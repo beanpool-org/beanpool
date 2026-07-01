@@ -248,6 +248,7 @@ export default function LedgerScreen() {
         rulerZeroLabel: { position: 'absolute', top: 54, fontSize: 9, fontWeight: '700', color: colors.text.body, textAlign: 'center', width: 16, marginLeft: -8 },
         // Tick wrapper: starts at bar bottom (36)
         rulerTickWrap: { position: 'absolute', alignItems: 'center', top: 36, marginLeft: -16, width: 32 },
+        floorChevronTop: { position: 'absolute', top: 8, marginLeft: -8 },
         rulerTickMark: { width: 1, height: 6 },
         rulerTickVal: { fontSize: 8, fontWeight: '600', color: colors.text.secondary, marginTop: 2, textAlign: 'center', width: 32 },
         rulerTickSym: { fontSize: 11, marginTop: 1, textAlign: 'center' },
@@ -450,13 +451,16 @@ export default function LedgerScreen() {
                     <View style={[styles.rulerZeroLine, { left: `${ZERO_P * 100}%` }]} />
                     <Text style={[styles.rulerZeroLabel, { left: `${ZERO_P * 100}%` }]} allowFontScaling={false}>0</Text>
 
-                    {/* ── Your credit floor — one chevron at your (continuous) floor ── */}
+                    {/* ── Your credit floor — black chevrons bracketing it, top & bottom of the bar ── */}
                     {balanceState.floor < 0 && (
-                        <View style={[styles.rulerTickWrap, { left: `${floorPct * 100}%` }]}>
-                            <MaterialCommunityIcons name="menu-up" size={18} color={tier.color} style={{ marginTop: -7 }} />
-                            <Text style={[styles.rulerTickVal, { color: tier.color, fontWeight: '800', marginTop: -2 }]} numberOfLines={1} allowFontScaling={false}>{Math.round(balanceState.floor)}</Text>
-                            <Text style={[styles.rulerYouTag, { color: tier.color }]} allowFontScaling={false}>your floor</Text>
-                        </View>
+                        <>
+                            <MaterialCommunityIcons name="menu-down" size={16} color={colors.text.body} style={[styles.floorChevronTop, { left: `${floorPct * 100}%` }]} />
+                            <View style={[styles.rulerTickWrap, { left: `${floorPct * 100}%` }]}>
+                                <MaterialCommunityIcons name="menu-up" size={16} color={colors.text.body} style={{ marginTop: -6 }} />
+                                <Text style={[styles.rulerTickVal, { color: colors.text.body, fontWeight: '800', marginTop: -1 }]} numberOfLines={1} allowFontScaling={false}>{Math.round(balanceState.floor)}</Text>
+                                <Text style={[styles.rulerYouTag, { color: colors.text.body }]} allowFontScaling={false}>your floor</Text>
+                            </View>
+                        </>
                     )}
 
                     {/* ── Circ zone boundary ticks (right) — threshold value only ── */}

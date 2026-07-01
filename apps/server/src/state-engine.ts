@@ -1501,54 +1501,15 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getVelocityGateStatus(publicKey: string): { active: boolean; dailyLimit?: number; dailyUsed?: number; unlockHours?: number } {
-    const member = getMember(publicKey);
-    if (!member?.joinedAt) return { active: false };
-
-    const { tier } = getMemberTrustProfile(publicKey);
-    if (tier.name !== 'Newcomer') return { active: false };
-
-    const ageHours = (Date.now() - new Date(member.joinedAt).getTime()) / (1000 * 60 * 60);
-    const t = getThresholds();
-    let dailyLimit: number | null = null;
-    let unlockHours = 0;
-
-    if (ageHours < t.ghostVelocityTier1Hours) {
-        dailyLimit = t.ghostVelocityTier1Limit;
-        unlockHours = Math.ceil(t.ghostVelocityTier1Hours - ageHours);
-    } else if (ageHours < t.ghostVelocityTier2Hours) {
-        dailyLimit = t.ghostVelocityTier2Limit;
-        unlockHours = Math.ceil(t.ghostVelocityTier2Hours - ageHours);
-    }
-
-    if (dailyLimit === null) return { active: false };
-
-    const recentSpend = db.prepare(`
-        SELECT COALESCE(SUM(amount), 0) as total 
-        FROM transactions 
-        WHERE from_pubkey = ? 
-          AND timestamp > datetime('now', '-24 hours')
-    `).get(publicKey) as any;
-
-    return {
-        active: true,
-        dailyLimit,
-        dailyUsed: Math.round((recentSpend?.total || 0) * 100) / 100,
-        unlockHours,
-    };
-}
-
-export function getBalance(publicKey: string): { balance: number; floor: number; tier: TierInfo; earnedCredit: number; commonsBalance: number; velocityGate?: { active: boolean; dailyLimit?: number; dailyUsed?: number; unlockHours?: number } } {
+export function getBalance(publicKey: string): { balance: number; floor: number; tier: TierInfo; earnedCredit: number; commonsBalance: number } {
     const account = ledger.getAccount(publicKey);
     const { floor, tier, earnedCredit } = getMemberTrustProfile(publicKey);
-    const velocityGate = getVelocityGateStatus(publicKey);
     return {
         balance: Math.round(account.balance * 100) / 100,
         floor,
         tier,
         earnedCredit,
         commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
-        ...(velocityGate.active ? { velocityGate } : {}),
     };
 }
 
@@ -1582,51 +1543,22 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     if (!from.startsWith('escrow_') && !from.startsWith('project_') && from !== 'COMMONS_POOL' && !getMember(from)) registerVisitor(from);
     if (!to.startsWith('escrow_') && !to.startsWith('project_') && to !== 'COMMONS_POOL' && !getMember(to)) registerVisitor(to);
 
-    // Ghost gift restriction: Ghosts can only transact via marketplace escrow
+    // Send gate (Trust Model v2): direct peer-to-peer sends ("gift a friend") require the sender
+    // to have EARNED trust — i.e. completed at least one real (marketplace) trade. Stops a fresh /
+    // farmed account from instantly forwarding received credits and vanishing. Re-keyed off the
+    // now-cosmetic tier (canGift) onto value-based earned credit. Escrow/marketplace flows and
+    // system accounts (COMMONS_POOL/genesis) are exempt.
     const isEscrow = method === 'escrow' || from.startsWith('escrow_') || to.startsWith('escrow_');
     if (!isEscrow && from !== 'COMMONS_POOL' && from !== 'genesis') {
-        const { tier } = getMemberTrustProfile(from);
-        if (!tier.canGift) {
-            console.log(`🚫 Ghost gift blocked: ${from.substring(0, 12)} attempted direct transfer`);
+        const { earnedCredit } = getMemberTrustProfile(from);
+        if (earnedCredit <= 0) {
+            console.log(`🚫 Send blocked (no completed trade yet): ${from.substring(0, 12)}`);
             return null;
         }
     }
 
-    // Ghost Velocity Gate: rate-limit new Ghost accounts to prevent Sybil funneling
-    if (!from.startsWith('escrow_') && !from.startsWith('project_') && from !== 'commons' && from !== 'COMMONS_POOL' && from !== 'genesis') {
-        const sender = getMember(from);
-        if (sender) {
-            const senderTier = getMemberTrustProfile(from).tier;
-            if (senderTier.name === 'Newcomer' && sender.joinedAt) {
-                const ageHours = (Date.now() - new Date(sender.joinedAt).getTime()) / (1000 * 60 * 60);
-                const t = getThresholds();
-                let dailyLimit: number | null = null;
-                let unlockHours = 0;
-
-                if (ageHours < t.ghostVelocityTier1Hours) {
-                    dailyLimit = t.ghostVelocityTier1Limit;
-                    unlockHours = Math.ceil(t.ghostVelocityTier1Hours - ageHours);
-                } else if (ageHours < t.ghostVelocityTier2Hours) {
-                    dailyLimit = t.ghostVelocityTier2Limit;
-                    unlockHours = Math.ceil(t.ghostVelocityTier2Hours - ageHours);
-                }
-
-                if (dailyLimit !== null) {
-                    const recentSpend = db.prepare(`
-                        SELECT COALESCE(SUM(amount), 0) as total 
-                        FROM transactions 
-                        WHERE from_pubkey = ? 
-                          AND timestamp > datetime('now', '-24 hours')
-                    `).get(from) as any;
-
-                    if ((recentSpend?.total || 0) + amount > dailyLimit) {
-                        console.log(`🛡️ Ghost velocity gate: ${sender.callsign} (${ageHours.toFixed(0)}h old) blocked — would exceed ${dailyLimit}B daily limit`);
-                        throw new Error(`New accounts are limited to ${dailyLimit}B per day. Full access unlocks in ~${unlockHours} hours.`);
-                    }
-                }
-            }
-        }
-    }
+    // (Ghost velocity gate removed — the sliding value-based floor already bounds how much a new
+    // account can move, so a daily rate-limit keyed off the now-cosmetic "Newcomer" tier is moot.)
 
     // Calculate dynamic floor for the sender (escrow wallets are exempt).
     // Use getMemberTrustProfile so the SAME floor definition applies to direct

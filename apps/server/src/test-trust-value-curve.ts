@@ -16,7 +16,7 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-trust-value-curve.ts
  */
 import { earnedCreditFromValue } from '@beanpool/core';
-import { initStateEngine, getMemberTrustProfile } from './state-engine.js';
+import { initStateEngine, getMemberTrustProfile, transfer, getBalance } from './state-engine.js';
 import { db } from './db/db.js';
 
 let run = 0, passed = 0;
@@ -102,6 +102,20 @@ function main() {
     // ── 8. First-trade gate: no trade / grant / vouch → no overdraft ──
     seedMember('fresh');
     assert(floorOf('fresh') === 0, `fresh account → floor 0, got ${floorOf('fresh')}`);
+
+    // ── 9. Send gate: no completed trade → can't gift; after a trade → can (and no velocity cap) ──
+    seedMember('noTrade'); seedMember('rcpt');
+    db.prepare(`UPDATE accounts SET balance = 100 WHERE public_key = ?`).run('noTrade');
+    assert(transfer('noTrade', 'rcpt', 10, 'gift', 'direct') === null,
+        'no completed trade → direct send blocked');
+    seedMember('didTrade'); seedMember('aSeller');
+    mtx('didTrade', 'aSeller', 100); // earns trust as buyer → earnedCredit > 0
+    db.prepare(`UPDATE accounts SET balance = 50 WHERE public_key = ?`).run('didTrade');
+    assert(transfer('didTrade', 'rcpt', 60, 'gift', 'direct') !== null,
+        'after a completed trade → direct send allowed, with NO velocity cap (60 > old 20/day)');
+
+    // ── 10. Velocity gate is gone from the balance shape ──
+    assert(!('velocityGate' in getBalance('didTrade')), 'getBalance no longer exposes a velocityGate');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

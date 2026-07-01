@@ -405,8 +405,12 @@ the **new-account velocity limit** (`state-engine.ts:1585-1613`), keyed on Newco
 Decisions:
 - [ ] **Tiers → cosmetic milestone badges.** Keep them (recognition + legible milestones), drop the
       pretence they're load-bearing. UI honesty: recognition vs. real unlock clearly distinguished.
-- [ ] **Velocity protection survives** — re-key from the "Newcomer" *label* to "low trust / young
-      account" (same population); it's fraud protection, independent of the badge.
-- [ ] **Make "can send credits" a *real* threshold** — gate on the **first qualified trade** (reuses
-      the floor-unlock), a genuine anti-fraud gate — **or delete the cosmetic pill.** No do-nothing perks.
-- [ ] **Governance** stays Phase 4, value-based votes. **Invites** stay non-tiered (see `invite-architecture.md`).
+- [x] **Velocity gate REMOVED** (decided 2026-07, shipped) — the sliding value-based floor already
+      bounds how much a new account can move, so a daily rate-limit keyed off the cosmetic "Newcomer"
+      tier was moot. Ripped from `transfer()`, `getVelocityGateStatus`, `getBalance`. *(Dead
+      config/settings/native-pill cleanup is a trivial follow-up.)*
+- [x] **"Can send credits" re-keyed** (decided 2026-07, shipped) — the gift gate in `transfer()` now
+      requires **earned trust > 0** (one completed marketplace trade) instead of `tier.canGift`. Stops
+      a fresh/farmed account forwarding received credits, and retires the last badge mechanic. Tested.
+- [ ] **Invites: OPEN to everyone** (decided — uninhibited growth). Code already allows it; just delete
+      the "Steward unlocks invitations" copy (native, next). **Governance** stays Phase 4, value-based votes.

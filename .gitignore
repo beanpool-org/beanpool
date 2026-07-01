@@ -59,3 +59,9 @@ deploy-targets.conf
 
 # Local Claude Code agent worktrees (temporary)
 .claude/worktrees/
+
+# Private Agent and Workspace Configurations (ignored in public repository)
+.agents/
+.claude/
+HANDOVER.md
+SECURITY-AUDIT.md

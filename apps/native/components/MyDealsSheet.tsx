@@ -142,7 +142,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         dealCard: {
             backgroundColor: colors.surface.card,
             borderRadius: 16,
-            padding: 16,
+            padding: 0,
             marginBottom: 12,
             borderWidth: 1,
             borderColor: colors.border.default,
@@ -151,11 +151,12 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             shadowOpacity: 0.04,
             shadowRadius: 4,
             elevation: 1,
+            flexDirection: 'row',
+            overflow: 'hidden',
         },
         dealThumb: {
-            width: 56,
-            height: 56,
-            borderRadius: 8,
+            width: 96,
+            height: '100%',
             backgroundColor: colors.border.default,
         },
         dealThumbFallback: {
@@ -362,64 +363,61 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                     !isCompleted && !isPending && { opacity: 0.5 },
                     isPending && { backgroundColor: palette.green50, borderColor: palette.green200 },
                 ]}>
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                        {item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? (
-                            <Image source={{ uri: item.coverImage }} style={styles.dealThumb} />
-                        ) : (
-                            <View style={[styles.dealThumb, styles.dealThumbFallback]}>
-                                <Text style={{ fontSize: 24, opacity: 0.5 }}>{isBuyer ? '🛒' : '🏷️'}</Text>
-                            </View>
-                        )}
-                        <View style={{ flex: 1, justifyContent: 'center' }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                    <View style={[styles.statusBadge, isCompleted && styles.statusCompleted]}>
-                                        <Text style={[styles.statusText, isCompleted && styles.statusTextCompleted]}>
-                                            {item.status.toUpperCase()}
-                                        </Text>
-                                    </View>
-                                    <Text style={styles.dateText}>
-                                        {new Date(item.createdAt).toLocaleDateString()}
+                    {item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? (
+                        <Image source={{ uri: item.coverImage }} style={styles.dealThumb} resizeMode="cover" />
+                    ) : (
+                        <View style={[styles.dealThumb, styles.dealThumbFallback]}>
+                            <Text style={{ fontSize: 24, opacity: 0.5 }}>{isBuyer ? '🛒' : '🏷️'}</Text>
+                        </View>
+                    )}
+                    <View style={{ flex: 1, padding: 12, justifyContent: 'space-between', minHeight: 96 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <View style={[styles.statusBadge, isCompleted && styles.statusCompleted]}>
+                                    <Text style={[styles.statusText, isCompleted && styles.statusTextCompleted]}>
+                                        {item.status.toUpperCase()}
                                     </Text>
                                 </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={[styles.creditAmount, { color: isBuyer ? palette.red600 : colors.brand.dark }]} numberOfLines={1}>
-                                        {isBuyer ? '- ' : '+ '}{item.credits}
-                                    </Text>
-                                    <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
-                                </View>
+                                <Text style={styles.dateText}>
+                                    {new Date(item.createdAt).toLocaleDateString()}
+                                </Text>
                             </View>
-                            <Text style={styles.dealTitle} numberOfLines={1}>{item.postTitle}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={[styles.creditAmount, { color: isBuyer ? palette.red600 : colors.brand.dark }]} numberOfLines={1}>
+                                    {isBuyer ? '- ' : '+ '}{item.credits}
+                                </Text>
+                                <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
+                            </View>
                         </View>
-                    </View>
-
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <MemberAvatar avatarUrl={partnerAvatar} pubkey={partnerPubkey || ''} callsign={partnerCallsign || '?'} size={22} />
-                            <Text style={styles.partnerText}>
-                                {isBuyer ? 'Bought from ' : 'Sold to '}
-                                <Text style={styles.partnerName}>{partnerCallsign}</Text>
-                            </Text>
+                        <Text style={styles.dealTitle} numberOfLines={1}>{item.postTitle}</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                                <MemberAvatar avatarUrl={partnerAvatar} pubkey={partnerPubkey || ''} callsign={partnerCallsign || '?'} size={20} />
+                                <Text style={[styles.partnerText, { fontSize: 11 }]} numberOfLines={1}>
+                                    {isBuyer ? 'From ' : 'To '}
+                                    <Text style={styles.partnerName}>{partnerCallsign}</Text>
+                                </Text>
+                            </View>
+                            {isCompleted && (
+                                needsReview ? (
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        style={[styles.reviewBtn, { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }]}
+                                        onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
+                                    >
+                                        <Text style={[styles.reviewBtnText, { fontSize: 11 }]}>Review</Text>
+                                    </Pressable>
+                                ) : (
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        style={[styles.reviewBtn, { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }]}
+                                        onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
+                                    >
+                                        <Text style={[styles.reviewBtnText, { color: palette.gray600, fontSize: 11 }]}>Edit</Text>
+                                    </Pressable>
+                                )
+                            )}
                         </View>
-                        {isCompleted && (
-                            needsReview ? (
-                                <Pressable
-                                    accessibilityRole="button"
-                                    style={styles.reviewBtn}
-                                    onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
-                                >
-                                    <Text style={styles.reviewBtnText}>Leave Review</Text>
-                                </Pressable>
-                            ) : (
-                                <Pressable
-                                    accessibilityRole="button"
-                                    style={[styles.reviewBtn, { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong }]}
-                                    onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
-                                >
-                                    <Text style={[styles.reviewBtnText, { color: palette.gray600 }]}>Edit Review</Text>
-                                </Pressable>
-                            )
-                        )}
                     </View>
                 </View>
             );
@@ -463,29 +461,27 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         return (
             <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push(`/post/${item.id}`); }}>
                 <View style={[styles.dealCard, highlightStyle]}>
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                        {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                            <Image source={{ uri: coverImage }} style={styles.dealThumb} />
-                        ) : (
-                            <View style={[styles.dealThumb, styles.dealThumbFallback]}>
-                                <Text style={{ fontSize: 24, opacity: 0.5 }}>📦</Text>
-                            </View>
-                        )}
-                        <View style={{ flex: 1, justifyContent: 'center' }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                <View style={[styles.typeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
-                                    <Text style={styles.typeBadgeText}>{item.type?.toUpperCase()}</Text>
-                                </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={styles.creditAmount} numberOfLines={1}>
-                                        {item.credits ?? '?'}
-                                    </Text>
-                                    <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
-                                </View>
-                            </View>
-                            <Text style={styles.dealTitle} numberOfLines={1}>{item.title}</Text>
-                            <Text style={[styles.dateText, displayStatusText.includes('Action') && { color: palette.amber600, fontWeight: '800' }]}>{displayStatusText}</Text>
+                    {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
+                        <Image source={{ uri: coverImage }} style={styles.dealThumb} resizeMode="cover" />
+                    ) : (
+                        <View style={[styles.dealThumb, styles.dealThumbFallback]}>
+                            <Text style={{ fontSize: 24, opacity: 0.5 }}>📦</Text>
                         </View>
+                    )}
+                    <View style={{ flex: 1, padding: 12, justifyContent: 'center', minHeight: 96 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <View style={[styles.typeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
+                                <Text style={styles.typeBadgeText}>{item.type?.toUpperCase()}</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={styles.creditAmount} numberOfLines={1}>
+                                    {item.credits ?? '?'}
+                                </Text>
+                                <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
+                            </View>
+                        </View>
+                        <Text style={styles.dealTitle} numberOfLines={1}>{item.title}</Text>
+                        <Text style={[styles.dateText, displayStatusText.includes('Action') && { color: palette.amber600, fontWeight: '800' }, { marginTop: 2 }]}>{displayStatusText}</Text>
                     </View>
                 </View>
             </Pressable>

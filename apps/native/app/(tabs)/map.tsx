@@ -333,9 +333,9 @@ export default function MapScreen() {
             paddingHorizontal: 12,
             paddingVertical: 10,
             borderRadius: 12,
-            backgroundColor: colors.feedback.warning.bg,
+            backgroundColor: theme === 'dark' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.06)',
             borderWidth: 1,
-            borderColor: colors.feedback.warning.border,
+            borderColor: theme === 'dark' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.18)',
             marginTop: 4,
             marginBottom: 12,
         },
@@ -344,8 +344,8 @@ export default function MapScreen() {
         },
         pricingTipBannerText: {
             fontSize: 12.5,
-            fontWeight: '600',
-            color: colors.feedback.warning.fg,
+            fontWeight: '700',
+            color: colors.brand.primary,
             flex: 1,
         },
 

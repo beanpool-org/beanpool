@@ -263,43 +263,36 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        The negative (left) side of the slider shows your <Text style={styles.boldWhiteText}>Overdraft Floor</Text>. This allows you to purchase goods and spend even if you temporarily have zero credits.
+                        The negative (left) side of the slider shows your <Text style={styles.boldWhiteText}>Overdraft Floor</Text> — how far below zero you can spend, so you can buy before you've sold. It isn't fixed: <Text style={styles.boldWhiteText}>it grows as you trade real value</Text> with the community.
                     </Text>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>FLOOR LIMITS BY TRUST TIER</Text>
-                        
-                        <View style={styles.limitRow}>
-                            <Text style={styles.limitEmoji}>🌱</Text>
-                            <View style={styles.limitDetails}>
-                                <Text style={styles.limitTier}>Newcomer</Text>
-                                <Text style={styles.limitValue}><Text style={styles.boldWhiteText}>-80B</Text> Overdraft Floor</Text>
-                            </View>
+                        <Text style={styles.cardLabel}>HOW YOUR FLOOR GROWS</Text>
+                        <ListItem prefix="1.">Everyone starts at a small <Text style={styles.boldWhiteText}>-80B</Text> floor after their first trade.</ListItem>
+                        <ListItem prefix="2.">It deepens <Text style={styles.boldWhiteText}>smoothly</Text> the more genuine value you trade — no fixed steps.</ListItem>
+                        <ListItem prefix="3."><Text style={styles.boldWhiteText}>Diverse</Text> trade (many partners) counts for more than repeat trade with one person.</ListItem>
+                        <ListItem prefix="4.">It's capped at <Text style={styles.boldWhiteText}>-2,000B</Text> — the deepest the system allows.</ListItem>
+                    </View>
+
+                    <View style={styles.cardContainer}>
+                        <Text style={styles.cardLabel}>ROUGH GUIDE (VALUE TRADED → FLOOR)</Text>
+
+                        <View style={styles.bracketRow}>
+                            <Text style={styles.bracketRange}>~500B traded</Text>
+                            <Text style={[styles.bracketRate, { color: colors.text.body }]}>≈ -255B</Text>
+                        </View>
+                        <View style={styles.bracketRow}>
+                            <Text style={styles.bracketRange}>~2,000B traded</Text>
+                            <Text style={[styles.bracketRate, { color: colors.text.body }]}>≈ -630B</Text>
+                        </View>
+                        <View style={styles.bracketRow}>
+                            <Text style={styles.bracketRange}>~10,000B traded</Text>
+                            <Text style={[styles.bracketRate, { color: colors.text.body }]}>≈ -1,360B</Text>
                         </View>
 
-                        <View style={styles.limitRow}>
-                            <Text style={styles.limitEmoji}>🏠</Text>
-                            <View style={styles.limitDetails}>
-                                <Text style={styles.limitTier}>Resident</Text>
-                                <Text style={styles.limitValue}><Text style={styles.boldWhiteText}>-200B</Text> Overdraft Floor</Text>
-                            </View>
-                        </View>
- 
-                        <View style={styles.limitRow}>
-                            <Text style={styles.limitEmoji}>🏛️</Text>
-                            <View style={styles.limitDetails}>
-                                <Text style={styles.limitTier}>Steward</Text>
-                                <Text style={styles.limitValue}><Text style={styles.boldWhiteText}>-600B</Text> Overdraft Floor</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.limitRow}>
-                            <Text style={styles.limitEmoji}>⛰️</Text>
-                            <View style={styles.limitDetails}>
-                                <Text style={styles.limitTier}>Elder</Text>
-                                <Text style={styles.limitValue}><Text style={styles.boldWhiteText}>-1,400B</Text> Overdraft Floor</Text>
-                            </View>
-                        </View>
+                        <Text style={[styles.zoneDesc, { marginTop: 10 }]}>
+                            Your tier badge (🌱 → 🏠 → 🏛️ → ⛰️) is a milestone you pass as your floor deepens — it marks your progress, it doesn't set the limit.
+                        </Text>
                     </View>
 
                     <View style={styles.infoBox}>

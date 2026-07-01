@@ -248,6 +248,7 @@ export default function LedgerScreen() {
         rulerZeroLabel: { position: 'absolute', top: 54, fontSize: 9, fontWeight: '700', color: colors.text.body, textAlign: 'center', width: 16, marginLeft: -8 },
         // Tick wrapper: starts at bar bottom (36)
         rulerTickWrap: { position: 'absolute', alignItems: 'center', top: 36, marginLeft: -16, width: 32 },
+        floorChevronTop: { position: 'absolute', top: 8, marginLeft: -8 },
         rulerTickMark: { width: 1, height: 6 },
         rulerTickVal: { fontSize: 8, fontWeight: '600', color: colors.text.secondary, marginTop: 2, textAlign: 'center', width: 32 },
         rulerTickSym: { fontSize: 11, marginTop: 1, textAlign: 'center' },
@@ -390,11 +391,9 @@ export default function LedgerScreen() {
 
         const balancePct = toPos(balance);
 
-        // Tier markers: Elder leftmost → Newcomer just left of zero
-        const tierMarkers = [...TIERS].reverse().map(t => ({
-            ...t,
-            pos: ANCHORS.find(a => a[0] === t.floor)?.[1] ?? toPos(t.floor),
-        }));
+        // Your (continuous) credit floor — floors slide with value now, so instead of fixed
+        // per-tier floor ticks we mark just YOUR floor with a single chevron.
+        const floorPct = toPos(balanceState.floor);
 
         // Circ zone boundary ticks — just the threshold values; the rate label
         // for each bracket sits centered in the zone it applies to (zoneRates below).
@@ -452,20 +451,17 @@ export default function LedgerScreen() {
                     <View style={[styles.rulerZeroLine, { left: `${ZERO_P * 100}%` }]} />
                     <Text style={[styles.rulerZeroLabel, { left: `${ZERO_P * 100}%` }]} allowFontScaling={false}>0</Text>
 
-                    {/* ── Tier floor ticks (left) — value then emoji below ── */}
-                    {tierMarkers.map(t => {
-                        const isCurrent = t.name === tier.name;
-                        return (
-                            <View key={t.name} style={[styles.rulerTickWrap, { left: `${t.pos * 100}%` }]}>
-                                <View style={[styles.rulerTickMark, { backgroundColor: isCurrent ? t.color : colors.text.muted }]} />
-                                <Text style={[styles.rulerTickVal, isCurrent && { color: t.color, fontWeight: '800' }]} numberOfLines={1} allowFontScaling={false}>{t.floor}</Text>
-                                <View style={isCurrent ? [styles.rulerSymRing, { borderColor: t.color, backgroundColor: t.bg }] : null}>
-                                    <Text style={styles.rulerTickSym} allowFontScaling={false}>{t.emoji}</Text>
-                                </View>
-                                {isCurrent && <Text style={[styles.rulerYouTag, { color: t.color }]} allowFontScaling={false}>YOU</Text>}
+                    {/* ── Your credit floor — black chevrons bracketing it, top & bottom of the bar ── */}
+                    {balanceState.floor < 0 && (
+                        <>
+                            <MaterialCommunityIcons name="menu-down" size={16} color={colors.text.body} style={[styles.floorChevronTop, { left: `${floorPct * 100}%` }]} />
+                            <View style={[styles.rulerTickWrap, { left: `${floorPct * 100}%` }]}>
+                                <MaterialCommunityIcons name="menu-up" size={16} color={colors.text.body} style={{ marginTop: -6 }} />
+                                <Text style={[styles.rulerTickVal, { color: colors.text.body, fontWeight: '800', marginTop: -1 }]} numberOfLines={1} allowFontScaling={false}>{Math.round(balanceState.floor)}</Text>
+                                <Text style={[styles.rulerYouTag, { color: colors.text.body }]} allowFontScaling={false}>your floor</Text>
                             </View>
-                        );
-                    })}
+                        </>
+                    )}
 
                     {/* ── Circ zone boundary ticks (right) — threshold value only ── */}
                     {circMarkers.map(c => (
@@ -546,8 +542,9 @@ export default function LedgerScreen() {
                 {/* Journey bar: cumulative progress 0 → Elder, with tier milestone ticks */}
                 <View style={styles.journeyTrack}>
                     <View style={[styles.journeyFill, { width: `${journeyPct * 100}%`, backgroundColor: tier.color }]} />
-                    {TIERS.filter((t: any) => t.min > 0).map((t: any) => {
-                        const pos = Math.min(1, t.min / ELDER_MIN);
+                    {TIERS.map((t: any) => {
+                        // Include Newcomer (min 0); inset slightly so the leftmost badge isn't clipped.
+                        const pos = Math.max(0.02, Math.min(1, t.min / ELDER_MIN));
                         const reached = ec >= t.min;
                         return (
                             <View key={t.name} style={[styles.journeyTick, { left: `${pos * 100}%` }]}>

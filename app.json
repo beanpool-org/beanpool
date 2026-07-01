@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "519523ec-1b9f-4952-a115-97264f182b56"
+      }
+    },
+    "android": {
+      "package": "org.beanpool.pillar"
+    },
+    "ios": {
+      "bundleIdentifier": "org.beanpool.pillar",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "Protect your BeanPool wallet and 12-word recovery phrase with Face ID."
+      }
+    }
+  }
+}

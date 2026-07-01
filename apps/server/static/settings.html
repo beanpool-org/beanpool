@@ -1,0 +1,1723 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool — Node Settings</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 520px;
+            margin: 0 auto;
+        }
+
+        @media (min-width: 768px) {
+            .container { max-width: 720px; }
+        }
+
+        @media (min-width: 1024px) {
+            .container { max-width: 900px; }
+        }
+
+        /* Glass panels */
+        .glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .glass h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 1rem;
+        }
+
+        /* Inputs */
+        input[type="text"],
+        input[type="search"],
+        input[type="password"],
+        select {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 0.6rem 0.75rem;
+            color: #f8fafc;
+            font-size: 0.875rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: #10b981;
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+        }
+
+        label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #94a3b8;
+            margin-bottom: 0.4rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .field {
+            margin-bottom: 1rem;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1.25rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-sm {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #334155;
+            color: #cbd5e1;
+        }
+
+        .btn-outline:hover {
+            border-color: #64748b;
+            color: #f1f5f9;
+        }
+
+        .btn-danger {
+            background: transparent;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+        }
+
+        .btn-danger:hover {
+            border-color: rgba(239, 68, 68, 0.5);
+            color: #fca5a5;
+        }
+
+        .btn-full {
+            width: 100%;
+        }
+
+        /* Status messages */
+        .status-msg {
+            font-size: 0.75rem;
+            text-align: center;
+            margin-top: 0.5rem;
+            display: none;
+        }
+
+        .status-msg.show {
+            display: block;
+        }
+
+        .status-msg.success {
+            color: #10b981;
+        }
+
+        .status-msg.error {
+            color: #f87171;
+        }
+
+        /* Map */
+        #settings-map {
+            height: 240px;
+            border-radius: 12px;
+            z-index: 1;
+            margin-top: 0.5rem;
+        }
+
+        /* Location search */
+        .search-wrapper {
+            position: relative;
+        }
+
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            display: none;
+        }
+
+        .search-results.active {
+            display: block;
+        }
+
+        .search-results .item {
+            padding: 0.6rem 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid #1e293b;
+            font-size: 0.85rem;
+            transition: background 0.15s;
+        }
+
+        .search-results .item:hover {
+            background: #1e293b;
+        }
+
+        .search-results .item .type {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        /* Connector cards */
+        .connector-card {
+            background: #0f172a80;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .connector-card .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .connector-card .name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #e2e8f0;
+        }
+
+        .connector-card .addr {
+            font-size: 0.75rem;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            color: #64748b;
+        }
+
+        .connector-card .meta {
+            display: flex;
+            gap: 1rem;
+            margin-top: 0.5rem;
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+
+        .connector-card .actions {
+            display: flex;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 0 8px;
+            height: 20px;
+            line-height: 20px;
+            border-radius: 10px;
+            font-size: 0.62rem;
+            font-weight: 600;
+            white-space: nowrap;
+            box-sizing: border-box;
+            vertical-align: middle;
+        }
+
+        .badge-mutual {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-outbound {
+            background: rgba(234, 179, 8, 0.15);
+            color: #facc15;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .badge-disconnected {
+            background: rgba(100, 116, 139, 0.15);
+            color: #94a3b8;
+            border: 1px solid rgba(100, 116, 139, 0.3);
+        }
+
+        /* Password input */
+        .pwd-wrapper {
+            position: relative;
+        }
+
+        .pwd-wrapper input {
+            padding-right: 2.5rem;
+        }
+
+        .pwd-eye {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0.25rem;
+        }
+
+        .pwd-eye:hover {
+            color: #cbd5e1;
+        }
+
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .page-header h1 span {
+            color: #10b981;
+        }
+
+        .page-header .peer-id {
+            font-size: 0.65rem;
+            font-family: 'SF Mono', monospace;
+            color: #475569;
+        }
+
+        /* Hide views */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Separator */
+        hr {
+            border: none;
+            border-top: 1px solid #1e293b;
+            margin: 1.5rem 0;
+        }
+
+        /* Trust level select */
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            padding-right: 2rem;
+        }
+
+        /* Add connector form */
+        .add-form {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .add-form .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        /* Tab bar */
+        .tab-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 0.3rem;
+            margin-bottom: 1.25rem;
+            position: sticky;
+            top: 0.5rem;
+            z-index: 100;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 0.55rem 0.25rem;
+            border: none;
+            border-radius: 10px;
+            background: transparent;
+            color: #64748b;
+            font-size: 0.72rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: #cbd5e1;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        }
+
+        @media (min-width: 768px) {
+            .tab-btn {
+                font-size: 0.8rem;
+                padding: 0.6rem 0.5rem;
+            }
+        }
+        @keyframes updatePulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Audit tree stat chips */
+        .stat-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            font-size: 0.6rem;
+            padding: 1px 5px;
+            border-radius: 8px;
+            font-weight: 600;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-chip.posts { background: #1e3a5f; color: #60a5fa; }
+        .stat-chip.msgs { background: #1e3a3e; color: #34d399; }
+        .stat-chip.deals { background: #3b2f1e; color: #fbbf24; }
+        .stat-chip.cancelled { background: #3b1e1e; color: #f87171; }
+
+        .stats-card {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 0.6rem;
+            margin: 0.4rem 0 0.2rem 0;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.3rem;
+            font-size: 0.7rem;
+        }
+        .stats-card .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            background: #1e293b;
+        }
+        .stats-card .stat-row .label { color: #94a3b8; }
+        .stats-card .stat-row .value { color: #f8fafc; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .stats-card .stat-row.full-width { grid-column: 1 / -1; }
+
+        /* Collapsible threshold groups */
+        details.threshold-group { margin-bottom: 0.75rem; }
+        details.threshold-group summary {
+            cursor: pointer;
+            padding: 0.6rem 0;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #cbd5e1;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-bottom: 1px solid #1e293b;
+            user-select: none;
+        }
+        details.threshold-group summary::after {
+            content: '▸';
+            margin-left: auto;
+            transition: transform 0.2s;
+        }
+        details.threshold-group[open] summary::after {
+            transform: rotate(90deg);
+        }
+        details.threshold-group summary::-webkit-details-marker { display: none; }
+        details.threshold-group .group-body {
+            padding-top: 0.75rem;
+        }
+
+        /* CPU circular gauge styling */
+        .cpu-gauge {
+            transform: rotate(-90deg);
+        }
+        .gauge-bg {
+            stroke: rgba(30, 41, 59, 0.8);
+        }
+        .gauge-val {
+            stroke: #10b981;
+            transition: stroke-dasharray 0.3s ease, stroke 0.3s ease;
+        }
+
+        /* Terminal logs styling */
+        .log-row {
+            margin-bottom: 0.35rem;
+            word-break: break-all;
+            white-space: pre-wrap;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+        .log-time {
+            color: #94a3b8;
+            flex-shrink: 0;
+            font-size: 0.7rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .log-lvl {
+            font-weight: 700;
+            padding: 1px 4px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            flex-shrink: 0;
+            text-transform: uppercase;
+        }
+        .log-lvl.info { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .log-lvl.warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .log-lvl.error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .log-lvl.security { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); box-shadow: 0 0 4px rgba(168, 85, 247, 0.4); }
+        .log-lvl.sync { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+        .log-cat {
+            color: #cbd5e1;
+            font-weight: 500;
+            font-size: 0.65rem;
+            flex-shrink: 0;
+            background: #1e293b;
+            padding: 1px 4px;
+            border-radius: 4px;
+            border: 1px solid #334155;
+        }
+        .log-msg {
+            color: #e2e8f0;
+            font-size: 0.72rem;
+        }
+        .log-meta {
+            font-size: 0.68rem;
+            color: #94a3b8;
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 6px;
+            padding: 0.4rem;
+            margin-top: 0.25rem;
+            font-family: monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .log-row details {
+            margin-top: 0.15rem;
+        }
+        .log-row details:not([open]) {
+            margin-bottom: 0;
+        }
+        .log-row details[open] {
+            margin-bottom: 0.25rem;
+        }
+        .log-row details summary {
+            color: #64748b;
+            font-size: 0.65rem;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            outline: none;
+        }
+        .log-row details summary:hover {
+            color: #94a3b8;
+        }
+        .log-row details:not([open]) .log-meta {
+            display: none !important;
+            user-select: none !important;
+            visibility: hidden !important;
+        }
+        .export-dropdown-container:hover #log-export-options {
+            display: block !important;
+        }
+        .export-opt-btn:hover {
+            background: #334155 !important;
+            color: #ffffff !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="page-header">
+            <div>
+                <h1>🫘 Node <span>Settings</span><span id="top-version-display" style="color: gold; font-size: 0.55em; margin-left: 10px; vertical-align: middle; font-weight: normal; font-family: monospace;"></span><a href="#" id="update-badge" onclick="switchTab('system');document.getElementById('update-panel').scrollIntoView({behavior:'smooth'});return false;" style="display:none;font-size:0.4em;margin-left:8px;vertical-align:middle;color:#3b82f6;text-decoration:none;font-weight:600;font-family:'Inter',sans-serif;animation:updatePulse 2s ease-in-out infinite;"><span style="display:inline-block;width:8px;height:8px;background:#3b82f6;border-radius:50%;margin-right:4px;vertical-align:middle;box-shadow:0 0 6px rgba(59,130,246,0.6);"></span><span id="update-badge-text">update available</span></a></h1>
+                <div class="peer-id" id="hdr-peer-id"></div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button id="logout-btn" class="btn btn-outline btn-sm hidden" style="color: #f87171; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.05);">🔒 Logout</button>
+                <a href="/" class="btn btn-outline btn-sm">← Back</a>
+            </div>
+        </div>
+
+        <!-- ========== LOGIN VIEW ========== -->
+        <div id="view-login">
+            <div class="glass">
+                <h3>🔒 Admin Login</h3>
+                <div class="field">
+                    <label>Password</label>
+                    <div class="pwd-wrapper">
+                        <input type="password" id="login-password" placeholder="Enter admin password">
+                        <button class="pwd-eye" aria-label="Toggle password visibility" title="Toggle password visibility">👁</button>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-full" id="login-btn">Unlock Settings</button>
+                <div class="status-msg" id="login-status"></div>
+            </div>
+        </div>
+
+        <!-- ========== SETTINGS VIEW ========== -->
+        <div id="view-settings" class="hidden">
+
+            <!-- Tab Bar -->
+            <div class="tab-bar" id="tab-bar">
+                <button class="tab-btn active" data-tab="identity">📡 Identity</button>
+                <button class="tab-btn" data-tab="network">🔗 Network</button>
+                <button class="tab-btn" data-tab="invites">🎫 Invites</button>
+                <button class="tab-btn" data-tab="system">⚙️ System</button>
+                <button class="tab-btn" data-tab="moderation">🛡️ Moderation <span id="mod-badge" style="display:none;background:#ef4444;color:#fff;font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;font-weight:700;"></span></button>
+                <button class="tab-btn" data-tab="members">🌳 Audit</button>
+                <button class="tab-btn" data-tab="commons">🏛️ Commons</button>
+                <button class="tab-btn" data-tab="comms">📥 Inbox &amp; Comms</button>
+                <button class="tab-btn" data-tab="diagnostics">💻 Diagnostics &amp; Logs <span id="diag-badge" style="display:none;background:#ef4444;color:#fff;font-size:0.65rem;padding:1px 5px;border-radius:8px;margin-left:4px;font-weight:700;"></span></button>
+                <button class="tab-btn" data-tab="backup">🗄️ Backup</button>
+                <button class="tab-btn" data-tab="connections">🔌 Connections</button>
+            </div>
+
+            <!-- Node Identity -->
+            <div class="glass" data-tab="identity">
+                <h3>📡 Node Identity</h3>
+                <div class="field">
+                    <label>Callsign (Short Name)</label>
+                    <input type="text" id="cfg-callsign" maxlength="50" placeholder="e.g. Mullumbimby BeanPool">
+                </div>
+                <div class="field">
+                    <label>Operating Region</label>
+                    <div class="search-wrapper">
+                        <input type="search" id="location-search" placeholder="Search for a location..."
+                            autocomplete="off">
+                        <div class="search-results" id="location-results"></div>
+                    </div>
+                    <div id="settings-map"></div>
+                    <input type="hidden" id="cfg-lat">
+                    <input type="hidden" id="cfg-lng">
+                </div>
+                <!-- Service Radius -->
+                <div class="field" id="radius-field" style="margin-top:0.75rem;">
+                    <label>Service Radius</label>
+                    <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <input type="range" id="radius-slider" min="0" max="200" value="0" step="1" style="flex:1;accent-color:#f59e0b;" />
+                        <input type="number" id="radius-km" min="0" max="500" step="1" placeholder="km" style="width:65px;padding:0.35rem;border-radius:6px;border:1px solid #1e293b;background:#0f172a;color:#e2e8f0;font-size:0.85rem;text-align:center;" />
+                    </div>
+                </div>
+
+                <!-- Directory Publishing Toggles -->
+                <div class="field" style="margin-top:1.5rem; border-top: 1px solid #1e293b; padding-top: 1.5rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                        <label style="margin:0;">Directory Publishing</label>
+                        <a href="/api/directory/info" target="_blank" style="font-size:0.75rem; color:#3b82f6; text-decoration:none; display:flex; align-items:center; gap:0.25rem;">
+                            <span>🔍 Preview Public Output</span>
+                        </a>
+                    </div>
+                    <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1.5rem; line-height: 1.4;">
+                        <strong>How it works:</strong> Your node securely pushes directory data to <a href="https://beanpool.org" target="_blank" style="color:#3b82f6;text-decoration:none;font-weight:600;">beanpool.org ↗</a> on a schedule. No inbound API access is required — your node only makes outbound requests. <strong>Your node's URL is NEVER published.</strong> This ensures your private network remains secure from the outside internet.
+                    </p>
+
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; background: #0f172a; padding: 1rem; border-radius: 8px; border: 1px solid #1e293b;">
+                        <div>
+                            <label style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Update Schedule</label>
+                            <select id="directory-push-interval" style="padding: 0.4rem; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 0.85rem; width: 120px;">
+                                <option value="0">Never (Disabled)</option>
+                                <option value="1">Every 1 hour</option>
+                                <option value="6">Every 6 hours</option>
+                                <option value="12" selected>Every 12 hours</option>
+                                <option value="24">Every 24 hours</option>
+                            </select>
+                        </div>
+                        <div style="text-align: right;">
+                            <div id="last-published" style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.4rem;">Last published: Never</div>
+                            <button id="publish-now-btn" type="button" class="btn primary" onclick="triggerDirectoryPush()" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">📤 Publish Now</button>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer;font-weight:600;">
+                            <input type="checkbox" id="publish-location" checked /> 📍 Share Location &amp; Radius
+                        </label>
+                        <p style="font-size:0.8rem;color:#64748b;margin:0.25rem 0 0 1.5rem;line-height:1.3;">
+                            Helps other BeanPoolers avoid creating duplicate nodes in your area, and allows the global community to see our network grow. Your URL is not shared.
+                        </p>
+                    </div>
+
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer;font-weight:600;">
+                            <input type="checkbox" id="publish-members" checked /> 👥 Share Member Count
+                        </label>
+                        <p style="font-size:0.8rem;color:#64748b;margin:0.25rem 0 0 1.5rem;line-height:1.3;">
+                            Shows the total number of users registered on your node to demonstrate community strength.
+                        </p>
+                    </div>
+
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer;font-weight:600;">
+                            <input type="checkbox" id="publish-contacts" checked /> 📧 Share Community Contacts
+                        </label>
+                        <p style="font-size:0.8rem;color:#64748b;margin:0.25rem 0 0 1.5rem;line-height:1.3;">
+                            Makes your Community Name, Email, and Phone visible on the directory so potential new users from outside the trust network can contact the admin to request an invite.
+                        </p>
+                    </div>
+
+                    <div style="margin-bottom: 0.5rem;">
+                        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer;font-weight:600;">
+                            <input type="checkbox" id="publish-health" checked /> 🖥️ Share Node Health &amp; Version
+                        </label>
+                        <p style="font-size:0.8rem;color:#64748b;margin:0.25rem 0 0 1.5rem;line-height:1.3;">
+                            This information is <strong>not published</strong> on the website. It is used exclusively by the BeanPool development team for diagnostics, network health monitoring, and improving the protocol.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Community Contacts -->
+                <div class="field" style="margin-top:1.5rem; border-top: 1px solid #1e293b; padding-top: 1.5rem;">
+                    <label>Community Contacts</label>
+                    <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem; line-height: 1.4;">
+                        Public details displayed on your landing page. Helps new members find your community.
+                    </p>
+                    <label style="font-size:0.85rem;margin-top:0.5rem;display:block;">Community Name</label>
+                    <input type="text" id="community-name" placeholder="e.g. Mullumbimby Community Exchange" maxlength="60" />
+                    <label style="font-size:0.85rem;margin-top:0.75rem;display:block;">Contact Email</label>
+                    <input type="email" id="contact-email" placeholder="e.g. admin@mycommunity.org" maxlength="100" />
+                    <label style="font-size:0.85rem;margin-top:0.75rem;display:block;">Contact Phone</label>
+                    <input type="tel" id="contact-phone" placeholder="e.g. +61 400 123 456" maxlength="30" />
+                </div>
+
+                <button class="btn btn-primary btn-full" id="save-identity-btn" style="margin-top:1rem;">Save Identity</button>
+                <div class="status-msg" id="identity-status"></div>
+            </div>
+
+            <!-- Change Password -->
+            <div class="glass" data-tab="identity">
+                <h3>🔑 Change Password</h3>
+                <div class="field">
+                    <div class="pwd-wrapper">
+                        <input type="password" id="new-pwd" placeholder="New password">
+                        <button class="pwd-eye" aria-label="Toggle password visibility" title="Toggle password visibility">👁</button>
+                    </div>
+                    <!-- Password strength requirements checklist -->
+                    <div class="pwd-requirements" id="pwd-requirements-box" style="margin-top: 0.75rem; padding: 0.75rem; border-radius: 8px; background: rgba(15, 23, 42, 0.6); border: 1px solid #1e293b; font-size: 0.75rem; color: #94a3b8; display: none;">
+                        <div style="font-weight: 600; margin-bottom: 0.4rem; color: #f8fafc;">Password must meet:</div>
+                        <div class="req-item" id="req-len" style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem; transition: color 0.2s;"><span class="icon" style="font-style: normal;">❌</span> At least 8 characters</div>
+                        <div class="req-item" id="req-upper" style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem; transition: color 0.2s;"><span class="icon" style="font-style: normal;">❌</span> At least one uppercase letter</div>
+                        <div class="req-item" id="req-lower" style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem; transition: color 0.2s;"><span class="icon" style="font-style: normal;">❌</span> At least one lowercase letter</div>
+                        <div class="req-item" id="req-num" style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem; transition: color 0.2s;"><span class="icon" style="font-style: normal;">❌</span> At least one number</div>
+                        <div class="req-item" id="req-sym" style="display: flex; align-items: center; gap: 0.4rem; transition: color 0.2s;"><span class="icon" style="font-style: normal;">❌</span> At least one symbol (!@#$%^&* etc.)</div>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="pwd-wrapper">
+                        <input type="password" id="new-pwd-confirm" placeholder="Confirm new password">
+                        <button class="pwd-eye" aria-label="Toggle password visibility" title="Toggle password visibility">👁</button>
+                    </div>
+                </div>
+                <button class="btn btn-outline btn-full" id="change-pwd-btn">Update Password</button>
+                <div class="status-msg" id="pwd-status"></div>
+            </div>
+
+            <!-- Invite Management -->
+            <div class="glass" data-tab="invites">
+                <h3>🎟️ Invite Management</h3>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+                    Generate invite codes for new members. Choose the starting tier for the invitee.
+                </p>
+
+                <!-- Tier Selector -->
+                <div id="invite-tier-selector" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 10px; border: 2px solid #334155; cursor: pointer; transition: border-color 0.2s;" class="tier-option selected" data-type="standard">
+                        <input type="radio" name="invite-type" value="standard" checked style="accent-color: #6b7280;">
+                        <span style="font-size: 1.2rem;">🥚</span>
+                        <div style="flex: 1;">
+                            <strong style="color: #e2e8f0; font-size: 0.85rem;">Newcomer</strong>
+                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts as Newcomer. Earns trust through trades.</p>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 10px; border: 2px solid #334155; cursor: pointer; transition: border-color 0.2s;" class="tier-option" data-type="trusted">
+                        <input type="radio" name="invite-type" value="trusted" style="accent-color: #3b82f6;">
+                        <span style="font-size: 1.2rem;">🏠</span>
+                        <div style="flex: 1;">
+                            <strong style="color: #93c5fd; font-size: 0.85rem;">Resident</strong>
+                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts as Resident. Can gift &amp; invite immediately.</p>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 10px; border: 2px solid #334155; cursor: pointer; transition: border-color 0.2s;" class="tier-option" data-type="ambassador">
+                        <input type="radio" name="invite-type" value="ambassador" style="accent-color: #8b5cf6;">
+                        <span style="font-size: 1.2rem;">🏛️</span>
+                        <div style="flex: 1;">
+                            <strong style="color: #c4b5fd; font-size: 0.85rem;">Steward</strong>
+                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts as Steward. For market promoters &amp; organisers.</p>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 10px; border: 2px solid #334155; cursor: pointer; transition: border-color 0.2s;" class="tier-option" data-type="elder">
+                        <input type="radio" name="invite-type" value="elder" style="accent-color: #f59e0b;">
+                        <span style="font-size: 1.2rem;">⛰️</span>
+                        <div style="flex: 1;">
+                            <strong style="color: #fde68a; font-size: 0.85rem;">Elder</strong>
+                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts as Elder. Highest trust level and borrowing limits.</p>
+                        </div>
+                    </label>
+                </div>
+
+                <button class="btn btn-primary btn-full" id="seed-invite-btn">Generate Invite Code</button>
+                <div id="seed-invite-result" class="hidden" style="margin-top: 1rem; text-align: center;">
+                    <div style="background: #0f172a; border: 2px solid #10b981; border-radius: 12px; padding: 1rem;">
+                        <p id="seed-invite-tier-label" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; color: #10b981;"></p>
+                        <p style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.5rem;">INVITE URL</p>
+                        <p id="seed-invite-code" style="font-size: 1rem; font-weight: 700; color: #10b981; word-break: break-all; margin-bottom: 1rem;"></p>
+                        <div style="margin: 1rem auto; background: white; border-radius: 12px; padding: 0.75rem; display: inline-block;">
+                            <img id="seed-invite-qr" width="180" height="180" alt="QR Code" style="display: block;" />
+                        </div>
+                        <p style="font-size: 0.7rem; color: #64748b; margin-bottom: 0.75rem;">Scan or share this URL to invite a new member</p>
+                        <button class="btn btn-outline btn-sm" style="margin-top: 0;" id="copy-invite-btn">📋 Copy URL</button>
+                    </div>
+                </div>
+                <div class="status-msg" id="seed-invite-status"></div>
+            </div>
+
+            <!-- Trusted Connectors -->
+            <div class="glass" data-tab="network">
+                <h3>🔗 Trusted Connectors</h3>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+                    Both nodes must add each other as connectors for mutual trust.
+                </p>
+
+                <div id="connectors-list"></div>
+
+                <div class="p2p-tip-box" style="background: rgba(59, 130, 246, 0.04); border: 1px dashed rgba(59, 130, 246, 0.15); border-radius: 8px; padding: 0.6rem 0.75rem; margin-top: 0.75rem; font-size: 0.7rem; color: #94a3b8; line-height: 1.45;">
+                    <strong style="color: #60a5fa; display: block; margin-bottom: 0.2rem; font-size: 0.72rem;">💡 Connection Mode Guide</strong>
+                    For optimal stability and resource usage:
+                    <ul style="margin: 0.2rem 0 0 1rem; padding: 0; list-style-type: disc;">
+                        <li>Configure one node as <strong style="color: #fbbf24;">⚡ Active</strong> (e.g. your private home NAS or backup mirror).</li>
+                        <li>Configure the other node as <strong style="color: #cbd5e1;">💤 Passive</strong> (e.g. your public load-balanced server).</li>
+                        <li>Avoid setting both nodes to Active, as simultaneous outbound dialing can cause connection collisions.</li>
+                    </ul>
+                </div>
+
+                <hr>
+
+                <h3 style="font-size: 0.85rem;">Add New Connector</h3>
+                <div class="add-form">
+                    <div class="field" style="margin-bottom:0">
+                        <label>Address</label>
+                        <input type="text" id="new-addr" placeholder="e.g. us.beanpool.org:4001">
+                    </div>
+                    <div class="row">
+                        <div class="field" style="margin-bottom:0">
+                            <label>Trust Level</label>
+                            <select id="new-trust">
+                                <option value="peer">Peer (Federation)</option>
+                                <option value="blocked">Blocked</option>
+                            </select>
+                        </div>
+                        <div class="field" style="margin-bottom:0">
+                            <label>Connection Mode</label>
+                            <select id="new-mode">
+                                <option value="active" selected>⚡ Active (Outbound Dial)</option>
+                                <option value="passive">💤 Passive (Inbound Listen)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field" style="margin-bottom:0">
+                        <label>Callsign (optional)</label>
+                        <input type="text" id="new-callsign" placeholder="e.g. US Node" maxlength="20">
+                    </div>
+                    <button class="btn btn-primary" id="add-connector-btn">Add Connector</button>
+                    <div class="status-msg" id="connector-status"></div>
+                </div>
+            </div>
+
+
+            <!-- Database Backup & Restore -->
+            <div class="glass" data-tab="system">
+                <h3>💾 Database Backup & Restore</h3>
+                <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem;">
+                    Download / restore snapshots, auto-snapshots and live backup health have moved.
+                </p>
+                <p style="font-size: 0.85rem; color: #cbd5e1; margin: 0;">
+                    → moved to the <a href="#" onclick="switchTab('backup');return false;" style="color:#3b82f6;text-decoration:none;font-weight:600;">🗄️ Backup tab</a>
+                </p>
+            </div>
+
+            <!-- Reset Node -->
+            <div class="glass" data-tab="system" style="border: 1px solid #7f1d1d;">
+                <h3>☢️ Reset Node</h3>
+                <p style="font-size: 0.8rem; color: #f87171; margin-bottom: 0.5rem;">
+                    <strong>This erases your node identity, admin password, and all configuration.</strong>
+                    The database (members, posts, ledger) is preserved, but the node will need to be 
+                    completely reconfigured after a container restart.
+                </p>
+                <p style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.75rem;">
+                    Type <code style="color:#f87171;background:#1e1e1e;padding:1px 4px;border-radius:3px;">RESET</code> below to enable the button.
+                </p>
+                <input type="text" id="reset-confirm-input" placeholder="Type RESET to confirm" 
+                    autocomplete="off" spellcheck="false"
+                    style="margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; border-color: #7f1d1d;"
+                    oninput="document.getElementById('reset-btn').disabled = this.value !== 'RESET'">
+                <button class="btn btn-danger btn-full" id="reset-btn" disabled>Reset Configuration</button>
+                <div class="status-msg" id="reset-status"></div>
+            </div>
+
+            <!-- Software Updates -->
+            <div class="glass" data-tab="system" id="update-panel">
+                <h3>🔄 Software Update</h3>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem;gap:1rem;">
+                    <div style="flex:1;">
+                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">Current Version</div>
+                        <div id="current-version" style="font-size:1.2rem;font-weight:700;color:#10b981;font-family:monospace;">—</div>
+                        <div id="update-published-at" style="font-size:0.7rem;color:#64748b;margin-top:0.2rem;display:none;"></div>
+                    </div>
+                    <div style="flex:1;text-align:right;">
+                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">Latest Available</div>
+                        <div id="latest-version" style="font-size:1.2rem;font-weight:700;color:#64748b;font-family:monospace;">—</div>
+                    </div>
+                </div>
+
+                <!-- Release Notes (hidden until update detected) -->
+                <div id="update-release-notes" style="display:none;background:#0f172a;border-radius:8px;padding:0.75rem;margin-bottom:0.75rem;font-size:0.8rem;color:#cbd5e1;max-height:120px;overflow-y:auto;border:1px solid #334155;"></div>
+
+                <!-- How to Update (hidden until update detected) -->
+                <div id="update-instructions" style="display:none;margin-bottom:0.75rem;">
+                    <div style="font-size:0.75rem;color:#94a3b8;font-weight:600;margin-bottom:0.4rem;">How to Update</div>
+                    <div style="position:relative;background:#0a0f1a;border:1px solid #1e293b;border-radius:8px;padding:0.75rem;font-family:'Courier New',monospace;font-size:0.78rem;color:#e2e8f0;line-height:1.6;">
+                        <code id="update-commands">docker compose pull<br>docker compose up -d</code>
+                        <button onclick="copyUpdateCommands()" style="position:absolute;top:0.5rem;right:0.5rem;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:0.2rem 0.4rem;cursor:pointer;font-size:0.65rem;transition:all 0.2s;" onmouseover="this.style.background='#334155';this.style.color='#f8fafc'" onmouseout="this.style.background='#1e293b';this.style.color='#94a3b8'" title="Copy commands">📋</button>
+                    </div>
+                    <div style="font-size:0.7rem;color:#64748b;margin-top:0.4rem;display:flex;align-items:center;gap:0.3rem;">
+                        <span style="color:#3b82f6;">ℹ️</span> Your data is preserved — only the application container is replaced.
+                    </div>
+                </div>
+
+                <!-- Check button -->
+                <div style="margin-bottom:0.75rem;">
+                    <button class="btn btn-outline" id="check-update-btn" style="width:100%;">🔍 Check for Updates</button>
+                </div>
+
+                <!-- Auto-check settings -->
+                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                    <label style="margin:0;font-size:0.75rem;cursor:pointer;display:flex;align-items:center;gap:0.4rem;color:#94a3b8;">
+                        <input type="checkbox" id="auto-check-updates" style="width:auto;accent-color:#10b981;">
+                        Auto-check for updates
+                    </label>
+                    <select id="update-check-interval" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:0.3rem 0.5rem;font-size:0.72rem;cursor:pointer;outline:none;">
+                        <option value="3600000">Hourly</option>
+                        <option value="21600000" selected>Every 6 hours</option>
+                        <option value="86400000">Daily</option>
+                        <option value="604800000">Weekly</option>
+                    </select>
+                </div>
+                <div class="status-msg" id="update-status"></div>
+            </div>
+
+            <!-- Community Health (moved to Audit tab) -->
+            <div class="glass" data-tab="members">
+                <h3>💚 Community Health</h3>
+                <div id="health-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:1rem;"></div>
+                <div id="health-widest" style="display:none;background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:0.75rem;margin-bottom:1rem;"></div>
+                <h4 style="font-size:0.8rem;color:#94a3b8;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.05em;">🚩 Flags</h4>
+                <div id="health-flags"></div>
+                <button class="btn btn-outline btn-full" id="refresh-health-btn" style="margin-top:0.75rem;">🔄 Refresh</button>
+            </div>
+
+            <!-- Admin Moderation -->
+            <div class="glass" data-tab="moderation" style="display:none;">
+                <h3>🛡️ Moderation Centre</h3>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.75rem;">Reports inbox, post management, and batch cleanup tools.</p>
+                
+                <!-- Reports Inbox -->
+                <div style="margin-bottom:1.25rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                        <h4 style="margin:0;font-size:0.95rem;color:#f8fafc;">🚩 Reports Inbox <span id="reports-count-badge" style="font-size:0.75rem;color:#ef4444;"></span></h4>
+                        <div style="display:flex;gap:0.35rem;">
+                            <button class="btn btn-outline" style="padding:0.2rem 0.5rem;font-size:0.7rem;" onclick="toggleReportFilter('all')" id="report-filter-all">All</button>
+                            <button class="btn btn-outline" style="padding:0.2rem 0.5rem;font-size:0.7rem;" onclick="toggleReportFilter('pending')" id="report-filter-pending">Pending</button>
+                            <button class="btn btn-outline" style="padding:0.2rem 0.5rem;font-size:0.7rem;" onclick="toggleReportFilter('actioned')" id="report-filter-actioned">Actioned</button>
+                        </div>
+                    </div>
+                    <div id="admin-reports-inbox" style="max-height:300px; overflow-y:auto; border:1px solid #1e293b; border-radius:8px;"></div>
+                </div>
+
+                <!-- Health Alerts -->
+                <div style="margin-bottom:1.25rem;">
+                    <h4 style="margin:0 0 0.5rem 0;font-size:0.95rem;color:#f8fafc;">⚠️ Health Alerts</h4>
+                    <div id="admin-health-alerts" style="border:1px solid #1e293b; border-radius:8px;"></div>
+                </div>
+
+                <hr style="border-color:#1e293b;margin:1rem 0;">
+                
+                <!-- Posts Management -->
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                    <h4 style="margin:0;font-size:0.95rem;color:#f8fafc;">📦 All Posts</h4>
+                    <span id="post-count-label" style="font-size:0.75rem;color:#64748b;"></span>
+                </div>
+                
+                <!-- Search + Filters -->
+                <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;flex-wrap:wrap;">
+                    <input type="text" id="admin-post-search" placeholder="Search posts..." style="flex:1;min-width:120px;height:32px;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0.4rem 0.6rem;color:#f8fafc;font-size:0.8rem;outline:none;">
+                    <select id="admin-post-type-filter" style="height:32px;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0 0.5rem;color:#f8fafc;font-size:0.8rem;">
+                        <option value="all">All Types</option>
+                        <option value="offer">Offers</option>
+                        <option value="need">Needs</option>
+                    </select>
+                    <select id="admin-post-category-filter" style="height:32px;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:0 0.5rem;color:#f8fafc;font-size:0.8rem;">
+                        <option value="all">All Categories</option>
+                        <option value="food">🥕 Food</option>
+                        <option value="services">🤝 Services</option>
+                        <option value="labour">👷 Labour</option>
+                        <option value="tools">🛠️ Tools</option>
+                        <option value="goods">📦 Goods</option>
+                        <option value="garden">🌻 Garden</option>
+                        <option value="housing">🏠 Housing</option>
+                        <option value="transport">🚗 Transport</option>
+                        <option value="education">📚 Education</option>
+                        <option value="arts">🎨 Arts</option>
+                        <option value="health">🌿 Health</option>
+                        <option value="care">❤️ Care</option>
+                        <option value="animals">🐾 Animals</option>
+                        <option value="tech">💻 Tech</option>
+                        <option value="energy">☀️ Energy</option>
+                        <option value="general">🌱 General</option>
+                    </select>
+                </div>
+
+                <!-- Batch Action Bar -->
+                <div id="batch-action-bar" style="display:none;background:#1e293b;border:1px solid #f59e0b44;border-radius:8px;padding:0.5rem 0.75rem;margin-bottom:0.5rem;justify-content:space-between;align-items:center;">
+                    <span style="font-size:0.8rem;color:#f59e0b;font-weight:600;"><span id="selected-count">0</span> selected</span>
+                    <div style="display:flex;gap:0.5rem;">
+                        <button class="btn btn-outline" onclick="selectAllPosts()" style="padding:0.2rem 0.5rem;font-size:0.7rem;">Select All</button>
+                        <button class="btn btn-outline" onclick="deselectAllPosts()" style="padding:0.2rem 0.5rem;font-size:0.7rem;">Deselect</button>
+                        <button class="btn btn-danger" onclick="bulkDeletePosts()" style="padding:0.2rem 0.5rem;font-size:0.7rem;">🗑️ Delete Selected</button>
+                    </div>
+                </div>
+
+                <div id="admin-posts-list" style="margin-bottom:0.75rem; max-height:500px; overflow-y:auto; border:1px solid #1e293b; border-radius:8px;"></div>
+                
+                <!-- Pagination -->
+                <div id="admin-posts-pagination" style="display:flex;justify-content:center;gap:0.5rem;margin-bottom:0.75rem;"></div>
+
+                <button class="btn btn-outline btn-full" onclick="loadAdminData()">🔄 Refresh Data</button>
+            </div>
+
+            <!-- Detection Thresholds (Audit tab) -->
+            <div class="glass" data-tab="members" style="display:none;">
+                <h3>🔧 Detection Thresholds</h3>
+                <p style="font-size:0.75rem;color:#64748b;margin-bottom:1rem;">Tune detection parameters for health flags. Changes take effect immediately.</p>
+
+                <details class="threshold-group">
+                    <summary>🚩 Health Flags <span style="font-size:0.65rem;color:#64748b;font-weight:400;">(5 settings)</span></summary>
+                    <div class="group-body">
+                        <div class="field">
+                            <label>Wash Trading Window (hours)</label>
+                            <input type="number" id="th-washTradingWindowHours" step="1">
+                        </div>
+                        <div class="field">
+                            <label>Wash Trading Min Txns (to flag)</label>
+                            <input type="number" id="th-washTradingMinTxns" step="1">
+                        </div>
+                        <div class="field">
+                            <label>Inactive Member (days)</label>
+                            <input type="number" id="th-inactiveMemberDays" step="1">
+                        </div>
+                        <div class="field">
+                            <label>Isolated Branch Min Txns</label>
+                            <input type="number" id="th-isolatedBranchMinTxns" step="1">
+                        </div>
+                        <div class="field">
+                            <label>Max Project Expiry (days)</label>
+                            <input type="number" id="th-maxProjectExpiryDays" step="1">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="threshold-group">
+                    <summary>🕵️ Sybil Detection <span style="font-size:0.65rem;color:#64748b;font-weight:400;">(3 settings)</span></summary>
+                    <div class="group-body">
+                        <div class="field">
+                            <label>Min Invitees Funneling (to flag)</label>
+                            <input type="number" id="th-sybilFunnelMinInvitees" step="1">
+                        </div>
+                        <div class="field">
+                            <label>Min Beans Funneled (to flag)</label>
+                            <input type="number" id="th-sybilFunnelMinAmount" step="1">
+                        </div>
+                        <div class="field">
+                            <label>Funnel Window (days)</label>
+                            <input type="number" id="th-sybilFunnelWindowDays" step="1">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="threshold-group">
+                    <summary>🛡️ Newcomer Velocity Gate <span style="font-size:0.65rem;color:#64748b;font-weight:400;">(4 settings)</span></summary>
+                    <div class="group-body">
+                        <p style="font-size:0.7rem;color:#64748b;margin-bottom:0.75rem;">ℹ️ Only affects newcomer accounts less than 72 hours old.</p>
+                        <div class="field">
+                            <label>Tier 1 Cutoff (hours)</label>
+                            <input type="number" id="th-ghostVelocityTier1Hours" step="1">
+                        </div>
+                        <div class="field">
+                            <label>Tier 1 Daily Limit (beans)</label>
+                            <input type="number" id="th-ghostVelocityTier1Limit" step="1">
+                        </div>
+                        <div class="field">
+                            <label>Tier 2 Cutoff (hours)</label>
+                            <input type="number" id="th-ghostVelocityTier2Hours" step="1">
+                        </div>
+                        <div class="field">
+                            <label>Tier 2 Daily Limit (beans)</label>
+                            <input type="number" id="th-ghostVelocityTier2Limit" step="1">
+                        </div>
+                    </div>
+                </details>
+
+                <div style="display:flex;gap:0.5rem;">
+                    <button class="btn btn-primary" id="save-audit-thresholds-btn" style="flex:1;">💾 Save</button>
+                    <button class="btn btn-outline" id="reset-audit-thresholds-btn" style="flex:1;">↩️ Defaults</button>
+                </div>
+                <div class="status-msg" id="audit-thresholds-status"></div>
+            </div>
+
+            <!-- Admin Members & Audit -->
+            <div class="glass" data-tab="members" style="display:none;">
+                <h3>🌳 Members & Audit Tree</h3>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem;">Manage members and prune suspicious branches. Members with pending reports show a 🚩 badge. Use <strong style="color:#fbbf24;">⛰️ Make Elder</strong> to promote a trusted member so they can help verify (vouch for) others — this only widens their credit limit; their balance is never touched.</p>
+                <div id="audit-filter-bar" style="font-size: 0.75rem; display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; padding: 0.4rem 0;">
+                    <button class="audit-filter-btn active" data-filter="all" onclick="setAuditFilter('all')"
+                        style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:#334155;color:#f8fafc;cursor:pointer;font-size:0.72rem;font-weight:600;">All</button>
+                    <button class="audit-filter-btn" data-filter="invite_spam" onclick="setAuditFilter('invite_spam')"
+                        style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#ef4444;cursor:pointer;font-size:0.72rem;font-weight:600;">⚠️ Sybil <span class="filter-count" data-count="invite_spam"></span></button>
+                    <button class="audit-filter-btn" data-filter="sybil_funnel" onclick="setAuditFilter('sybil_funnel')"
+                        style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#ef4444;cursor:pointer;font-size:0.72rem;font-weight:600;">🕵️ Funnel <span class="filter-count" data-count="sybil_funnel"></span></button>
+                    <button class="audit-filter-btn" data-filter="wash_trading" onclick="setAuditFilter('wash_trading')"
+                        style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#f59e0b;cursor:pointer;font-size:0.72rem;font-weight:600;">🔄 Wash <span class="filter-count" data-count="wash_trading"></span></button>
+                    <button class="audit-filter-btn" data-filter="isolated_branch" onclick="setAuditFilter('isolated_branch')"
+                        style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#f59e0b;cursor:pointer;font-size:0.72rem;font-weight:600;">🏝️ Isolated <span class="filter-count" data-count="isolated_branch"></span></button>
+                    <button class="audit-filter-btn" data-filter="inactive_member" onclick="setAuditFilter('inactive_member')"
+                        style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#64748b;cursor:pointer;font-size:0.72rem;font-weight:600;">💤 Inactive <span class="filter-count" data-count="inactive_member"></span></button>
+                    <button class="audit-filter-btn" data-filter="reported" onclick="setAuditFilter('reported')"
+                        style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#ef4444;cursor:pointer;font-size:0.72rem;font-weight:600;">🚩 Reported <span class="filter-count" data-count="reported"></span></button>
+                </div>
+                <div id="admin-members-tree" style="margin-bottom:0.75rem; max-height:400px; overflow-y:auto; border:1px solid #1e293b; border-radius:8px; padding:0.5rem;"></div>
+                <button class="btn btn-outline btn-full" onclick="loadAdminData()">🔄 Refresh Data</button>
+            </div>
+
+            <!-- Commons & Voting -->
+            <div class="glass" data-tab="commons" style="display:none;">
+                <h3>🏛️ Community Commons</h3>
+                <p style="font-size:0.8rem;color:#64748b;margin-bottom:1rem;">Manage the circulation pool, voting rounds, and community projects.</p>
+
+                <!-- Pool Balance -->
+                <div style="display:flex;gap:1rem;margin-bottom:1rem;">
+                    <div style="flex:1;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:1rem;text-align:center;">
+                        <p style="font-size:0.8rem;color:#64748b;margin-bottom:0.25rem;">Commons Pool</p>
+                        <p id="commons-balance" style="font-size:1.8rem;font-weight:700;color:#f59e0b;font-family:monospace;">...</p>
+                    </div>
+                    <div style="flex:1;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:1rem;text-align:center;">
+                        <p style="font-size:0.8rem;color:#64748b;margin-bottom:0.25rem;">Active Round</p>
+                        <p id="commons-round-status" style="font-size:1rem;font-weight:600;color:#60a5fa;">None</p>
+                    </div>
+                </div>
+
+                <!-- Projects List -->
+                <h4 style="font-size:0.95rem;margin-bottom:0.5rem;">Projects</h4>
+                <div id="commons-projects-list" style="max-height:300px;overflow-y:auto;border:1px solid #1e293b;border-radius:8px;margin-bottom:1rem;"></div>
+
+                <!-- Voting Round Controls -->
+                <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;">
+                    <button class="btn btn-outline" onclick="createRound()" style="flex:1;">🗳️ Create Round</button>
+                    <button class="btn btn-outline" onclick="closeRound()" style="flex:1;">✅ Close Round</button>
+                    <button class="btn btn-outline" onclick="loadCommonsData()" style="flex:1;">🔄 Refresh</button>
+                </div>
+
+                <!-- Circulation Rate -->
+                <hr style="border-color:#1e293b;margin:0 0 1rem 0;">
+                <h4 style="font-size:0.95rem;margin-bottom:0.5rem;">💰 Circulation Rate</h4>
+                <p style="font-size:0.75rem;color:#64748b;margin-bottom:0.75rem;">The base rate at which idle credits flow back to the commons pool each epoch. Progressive scaling (0.5% – 2.5%) applies automatically based on balance.</p>
+                <div class="field">
+                    <label>Base Circulation Rate</label>
+                    <input type="number" id="th-circulationRate" step="0.001">
+                </div>
+                <div style="display:flex;gap:0.5rem;">
+                    <button class="btn btn-primary" id="save-commons-thresholds-btn" style="flex:1;">💾 Save</button>
+                    <button class="btn btn-outline" id="reset-commons-thresholds-btn" style="flex:1;">↩️ Defaults</button>
+                </div>
+                <div class="status-msg" id="commons-thresholds-status"></div>
+
+            </div>
+
+            <!-- Inbox & Global Comms -->
+            <div class="glass" data-tab="comms" style="display:none; flex-direction:column; max-height:85vh;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                    <h3 style="margin:0;">📥 Inbox & Global Comms</h3>
+                    <button class="btn btn-outline" onclick="loadAdminInbox()" style="padding:0.3rem 0.75rem;font-size:0.8rem;">🔄 Refresh</button>
+                </div>
+                
+                <!-- Inbox Split Pane -->
+                <div style="display: flex; gap: 0; min-height: 400px; height: 400px; border: 1px solid #1e293b; border-radius: 8px; overflow: hidden; margin-bottom: 1rem; flex-shrink: 0;">
+                    
+                    <!-- Left Sidebar (Users & Convs) -->
+                    <div style="width: 35%; background: #0f172a; border-right: 1px solid #1e293b; display: flex; flex-direction: column;">
+                        <div style="padding: 0.5rem; border-bottom: 1px solid #1e293b;">
+                            <input type="text" id="admin-inbox-search" placeholder="Search members..." style="width:100%;height:32px;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:0.4rem;color:#f8fafc;font-size:0.8rem;outline:none;">
+                        </div>
+                        <div id="admin-inbox-list" style="flex: 1; overflow-y: auto;">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    
+                    <!-- Right Chat Area -->
+                    <div style="flex: 1; background: #020617; display: flex; flex-direction: column;">
+                        <div id="admin-inbox-header" style="padding: 0.75rem; border-bottom: 1px solid #1e293b; font-weight: 600; color: #f8fafc; background: #0f172a;font-size:0.9rem;">
+                            Select a conversation
+                        </div>
+                        <div id="admin-inbox-messages" style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                            <div style="margin:auto;color:#475569;font-size:0.85rem;">No conversation selected</div>
+                        </div>
+                        <div style="padding: 0.5rem; border-top: 1px solid #1e293b; background: #0f172a; display: flex; gap: 0.5rem;">
+                            <input type="text" id="admin-inbox-input" placeholder="Type a message..." disabled style="flex: 1;background:#1e293b;border:1px solid #334155;border-radius:20px;padding:0.5rem 1rem;color:#f8fafc;font-size:0.85rem;outline:none;">
+                            <button class="btn btn-primary" id="admin-inbox-send" disabled style="padding:0.5rem 1rem;border-radius:20px;">Send</button>
+                        </div>
+                    </div>
+                </div>
+
+                <hr style="border-color: #1e293b; margin: 0.5rem 0 1rem 0;">
+                
+                <!-- Global Announcements -->
+                <h3 style="font-size: 0.9rem; margin-bottom: 0.5rem;">📢 Push Global Announcement</h3>
+                <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                    <div class="field" style="flex:1;">
+                        <input type="text" id="admin-announce-title" placeholder="e.g. Scheduled Maintenance">
+                    </div>
+                    <div class="field" style="flex:1;">
+                        <select id="admin-announce-severity">
+                            <option value="info">Info (Blue)</option>
+                            <option value="warning">Warning (Yellow)</option>
+                            <option value="critical">Critical (Red)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="field">
+                    <textarea id="admin-announce-body" rows="2" style="width:100%;border:1px solid #334155;border-radius:8px;padding:0.6rem;color:#f8fafc;font-family:inherit;font-size:0.85rem;resize:vertical;" placeholder="Popup Message Body..."></textarea>
+                </div>
+                <button class="btn btn-outline btn-full" id="btn-send-announcement" style="margin-bottom:0.75rem;">Broadcast Announcement</button>
+                <div class="status-msg" id="announce-status"></div>
+            </div>
+
+            <!-- Diagnostics & Logs -->
+            <div class="glass" data-tab="diagnostics" style="display:none;">
+                <h3>💻 Diagnostics &amp; System Logs</h3>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1.25rem;">
+                    Monitor real-time node events, security audit logs, and hardware resource metrics.
+                </p>
+
+                <!-- Hardware Resource Cards Grid -->
+                <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                    <!-- CPU Load Card -->
+                    <div class="metric-card glass" style="background: rgba(15, 23, 42, 0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;">
+                        <span style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 0.5rem;">CPU Load</span>
+                        <div class="cpu-gauge-container" style="position: relative; width: 80px; height: 80px;">
+                            <svg class="cpu-gauge" width="80" height="80" viewBox="0 0 36 36">
+                                <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#1e293b" stroke-width="2.5" />
+                                <path id="cpu-gauge-val" class="gauge-val" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" style="transition: stroke-dasharray 0.5s ease;" />
+                            </svg>
+                            <div id="cpu-load-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1rem; font-weight: 700; font-family: monospace; color: #f8fafc;">0%</div>
+                        </div>
+                        <span id="cpu-cores" style="font-size: 0.65rem; color: #64748b; margin-top: 0.5rem;">— Cores</span>
+                    </div>
+
+                    <!-- RAM Usage Card -->
+                    <div class="metric-card glass" style="background: rgba(15, 23, 42, 0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <span style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; display: block; margin-bottom: 0.75rem;">Memory Allocation</span>
+                            <div style="font-size: 1.15rem; font-weight: 700; color: #f8fafc; font-family: monospace; margin-bottom: 0.5rem;" id="ram-usage-text">0 / 0 GB</div>
+                            <div style="background: #1e293b; height: 8px; border-radius: 4px; overflow: hidden;">
+                                <div id="ram-usage-bar" style="background: linear-gradient(90deg, #3b82f6, #60a5fa); width: 0%; height: 100%; border-radius: 4px; transition: width 0.5s ease; box-shadow: 0 0 8px rgba(96,165,250,0.5);"></div>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: #64748b; margin-top: 0.5rem;">
+                            <span>Used: <span id="ram-used-percent" style="font-weight: 600; color: #cbd5e1;">0%</span></span>
+                            <span>Free: <span id="ram-free-gb">0 GB</span></span>
+                        </div>
+                    </div>
+
+                    <!-- Database & WAL Size Card -->
+                    <div class="metric-card glass" style="background: rgba(15, 23, 42, 0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <span style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; display: block; margin-bottom: 0.5rem;">Database Storage</span>
+                            <div style="font-size: 1.25rem; font-weight: 700; color: #fbbf24; font-family: monospace;" id="db-total-size">0.00 MB</div>
+                            <div style="font-size: 0.65rem; color: #64748b; margin-top: 0.25rem;">
+                                WAL Cache: <span id="db-wal-size" style="font-family: monospace; color: #cbd5e1;">0.00 MB</span>
+                            </div>
+                        </div>
+                        <div style="font-size: 0.65rem; color: #64748b; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #1e293b; padding-top: 0.5rem; margin-top: 0.5rem;">
+                            <span>Uptime: <span id="sys-uptime" style="font-family: monospace; color: #cbd5e1;">—</span></span>
+                            <span id="sys-os-arch" style="font-family: monospace; text-transform: uppercase;">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Custom styled terminal log console -->
+                <div class="terminal-container" style="background: #020617; border: 1px solid #1e293b; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; height: 500px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">
+                    
+                    <!-- Console Header Toolbar -->
+                    <div class="terminal-toolbar" style="background: #0f172a; padding: 0.6rem 0.75rem; border-bottom: 1px solid #1e293b; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: space-between; z-index: 10;">
+                        <!-- Filters -->
+                        <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                            <select id="log-filter-level" style="height: 30px; width: 105px; font-size: 0.75rem; background: #1e293b; border: 1px solid #334155; padding: 0.2rem 0.5rem; border-radius: 6px;">
+                                <option value="ALL">All Levels</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARN">WARN</option>
+                                <option value="ERROR">ERROR</option>
+                                <option value="SECURITY">SECURITY</option>
+                                <option value="SYNC">SYNC</option>
+                            </select>
+                            
+                            <select id="log-filter-category" style="height: 30px; width: 115px; font-size: 0.75rem; background: #1e293b; border: 1px solid #334155; padding: 0.2rem 0.5rem; border-radius: 6px;">
+                                <option value="ALL">All Categories</option>
+                                <option value="P2P">P2P</option>
+                                <option value="LEDGER">LEDGER</option>
+                                <option value="TLS">TLS</option>
+                                <option value="ADMIN">ADMIN</option>
+                                <option value="AUTH">AUTH</option>
+                                <option value="DB">DB</option>
+                                <option value="SYS">SYS</option>
+                            </select>
+
+                            <input type="text" id="log-search" placeholder="Filter message..." style="height: 30px; width: 120px; font-size: 0.75rem; background: #1e293b; border: 1px solid #334155; padding: 0 0.5rem; border-radius: 6px; color: #f8fafc; outline: none;" />
+                        </div>
+
+                        <!-- Actions -->
+                        <div style="display: flex; gap: 0.4rem; align-items: center;">
+                            <!-- Pause / Play Toggle -->
+                            <button id="btn-log-pause" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem; height: 30px;" title="Pause log auto-scroll">
+                                ⏸️ Pause
+                            </button>
+                            <!-- Clear Console -->
+                            <button id="btn-log-clear" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem; height: 30px;" title="Clear console view">
+                                🧹 Clear
+                            </button>
+                            <!-- Export Dropdown Container -->
+                            <div class="export-dropdown-container" style="position: relative; display: inline-block;">
+                                <button id="btn-log-export" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem; height: 30px;" title="Export Logs">
+                                    💾 Export ▾
+                                </button>
+                                <div id="log-export-options" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 100; min-width: 120px; overflow: hidden;">
+                                    <button class="export-opt-btn" id="btn-export-txt" style="width: 100%; padding: 0.5rem 0.75rem; text-align: left; background: none; border: none; color: #cbd5e1; font-size: 0.75rem; cursor: pointer; display: block; border-bottom: 1px solid #334155;">
+                                        📄 Plain Text (.txt)
+                                    </button>
+                                    <button class="export-opt-btn" id="btn-export-json" style="width: 100%; padding: 0.5rem 0.75rem; text-align: left; background: none; border: none; color: #cbd5e1; font-size: 0.75rem; cursor: pointer; display: block;">
+                                        📦 Raw Data (.json)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Console Feed -->
+                    <div id="log-terminal-feed" style="flex: 1; overflow-y: auto; padding: 0.75rem 1rem; font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.75rem; line-height: 1.5; color: #cbd5e1; user-select: text; scroll-behavior: smooth;">
+                        <!-- Hydrated by JS -->
+                    </div>
+
+                    <!-- Connection Status Banner -->
+                    <div id="log-ws-status" style="background: rgba(16, 185, 129, 0.1); border-top: 1px solid rgba(16, 185, 129, 0.2); padding: 0.3rem 0.75rem; font-size: 0.65rem; color: #34d399; display: flex; align-items: center; justify-content: space-between; font-weight: 500;">
+                        <span>● Connected to System Events Stream</span>
+                        <span id="log-buffered-count" style="font-family: monospace;">0 logs</span>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ======================== BACKUP TAB ======================== -->
+
+            <!-- SECTION 1 (prominent): Snapshots & manual backup — works on ANY node -->
+            <div class="glass" data-tab="backup" style="display:none;">
+                <h3>📸 Snapshots &amp; manual backup <span style="font-size:0.65rem;font-weight:600;color:#10b981;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;">this node</span></h3>
+                <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.75rem;">
+                    Local point-in-time protection for this node. <strong>No backup server required</strong> — this works on any node. Download a full snapshot of this node's database and config, or upload a previously downloaded snapshot to restore.
+                </p>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <button class="btn btn-primary" id="btn-backup" onclick="downloadBackup()" style="flex: 1;">
+                        💾 Download Backup
+                    </button>
+                    <label class="btn btn-outline" style="flex: 1; text-align: center; cursor: pointer; display: flex; justify-content: center; align-items: center; margin: 0; color: #f8fafc;">
+                        <input type="file" id="backup-upload-input" accept=".tar.gz" style="display:none;" onchange="uploadBackup()">
+                        📂 Upload Restore
+                    </label>
+                </div>
+                <div class="status-msg" id="backup-status"></div>
+                <div class="status-msg" id="restore-status"></div>
+
+                <!-- Auto-snapshots config -->
+                <div style="border-top:1px solid #1e293b;margin-top:1rem;padding-top:1rem;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+                        <div style="font-size:0.85rem;font-weight:600;color:#e2e8f0;">⏱️ Auto-snapshots</div>
+                        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.78rem;color:#cbd5e1;">
+                            <input type="checkbox" id="autosnap-enabled" onchange="saveAutoSnapConfig()" style="width:auto;margin:0;">
+                            Enabled
+                        </label>
+                    </div>
+                    <p style="font-size:0.72rem;color:#64748b;margin-bottom:0.6rem;">
+                        Periodically write a local DB snapshot into <code>data/snapshots/</code>, keeping the most recent few. On by default — daily, keeping 7.
+                    </p>
+                    <div style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;">
+                        <div style="flex:1;min-width:120px;">
+                            <label style="font-size:0.7rem;color:#94a3b8;display:block;margin-bottom:0.2rem;">Interval (hours)</label>
+                            <input type="number" id="autosnap-interval" min="1" step="1" value="24" style="width:100%;">
+                        </div>
+                        <div style="flex:1;min-width:120px;">
+                            <label style="font-size:0.7rem;color:#94a3b8;display:block;margin-bottom:0.2rem;">Keep (count)</label>
+                            <input type="number" id="autosnap-keep" min="1" step="1" value="7" style="width:100%;">
+                        </div>
+                        <button class="btn btn-outline" onclick="saveAutoSnapConfig()" style="flex:0 0 auto;">Save</button>
+                        <button class="btn btn-primary" onclick="createSnapshotNow()" style="flex:0 0 auto;">📸 Snapshot now</button>
+                    </div>
+                    <div class="status-msg" id="autosnap-status"></div>
+                </div>
+
+                <!-- Snapshot list -->
+                <div style="margin-top:1rem;">
+                    <div style="font-size:0.8rem;font-weight:600;color:#e2e8f0;margin-bottom:0.5rem;">Local snapshots</div>
+                    <div id="snapshot-list" style="font-size:0.78rem;color:#94a3b8;">Loading…</div>
+                </div>
+            </div>
+
+            <!-- SECTION 2 (optional/advanced): Live backup server — role + health -->
+            <div class="glass" data-tab="backup" style="display:none;">
+                <h3>🔄 Live backup server <span style="font-size:0.65rem;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;">optional · advanced</span></h3>
+                <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 1rem;">
+                    A <em>separate, optional</em> hot-standby for failover (HA). A second machine (a <strong>backup</strong> server) continuously pulls a signed read-only snapshot from this <strong>primary</strong> over HTTPS. State only ever flows primary → backup. You do <strong>not</strong> need this for the local snapshots above.
+                </p>
+
+                <!-- Role -->
+                <div style="background: rgba(15,23,42,0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+                    <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.3rem;">This Node's Role</div>
+                    <div style="display:flex;align-items:center;gap:0.6rem;">
+                        <span id="backup-role-badge" style="font-size:1.1rem;font-weight:700;color:#38bdf8;">—</span>
+                        <span id="backup-role-desc" style="font-size:0.78rem;color:#94a3b8;"></span>
+                    </div>
+                    <div id="backup-primary-url-row" style="display:none;font-size:0.78rem;color:#cbd5e1;margin-top:0.5rem;">
+                        Pulling from: <code id="backup-primary-url" style="color:#10b981;background:#0a0f1a;padding:1px 5px;border-radius:3px;font-family:monospace;margin-right:8px;"></code>
+                        <button class="btn btn-secondary" onclick="toggleReplicationConfigForm()" style="font-size:0.65rem;padding:2px 8px;vertical-align:middle;display:inline-block;cursor:pointer;">✏️ Edit Connection</button>
+
+                        <!-- Inline Edit Form -->
+                        <div id="replication-config-form" style="display:none;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #1e293b;">
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label style="display:block;font-size:0.65rem;color:#94a3b8;text-transform:uppercase;margin-bottom:0.25rem;">Primary Node HTTPS URL</label>
+                                <input type="text" id="rep-primary-url" placeholder="https://test.beanpool.org" style="background:#090d16;border:1px solid #1e293b;color:#e2e8f0;font-family:monospace;font-size:0.8rem;padding:0.4rem;width:100%;border-radius:6px;box-sizing:border-box;" />
+                            </div>
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label style="display:block;font-size:0.65rem;color:#94a3b8;text-transform:uppercase;margin-bottom:0.25rem;">Primary Admin Password</label>
+                                <input type="password" id="rep-primary-pw" placeholder="Leave blank to keep current password" style="background:#090d16;border:1px solid #1e293b;color:#e2e8f0;font-size:0.8rem;padding:0.4rem;width:100%;border-radius:6px;box-sizing:border-box;" />
+                            </div>
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label style="display:block;font-size:0.65rem;color:#94a3b8;text-transform:uppercase;margin-bottom:0.25rem;">Primary Replication Token <span style="color:#10b981;text-transform:none;">(recommended)</span></label>
+                                <input type="password" id="rep-primary-token" placeholder="Paste the token shown on the primary" style="background:#090d16;border:1px solid #1e293b;color:#e2e8f0;font-family:monospace;font-size:0.8rem;padding:0.4rem;width:100%;border-radius:6px;box-sizing:border-box;" />
+                                <div style="font-size:0.62rem;color:#64748b;margin-top:0.25rem;">Scoped read-only credential for snapshot pulls. Leave blank to keep current; when set it is used instead of the admin password.</div>
+                            </div>
+                            <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                                <button class="btn btn-primary" onclick="saveReplicationConfig()" style="font-size:0.7rem;padding:4px 12px;cursor:pointer;">Save Connection</button>
+                                <button class="btn btn-secondary" onclick="toggleReplicationConfigForm()" style="font-size:0.7rem;padding:4px 12px;cursor:pointer;">Cancel</button>
+                            </div>
+                            <div class="status-msg" id="rep-config-status" style="margin-top:0.5rem;font-size:0.7rem;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live backup health (only meaningful on a backup) -->
+                <div id="backup-health-tile" style="background: rgba(15,23,42,0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;">Live Backup Health</div>
+                        <span id="backup-health-badge" style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:8px;background:#334155;color:#cbd5e1;">—</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.75rem;">
+                        <div>
+                            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;">Last Successful Pull</div>
+                            <div id="backup-last-success" style="font-size:0.95rem;font-weight:600;color:#e2e8f0;">—</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;">Failure Streak</div>
+                            <div id="backup-fail-streak" style="font-size:0.95rem;font-weight:600;color:#e2e8f0;">—</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;">Pull Interval</div>
+                            <div id="backup-interval" style="font-size:0.95rem;font-weight:600;color:#e2e8f0;">—</div>
+                        </div>
+                    </div>
+                    <p id="backup-health-note" style="font-size:0.72rem;color:#64748b;margin:0.6rem 0 0;"></p>
+
+                    <!-- Replica consistency: does this backup hold the same data the primary sent? -->
+                    <div id="backup-consistency" style="margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid #1e293b;display:none;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+                            <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;">Replica Consistency <span title="Compares this backup's row counts, total balance and commons against the primary's most recent signed snapshot." style="cursor:help;color:#475569;">ⓘ</span></div>
+                            <span id="backup-consistency-badge" style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:8px;background:#334155;color:#cbd5e1;">—</span>
+                        </div>
+                        <div id="backup-consistency-body" style="font-size:0.75rem;color:#cbd5e1;"></div>
+                        <p id="backup-consistency-meta" style="font-size:0.68rem;color:#64748b;margin:0.5rem 0 0;"></p>
+                    </div>
+
+                    <!-- Force resync: rebuild this backup from the primary's current snapshot -->
+                    <div id="backup-resync-row" style="margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid #1e293b;">
+                        <button class="btn btn-secondary" id="backup-resync-btn" onclick="forceResync()" style="font-size:0.7rem;padding:5px 12px;cursor:pointer;">🔄 Force full resync</button>
+                        <span style="font-size:0.65rem;color:#64748b;margin-left:8px;">Rebuilds from the primary's current snapshot, discarding drifted/orphan rows.</span>
+                        <div class="status-msg" id="backup-resync-status" style="margin-top:0.4rem;font-size:0.7rem;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2a: Replication access (primary side) — who is pulling snapshots -->
+            <div class="glass" id="replication-access-panel" data-tab="backup" style="display:none;">
+                <h3>🔑 Replication Access <span style="font-size:0.65rem;font-weight:600;color:#38bdf8;background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3);padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;">primary</span></h3>
+                <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.75rem;">
+                    The snapshot-pull endpoint serves this node's <strong>entire ledger</strong>. Authenticate backups with a dedicated <strong>replication token</strong> — a scoped, read-only credential separate from the admin password, so the admin password can rotate without breaking replication and a leaked admin password can't be used to siphon the database.
+                </p>
+
+                <!-- Token management -->
+                <div style="background: rgba(15,23,42,0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+                        <div style="font-size:0.8rem;color:#cbd5e1;">Replication token: <strong id="rep-token-state" style="color:#94a3b8;">—</strong></div>
+                        <button class="btn btn-primary" id="rep-token-gen-btn" onclick="generateReplicationToken()" style="font-size:0.7rem;padding:4px 12px;cursor:pointer;">🔑 Generate / rotate token</button>
+                    </div>
+                    <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.72rem;color:#cbd5e1;margin-top:0.75rem;cursor:pointer;">
+                        <input type="checkbox" id="rep-token-only" onchange="setTokenOnlyMode()" style="cursor:pointer;" />
+                        Require token — reject admin-password pulls (enable only after the token is set on every backup)
+                    </label>
+                    <!-- Shown once after generation -->
+                    <div id="rep-token-reveal" style="display:none;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #1e293b;">
+                        <div style="font-size:0.7rem;color:#f59e0b;font-weight:600;margin-bottom:0.4rem;">⚠️ Copy this token now — it is shown only once. Paste it into each backup's connection settings.</div>
+                        <div style="position:relative;background:#0a0f1a;border:1px solid #1e293b;border-radius:8px;padding:0.6rem;padding-right:2.5rem;font-family:'Courier New',monospace;font-size:0.74rem;color:#e2e8f0;word-break:break-all;">
+                            <code id="rep-token-value"></code>
+                            <button onclick="copyReplicationToken()" style="position:absolute;top:0.4rem;right:0.4rem;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:0.2rem 0.4rem;cursor:pointer;font-size:0.65rem;" title="Copy token">📋</button>
+                        </div>
+                    </div>
+                    <div class="status-msg" id="rep-token-status" style="margin-top:0.5rem;font-size:0.7rem;"></div>
+                </div>
+
+                <!-- Access activity -->
+                <div style="background: rgba(15,23,42,0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem;">
+                    <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.6rem;">Snapshot Pull Activity</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.75rem;">
+                        <div>
+                            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;">Last Pull</div>
+                            <div id="rep-last-pull" style="font-size:0.9rem;font-weight:600;color:#e2e8f0;">—</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;">Total Pulls</div>
+                            <div id="rep-total-pulls" style="font-size:0.9rem;font-weight:600;color:#e2e8f0;">—</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;">Rejected Attempts</div>
+                            <div id="rep-rejected" style="font-size:0.9rem;font-weight:600;color:#e2e8f0;">—</div>
+                        </div>
+                    </div>
+                    <div id="rep-recent" style="margin-top:0.75rem;font-size:0.7rem;color:#94a3b8;"></div>
+                    <p style="font-size:0.68rem;color:#64748b;margin:0.6rem 0 0;">Rejected attempts are pulls with a bad/missing credential. A nonzero count from an unexpected source is worth investigating.</p>
+                </div>
+            </div>
+
+            <!-- SECTION 2b: Create a backup server wizard (part of the optional HA feature) -->
+            <div class="glass" id="backup-enroll-wizard" data-tab="backup" style="display:none;">
+                <h3>➕ Create a backup server <span style="font-size:0.65rem;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;">optional · advanced</span></h3>
+                <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.75rem;">
+                    Stand up a <strong>second machine</strong> as a live backup of this node. Run the command below <strong>on that other machine</strong> (it must already have the BeanPool node code). It enrolls the machine into this community and configures it to pull from this primary.
+                </p>
+                <button class="btn btn-primary" id="backup-enroll-btn" onclick="generateBackupCommand()" style="margin-bottom:0.75rem;">
+                    🪄 Generate setup command
+                </button>
+                <div id="backup-enroll-result" style="display:none;">
+                    <div style="font-size:0.75rem;color:#94a3b8;font-weight:600;margin-bottom:0.4rem;">Run this on the BACKUP machine:</div>
+                    <div style="position:relative;background:#0a0f1a;border:1px solid #1e293b;border-radius:8px;padding:0.75rem;padding-right:2.5rem;font-family:'Courier New',monospace;font-size:0.78rem;color:#e2e8f0;line-height:1.6;word-break:break-all;">
+                        <code id="backup-setup-command"></code>
+                        <button onclick="copyBackupCommand()" style="position:absolute;top:0.5rem;right:0.5rem;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:0.2rem 0.4rem;cursor:pointer;font-size:0.65rem;" title="Copy command">📋</button>
+                    </div>
+                    <p style="font-size:0.72rem;color:#64748b;margin:0.5rem 0 0;">
+                        Replace <code style="color:#f59e0b;">&lt;ADMIN_PASSWORD&gt;</code> with this node's admin password (not shown here for safety). After it finishes on the other machine, restart that node — it will begin pulling within ~60s and appear in the health tile above.
+                    </p>
+                </div>
+                <div class="status-msg" id="backup-enroll-status"></div>
+            </div>
+
+            <!-- SECTION 2c: Restore primary server wizard (only shown on backups) -->
+            <div class="glass" id="backup-restore-wizard" data-tab="backup" style="display:none;">
+                <h3>🔄 Restore primary server <span style="font-size:0.65rem;font-weight:600;color:#10b981;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;">disaster recovery</span></h3>
+                <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.75rem;">
+                    If your primary server fails, you can restore a fresh primary node using the data and identity keys from this backup. Run the command below <strong>on the new primary machine</strong> (it must already have the BeanPool node code).
+                </p>
+                <button class="btn btn-primary" id="backup-restore-btn" onclick="generateRestoreCommand()" style="margin-bottom:0.75rem;">
+                    🪄 Generate restore command
+                </button>
+                <div id="backup-restore-result" style="display:none;">
+                    <div style="font-size:0.75rem;color:#94a3b8;font-weight:600;margin-bottom:0.4rem;">Run this on the new PRIMARY machine:</div>
+                    <div style="position:relative;background:#0a0f1a;border:1px solid #1e293b;border-radius:8px;padding:0.75rem;padding-right:2.5rem;font-family:'Courier New',monospace;font-size:0.78rem;color:#e2e8f0;line-height:1.6;word-break:break-all;">
+                        <code id="backup-restore-command"></code>
+                        <button onclick="copyRestoreCommand()" style="position:absolute;top:0.5rem;right:0.5rem;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:0.2rem 0.4rem;cursor:pointer;font-size:0.65rem;" title="Copy command">📋</button>
+                    </div>
+                    <p style="font-size:0.72rem;color:#64748b;margin:0.5rem 0 0;">
+                        Replace <code style="color:#f59e0b;">&lt;BACKUP_ADMIN_PASSWORD&gt;</code> with this backup server's admin password (not shown here for safety). After the script finishes on the primary machine, boot that node — it will start up with your fully restored database.
+                    </p>
+                </div>
+                <div class="status-msg" id="backup-restore-status"></div>
+            </div>
+
+            <!-- Live Connections -->
+            <div class="glass" data-tab="connections" style="display:none;">
+                <h3>🔌 Live WebSocket Connections</h3>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1.25rem;">
+                    Monitor real-time client sync feeds, admin logs streams, and active connection metrics.
+                </p>
+
+                <!-- Connection Analytics Cards Grid -->
+                <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                    <!-- Total Connected Card -->
+                    <div class="metric-card glass" style="background: rgba(15, 23, 42, 0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; text-align: center;">
+                        <span style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; display: block; margin-bottom: 0.5rem;">Total Connected</span>
+                        <div id="conn-stat-total" style="font-size: 1.75rem; font-weight: 700; color: #38bdf8; font-family: monospace;">0</div>
+                    </div>
+
+                    <!-- Sync Clients Card -->
+                    <div class="metric-card glass" style="background: rgba(15, 23, 42, 0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; text-align: center;">
+                        <span style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; display: block; margin-bottom: 0.5rem;">Sync Feeds (Clients)</span>
+                        <div id="conn-stat-sync" style="font-size: 1.75rem; font-weight: 700; color: #10b981; font-family: monospace;">0</div>
+                    </div>
+
+                    <!-- Admin Streams Card -->
+                    <div class="metric-card glass" style="background: rgba(15, 23, 42, 0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; text-align: center;">
+                        <span style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; display: block; margin-bottom: 0.5rem;">Admin Streams</span>
+                        <div id="conn-stat-admin" style="font-size: 1.75rem; font-weight: 700; color: #a855f7; font-family: monospace;">0</div>
+                    </div>
+
+                    <!-- Avg Connection Time Card -->
+                    <div class="metric-card glass" style="background: rgba(15, 23, 42, 0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; text-align: center;">
+                        <span style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; display: block; margin-bottom: 0.5rem;">Avg Time (Seconds)</span>
+                        <div id="conn-stat-avg-time" style="font-size: 1.75rem; font-weight: 700; color: #fbbf24; font-family: monospace;">0s</div>
+                    </div>
+
+                    <!-- Total Messages Transited Card -->
+                    <div class="metric-card glass" style="background: rgba(15, 23, 42, 0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem; text-align: center;">
+                        <span style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; display: block; margin-bottom: 0.5rem;">Messages Transited</span>
+                        <div id="conn-stat-messages" style="font-size: 1.75rem; font-weight: 700; color: #f43f5e; font-family: monospace;">0</div>
+                    </div>
+                </div>
+
+                <!-- Two Column Dashboard -->
+                <div class="conn-dashboard-layout" style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 1.5rem;">
+                    <!-- Left Column: Active Connections (List of Cards) -->
+                    <div class="conn-list-column" style="flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 0.75rem;">
+                        <h4 style="margin: 0; color: #cbd5e1; font-size: 0.9rem; display: flex; align-items: center; justify-content: space-between;">
+                            <span>Active Connections</span>
+                            <span id="conn-list-count" style="font-size: 0.75rem; color: #64748b; font-weight: normal;">0 active</span>
+                        </h4>
+                        <div id="conn-list-container" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 500px; overflow-y: auto; padding-right: 0.25rem;">
+                            <div style="text-align: center; color: #64748b; padding: 2rem; font-size: 0.85rem; border: 1px dashed #1e293b; border-radius: 12px; background: rgba(15, 23, 42, 0.2);">
+                                No active connections
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Real-Time Traffic Stream -->
+                    <div class="conn-traffic-column" style="flex: 1.5; min-width: 400px; display: flex; flex-direction: column; gap: 0.75rem;">
+                        <h4 style="margin: 0; color: #cbd5e1; font-size: 0.9rem;">Live Traffic Feed</h4>
+                        
+                        <div class="terminal-container" style="background: #020617; border: 1px solid #1e293b; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; height: 500px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);">
+                            <!-- Toolbar -->
+                            <div class="terminal-toolbar" style="background: #0f172a; padding: 0.6rem 0.75rem; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; z-index: 10;">
+                                <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">WebSocket Events Stream</span>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <button id="btn-conn-pause" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem; height: 30px;" title="Pause live traffic feed scroll">
+                                        ⏸️ Pause
+                                    </button>
+                                    <button id="btn-conn-clear" class="btn btn-outline btn-sm" style="padding: 0.3rem 0.6rem; height: 30px;" title="Clear traffic feed">
+                                        🧹 Clear
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Traffic Feed Console -->
+                            <div id="conn-traffic-feed" style="flex: 1; overflow-y: auto; padding: 0.75rem 1rem; font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.75rem; line-height: 1.5; color: #cbd5e1; user-select: text; scroll-behavior: smooth;">
+                                <div style="color: #64748b; font-style: italic;">Listening for incoming network packets...</div>
+                            </div>
+
+                            <!-- Footer Status -->
+                            <div id="conn-ws-status" style="background: rgba(16, 185, 129, 0.1); border-top: 1px solid rgba(16, 185, 129, 0.2); padding: 0.3rem 0.75rem; font-size: 0.65rem; color: #34d399; display: flex; align-items: center; justify-content: space-between; font-weight: 500;">
+                                <span>● Connected to Connection Monitor</span>
+                                <span id="conn-traffic-count" style="font-family: monospace;">0 packets</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="settings.js?v=1.0.37"></script>
+</body>
+
+</html>

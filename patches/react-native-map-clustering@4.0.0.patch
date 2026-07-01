@@ -1,0 +1,100 @@
+diff --git a/lib/ClusteredMapView.js b/lib/ClusteredMapView.js
+index 8c7820c0b4a38e54cbee47a5773a53fd7bf9e7d3..fe084584ff80a3fffbc2098cd99d1adaafc0450c 100644
+--- a/lib/ClusteredMapView.js
++++ b/lib/ClusteredMapView.js
+@@ -136,9 +136,6 @@ const ClusteredMapView = forwardRef(
+         const bBox = calculateBBox(region);
+         const zoom = returnMapZoom(region, bBox, minZoom);
+         const markers = superCluster.getClusters(bBox, zoom);
+-        if (animationEnabled && Platform.OS === "ios") {
+-          LayoutAnimation.configureNext(layoutAnimationConf);
+-        }
+         if (zoom >= 18 && markers.length > 0 && clusterChildren) {
+           if (spiralEnabled) updateSpiderfier(true);
+         } else {
+@@ -183,10 +180,15 @@ const ClusteredMapView = forwardRef(
+         }}
+         onRegionChangeComplete={_onRegionChangeComplete}
+       >
+-        {markers.map((marker) =>
+-          marker.properties.point_count === 0 ? (
+-            propsChildren[marker.properties.index]
+-          ) : !isSpiderfier ? (
++        {propsChildren.map((child, i) => {
++          const isVisible = markers.find(m => m.properties.point_count === 0 && m.properties.index === i);
++          return React.cloneElement(child, { 
++            key: `leaf-${i}`, 
++            opacity: isVisible ? 1 : 0 
++          });
++        })}
++        {markers.filter(m => m.properties.point_count > 0).map((marker) =>
++          !isSpiderfier ? (
+             renderCluster ? (
+               renderCluster({
+                 onPress: _onClusterPress(marker),
+diff --git a/lib/ClusteredMarker.js b/lib/ClusteredMarker.js
+index 73700baaea2b58b6380688a389292bd9de98a840..e3aba0ec38bfefe2f3db77ef4aaf60f0f1d3b57a 100755
+--- a/lib/ClusteredMarker.js
++++ b/lib/ClusteredMarker.js
+@@ -11,13 +11,13 @@ const ClusteredMarker = ({
+   clusterTextColor,
+   clusterFontFamily,
+   tracksViewChanges,
++  opacity = 1,
+ }) => {
+   const points = properties.point_count;
+   const { width, height, fontSize, size } = returnMarkerStyle(points);
+ 
+   return (
+     <Marker
+-      key={`${geometry.coordinates[0]}_${geometry.coordinates[1]}`}
+       coordinate={{
+         longitude: geometry.coordinates[0],
+         latitude: geometry.coordinates[1],
+@@ -25,6 +25,7 @@ const ClusteredMarker = ({
+       style={{ zIndex: points + 1 }}
+       onPress={onPress}
+       tracksViewChanges={tracksViewChanges}
++      opacity={opacity}
+     >
+       <TouchableOpacity
+         activeOpacity={0.5}
+diff --git a/lib/helpers.js b/lib/helpers.js
+index 8961171543c06564a26c0dd35f64052857e888e3..779c67ed8bce04643a04d2dfddf84600b944231f 100644
+--- a/lib/helpers.js
++++ b/lib/helpers.js
+@@ -15,20 +15,24 @@ export const calculateBBox = (region) => {
+   else lngD = region.longitudeDelta;
+ 
+   return [
+-    region.longitude - lngD, // westLng - min lng
+-    region.latitude - region.latitudeDelta, // southLat - min lat
+-    region.longitude + lngD, // eastLng - max lng
+-    region.latitude + region.latitudeDelta, // northLat - max lat
++    region.longitude - (lngD * 2), // westLng - min lng
++    region.latitude - (region.latitudeDelta * 2), // southLat - min lat
++    region.longitude + (lngD * 2), // eastLng - max lng
++    region.latitude + (region.latitudeDelta * 2), // northLat - max lat
+   ];
+ };
+ 
+ export const returnMapZoom = (region, bBox, minZoom) => {
+-  const viewport =
+-    region.longitudeDelta >= 40
+-      ? { zoom: minZoom }
+-      : GeoViewport.viewport(bBox, [width, height]);
+-
+-  return viewport.zoom;
++  try {
++    const viewport =
++      region.longitudeDelta >= 40
++        ? { zoom: minZoom }
++        : GeoViewport.viewport(bBox, [width, height]);
++
++    return (viewport && typeof viewport.zoom === 'number' && !isNaN(viewport.zoom)) ? Math.round(viewport.zoom) : minZoom;
++  } catch (e) {
++    return minZoom;
++  }
+ };
+ 
+ export const markerToGeoJSONFeature = (marker, index) => {

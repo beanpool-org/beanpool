@@ -1,0 +1,24 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "485XM2R33S.org.beanpool.pillar"
+        ],
+        "components": [
+          {
+            "/": "/",
+            "?": {
+              "invite": "*"
+            },
+            "comment": "Match invite links with query parameters"
+          },
+          {
+            "/": "/app*",
+            "comment": "Match legacy app paths"
+          }
+        ]
+      }
+    ]
+  }
+}

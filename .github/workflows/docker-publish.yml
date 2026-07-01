@@ -1,0 +1,108 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/beanpool-node
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version and platforms
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+            echo "platforms=linux/amd64,linux/arm64" >> $GITHUB_OUTPUT
+          else
+            echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
+            echo "platforms=linux/amd64" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=
+            type=semver,pattern={{version}},enable=${{ steps.version.outputs.is_release }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ steps.version.outputs.is_release }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: ${{ steps.version.outputs.platforms }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
+
+      - name: Generate Release Notes
+        if: steps.version.outputs.is_release == 'true'
+        run: |
+          cat << 'EOF' > release_notes.md
+          ## 📦 How to Install / Upgrade
+          
+          BeanPool is distributed as a Docker container. You can pull the latest version directly from the GitHub Container Registry.
+          
+          **Using Docker Compose:**
+          ```yaml
+          services:
+            beanpool:
+              image: ghcr.io/martyinspace/beanpool-node:${{ steps.version.outputs.version }}
+              restart: unless-stopped
+              ports:
+                - "80:8080"
+                - "443:8443"
+                - "4001:4001"
+                - "4002:4002"
+              volumes:
+                - ./data:/app/data
+          ```
+          
+          **Using Docker CLI:**
+          ```bash
+          docker pull ghcr.io/martyinspace/beanpool-node:latest
+          ```
+          EOF
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.is_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body_path: release_notes.md
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,113 @@
+{
+  "expo": {
+    "name": "Bean Pool",
+    "slug": "beanpool-pillar",
+    "version": "1.1.56",
+    "orientation": "portrait",
+    "icon": "./assets/images/app-icon.png",
+    "scheme": "beanpool",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#ffffff",
+      "image": "./assets/images/logo.png",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "org.beanpool.pillar",
+      "buildNumber": "150",
+      "associatedDomains": [
+        "applinks:beanpool.org",
+        "applinks:*.beanpool.org"
+      ],
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch",
+          "fetch"
+        ],
+        "NSLocationWhenInUseUsageDescription": "BeanPool relies exclusively on your device's GPS to plot your independent identity on the community map, enabling you to physically discover neighboring Marketplace needs and offers.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "appleTeamId": "485XM2R33S"
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize",
+      "versionCode": 172,
+      "package": "org.beanpool.pillar",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/app-icon.png",
+        "backgroundColor": "#0a0a0a"
+      },
+      "config": {
+        "googleMaps": {
+          "apiKey": ""
+        }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "*.beanpool.org"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "plugins": [
+      "./plugins/withAndroidLargeHeap",
+      "expo-router",
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BeanPool requires photo library access so you can select and upload photos of items or services you are offering on the community marketplace.",
+          "cameraPermission": "BeanPool requires camera access so you can take and upload photos of items or services you are offering on the community marketplace.",
+          "microphonePermission": "BeanPool requires microphone access to record audio when capturing video of items or services you are offering on the community marketplace."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true,
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "BeanPool relies exclusively on your device's GPS to plot your independent identity on the community map, enabling you to physically discover neighboring Marketplace needs and offers.",
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-secure-store",
+      "expo-sharing"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "17a2a61a-9cbe-457e-bb10-84d8a666e6eb"
+      }
+    }
+  }
+}

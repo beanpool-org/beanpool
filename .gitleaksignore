@@ -1,0 +1,17 @@
+# Gitleaks ignore fingerprints for whitelist
+
+# Fingerprints for local tmp_public_export path
+tmp_public_export/README.md:generic-api-key:450
+tmp_public_export/ROADMAP.md:generic-api-key:107
+tmp_public_export/HANDOVER.md:generic-api-key:75
+tmp_public_export/apps/server/src/test-logger-sanitization.ts:generic-api-key:23
+tmp_public_export/apps/server/src/test-logger-sanitization.ts:private-key:13
+tmp_public_export/apps/website/main.js:generic-api-key:9
+
+# Fingerprints for public release repo (without prefix)
+README.md:generic-api-key:450
+ROADMAP.md:generic-api-key:107
+HANDOVER.md:generic-api-key:75
+apps/server/src/test-logger-sanitization.ts:generic-api-key:23
+apps/server/src/test-logger-sanitization.ts:private-key:13
+apps/website/main.js:generic-api-key:9

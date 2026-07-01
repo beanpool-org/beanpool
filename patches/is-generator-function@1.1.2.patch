@@ -1,0 +1,14 @@
+diff --git a/index.js b/index.js
+index f7a4859d1319e30f1ad6ccbe4e912ffe6d31f18d..2ba59bcf8325228704d71ee430b3d915f03e5604 100644
+--- a/index.js
++++ b/index.js
+@@ -26,6 +26,8 @@ module.exports = function isGeneratorFunction(fn) {
+ 	if (!getProto) {
+ 		return false;
+ 	}
+-	var GeneratorFunction = getGeneratorFunction();
++	var GeneratorFunction = typeof getGeneratorFunction === 'function' 
++		? getGeneratorFunction() 
++		: (getGeneratorFunction && typeof getGeneratorFunction.default === 'function' ? getGeneratorFunction.default() : null);
+ 	return GeneratorFunction && getProto(fn) === GeneratorFunction.prototype;
+ };

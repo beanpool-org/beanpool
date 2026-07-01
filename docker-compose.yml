@@ -1,0 +1,52 @@
+services:
+  beanpool-node:
+    image: ghcr.io/martyinspace/beanpool-node:latest
+    build: .
+    ports:
+      - "80:8080" # Standard HTTP (for QR poster)
+      - "443:8443" # Standard HTTPS (clean URLs)
+      - "8080:8080" # Legacy HTTP (fallback while Azure NSG is updated)
+      - "8443:8443" # Legacy HTTPS (fallback while Azure NSG is updated)
+      - "4001:4001"
+      - "4002:4002"
+    environment:
+      - PUBLIC_IP=${PUBLIC_IP}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - BEANPOOL_DATA_DIR=/data
+      - CF_API_TOKEN=${CF_API_TOKEN}
+      - CF_ZONE_ID=${CF_ZONE_ID}
+      - CF_RECORD_NAME=${CF_RECORD_NAME}
+      # Cutover: role / backup / enforcement (Phase 1 + SRV-20). Empty defaults =
+      # primary role, backup puller off, all enforcement flags off — the safe
+      # dormant state. Set per node via the node-local .env (preserved across
+      # redeploys by deploy.sh). See docs/SECURITY-CUTOVER-CHECKLIST.md.
+      - NODE_ROLE=${NODE_ROLE:-}
+      - BACKUP_PRIMARY_URL=${BACKUP_PRIMARY_URL:-}
+      - BACKUP_ADMIN_PASSWORD=${BACKUP_ADMIN_PASSWORD:-}
+      - BACKUP_PULL_INTERVAL_MS=${BACKUP_PULL_INTERVAL_MS:-}
+      - PROMOTED_FROM_BACKUP=${PROMOTED_FROM_BACKUP:-}
+      - ENFORCE_READ_AUTH=${ENFORCE_READ_AUTH:-}
+      - ENFORCE_WS_AUTH=${ENFORCE_WS_AUTH:-}
+      - ENFORCE_LEDGER_AUTH=${ENFORCE_LEDGER_AUTH:-}
+    volumes:
+      - ./data:/data
+    networks:
+      - default
+      - beanpool-shared
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
+    networks:
+      - default
+      - beanpool-shared
+    profiles:
+      - tunnel
+    restart: unless-stopped
+
+networks:
+  beanpool-shared:
+    external: true

@@ -5161,6 +5161,9 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     const projects = getProjects();
     const commonsBalance = getCommonsBalance();
     
+    // ⚡ Bolt: Build a Map for O(1) lookups instead of using .find() in a loop, avoiding O(N^2) complexity.
+    const membersByPubKey = new Map(members.map(m => [m.publicKey, m]));
+
     let balancesCsv = 'Account,Callsign,Balance_Type,Balance\n';
     balancesCsv += `commons,Community Pool,System,${commonsBalance}\n`;
     
@@ -5177,7 +5180,7 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
     
     const pendingTxs = db.prepare("SELECT * FROM marketplace_transactions WHERE status='pending'").all() as any[];
     for (const tx of pendingTxs) {
-        const buyer = members.find(m => m.publicKey === tx.buyer_pubkey);
+        const buyer = membersByPubKey.get(tx.buyer_pubkey);
         balancesCsv += `escrow_${tx.id},Escrow (Payer: ${buyer?.callsign || 'Unknown'}),Pending_Trade,${tx.credits}\n`;
     }
     

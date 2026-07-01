@@ -1,15 +1,17 @@
 /**
- * Trust Model v2 regression test — earned credit is VALUE-based (saturating curve), not
- * handshake-count-based, and grants live in a SEPARATE lane from earned trust.
+ * Trust Model v2 + F3 regression test — earned trust comes ONLY from completed marketplace
+ * (escrow) trades, on a saturating value curve. Direct "send credits" build no trust; grants
+ * live in a separate lane.
  *
  * Proves:
- *   1. earnedCreditFromValue() is proportional at the low end, saturating, integer, deterministic.
- *   2. A tiny (3-bean) first trade earns ~nothing → the old "3-bean → −128" cliff is gone.
- *   3. The self-funding partner farm is dead: 1-bean sends to 40 sock accounts no longer max the floor.
- *   4. Real, diverse value earns a real floor (≈ Steward at ~2000 cycled).
- *   5. The per-counterparty diversity cap holds under the new curve (10k to ONE partner counts as 5k).
- *   6. A grant (earned_credit column) deepens the floor but returns earnedCredit = 0 (vote-safe).
- *   7. The first-trade gate still holds: no overdraft with no trade, no grant, no vouch.
+ *   1. earnedCreditFromValue(): proportional low end, saturating, integer/deterministic.
+ *   2. A small (3-bean) completed trade earns ~nothing (no "3-bean → -128" cliff) — and credits BOTH sides.
+ *   3. Direct transfers (gifts) build NO trust, at any size.
+ *   4. The self-funding farm stays dead: 40 tiny completed trades ≠ a maxed floor.
+ *   5. Real, diverse trade earns a real floor (~Steward at ~2000 across many sellers).
+ *   6. Per-counterparty diversity cap holds (10k with ONE partner counts as 5k).
+ *   7. A grant deepens the floor but returns earnedCredit = 0 (governance-safe).
+ *   8. First-trade gate: no trade/grant/vouch → no overdraft.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-trust-value-curve.ts
  */
@@ -28,14 +30,25 @@ function seedMember(pk: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
+// A COMPLETED marketplace (escrow) trade — the only thing that builds trust; credits both sides.
+// FK enforcement is on, so we back each trade with a real post (authored by the seller).
+function mtx(buyer: string, seller: string, credits: number) {
+    const pid = 'post-' + (seq++);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
+        .run(pid, credits, seller);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?,?,?,?,?, 'completed')`)
+        .run('mtx-' + (seq++), pid, buyer, seller, credits);
+}
+// A direct peer-to-peer transfer (gift) — must NOT build trust.
 function tx(from: string, to: string, amount: number) {
     db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('t' + (seq++), from, to, amount, 'm', new Date().toISOString());
 }
-const floorOf = (pk: string) => getMemberTrustProfile(pk).floor;
+const profile = (pk: string) => getMemberTrustProfile(pk);
+const floorOf = (pk: string) => profile(pk).floor;
 
 function main() {
-    console.log('Running Trust Model v2 value-curve test...\n');
+    console.log('Running Trust Model v2 + F3 value-curve test...\n');
     initStateEngine();
 
     // ── 1. Pure curve: proportional low end, saturating, integer/deterministic ──
@@ -49,40 +62,46 @@ function main() {
     assert(earnedCreditFromValue(10000) > earnedCreditFromValue(2000), 'curve is monotonic increasing');
     assert(Number.isInteger(earnedCreditFromValue(1234)), 'curve returns an integer (deterministic)');
 
-    // ── 2. 3-bean first trade → shallow floor (cliff gone; old model gave −128) ──
-    seedMember('a'); seedMember('b');
-    tx('a', 'b', 3);
-    assert(floorOf('a') === -81, `3-bean trade → floor −81 (was −128), got ${floorOf('a')}`);
+    // ── 2. A small completed trade → shallow floor, and BOTH sides earn it ──
+    seedMember('buyer3'); seedMember('seller3');
+    mtx('buyer3', 'seller3', 3);
+    assert(floorOf('buyer3') === -81, `3-bean completed trade → buyer floor −81, got ${floorOf('buyer3')}`);
+    assert(floorOf('seller3') === -81, `3-bean completed trade → seller ALSO earns it (floor −81), got ${floorOf('seller3')}`);
 
-    // ── 3. Self-funding partner farm is DEAD: 1-bean sends to 40 socks ──
+    // ── 3. Direct transfers (gifts) build NO trust, at any size ──
+    seedMember('gifter'); seedMember('friend');
+    tx('gifter', 'friend', 5000);
+    assert(profile('gifter').earnedCredit === 0, `5000 direct gift → earnedCredit 0 (gifts aren't trades), got ${profile('gifter').earnedCredit}`);
+    // contrast: the SAME 5000 as a completed trade earns real trust
+    seedMember('mbuyer'); seedMember('mseller');
+    mtx('mbuyer', 'mseller', 5000);
+    assert(profile('mbuyer').earnedCredit === 960, `5000 completed trade → earnedCredit 960 (vs 0 for the identical gift), got ${profile('mbuyer').earnedCredit}`);
+
+    // ── 4. Self-funding farm stays dead: 40 tiny completed trades ──
     seedMember('farmer');
-    for (let i = 0; i < 40; i++) { const s = 'sock' + i; seedMember(s); tx('farmer', s, 1); }
-    const farmFloor = floorOf('farmer');
-    assert(farmFloor === -95, `40 × 1-bean socks → floor −95 (old model: −2000), got ${farmFloor}`);
-    assert(farmFloor > -150, 'farmed floor nowhere near the −2000 cap');
+    for (let i = 0; i < 40; i++) { const s = 'fsock' + i; seedMember(s); mtx('farmer', s, 1); }
+    assert(floorOf('farmer') === -95, `40 × 1-bean completed trades → floor −95 (not −2000), got ${floorOf('farmer')}`);
 
-    // ── 4. Real, diverse value earns a real floor (~Steward at 2000 cycled) ──
+    // ── 5. Real, diverse trade → real floor (~Steward at 2000 across 5 sellers) ──
     seedMember('trader');
-    for (let i = 0; i < 5; i++) { const p = 'tp' + i; seedMember(p); tx('trader', p, 400); } // 5 × 400 = 2000
-    assert(floorOf('trader') === -628, `2000 cycled across 5 partners → floor −628, got ${floorOf('trader')}`);
+    for (let i = 0; i < 5; i++) { const s = 'tseller' + i; seedMember(s); mtx('trader', s, 400); }
+    assert(floorOf('trader') === -628, `2000 across 5 sellers → floor −628, got ${floorOf('trader')}`);
 
-    // ── 5. Diversity cap holds: 10k to ONE partner counts as 5k ──
+    // ── 6. Diversity cap: 10k with ONE partner counts as 5k ──
     seedMember('whale'); seedMember('buddy');
-    tx('whale', 'buddy', 10000);
-    // capped at PER_COUNTERPARTY_VOLUME_CAP (5000) → curve(5000) = 960 → floor −1040
-    assert(floorOf('whale') === -1040, `10k to one partner capped at 5k → floor −1040, got ${floorOf('whale')}`);
+    mtx('whale', 'buddy', 10000);
+    assert(floorOf('whale') === -1040, `10k with one partner capped at 5k → floor −1040, got ${floorOf('whale')}`);
 
-    // ── 6. Grant lane: deepens floor, but earnedCredit stays 0 (governance-safe) ──
+    // ── 7. Grant lane: deepens floor, earnedCredit stays 0 (governance-safe) ──
     seedMember('granted');
     db.prepare(`UPDATE members SET earned_credit = ? WHERE public_key = ?`).run(520, 'granted');
-    const gp = getMemberTrustProfile('granted');
+    const gp = profile('granted');
     assert(gp.floor === -600, `grant of 520 → floor −600, got ${gp.floor}`);
-    assert(gp.earnedCredit === 0, `granted credit does NOT count as earned (earnedCredit=0), got ${gp.earnedCredit}`);
-    assert(gp.grantedCredit === 520, `grantedCredit reported separately (=520), got ${gp.grantedCredit}`);
+    assert(gp.earnedCredit === 0 && gp.grantedCredit === 520, `grant is a separate lane (earned 0, granted 520), got earned=${gp.earnedCredit} granted=${gp.grantedCredit}`);
 
-    // ── 7. First-trade gate: no trade, no grant, no vouch → no overdraft ──
+    // ── 8. First-trade gate: no trade / grant / vouch → no overdraft ──
     seedMember('fresh');
-    assert(floorOf('fresh') === 0, `fresh account (no trade/grant/vouch) → floor 0, got ${floorOf('fresh')}`);
+    assert(floorOf('fresh') === 0, `fresh account → floor 0, got ${floorOf('fresh')}`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

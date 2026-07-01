@@ -1181,6 +1181,28 @@ function countedOutboundVolume(publicKey: string): number {
 }
 
 /**
+ * F3 — value that counts toward EARNED TRUST: only COMPLETED marketplace (escrow) trades.
+ *
+ * Attributed to the REAL counterparty (buyer↔seller), not the intermediating escrow account,
+ * and capped per counterparty (PER_COUNTERPARTY_VOLUME_CAP) so diverse trade counts for more
+ * than repeat trade with one partner. BOTH sides of a completed trade earn the value (the seller
+ * delivered, the buyer paid). Direct peer-to-peer "send credits" are gifts/helping-a-friend —
+ * they are deliberately NOT trades and build NO trust (per product decision, 2026-07).
+ */
+function qualifiedTradeValue(publicKey: string): number {
+    const rows = db.prepare(`
+        SELECT counterparty, COALESCE(SUM(credits), 0) as v FROM (
+            SELECT seller_pubkey AS counterparty, credits FROM marketplace_transactions
+                WHERE buyer_pubkey = ? AND status = 'completed' AND seller_pubkey != ?
+            UNION ALL
+            SELECT buyer_pubkey AS counterparty, credits FROM marketplace_transactions
+                WHERE seller_pubkey = ? AND status = 'completed' AND buyer_pubkey != ?
+        ) GROUP BY counterparty
+    `).all(publicKey, publicKey, publicKey, publicKey) as { counterparty: string; v: number }[];
+    return rows.reduce((sum, r) => sum + Math.min(r.v, PER_COUNTERPARTY_VOLUME_CAP), 0);
+}
+
+/**
  * Returns the full trust profile for a member: stats, floor, ceiling, and tier.
  * Incorporates any pre-seeded earned_credit from admin genesis invites.
  */
@@ -1203,11 +1225,12 @@ export function getMemberTrustProfile(publicKey: string): {
 
     const c = PROTOCOL_CONSTANTS;
 
-    // EARNED-credit lane (Trust Model v2): a saturating function of qualified VALUE cycled — not
-    // handshake counts. countedOutboundVolume already caps per-counterparty (A2-26), so it is
-    // diversity-weighted value; earning a deep floor requires real, diverse value (which itself
-    // needs floor room to bootstrap), not cheap 1-bean pings across many sock accounts.
-    const value = countedOutboundVolume(publicKey);
+    // EARNED-credit lane (Trust Model v2 / F3): a saturating function of qualified trade VALUE —
+    // ONLY completed marketplace (escrow) trades, attributed to the real counterparty and capped
+    // per-counterparty (A2-26 diversity), crediting both buyer and seller. Direct "send credits"
+    // are gifts, not trades, and build no trust. Earning a deep floor requires real, diverse,
+    // completed trade — not gifts or 1-bean pings across sock accounts.
+    const value = qualifiedTradeValue(publicKey);
     const rawEarned = earnedCreditFromValue(value);
 
     // Star rating scales EARNED value only (0.5–1.0×); granted credit passes through intact.

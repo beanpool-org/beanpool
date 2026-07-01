@@ -80,7 +80,7 @@ jobs:
           ```yaml
           services:
             beanpool:
-              image: ghcr.io/martyinspace/beanpool-node:${{ steps.version.outputs.version }}
+              image: ghcr.io/${{ github.repository_owner }}/beanpool-node:${{ steps.version.outputs.version }}
               restart: unless-stopped
               ports:
                 - "80:8080"
@@ -93,7 +93,7 @@ jobs:
           
           **Using Docker CLI:**
           ```bash
-          docker pull ghcr.io/martyinspace/beanpool-node:latest
+          docker pull ghcr.io/${{ github.repository_owner }}/beanpool-node:latest
           ```
           EOF
 

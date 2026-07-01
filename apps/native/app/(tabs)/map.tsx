@@ -1168,7 +1168,7 @@ export default function MapScreen() {
                             </View>
 
                             <Pressable accessibilityRole="button" onPress={showPricingGuide} hitSlop={8} style={styles.pricingTipBanner}>
-                                <Text style={styles.pricingTipBannerEmoji}>💡</Text>
+                                <Text style={styles.pricingTipBannerEmoji}>🏷️</Text>
                                 <Text style={styles.pricingTipBannerText}>Not sure what to charge? View the Community Pricing Guide</Text>
                             </Pressable>
 

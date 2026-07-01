@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, calculateDynamicFloor, getTier, getGenesisEarnedCredit, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, earnedCreditFromValue, getTier, getGenesisEarnedCredit, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType } from '@beanpool/core';
 import { getThresholds, getLocalConfig } from './local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
@@ -1189,59 +1189,50 @@ export function getMemberTrustProfile(publicKey: string): {
     floor: number;
     tier: TierInfo;
     earnedCredit: number;
+    grantedCredit: number;
 } {
     const stats = getMemberTrustStats(publicKey);
 
-    // Pre-seeded earned credit from genesis invites — incl. admin Elder upgrades, which
-    // pull this same lever (see adminSetElder) — plus any Elder vouch. NOTE: earned_credit
-    // is a credit-*limit* input, never a ledger balance: changing it mints/moves no beans.
+    // GRANTED-credit lane: genesis pre-seed + admin Elder grants (adminSetElder) + Elder vouch.
+    // Stored in members.earned_credit (legacy column name). It is a credit-*limit* input only —
+    // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
+    // the floor but never count as "earned" (governance votes use earned/value only, not grants).
     const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by FROM members WHERE public_key = ?").get(publicKey) as any;
-    const preSeeded = memberRow?.earned_credit || 0;
+    const grantedCredit = memberRow?.earned_credit || 0;
     const elderVouched = !!memberRow?.elder_vouched_by;
 
     const c = PROTOCOL_CONSTANTS;
-    const tradePoints = (stats.tradeCount * c.CREDIT_WEIGHT_TRADES)
-                      + (stats.uniquePartners * c.CREDIT_WEIGHT_PARTNERS);
-    const tenurePoints = Math.min(stats.ageDays * c.CREDIT_WEIGHT_AGE_DAYS, tradePoints);
-    // Organic, *earned* trust only (trades + tenure). Pre-seeded grants are added AFTER
-    // the rating multiplier below, so an explicit admin/genesis grant is never diluted by
-    // the member's star rating — an appointment isn't subject to organic discounting.
-    const organicBase = tradePoints + tenurePoints;
 
-    // Query volume cycled, but A2-26: weight by DISTINCT counterparty with a
-    // per-counterparty cap so two Sybil identities can't wash-trade between
-    // themselves to inflate earned credit (which deepens the overdraft floor).
-    // Each counterparty contributes at most PER_COUNTERPARTY_VOLUME_CAP, so maxing
-    // the bonus requires genuinely diverse trade rather than a single washed pair.
-    const volume = countedOutboundVolume(publicKey);
-    const volumeBonus = Math.min(200, Math.floor(volume / 100));
+    // EARNED-credit lane (Trust Model v2): a saturating function of qualified VALUE cycled — not
+    // handshake counts. countedOutboundVolume already caps per-counterparty (A2-26), so it is
+    // diversity-weighted value; earning a deep floor requires real, diverse value (which itself
+    // needs floor room to bootstrap), not cheap 1-bean pings across many sock accounts.
+    const value = countedOutboundVolume(publicKey);
+    const rawEarned = earnedCreditFromValue(value);
 
-    // Query Average Rating & Review Count
+    // Star rating scales EARNED value only (0.5–1.0×); granted credit passes through intact.
     const ratingsRow = db.prepare(`
-        SELECT AVG(stars) as avg, COUNT(*) as cnt 
-        FROM ratings 
+        SELECT AVG(stars) as avg, COUNT(*) as cnt
+        FROM ratings
         WHERE target_pubkey = ?
     `).get(publicKey) as any;
     const reviewCount = ratingsRow?.cnt || 0;
     const avgRating = ratingsRow?.avg || 5.0;
     const multiplier = reviewCount > 0 ? (0.5 + 0.5 * (avgRating / 5.0)) : 1.0;
+    const earnedCredit = Math.max(0, Math.floor(rawEarned * multiplier));
 
-    // Multiplier applies to organic earnings only; pre-seeded grants pass through intact.
-    const earnedCredit = Math.max(0, Math.floor((organicBase + volumeBonus) * multiplier) + preSeeded);
+    // Floor from earned + granted, capped at CREDIT_MAX_EARNED total.
+    let floor = c.CREDIT_BASE_FLOOR - Math.min(c.CREDIT_MAX_EARNED, earnedCredit + grantedCredit);
 
-    // Calculate dynamic floor based on upgraded Trust Points
-    let floor = c.CREDIT_BASE_FLOOR - Math.min(c.CREDIT_MAX_EARNED, earnedCredit);
-
-    // Floor-gate: no overdraft until the account's FIRST genuine trade —
-    // unless an Elder has vouched for them, which graduates a founding member
-    // straight to Newcomer (restores the -80 base floor) ahead of their first trade.
-    if (stats.tradeCount === 0 && preSeeded === 0 && !elderVouched) {
+    // Floor-gate: no overdraft until the account's FIRST genuine trade — unless a grant or an
+    // Elder vouch has graduated a founding member ahead of their first trade.
+    if (stats.tradeCount === 0 && grantedCredit === 0 && !elderVouched) {
         floor = 0;
     }
 
     const tier = getTier(floor);
 
-    return { stats, floor, tier, earnedCredit };
+    return { stats, floor, tier, earnedCredit, grantedCredit };
 }
 
 // ===================== TRUST PROFILE (VIEWER-AWARE) =====================

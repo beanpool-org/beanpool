@@ -19,7 +19,17 @@ export const PROTOCOL_CONSTANTS = {
     CREDIT_BASE_FLOOR: -80,            // Ghost starts here (≈ 2 hours of credit)
     CREDIT_MAX_EARNED: 1920,           // Max additional earned (total cap: -2000 ≈ 50 hours)
 
-    // Growth Weights
+    // === Trust Curve (Trust Model v2 — value-based, saturating) ===
+    // Earned credit is a saturating function of qualified, diversity-capped value cycled (V):
+    //   earnedCredit = floor(CREDIT_MAX_EARNED * V / (V + TRUST_CURVE_K))
+    // Integer-only → deterministic across all federated nodes (no float log/√).
+    // Proportional at the low end (a tiny trade earns ~nothing → kills the 3-bean cliff),
+    // saturating at the top (no single account runs away toward the cap).
+    // Tuning: lower K = credit reached with less value (more generous); higher K = stricter.
+    TRUST_CURVE_K: 5000,
+
+    // Growth Weights — LEGACY (count-based; superseded by the value curve above in Trust Model v2).
+    // Retained only for the deprecated calculateDynamicFloor() mirror; not used at runtime.
     CREDIT_WEIGHT_TRADES: 8,           // Each organic trade adds 8 Beans of credit
     CREDIT_WEIGHT_PARTNERS: 40,        // Each unique partner adds 40 Beans (1 hour of credit)
     CREDIT_WEIGHT_AGE_DAYS: 2,         // Each day of account age adds 2 Beans
@@ -71,12 +81,30 @@ export interface TrustStats {
 // ===================== CORE FUNCTIONS =====================
 
 /**
- * Calculates the dynamic credit floor for a member based on their trade history.
- * 
+ * Trust Model v2 — earned credit as a saturating function of value cycled.
+ *
+ *   earnedCredit = floor(CREDIT_MAX_EARNED * V / (V + TRUST_CURVE_K))
+ *
+ * `value` is the caller's qualified, diversity-capped value cycled (e.g. countedOutboundVolume,
+ * which already caps per-counterparty). Pure + integer-only → identical on every federated node.
+ * This is a credit-*limit* input; it mints no beans.
+ *
+ * @param value  qualified value cycled (≥ 0)
+ * @returns      earned credit (0 … CREDIT_MAX_EARNED), integer
+ */
+export function earnedCreditFromValue(value: number): number {
+    const c = PROTOCOL_CONSTANTS;
+    if (!(value > 0)) return 0;                       // guards NaN / negatives / 0
+    const v = Math.floor(value);                      // integer domain for determinism
+    return Math.floor((c.CREDIT_MAX_EARNED * v) / (v + c.TRUST_CURVE_K));
+}
+
+/**
+ * LEGACY (Trust Model v1) — count-based dynamic floor. Superseded by the value curve
+ * (earnedCreditFromValue). No live callers; retained for reference/back-compat only.
+ *
  * Formula: floor = BASE_FLOOR − min(MAX_EARNED, earnedCredit)
  * where:   earnedCredit = (tradeCount × 8) + (uniquePartners × 40) + (ageDays × 2)
- * 
- * @returns A negative number representing the member's borrowing limit (e.g. -420)
  */
 export function calculateDynamicFloor(stats: TrustStats): number {
     const c = PROTOCOL_CONSTANTS;

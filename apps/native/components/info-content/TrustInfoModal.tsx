@@ -100,32 +100,23 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        Your <Text style={styles.boldWhiteText}>Trust Points</Text> represent your contribution and reputation. They are calculated dynamically using trade activity, transaction volume, and reviews:
+                        Your <Text style={styles.boldWhiteText}>Trust</Text> grows with the <Text style={styles.boldWhiteText}>real value you trade</Text> with the community — not how many trades or handshakes you rack up.
                     </Text>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>1. BASE SCORE</Text>
-                        <View style={{ marginBottom: 8 }}>
-                            <ListItem>completed trades (<Text style={styles.boldWhiteText}>+8 pts</Text> each)</ListItem>
-                            <ListItem>unique partners (<Text style={styles.boldWhiteText}>+40 pts</Text> each)</ListItem>
-                            <ListItem>days as active member (<Text style={styles.boldWhiteText}>+2 pts/day</Text>)</ListItem>
-                        </View>
+                        <Text style={styles.cardLabel}>1. VALUE YOU'VE TRADED</Text>
                         <Text style={styles.cardText}>
-                            💡 <Text style={styles.boldWhiteText}>Tenure Gate:</Text> Points from days as active member can never exceed points from trades + unique partners. This prevents idle accounts from opening large credit lines.
+                            Your score is a <Text style={styles.boldWhiteText}>smooth, saturating curve</Text> over the qualified value you cycle through trades — proportional at first, then leveling off near the top so no one runs away.
+                        </Text>
+                        <Text style={[styles.cardText, { marginTop: 8 }]}>
+                            💡 <Text style={styles.boldWhiteText}>Diversity counts:</Text> value with any one partner is capped, so trading with <Text style={styles.boldWhiteText}>many</Text> people builds trust far faster than repeat trades with a single partner.
                         </Text>
                     </View>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>2. VOLUME BONUS</Text>
-                        <Text style={styles.cardText}>
-                            You earn <Text style={styles.boldWhiteText}>+1 point</Text> for every <Text style={styles.boldWhiteText}>100B</Text> cycled through marketplace deals, capped at a maximum bonus of <Text style={styles.boldWhiteText}>+200 points</Text>.
-                        </Text>
-                    </View>
-
-                    <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>3. REPUTATION MULTIPLIER</Text>
+                        <Text style={styles.cardLabel}>2. REPUTATION MULTIPLIER</Text>
                         <Text style={[styles.cardText, { marginBottom: 8 }]}>
-                            Ratings left by counterparties directly scale your final points:
+                            Ratings left by counterparties scale your score:
                         </Text>
                         <ListItem><Text style={styles.boldWhiteText}>5.0 stars</Text> = <Text style={styles.boldWhiteText}>100%</Text> of score</ListItem>
                         <ListItem><Text style={styles.boldWhiteText}>4.0 stars</Text> = <Text style={styles.boldWhiteText}>90%</Text> of score</ListItem>
@@ -135,12 +126,12 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
                     </View>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>4. PROGRESS SLIDER & MILESTONES</Text>
+                        <Text style={styles.cardLabel}>3. MILESTONES</Text>
                         <Text style={[styles.cardText, { marginBottom: 8 }]}>
-                            The progress bar shows your path towards becoming an <Text style={styles.boldWhiteText}>Elder (1,320 pts)</Text>:
+                            As your trust grows you pass milestone badges — they mark your progress, they don't set your credit floor:
                         </Text>
-                        <ListItem>Milestones: 🌱 <Text style={styles.boldWhiteText}>Newcomer (0 pts)</Text> → 🏠 <Text style={styles.boldWhiteText}>Resident (120 pts)</Text> → 🏛️ <Text style={styles.boldWhiteText}>Steward (520 pts)</Text> → ⛰️ <Text style={styles.boldWhiteText}>Elder (1,320 pts)</Text></ListItem>
-                        <ListItem>Standard Newcomers with no completed trades display a <Text style={styles.boldWhiteText}>🔑 Founding</Text> badge (a temporary status that graduates after your first trade).</ListItem>
+                        <ListItem>🌱 <Text style={styles.boldWhiteText}>Newcomer</Text> → 🏠 <Text style={styles.boldWhiteText}>Resident</Text> → 🏛️ <Text style={styles.boldWhiteText}>Steward</Text> → ⛰️ <Text style={styles.boldWhiteText}>Elder</Text></ListItem>
+                        <ListItem>New members show a <Text style={styles.boldWhiteText}>🔑 Founding</Text> badge until their first trade.</ListItem>
                     </View>
                 </View>
             )

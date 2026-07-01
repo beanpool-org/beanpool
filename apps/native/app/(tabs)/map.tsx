@@ -326,6 +326,28 @@ export default function MapScreen() {
         tipPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border },
         tipPillEmoji: { fontSize: 13 },
         tipPillText: { fontSize: 11, fontWeight: '800', color: colors.feedback.warning.fg, letterSpacing: 0.3 },
+        pricingTipBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 12,
+            backgroundColor: colors.feedback.warning.bg,
+            borderWidth: 1,
+            borderColor: colors.feedback.warning.border,
+            marginTop: 4,
+            marginBottom: 12,
+        },
+        pricingTipBannerEmoji: {
+            fontSize: 16,
+        },
+        pricingTipBannerText: {
+            fontSize: 12.5,
+            fontWeight: '600',
+            color: colors.feedback.warning.fg,
+            flex: 1,
+        },
 
         // Price input row
         priceInputRow: { flexDirection: 'row', gap: 8, marginBottom: 6, alignItems: 'center' },
@@ -1143,11 +1165,12 @@ export default function MapScreen() {
                                 >
                                     <Text style={[styles.freeChipText, postCredits === '0' && styles.freeChipTextActive]}>FREE</Text>
                                 </Pressable>
-                                <Pressable accessibilityRole="button" onPress={showPricingGuide} hitSlop={8} style={styles.tipPill}>
-                                    <Text style={styles.tipPillEmoji}>💡</Text>
-                                    <Text style={styles.tipPillText}>Pricing tip</Text>
-                                </Pressable>
                             </View>
+
+                            <Pressable accessibilityRole="button" onPress={showPricingGuide} hitSlop={8} style={styles.pricingTipBanner}>
+                                <Text style={styles.pricingTipBannerEmoji}>💡</Text>
+                                <Text style={styles.pricingTipBannerText}>Not sure what to charge? View the Community Pricing Guide</Text>
+                            </Pressable>
 
                             <Pressable
                                 accessibilityRole="button"

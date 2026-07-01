@@ -96,11 +96,18 @@ work lands until this is closed.
       connected above a threshold**, and an **Elder vouch bypasses the connectivity penalty for a
       user's first few trades**. Earliest network stage: fall back to **connectivity-free value
       scoring** until an anchored core exists. *(via external review)*
-- [ ] **F3 — Qualified value only.** Only *qualified* trades' value counts (escrow-completed /
-      bidirectional / rated / above a min value). Only ratings from qualified counterparties count
-      (kills T4 rating-bombing).
-    - *(Note: with value as the lever, F4's old "raise the volumeBonus cap / de-weight partners" is
-      moot — value **is** the score now. `PER_COUNTERPARTY_VOLUME_CAP = 5000` stays as the diversity cap.)*
+- [x] **F3 — Qualified value = completed marketplace trades only** (DECIDED 2026-07, shipped).
+      `qualifiedTradeValue()` sums COMPLETED `marketplace_transactions` per REAL counterparty
+      (buyer↔seller, not the intermediating escrow account), capped per-counterparty (A2-26), and
+      **credits both sides** of a trade. Direct peer-to-peer "send credits" are gifts/helping-a-friend
+      and build **no** trust (per product ruling — real trades go through escrow). This also fixed
+      three latent bugs: sellers earned nothing, unique escrow accounts defeated the diversity cap,
+      and escrow synthetics counted as counterparties. Verified in test-trust-value-curve.ts.
+    - *Follow-ups:* (a) **governance credit** still uses the raw `countedOutboundVolume` — move it to
+      `qualifiedTradeValue` for consistency (needs the A2-26 test reseeded to marketplace trades);
+      (b) the **first-trade gate** still lifts the −80 base on *any* first transaction incl. a received
+      gift — decide whether it should require a *completed marketplace* trade (stricter, "sell first").
+    - *(F4's old "raise volumeBonus cap / de-weight partners" is moot — value **is** the score now.)*
 - [ ] **F5 — Demurrage-split mitigation** — aggregate/identity-aware green-zone so socks under 200
       don't each get 0%.
     - **Perf: identity-clustering must be async / cached, never in the transactional path.** Demurrage

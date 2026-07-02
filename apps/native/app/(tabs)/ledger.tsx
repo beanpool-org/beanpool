@@ -56,10 +56,18 @@ export default function LedgerScreen() {
     // Tiers are recognition milestones. `floor` is the credit floor you reach on ENTERING
     // the tier (floors slide continuously between them). `min` = earned+granted credit needed.
     const TIERS = useMemo(() => [
-        { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: -20,   perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
-        { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 180,  floor: -200,  perks: ['Credit floor deepens toward -200'] },
-        { name: 'Steward',  emoji: '🏛️', color: colors.trust.steward.fg, bg: colors.trust.steward.bg, border: colors.trust.steward.border, min: 580,  floor: -600,  perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
-        { name: 'Elder',    emoji: '⛰️', color: colors.trust.elder.fg, bg: colors.trust.elder.bg, border: colors.trust.elder.border, min: 1380, floor: -1400, perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
+        { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: -20,
+          blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — a small welcome voucher gets you moving.",
+          perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+        { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 180,  floor: -200,
+          blurb: "You've traded real value with the community. Your credit line deepens, so you can give more before settling back to balance.",
+          perks: ['Credit floor deepens toward -200'] },
+        { name: 'Steward',  emoji: '🏛️', color: colors.trust.steward.fg, bg: colors.trust.steward.bg, border: colors.trust.steward.border, min: 580,  floor: -600,
+          blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
+          perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
+        { name: 'Elder',    emoji: '⛰️', color: colors.trust.elder.fg, bg: colors.trust.elder.bg, border: colors.trust.elder.border, min: 1380, floor: -1400,
+          blurb: "A pillar of the commons — the deepest credit line and the community's highest recognition.",
+          perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
     ], [colors]);
 
     React.useEffect(() => {
@@ -75,6 +83,7 @@ export default function LedgerScreen() {
     });
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'trust' | 'financials'>('trust');
+    const [selectedLevel, setSelectedLevel] = useState<number | null>(null); // Levels shelf: null → follows current tier
     const [escrowTotal, setEscrowTotal] = useState(0);
     const [pledgeHistory, setPledgeHistory] = useState<any[]>([]);
     const [exporting, setExporting] = useState(false);
@@ -138,9 +147,35 @@ export default function LedgerScreen() {
         journeyTick: { position: 'absolute', top: -2, alignItems: 'center', width: 16, marginLeft: -8 },
         journeyTickMark: { width: 2, height: 14, backgroundColor: colors.border.strong, borderRadius: 1 },
         journeyTickEmoji: { fontSize: 12, marginTop: 2 },
-        perksRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+        perksRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
         perkPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
         perkText: { fontSize: 12, fontWeight: '700' },
+
+        // Standing hero
+        heroInfo: { position: 'absolute', top: 14, right: 14, zIndex: 2 },
+        heroSub: { fontSize: 12, fontWeight: '600', color: colors.text.secondary, marginTop: 3 },
+        heroProgressRow: { marginTop: 16 },
+        heroProgressText: { fontSize: 13, color: colors.text.body, fontWeight: '600' },
+
+        // Medallion shelf — every level at a glance
+        shelf: { flexDirection: 'row', gap: 8, marginBottom: 18 },
+        shelfItem: { flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 2, borderRadius: 16, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: colors.surface.card },
+        shelfName: { fontSize: 11, fontWeight: '800', marginTop: 6 },
+        shelfState: { fontSize: 9, fontWeight: '600', color: colors.text.muted, marginTop: 2 },
+
+        // Selected-level detail card
+        detailCard: { backgroundColor: colors.surface.card, borderRadius: 18, padding: 18, marginBottom: 20, borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+        detailHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+        detailName: { fontSize: 20, fontWeight: '900', letterSpacing: -0.3 },
+        detailStatePill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1 },
+        detailStateText: { fontSize: 11, fontWeight: '800' },
+        detailBlurb: { fontSize: 13, color: colors.text.body, lineHeight: 19, marginBottom: 14 },
+        detailFloorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface.app, borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: colors.border.default },
+        detailFloorLabel: { flex: 1, fontSize: 13, color: colors.text.secondary, fontWeight: '600' },
+        detailFloorVal: { fontSize: 20, fontWeight: '900', fontVariant: ['tabular-nums'] },
+        detailPerkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 7 },
+        detailPerkText: { flex: 1, fontSize: 13, color: colors.text.body, lineHeight: 18 },
+        detailNote: { fontSize: 11, color: colors.text.muted, fontStyle: 'italic', marginTop: 8, lineHeight: 16 },
 
         pathCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
         pathTitle: { fontSize: 13, fontWeight: '700', color: colors.text.heading, marginBottom: 14 },
@@ -329,6 +364,27 @@ export default function LedgerScreen() {
         } finally { setSending(false); }
     };
 
+    // Open the Send flow from anywhere (Levels hero or Wallet). Surfaces the form in the Wallet tab.
+    const openSend = async () => {
+        if (!canSend) {
+            Alert.alert(
+                'Sending unlocks after your 1st trade',
+                'Direct sends are for helping out — they open up the moment you complete your first Marketplace trade.\n\nBrowse the Marketplace to make that first trade!',
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+        const url = await AsyncStorage.getItem('beanpool_anchor_url');
+        if (!url) {
+            Alert.alert('Not Connected', 'Connect to a community first.', [{ text: 'Cancel' }, { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }]);
+            return;
+        }
+        loadMembers();
+        setActiveTab('financials');
+        setSendError(null); setSendSuccess(false);
+        setShowSend(true);
+    };
+
     // Trust calculations (value-based)
     const earned = balanceState.earnedCredit || 0;   // from the saturating value curve
     const granted = balanceState.grantedCredit || 0; // vouch/genesis/admin (separate lane)
@@ -362,6 +418,8 @@ export default function LedgerScreen() {
     // Level → coin-badge key (for the new SVG TrustBadge medallions).
     const LEVEL_KEYS: TrustLevel[] = ['newcomer', 'resident', 'steward', 'elder'];
     const levelKey = LEVEL_KEYS[tierIdx] || 'newcomer';
+    // Which level the Levels shelf is inspecting (defaults to your current tier until you tap another).
+    const selLevel = selectedLevel ?? tierIdx;
 
     const selectedMember = members.find(m => m.publicKey === sendTo);
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
@@ -371,70 +429,120 @@ export default function LedgerScreen() {
 
 
 
-    // ─── Trust Tab ───────────────────────────────────────────────────────────
-    const renderTrustTab = () => (
+    // ─── Levels Tab ──────────────────────────────────────────────────────────
+    const renderTrustTab = () => {
+        const sel = TIERS[selLevel];
+        const selReached = tierIdx >= selLevel;
+        const selCurrent = tierIdx === selLevel;
+        const selNeeded = Math.max(0, sel.min - ec);
+        return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.app }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
 
-            {/* Tier Hero */}
-            <Pressable
-                style={[styles.tierHero, { backgroundColor: tier.bg, borderColor: tier.border }]}
-                accessibilityRole="button"
-                onPress={() => {
-                    setTrustInfoTab('levels');
-                    setShowTrustInfo(true);
-                }}
-            >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                    <View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Text style={styles.tierHeroLabel}>YOUR TRUST LEVEL</Text>
-                            <MaterialCommunityIcons name="information-outline" size={14} color={colors.text.muted} style={{ marginLeft: 4 }} />
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                            <TrustBadge level={levelKey} size={56} ring ringPct={journeyPct} />
-                            <Text style={[styles.tierHeroName, { color: tier.color }]}>{tier.name}</Text>
-                        </View>
-                    </View>
-                    <View style={[styles.levelBadge, { borderColor: tier.border, backgroundColor: colors.surface.card }]}>
-                        <Text style={[styles.levelBadgeText, { color: tier.color }]}>Level {tierIdx + 1} / {TIERS.length}</Text>
+            {/* ── Standing hero ── */}
+            <View style={[styles.tierHero, { backgroundColor: tier.bg, borderColor: tier.border }]}>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="How trust works"
+                    hitSlop={8}
+                    style={styles.heroInfo}
+                    onPress={() => { setTrustInfoTab('levels'); setShowTrustInfo(true); }}
+                >
+                    <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.muted} />
+                </Pressable>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                    <TrustBadge level={levelKey} size={76} ring ringPct={journeyPct} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.tierHeroLabel}>YOUR TRUST LEVEL</Text>
+                        <Text style={[styles.tierHeroName, { color: tier.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{tier.name}</Text>
+                        <Text style={styles.heroSub}>Level {tierIdx + 1} of {TIERS.length} · {ec} trust</Text>
                     </View>
                 </View>
 
-                {/* Journey bar: cumulative progress 0 → Elder, with tier milestone ticks */}
-                <View style={styles.journeyTrack}>
-                    <View style={[styles.journeyFill, { width: `${journeyPct * 100}%`, backgroundColor: tier.color }]} />
-                    {TIERS.map((t: any) => {
-                        // Include Newcomer (min 0); inset slightly so the leftmost badge isn't clipped.
-                        const pos = Math.max(0.02, Math.min(1, t.min / ELDER_MIN));
-                        const reached = ec >= t.min;
-                        return (
-                            <View key={t.name} style={[styles.journeyTick, { left: `${pos * 100}%` }]}>
-                                <View style={[styles.journeyTickMark, reached && { backgroundColor: t.color }]} />
-                                <Text style={styles.journeyTickEmoji} allowFontScaling={false}>{t.emoji}</Text>
-                            </View>
-                        );
-                    })}
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
-                    <Text style={styles.progressLabel}>{ec} trust</Text>
+                <View style={styles.heroProgressRow}>
                     {nextTier
-                        ? <Text style={styles.progressLabel}>{creditsToNext} to {nextTier.name}</Text>
-                        : <Text style={[styles.progressLabel, { color: theme === 'dark' ? palette.amber400 : palette.amber600, fontWeight: '700' }]}>✨ Maximum level!</Text>
+                        ? <Text style={styles.heroProgressText}><Text style={{ fontWeight: '900', color: tier.color }}>{creditsToNext}</Text> more trust to {nextTier.emoji} {nextTier.name}</Text>
+                        : <Text style={[styles.heroProgressText, { color: theme === 'dark' ? palette.amber400 : palette.amber600, fontWeight: '800' }]}>✨ Highest level reached</Text>
                     }
                 </View>
 
-                {/* Perks — Send unlocks after your 1st completed trade; Invite is open to everyone */}
+                {/* Capabilities — Send opens after your 1st trade; Invite is open to everyone */}
                 <View style={styles.perksRow}>
-                    <View style={[styles.perkPill, { borderColor: canSend ? palette.green200 : colors.border.default, backgroundColor: canSend ? palette.green50 : colors.surface.app }]}>
-                        <MaterialCommunityIcons name={canSend ? 'check-circle' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
+                    <Pressable
+                        accessibilityRole="button"
+                        style={[styles.perkPill, { borderColor: canSend ? palette.green200 : colors.border.default, backgroundColor: canSend ? palette.green50 : colors.surface.app }]}
+                        onPress={openSend}
+                    >
+                        <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
                         <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : 'Send (after 1st trade)'}</Text>
-                    </View>
+                    </Pressable>
                     <View style={[styles.perkPill, { borderColor: palette.green200, backgroundColor: palette.green50 }]}>
                         <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
                         <Text style={[styles.perkText, { color: colors.brand.dark }]}>Invite Members</Text>
                     </View>
                 </View>
-            </Pressable>
+            </View>
+
+            {/* ── Medallion shelf: every level at a glance, tap to inspect ── */}
+            <Text style={styles.sectionLabel}>ALL LEVELS</Text>
+            <View style={styles.shelf}>
+                {TIERS.map((t: any, i: number) => {
+                    const reached = tierIdx >= i;
+                    const isSel = selLevel === i;
+                    return (
+                        <Pressable
+                            key={t.name}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: isSel }}
+                            onPress={() => setSelectedLevel(i)}
+                            style={[styles.shelfItem, isSel && { borderColor: t.color, backgroundColor: t.bg }]}
+                        >
+                            <TrustBadge level={LEVEL_KEYS[i]} size={46} locked={!reached} />
+                            <Text style={[styles.shelfName, { color: reached ? t.color : colors.text.muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{t.name}</Text>
+                            <Text style={styles.shelfState} numberOfLines={1}>
+                                {tierIdx === i ? "You're here" : reached ? 'Reached' : `${t.min} trust`}
+                            </Text>
+                        </Pressable>
+                    );
+                })}
+            </View>
+
+            {/* ── Selected-level detail ── */}
+            <View style={[styles.detailCard, { borderColor: sel.border }]}>
+                <View style={styles.detailHeader}>
+                    <TrustBadge level={LEVEL_KEYS[selLevel]} size={44} locked={!selReached} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.detailName, { color: sel.color }]}>{sel.name}</Text>
+                        <Text style={styles.shelfState}>Level {selLevel + 1} of {TIERS.length}</Text>
+                    </View>
+                    <View style={[styles.detailStatePill, { borderColor: sel.border, backgroundColor: selReached ? sel.bg : colors.surface.app }]}>
+                        <Text style={[styles.detailStateText, { color: selReached ? sel.color : colors.text.muted }]}>
+                            {selCurrent ? "You're here" : selReached ? 'Reached ✓' : '🔒 Locked'}
+                        </Text>
+                    </View>
+                </View>
+
+                <Text style={styles.detailBlurb}>{sel.blurb}</Text>
+
+                {/* The real mechanical benefit of standing: a deeper credit line */}
+                <View style={styles.detailFloorRow}>
+                    <MaterialCommunityIcons name="scale-balance" size={18} color={sel.color} />
+                    <Text style={styles.detailFloorLabel}>Credit line reaches</Text>
+                    <Text style={[styles.detailFloorVal, { color: sel.color }]}>{sel.floor}</Text>
+                </View>
+
+                {sel.perks.map((p: string) => (
+                    <View key={p} style={styles.detailPerkRow}>
+                        <MaterialCommunityIcons name={selReached ? 'check-circle' : 'circle-outline'} size={15} color={selReached ? colors.brand.primary : colors.border.strong} />
+                        <Text style={styles.detailPerkText}>{p}</Text>
+                    </View>
+                ))}
+
+                {!selReached && selNeeded > 0 && (
+                    <Text style={styles.detailNote}>Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</Text>
+                )}
+                <Text style={styles.detailNote}>Everyone can invite and vote. Sending opens after your first trade. Higher levels deepen your credit line and recognition.</Text>
+            </View>
 
             {/* How to reach the next tier — leads with the highest-leverage lever */}
             {nextTier && (
@@ -501,73 +609,10 @@ export default function LedgerScreen() {
                 ))}
             </View>
 
-            {/* Tier Ladder */}
-            <Text style={styles.sectionLabel}>TRUST LADDER</Text>
-            <View style={styles.ladder}>
-                {TIERS.map((t: any, i: number) => {
-                    const reached = tierIdx >= i;
-                    const isCurrent = tierIdx === i;
-                    const hoursEquiv = Math.round(Math.abs(t.floor) / 40 * 10) / 10;
-                    const creditsNeeded = Math.max(0, t.min - ec);
-                    return (
-                        <Pressable
-                            key={t.name}
-                            style={[styles.ladderRow, isCurrent && { backgroundColor: t.bg, borderColor: t.border }]}
-                            accessibilityRole="button"
-                            onPress={() => {
-                                setTrustInfoTab('perks');
-                                setShowTrustInfo(true);
-                            }}
-                        >
-                            <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                                <View style={[styles.ladderDot, { backgroundColor: reached ? t.color : colors.border.default, borderColor: t.color, marginTop: 4 }]} />
-                                <View style={{ width: 36, alignItems: 'center', marginTop: 1 }}>
-                                    <TrustBadge level={LEVEL_KEYS[i]} size={32} locked={!reached} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Text style={[styles.ladderName, { color: reached ? t.color : colors.text.muted }]}>
-                                            {t.name}{isCurrent ? '  ← you' : ''}
-                                        </Text>
-                                        {reached
-                                            ? <MaterialCommunityIcons name="check-circle" size={16} color={t.color} />
-                                            : creditsNeeded > 0
-                                                ? <Text style={[styles.ladderBadge, { color: t.color, borderColor: t.color + '40' }]}>{creditsNeeded} to go</Text>
-                                                : null
-                                        }
-                                    </View>
-
-                                    {/* Trust required to reach this milestone */}
-                                    <Text style={styles.ladderReq}>
-                                        {t.min === 0 ? 'Starting tier' : `Reach ${t.min} trust from the value you trade`}
-                                    </Text>
-
-                                    {/* Milestone floor (floors slide continuously — this is the floor on arrival) */}
-                                    <View style={styles.ladderDetail}>
-                                        <MaterialCommunityIcons name="scale-balance" size={11} color={colors.text.secondary} />
-                                        <Text style={styles.ladderDetailText}>
-                                            Credit floor → {t.floor} · ≈{hoursEquiv}hrs
-                                        </Text>
-                                    </View>
-
-                                    {/* Perks */}
-                                    <View style={{ marginTop: 4, gap: 2 }}>
-                                        {t.perks.map((p: string) => (
-                                            <View key={p} style={styles.ladderDetail}>
-                                                <MaterialCommunityIcons name={reached ? 'check' : 'lock-outline'} size={11} color={reached ? colors.brand.primary : colors.border.strong} />
-                                                <Text style={[styles.ladderDetailText, { color: reached ? colors.text.body : colors.text.muted }]}>{p}</Text>
-                                            </View>
-                                        ))}
-                                    </View>
-                                </View>
-                            </View>
-                        </Pressable>
-                    );
-                })}
-            </View>
             <Text style={styles.formula}>💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.</Text>
         </ScrollView>
-    );
+        );
+    };
 
     // ─── Financials Tab ───────────────────────────────────────────────────────
     const renderActivityHeader = () => {
@@ -649,22 +694,7 @@ export default function LedgerScreen() {
                 <Pressable
                     style={[styles.sendBtn, showSend && styles.sendBtnOpen, !canSend && styles.sendBtnLocked]}
                     accessibilityRole="button"
-                    onPress={async () => {
-                        if (!canSend) {
-                            Alert.alert(
-                                'Sending unlocks after your 1st trade',
-                                'Direct sends are for helping out — they open up the moment you complete your first Marketplace trade.\n\nBrowse the Marketplace to make that first trade!',
-                                [{ text: 'OK' }]
-                            );
-                            return;
-                        }
-                        if (!showSend) {
-                            const url = await AsyncStorage.getItem('beanpool_anchor_url');
-                            if (!url) { Alert.alert('Not Connected', 'Connect to a community first.', [{ text: 'Cancel' }, { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }]); return; }
-                            loadMembers();
-                        }
-                        setShowSend(!showSend); setSendError(null); setSendSuccess(false);
-                    }}
+                    onPress={showSend ? () => { setShowSend(false); setSendError(null); setSendSuccess(false); } : openSend}
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                         <Text style={[styles.sendBtnText, !canSend && { color: colors.text.secondary }]}>
@@ -828,11 +858,11 @@ export default function LedgerScreen() {
             <View style={styles.tabBar}>
                 <Pressable style={[styles.tab, activeTab === 'trust' && [styles.tabActive, { borderBottomColor: tier.color }]]} accessibilityRole="button" accessibilityState={{ selected: activeTab === 'trust' }} onPress={() => setActiveTab('trust')}>
                     <MaterialCommunityIcons name="shield-star-outline" size={15} color={activeTab === 'trust' ? tier.color : colors.text.muted} />
-                    <Text style={[styles.tabText, activeTab === 'trust' && { color: tier.color, fontWeight: '800' }]}>Trust Level</Text>
+                    <Text style={[styles.tabText, activeTab === 'trust' && { color: tier.color, fontWeight: '800' }]}>Levels</Text>
                 </Pressable>
                 <Pressable style={[styles.tab, activeTab === 'financials' && styles.tabActive]} accessibilityRole="button" accessibilityState={{ selected: activeTab === 'financials' }} onPress={() => setActiveTab('financials')}>
                     <MaterialCommunityIcons name="swap-horizontal" size={15} color={activeTab === 'financials' ? colors.brand.primary : colors.text.muted} />
-                    <Text style={[styles.tabText, activeTab === 'financials' && { color: colors.brand.primary, fontWeight: '800' }]}>Financials</Text>
+                    <Text style={[styles.tabText, activeTab === 'financials' && { color: colors.brand.primary, fontWeight: '800' }]}>Wallet</Text>
                 </Pressable>
             </View>
 

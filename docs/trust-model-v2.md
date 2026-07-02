@@ -158,10 +158,17 @@ accountable — and un-farmable.**
       **audit it** ("20 of my limit is a vouch, the rest earned"), (c) keep it **flat + bounded**.
       So `floor = −80 − min(CAP, earnedCredit + grantedCredit)`; a vouch does `grantedCredit += 20`.
       Mints **no beans** — it is permission to owe 20 more (§0).
-- [ ] **Opening for a vouched newcomer = −20 (voucher only), not the full −80 base.** The −80 base
-      stays gated behind a *qualified first trade* (real skin in the game); a vouch is a lighter
-      signal, so it's a small leg-up and the rest is earned. Caps a vouch-army at 20 each.
-      *Sub-decision at build: −20 only (recommended) vs. −20 on top of the current gate-bypass-to-base.*
+- [x] **Base floor → 0 + universal 20-bean welcome voucher** (DECIDED 2026-07, shipped PR #8).
+      The baked-in −80 base was itself unbacked "thin-air" credit; replaced with an explicit voucher.
+      Now `floor = −min(2000, NEWCOMER_VOUCHER(20) + earned + granted)` with `CREDIT_BASE_FLOOR = 0`.
+      The 20 voucher applies to any **activated** member (first trade / grant / elder-vouch) — so the
+      first-trade gate is subsumed (un-activated → 0 credit, no Sybil faucet). Genesis seed amounts
+      recalibrated +60 (180/580/1380) to preserve the −200/−600/−1400 tier floors. Deepest floor
+      still −2000, now via the cap.
+- [x] **Opening after first trade = −20 (the voucher), for everyone** — supersedes the "−20 only for
+      vouched newcomers vs −80 base for the rest" split above: there is no −80 base any more, so every
+      activated member simply gets the flat 20. An Elder vouch still additionally lifts the gate
+      *ahead* of the first trade. A vouch-army is still capped at 20 each.
 - [ ] **Commons +ve grant = documented fast-follow** (a real welcome gift from the demurrage-funded
       pot). Ship only after vouch-capacity limits are proven; must **vest on first qualified trade**
       to prevent Sybil drain.

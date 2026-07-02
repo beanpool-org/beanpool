@@ -9,10 +9,10 @@ set -e
 #   bash deploy.sh 1 3 4     # Deploy to specific nodes by number
 #
 # The Docker image is auto-built by GitHub Actions on push to main:
-#   ghcr.io/martyinspace/beanpool-node:latest
+#   ghcr.io/beanpool-org/beanpool-node:latest
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-IMAGE="ghcr.io/martyinspace/beanpool-node:latest"
+IMAGE="ghcr.io/beanpool-org/beanpool-node:latest"
 
 # Load .env file for Cloudflare credentials (if it exists)
 if [ -f "$SCRIPT_DIR/.env" ]; then

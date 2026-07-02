@@ -27,14 +27,14 @@ const TIERS = [
       blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — a small welcome voucher gets you moving.",
       perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
     { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 180,  floor: -200,
-      blurb: "You've traded real value with the community. Your credit line deepens, so you can give more before settling back to balance.",
-      perks: ['Credit floor deepens toward -200'] },
+      blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
+      perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
     { name: 'Steward',  emoji: '🏛️', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', min: 580,  floor: -600,
       blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
-      perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
+      perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
     { name: 'Elder',    emoji: '⛰️', color: '#d97706', bg: '#fffbeb', border: '#fde68a', min: 1380, floor: -1400,
-      blurb: "A pillar of the commons — the deepest credit line and the community's highest recognition.",
-      perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
+      blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
+      perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
 ];
 
 // Trust curve (mirrors beanpool-core/protocol.ts): earned trust is a saturating function of
@@ -334,11 +334,20 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
                         <p className="text-[13px] text-nature-700 dark:text-nature-300 leading-relaxed mb-4">{sel.blurb}</p>
 
-                        {/* Credit line mechanical benefit */}
-                        <div className="flex items-center gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
-                            <span>⚖️</span>
-                            <span className="flex-1 text-[13px] text-nature-600 dark:text-nature-400 font-semibold">Credit line reaches</span>
-                            <span className="text-xl font-black font-mono" style={{ color: sel.color }}>{sel.floor}</span>
+                        {/* Credit floor — show YOUR actual floor when viewing your own tier */}
+                        <div className="flex items-start gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
+                            <span className="mt-0.5">⚖️</span>
+                            <div className="flex-1">
+                                <div className="text-[13px] text-nature-600 dark:text-nature-400 font-semibold">
+                                    {selCurrent ? 'Your current floor' : selReached ? 'Floor from this tier' : 'Floor starts at'}
+                                </div>
+                                {selCurrent && (
+                                    <div className="text-[10px] text-nature-400 mt-0.5">Grows deeper as you trade more</div>
+                                )}
+                            </div>
+                            <span className="text-xl font-black font-mono" style={{ color: sel.color }}>
+                                {selCurrent ? floor : sel.floor}
+                            </span>
                         </div>
 
                         <div className="flex flex-col gap-2">
@@ -353,7 +362,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         {!selReached && selNeeded > 0 && (
                             <p className="text-[11px] text-nature-400 italic mt-4">Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</p>
                         )}
-                        <p className="text-[11px] text-nature-400 italic mt-2">Everyone can invite and vote. Sending opens after your first trade. Higher levels deepen your credit line and recognition.</p>
+                        <p className="text-[11px] text-nature-400 italic mt-2">Your floor deepens continuously as you trade — it's not capped at the tier entry value. Higher standing just unlocks a deeper possible range.</p>
                     </div>
 
                     {/* How to reach next tier */}

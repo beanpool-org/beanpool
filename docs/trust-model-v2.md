@@ -1,8 +1,10 @@
 # Trust Model v2 — Implementation Plan
 
-> Status: **design locked, pre-implementation.** This is the plan of record from the
-> trust/credit redesign discussion. Related: `protocol-rules.md`,
-> `trust-profile-and-trade-safety.md`, `commons-pool-transparency.md`,
+> Status: **Phase 1 core + Sybil hardening + Phase 3 UI are SHIPPED** (PR #1–#9, 2026-07). This
+> remains the design rationale + roadmap; for a concise description of what actually runs, see
+> **[`trust-model-shipped.md`](./trust-model-shipped.md)** (canonical formulas + flow diagrams).
+> Still open: Phase 2 features (offer covenant, onboarding, pause mode), and F2/F5 (research).
+> Related: `protocol-rules.md`, `trust-profile-and-trade-safety.md`, `commons-pool-transparency.md`,
 > `invite-architecture.md`, `SECURITY-AUDIT.md`.
 
 ---
@@ -35,7 +37,7 @@ to zero.
 
 | Piece | Location | Note |
 |---|---|---|
-| `earnedCredit` → floor | `state-engine.ts:1187-1245` (`getMemberTrustProfile`) | `floor = −80 − min(1920, earnedCredit)` — *earnedCredit formula rebased to value in §2 F1 / §10* |
+| `earnedCredit` → floor | `state-engine.ts` (`getMemberTrustProfile`) | **SHIPPED:** `floor = − min(2000, 20-voucher + earnedCredit + grantedCredit)`; `earnedCredit` = value-curve (see `trust-model-shipped.md`). *(was `−80 − min(1920, earnedCredit)`)* |
 | Trade / partner counting | `state-engine.ts:1109-1162` (`getMemberTrustStats`) | a "trade" = **any** `transactions` row, any amount |
 | Volume cap (A2-26) | `state-engine.ts:1164-1181` | `PER_COUNTERPARTY_VOLUME_CAP = 5000` — caps *volume* washing only |
 | First-trade gate | `state-engine.ts:1238` | floor stays 0 until first trade unless pre-seeded / elder-vouched |

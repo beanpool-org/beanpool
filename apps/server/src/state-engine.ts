@@ -1239,10 +1239,13 @@ export function getMemberTrustProfile(publicKey: string): {
     const multiplier = reviewCount > 0 ? (0.5 + 0.5 * (avgRating / 5.0)) : 1.0;
     const earnedCredit = Math.max(0, Math.floor(rawEarned * multiplier));
 
-    // Activation gate: no overdraft until the account's FIRST genuine trade — unless a grant or
-    // an Elder vouch has graduated a founding member ahead of their first trade. Only an activated
-    // member receives the welcome voucher (so an army of un-traded sock accounts gets 0 credit).
-    const activated = stats.tradeCount > 0 || grantedCredit > 0 || elderVouched;
+    // Activation gate: no overdraft (and no welcome voucher) until the account has completed a real
+    // marketplace trade — i.e. qualifiedTradeValue > 0 — unless a grant or an Elder vouch has
+    // graduated a founding member ahead of it. Crucially this keys off qualified trade VALUE, not
+    // stats.tradeCount: tradeCount also counts direct `transactions`, so merely RECEIVING a gift
+    // would otherwise activate a sock account and mint it a -20 voucher — a Sybil faucet (gift 1 bean
+    // to N socks → 20N beans of unbacked credit). Real trades go through escrow; gifts don't activate.
+    const activated = value > 0 || grantedCredit > 0 || elderVouched;
     const welcomeVoucher = activated ? c.NEWCOMER_VOUCHER : 0;
 
     // Floor = -(voucher + earned + granted), clamped so the deepest floor is -CREDIT_FLOOR_CAP.

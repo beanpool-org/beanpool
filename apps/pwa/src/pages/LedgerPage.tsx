@@ -22,10 +22,10 @@ interface Props {
 // Tiers are recognition milestones. `floor` is the credit floor reached on ENTERING the tier
 // (floors slide continuously between them). `min` = earned+granted credit needed.
 const TIERS = [
-    { name: 'Newcomer', emoji: '🌱', color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db', min: 0,    floor: -80,   perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
-    { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 120,  floor: -200,  perks: ['Credit floor deepens toward -200'] },
-    { name: 'Steward',  emoji: '🏛️', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', min: 520,  floor: -600,  perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
-    { name: 'Elder',    emoji: '⛰️', color: '#d97706', bg: '#fffbeb', border: '#fde68a', min: 1320, floor: -1400, perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
+    { name: 'Newcomer', emoji: '🌱', color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db', min: 0,    floor: -20,   perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+    { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 180,  floor: -200,  perks: ['Credit floor deepens toward -200'] },
+    { name: 'Steward',  emoji: '🏛️', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', min: 580,  floor: -600,  perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
+    { name: 'Elder',    emoji: '⛰️', color: '#d97706', bg: '#fffbeb', border: '#fde68a', min: 1380, floor: -1400, perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
 ];
 
 // Trust curve (mirrors beanpool-core/protocol.ts): earned trust is a saturating function of
@@ -145,10 +145,10 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     // Tier: trust the server's authoritative tier name; fall back to the credit threshold.
     const TIER_NAMES = ['Newcomer', 'Resident', 'Steward', 'Elder'];
     const serverIdx = TIER_NAMES.indexOf(balanceInfo?.tier?.name ?? '');
-    const tierIdx = serverIdx >= 0 ? serverIdx : (ec >= 1320 ? 3 : ec >= 520 ? 2 : ec >= 120 ? 1 : 0);
+    const tierIdx = serverIdx >= 0 ? serverIdx : (ec >= 1380 ? 3 : ec >= 580 ? 2 : ec >= 180 ? 1 : 0);
     const tier = TIERS[tierIdx];
     const nextTier = TIERS[tierIdx + 1] || null;
-    const ELDER_MIN = 1320;
+    const ELDER_MIN = 1380;
     const journeyPct = Math.min(1, totalCredit / ELDER_MIN);
     const creditsToNext = nextTier ? Math.max(0, nextTier.min - totalCredit) : 0;
 
@@ -416,7 +416,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-4">WHAT BUILDS YOUR TRUST</span>
                         <div className="grid grid-cols-3 gap-3">
                             {[
-                                { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1320)), color: '#10b981' },
+                                { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1380)), color: '#10b981' },
                                 { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: '#3b82f6' },
                                 { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: '#f97316' },
                             ].map(a => (

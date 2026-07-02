@@ -268,7 +268,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
 
                     <View style={styles.cardContainer}>
                         <Text style={styles.cardLabel}>HOW YOUR FLOOR GROWS</Text>
-                        <ListItem prefix="1.">Everyone starts at a small <Text style={styles.boldWhiteText}>-80B</Text> floor after their first trade.</ListItem>
+                        <ListItem prefix="1.">Everyone starts with a small <Text style={styles.boldWhiteText}>-20B</Text> welcome voucher after their first trade.</ListItem>
                         <ListItem prefix="2.">It deepens <Text style={styles.boldWhiteText}>smoothly</Text> the more genuine value you trade — no fixed steps.</ListItem>
                         <ListItem prefix="3."><Text style={styles.boldWhiteText}>Diverse</Text> trade (many partners) counts for more than repeat trade with one person.</ListItem>
                         <ListItem prefix="4.">It's capped at <Text style={styles.boldWhiteText}>-2,000B</Text> — the deepest the system allows.</ListItem>

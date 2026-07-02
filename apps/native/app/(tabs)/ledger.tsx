@@ -23,20 +23,20 @@ import { palette } from '../../constants/colors';
 // ── Trust model constants (mirrors beanpool-core/protocol.ts) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
 //   earned = floor(CREDIT_MAX_EARNED × V / (V + TRUST_CURVE_K))
-// Your credit floor slides continuously with earned+granted credit; tiers are just
-// recognition milestones along the way (they don't set the floor). Gifts build no trust.
-const BASE_FLOOR = -80;              // floor at zero trust
-const CREDIT_MAX_EARNED = 1920;      // cap on earned+granted credit (floor bottoms at -2000)
+// There is NO baked-in floor: floor = -(20 welcome voucher + earned + granted), so it slides
+// continuously from 0 down to -2000. Tiers are recognition milestones (they don't set the floor).
+// (The 20 voucher is already folded into the tier thresholds below, so the client needs no constant.)
+const CREDIT_MAX_EARNED = 1920;      // asymptote of the earned-trust curve
 const TRUST_CURVE_K = 5000;          // curve constant (higher = stricter)
 const PER_COUNTERPARTY_CAP = 5000;   // diversity: value with any ONE partner counts at most this much
 const CIRC_TICKS = [200, 500, 1000]; // circulation rate change points
 
 // Tier credit thresholds (earned+granted). They map to the floor breakpoints
-// -200/-600/-1400 the server uses in getTier().
+// -200/-600/-1400 the server uses in getTier(), given floor = -(20 voucher + earned + granted).
 function getTierIndex(credit: number) {
-    if (credit >= 1320) return 3;
-    if (credit >= 520)  return 2;
-    if (credit >= 120)  return 1;
+    if (credit >= 1380) return 3;
+    if (credit >= 580)  return 2;
+    if (credit >= 180)  return 1;
     return 0;
 }
 // Inverse of the curve: qualified value needed to reach a target earned credit.
@@ -54,10 +54,10 @@ export default function LedgerScreen() {
     // Tiers are recognition milestones. `floor` is the credit floor you reach on ENTERING
     // the tier (floors slide continuously between them). `min` = earned+granted credit needed.
     const TIERS = useMemo(() => [
-        { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: -80,   perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
-        { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 120,  floor: -200,  perks: ['Credit floor deepens toward -200'] },
-        { name: 'Steward',  emoji: '🏛️', color: colors.trust.steward.fg, bg: colors.trust.steward.bg, border: colors.trust.steward.border, min: 520,  floor: -600,  perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
-        { name: 'Elder',    emoji: '⛰️', color: colors.trust.elder.fg, bg: colors.trust.elder.bg, border: colors.trust.elder.border, min: 1320, floor: -1400, perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
+        { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: -20,   perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+        { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 180,  floor: -200,  perks: ['Credit floor deepens toward -200'] },
+        { name: 'Steward',  emoji: '🏛️', color: colors.trust.steward.fg, bg: colors.trust.steward.bg, border: colors.trust.steward.border, min: 580,  floor: -600,  perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
+        { name: 'Elder',    emoji: '⛰️', color: colors.trust.elder.fg, bg: colors.trust.elder.bg, border: colors.trust.elder.border, min: 1380, floor: -1400, perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
     ], [colors]);
 
     React.useEffect(() => {
@@ -612,7 +612,7 @@ export default function LedgerScreen() {
             <Text style={styles.sectionLabel}>WHAT BUILDS YOUR TRUST</Text>
             <View style={styles.achieveRow}>
                 {[
-                    { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1320)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
+                    { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1380)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
                     { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: palette.blue500, trackBg: theme === 'dark' ? 'rgba(59,130,246,0.15)' : palette.blue50 },
                     { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: palette.orange500, trackBg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : palette.orange50 },
                 ].map(a => (

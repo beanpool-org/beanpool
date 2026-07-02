@@ -17,6 +17,8 @@ import { CirculationInfoModal } from '../../components/info-content/CirculationI
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { TrustInfoModal } from '../../components/info-content/TrustInfoModal';
 import { SliderInfoModal } from '../../components/info-content/SliderInfoModal';
+import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
+import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 
@@ -357,158 +359,15 @@ export default function LedgerScreen() {
     const partnersToNext = nextTier && Number.isFinite(valueToNext)
         ? Math.max(1, Math.ceil(valueToNext / PER_COUNTERPARTY_CAP)) : 0;
 
+    // Level → coin-badge key (for the new SVG TrustBadge medallions).
+    const LEVEL_KEYS: TrustLevel[] = ['newcomer', 'resident', 'steward', 'elder'];
+    const levelKey = LEVEL_KEYS[tierIdx] || 'newcomer';
+
     const selectedMember = members.find(m => m.publicKey === sendTo);
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
 
-    // ─── Credit Spectrum Bar ──────────────────────────────────────────────────
-    const renderCreditBar = () => {
-        const balance = balanceState.balance;
-
-        // Fixed visual anchor positions — evenly spaced for readability, NOT linear.
-        // 9 anchors: 4 tier floors + zero + 4 circ bracket boundaries (incl. 2000)
-        const ANCHORS: [number, number][] = [
-            [-1400, 0.04],  // Elder floor       ⛰️
-            [-600,  0.13],  // Steward floor      🏛️  (evenly spaced so each colour band is equal width)
-            [-200,  0.24],  // Resident floor     🏠
-            [-80,   0.35],  // Newcomer floor     🌱
-            [0,     0.46],  // Zero line
-            [200,   0.57],  // 0–200: 0% (Tax-Free Green Zone) → rate changes to 1% above 200
-            [500,   0.68],  // 200–500: 1% → rate changes to 1.5% above here
-            [1000,  0.79],  // 500–1000: 1.5% → rate changes to 2% above here
-            [2000,  0.91],  // 1000–2000: 2% → rate changes to 2.5% above here
-        ];
-
-        // Piecewise linear interpolation between anchors — bead tracks accurately
-        const toPos = (v: number): number => {
-            if (v <= ANCHORS[0][0]) return ANCHORS[0][1];
-            if (v >= ANCHORS[ANCHORS.length - 1][0]) return ANCHORS[ANCHORS.length - 1][1];
-            for (let i = 0; i < ANCHORS.length - 1; i++) {
-                const [v0, p0] = ANCHORS[i];
-                const [v1, p1] = ANCHORS[i + 1];
-                if (v >= v0 && v <= v1) {
-                    const t = (v - v0) / (v1 - v0);
-                    return p0 + t * (p1 - p0);
-                }
-            }
-            return 0.5;
-        };
-
-        // Named positions (extracted from ANCHORS for readability)
-        const ZERO_P  = 0.46;
-        const P_200   = 0.57;
-        const P_500   = 0.68;
-        const P_1000  = 0.79;
-        const P_2000  = 0.91;
-        // Negative-side anchor positions (tier floors) — for the mirrored zones
-        const P_N80   = 0.35;
-        const P_N200  = 0.24;
-        const P_N600  = 0.13;
-
-        const balancePct = toPos(balance);
-
-        // Your (continuous) credit floor — floors slide with value now, so instead of fixed
-        // per-tier floor ticks we mark just YOUR floor with a single chevron.
-        const floorPct = toPos(balanceState.floor);
-
-        // Circ zone boundary ticks — just the threshold values; the rate label
-        // for each bracket sits centered in the zone it applies to (zoneRates below).
-        const circMarkers = [
-            { v: 200,  pos: P_200  },
-            { v: 500,  pos: P_500  },
-            { v: 1000, pos: P_1000 },
-            { v: 2000, pos: P_2000 },
-        ];
-
-        // Tax rate per bracket, positioned at the CENTER of the zone it applies to.
-        const zoneRates: { rate: string; pos: number; color?: string }[] = [
-            { rate: '0%',   pos: (ZERO_P + P_200) / 2, color: palette.green600 }, // 0–200 tax-free
-            { rate: '1%',   pos: (P_200 + P_500) / 2 },   // 200–500
-            { rate: '1.5%', pos: (P_500 + P_1000) / 2 },  // 500–1000
-            { rate: '2%',   pos: (P_1000 + P_2000) / 2 }, // 1000–2000
-            { rate: '2.5%', pos: (P_2000 + 1) / 2 },      // 2000+
-        ];
-
-        return (
-            <Pressable
-                style={styles.creditBarOuter}
-                accessibilityRole="button"
-                accessibilityLabel="Credit spectrum"
-                onPress={() => {
-                    setShowSliderInfo(true);
-                }}
-            >
-                <View style={styles.rulerWrap}>
-
-                    {/* ── Continuous diverging bar: zero is the sweet spot, worse the further out either way ── */}
-                    {/* Negative side (mirrored): green near zero → red at the Elder floor */}
-                    {/* Red: ≤ -600 (down to the Elder floor) — rounded left cap */}
-                    <View style={[styles.rulerSeg, { left: '2%', width: `${(P_N600 - 0.02) * 100}%`, backgroundColor: colors.feedback.danger.solid, borderTopLeftRadius: 6, borderBottomLeftRadius: 6, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]} />
-                    {/* Orange: -600 to -200 */}
-                    <View style={[styles.rulerSeg, { left: `${P_N600 * 100}%`, width: `${(P_N200 - P_N600) * 100}%`, backgroundColor: palette.orange500, borderRadius: 0 }]} />
-                    {/* Yellow: -200 to -80 */}
-                    <View style={[styles.rulerSeg, { left: `${P_N200 * 100}%`, width: `${(P_N80 - P_N200) * 100}%`, backgroundColor: palette.yellow500, borderRadius: 0 }]} />
-                    {/* Green: -80 to 0 (sweet-spot band continues across zero) */}
-                    <View style={[styles.rulerSeg, { left: `${P_N80 * 100}%`, width: `${(ZERO_P - P_N80) * 100}%`, backgroundColor: palette.green500, borderRadius: 0 }]} />
-                    {/* Green: 0–200 (Tax-Free Zone) */}
-                    <View style={[styles.rulerSeg, { left: `${ZERO_P * 100}%`, width: `${(P_200 - ZERO_P) * 100}%`, backgroundColor: palette.green500, borderRadius: 0 }]} />
-                    {/* Lime: 200–500 (1%) */}
-                    <View style={[styles.rulerSeg, { left: `${P_200 * 100}%`, width: `${(P_500 - P_200) * 100}%`, backgroundColor: palette.lime500, borderRadius: 0 }]} />
-                    {/* Yellow: 500–1000 (1.5%) */}
-                    <View style={[styles.rulerSeg, { left: `${P_500 * 100}%`, width: `${(P_1000 - P_500) * 100}%`, backgroundColor: palette.yellow500, borderRadius: 0 }]} />
-                    {/* Orange: 1000–2000 (2%) */}
-                    <View style={[styles.rulerSeg, { left: `${P_1000 * 100}%`, width: `${(P_2000 - P_1000) * 100}%`, backgroundColor: palette.orange500, borderRadius: 0 }]} />
-                    {/* Red: 2000+ (2.5%) — rounded right cap */}
-                    <View style={[styles.rulerSeg, { left: `${P_2000 * 100}%`, right: 0, backgroundColor: colors.feedback.danger.solid, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderTopRightRadius: 6, borderBottomRightRadius: 6 }]} />
-
-                    {/* ── Zero marker — only extends BELOW the line so it doesn't clip the bead label ── */}
-                    <View style={[styles.rulerZeroLine, { left: `${ZERO_P * 100}%` }]} />
-                    <Text style={[styles.rulerZeroLabel, { left: `${ZERO_P * 100}%` }]} allowFontScaling={false}>0</Text>
-
-                    {/* ── Your credit floor — black chevrons bracketing it, top & bottom of the bar ── */}
-                    {balanceState.floor < 0 && (
-                        <>
-                            <MaterialCommunityIcons name="menu-down" size={16} color={colors.text.body} style={[styles.floorChevronTop, { left: `${floorPct * 100}%` }]} />
-                            <View style={[styles.rulerTickWrap, { left: `${floorPct * 100}%` }]}>
-                                <MaterialCommunityIcons name="menu-up" size={16} color={colors.text.body} style={{ marginTop: -6 }} />
-                                <Text style={[styles.rulerTickVal, { color: colors.text.body, fontWeight: '800', marginTop: -1 }]} numberOfLines={1} allowFontScaling={false}>{Math.round(balanceState.floor)}</Text>
-                                <Text style={[styles.rulerYouTag, { color: colors.text.body }]} allowFontScaling={false}>your floor</Text>
-                            </View>
-                        </>
-                    )}
-
-                    {/* ── Circ zone boundary ticks (right) — threshold value only ── */}
-                    {circMarkers.map(c => (
-                        <View key={c.v} style={[styles.rulerTickWrap, { left: `${c.pos * 100}%` }]}>
-                            <View style={[styles.rulerTickMark, { backgroundColor: colors.text.muted }]} />
-                            <Text style={styles.rulerTickVal} numberOfLines={1} allowFontScaling={false}>{c.v}</Text>
-                        </View>
-                    ))}
-
-                    {/* ── Tax rate centered in the bracket it applies to ── */}
-                    {zoneRates.map(z => (
-                        <Text key={z.rate} style={[styles.rulerZoneRate, z.color ? { color: z.color, fontWeight: '800' } : null, { left: `${z.pos * 100}%` }]} numberOfLines={1} allowFontScaling={false}>{z.rate}</Text>
-                    ))}
-
-                    {/* ── Balance bead: label above, circle on the line ── */}
-                    <View style={[styles.rulerBeadWrap, { left: `${balancePct * 100}%` }]}>
-                        <Text style={[styles.rulerBeadLabel, { color: balance >= 0 ? palette.emerald800 : palette.red800 }]}>
-                            {balance >= 0 ? '+' : ''}{balance.toFixed(1)}B
-                        </Text>
-                        <View style={[styles.rulerBead, { backgroundColor: tier.color, borderColor: colors.text.inverse }]} />
-                    </View>
-
-                </View>
-
-                {/* ── Zero equilibrium note ── */}
-                <View style={styles.rulerEquilibriumWrap}>
-                    <Text style={styles.rulerEquilibriumText}>
-                        ⚖️ Zero is the sweet spot — you've given as much as you've received. This is where the commons flows best.
-                    </Text>
-                </View>
-
-            </Pressable>
-        );
-    };
+    // Credit position is now the reusable <CreditBar> component (zero-centred, anchored scale).
+    // The old inline spectrum slider was removed in the ledger redesign.
 
 
 
@@ -531,8 +390,8 @@ export default function LedgerScreen() {
                             <Text style={styles.tierHeroLabel}>YOUR TRUST LEVEL</Text>
                             <MaterialCommunityIcons name="information-outline" size={14} color={colors.text.muted} style={{ marginLeft: 4 }} />
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                            <Text style={{ fontSize: 32 }}>{tier.emoji}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                            <TrustBadge level={levelKey} size={56} ring ringPct={journeyPct} />
                             <Text style={[styles.tierHeroName, { color: tier.color }]}>{tier.name}</Text>
                         </View>
                     </View>
@@ -662,7 +521,9 @@ export default function LedgerScreen() {
                         >
                             <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                                 <View style={[styles.ladderDot, { backgroundColor: reached ? t.color : colors.border.default, borderColor: t.color, marginTop: 4 }]} />
-                                <Text style={{ fontSize: 18, width: 24, textAlign: 'center', marginTop: 1 }}>{t.emoji}</Text>
+                                <View style={{ width: 36, alignItems: 'center', marginTop: 1 }}>
+                                    <TrustBadge level={LEVEL_KEYS[i]} size={32} locked={!reached} />
+                                </View>
                                 <View style={{ flex: 1 }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <Text style={[styles.ladderName, { color: reached ? t.color : colors.text.muted }]}>
@@ -953,8 +814,15 @@ export default function LedgerScreen() {
                 </Pressable>
             </View>
 
-            {/* ── Credit Spectrum Bar ── */}
-            {renderCreditBar()}
+            {/* ── Credit position — zero is the sweet spot ── */}
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Credit position — tap to learn how it works"
+                onPress={() => setShowSliderInfo(true)}
+                style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
+            >
+                <CreditBar balance={balanceState.balance} floor={balanceState.floor} colors={colors} />
+            </Pressable>
 
             {/* ── Tab bar ── */}
             <View style={styles.tabBar}>

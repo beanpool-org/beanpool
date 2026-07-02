@@ -25,16 +25,16 @@ interface Props {
 const TIERS = [
     { name: 'Newcomer', emoji: '🌱', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', min: 0,    floor: -20,
       blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — a small welcome voucher gets you moving.",
-      perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+      perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits when your balance is positive'] },
     { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 180,  floor: -200,
-      blurb: "You've traded real value with the community. Your credit line deepens, so you can give more before settling back to balance.",
-      perks: ['Credit floor deepens toward -200'] },
+      blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
+      perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
     { name: 'Steward',  emoji: '🏛️', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', min: 580,  floor: -600,
       blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
-      perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
+      perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
     { name: 'Elder',    emoji: '⛰️', color: '#d97706', bg: '#fffbeb', border: '#fde68a', min: 1380, floor: -1400,
-      blurb: "A pillar of the commons — the deepest credit line and the community's highest recognition.",
-      perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
+      blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
+      perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
 ];
 
 // Trust curve (mirrors beanpool-core/protocol.ts): earned trust is a saturating function of
@@ -154,7 +154,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     const qualifiedValue = balanceInfo?.qualifiedValue ?? 0;
     const avgRating = balanceInfo?.avgRating ?? 0;
     const reviewCount = balanceInfo?.reviewCount ?? 0;
-    const canSend = earned > 0;                        // real send gate: any completed trade (PR#4)
+    const canSend = balance > 0;                        // gate: positive balance (tiers are merit badges, not gates)
     const ts = balanceInfo?.trustStats;
     const uniquePartners = ts?.uniquePartners ?? 0;
 
@@ -280,7 +280,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                                 style={{ background: 'none', font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
-                                <span>{canSend ? 'Send Credits' : 'Send (after 1st trade)'}</span>
+                                <span>{canSend ? 'Send Credits' : 'Send (needs +ve balance)'}</span>
                             </button>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600">
                                 <span>✓</span>
@@ -334,11 +334,20 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
                         <p className="text-[13px] text-nature-700 dark:text-nature-300 leading-relaxed mb-4">{sel.blurb}</p>
 
-                        {/* Credit line mechanical benefit */}
-                        <div className="flex items-center gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
-                            <span>⚖️</span>
-                            <span className="flex-1 text-[13px] text-nature-600 dark:text-nature-400 font-semibold">Credit line reaches</span>
-                            <span className="text-xl font-black font-mono" style={{ color: sel.color }}>{sel.floor}</span>
+                        {/* Credit floor — show YOUR actual floor when viewing your own tier */}
+                        <div className="flex items-start gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
+                            <span className="mt-0.5">⚖️</span>
+                            <div className="flex-1">
+                                <div className="text-[13px] text-nature-600 dark:text-nature-400 font-semibold">
+                                    {selCurrent ? 'Your current floor' : selReached ? 'Floor from this tier' : 'Floor starts at'}
+                                </div>
+                                {selCurrent && (
+                                    <div className="text-[10px] text-nature-400 mt-0.5">Grows deeper as you trade more</div>
+                                )}
+                            </div>
+                            <span className="text-xl font-black font-mono" style={{ color: sel.color }}>
+                                {selCurrent ? floor : sel.floor}
+                            </span>
                         </div>
 
                         <div className="flex flex-col gap-2">
@@ -353,7 +362,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         {!selReached && selNeeded > 0 && (
                             <p className="text-[11px] text-nature-400 italic mt-4">Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</p>
                         )}
-                        <p className="text-[11px] text-nature-400 italic mt-2">Everyone can invite and vote. Sending opens after your first trade. Higher levels deepen your credit line and recognition.</p>
+                        <p className="text-[11px] text-nature-400 italic mt-2">Levels are merit badges — they don't gate any action. Anyone can invite. Anyone with a positive balance can send. Higher levels mean a deeper credit line and community recognition.</p>
                     </div>
 
                     {/* How to reach next tier */}
@@ -446,7 +455,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         {!canSend && (
                             <div className="bg-nature-50 dark:bg-nature-850/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
-                                    🔒 Sending credits unlocks after your <strong>first completed trade</strong>. Trade on the Marketplace to get started.
+                                    🔒 You can send credits whenever your balance is positive — earn some by completing a trade on the Marketplace.
                                 </p>
                             </div>
                         )}
@@ -458,7 +467,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                                 showSend ? 'bg-nature-800 text-white hover:bg-nature-900' : 'bg-[#d97757] text-white hover:bg-[#c26749]'
                             }`}
                         >
-                            {!canSend ? '🔒 Send Credits (after 1st trade)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                            {!canSend ? '🔒 Send Credits (needs positive balance)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
                         </button>
 
                         {/* Send Form */}

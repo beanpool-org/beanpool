@@ -58,16 +58,16 @@ export default function LedgerScreen() {
     const TIERS = useMemo(() => [
         { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: -20,
           blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — a small welcome voucher gets you moving.",
-          perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+          perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits when your balance is positive'] },
         { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 180,  floor: -200,
-          blurb: "You've traded real value with the community. Your credit line deepens, so you can give more before settling back to balance.",
-          perks: ['Credit floor deepens toward -200'] },
+          blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
+          perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
         { name: 'Steward',  emoji: '🏛️', color: colors.trust.steward.fg, bg: colors.trust.steward.bg, border: colors.trust.steward.border, min: 580,  floor: -600,
           blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
-          perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
+          perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
         { name: 'Elder',    emoji: '⛰️', color: colors.trust.elder.fg, bg: colors.trust.elder.bg, border: colors.trust.elder.border, min: 1380, floor: -1400,
-          blurb: "A pillar of the commons — the deepest credit line and the community's highest recognition.",
-          perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
+          blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
+          perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
     ], [colors]);
 
     React.useEffect(() => {
@@ -368,8 +368,8 @@ export default function LedgerScreen() {
     const openSend = async () => {
         if (!canSend) {
             Alert.alert(
-                'Sending unlocks after your 1st trade',
-                'Direct sends are for helping out — they open up the moment you complete your first Marketplace trade.\n\nBrowse the Marketplace to make that first trade!',
+                'No balance to send',
+                'You can send credits whenever your balance is positive — earn some by completing a trade on the Marketplace.',
                 [{ text: 'OK' }]
             );
             return;
@@ -393,7 +393,7 @@ export default function LedgerScreen() {
     const qualifiedValue = balanceState.qualifiedValue || 0;
     const avgRating = balanceState.avgRating || 0;
     const reviewCount = balanceState.reviewCount || 0;
-    const canSend = earned > 0;                        // real send gate: any completed trade (PR#4)
+    const canSend = balanceState.balance > 0;           // gate: positive balance only (tiers are merit badges, not gates)
     const ts = balanceState.trustStats;
     const uniquePartners = ts?.uniquePartners || 0;
 
@@ -466,7 +466,7 @@ export default function LedgerScreen() {
                     }
                 </View>
 
-                {/* Capabilities — Send opens after your 1st trade; Invite is open to everyone */}
+                {/* Quick actions */}
                 <View style={styles.perksRow}>
                     <Pressable
                         accessibilityRole="button"
@@ -474,7 +474,7 @@ export default function LedgerScreen() {
                         onPress={openSend}
                     >
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : 'Send (after 1st trade)'}</Text>
+                        <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : 'Send (needs +ve balance)'}</Text>
                     </Pressable>
                     <View style={[styles.perkPill, { borderColor: palette.green200, backgroundColor: palette.green50 }]}>
                         <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
@@ -524,11 +524,22 @@ export default function LedgerScreen() {
 
                 <Text style={styles.detailBlurb}>{sel.blurb}</Text>
 
-                {/* The real mechanical benefit of standing: a deeper credit line */}
+                {/* Credit floor — show YOUR actual floor when this is your tier; the tier entry floor otherwise */}
                 <View style={styles.detailFloorRow}>
                     <MaterialCommunityIcons name="scale-balance" size={18} color={sel.color} />
-                    <Text style={styles.detailFloorLabel}>Credit line reaches</Text>
-                    <Text style={[styles.detailFloorVal, { color: sel.color }]}>{sel.floor}</Text>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.detailFloorLabel}>
+                            {selCurrent ? 'Your current floor' : selReached ? `Floor from this tier` : `Floor starts at`}
+                        </Text>
+                        {selCurrent && (
+                            <Text style={{ fontSize: 10, color: colors.text.muted, marginTop: 1 }}>
+                                Grows deeper as you trade more
+                            </Text>
+                        )}
+                    </View>
+                    <Text style={[styles.detailFloorVal, { color: sel.color }]}>
+                        {selCurrent ? balanceState.floor : sel.floor}
+                    </Text>
                 </View>
 
                 {sel.perks.map((p: string) => (
@@ -541,7 +552,7 @@ export default function LedgerScreen() {
                 {!selReached && selNeeded > 0 && (
                     <Text style={styles.detailNote}>Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</Text>
                 )}
-                <Text style={styles.detailNote}>Everyone can invite and vote. Sending opens after your first trade. Higher levels deepen your credit line and recognition.</Text>
+                <Text style={styles.detailNote}>Levels are merit badges — they don't gate any action. Anyone can invite. Anyone with a positive balance can send. Higher levels mean a deeper credit line and community recognition.</Text>
             </View>
 
             {/* How to reach the next tier — leads with the highest-leverage lever */}
@@ -698,7 +709,7 @@ export default function LedgerScreen() {
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                         <Text style={[styles.sendBtnText, !canSend && { color: colors.text.secondary }]}>
-                            {!canSend ? '🔒 Send Credits (after 1st trade)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                            {!canSend ? '🔒 Send Credits (needs positive balance)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
                         </Text>
                         {!canSend && (
                             <MaterialCommunityIcons name="information-outline" size={16} color={colors.text.muted} />

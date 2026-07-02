@@ -1955,6 +1955,10 @@ export async function startHttpsServer(port: number): Promise<void> {
             ...getBalance(publicKey),
             callsign: member.callsign,
             trustStats: trust.stats, // tradeCount, uniquePartners, ageDays
+            grantedCredit: trust.grantedCredit,   // vouch/genesis/admin grants (separate lane, no vote weight)
+            qualifiedValue: trust.qualifiedValue, // diversity-capped trade value behind the earned score
+            avgRating: trust.avgRating,           // reputation multiplier inputs
+            reviewCount: trust.reviewCount,
             elderVouchedBy: member.elderVouchedBy || null,
             hasListedOffer: listedOffer,
             // Gate 1: blocked from posting Needs / accepting Offers until an Offer is listed.

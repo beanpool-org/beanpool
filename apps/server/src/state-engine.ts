@@ -1212,6 +1212,9 @@ export function getMemberTrustProfile(publicKey: string): {
     tier: TierInfo;
     earnedCredit: number;
     grantedCredit: number;
+    qualifiedValue: number;
+    avgRating: number;
+    reviewCount: number;
 } {
     const stats = getMemberTrustStats(publicKey);
 
@@ -1255,7 +1258,10 @@ export function getMemberTrustProfile(publicKey: string): {
 
     const tier = getTier(floor);
 
-    return { stats, floor, tier, earnedCredit, grantedCredit };
+    // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
+    // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation
+    // multiplier inputs, surfaced so the client can show them honestly.
+    return { stats, floor, tier, earnedCredit, grantedCredit, qualifiedValue: value, avgRating, reviewCount };
 }
 
 // ===================== TRUST PROFILE (VIEWER-AWARE) =====================

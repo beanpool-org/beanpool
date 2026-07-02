@@ -747,8 +747,6 @@
             'washTradingWindowHours', 'washTradingMinTxns', 'inactiveMemberDays',
             'isolatedBranchMinTxns', 'maxProjectExpiryDays',
             'sybilFunnelMinInvitees', 'sybilFunnelMinAmount', 'sybilFunnelWindowDays',
-            'ghostVelocityTier1Hours', 'ghostVelocityTier1Limit',
-            'ghostVelocityTier2Hours', 'ghostVelocityTier2Limit'
         ];
         const COMMONS_THRESHOLD_KEYS = ['circulationRate'];
         const ALL_THRESHOLD_KEYS = [...AUDIT_THRESHOLD_KEYS, ...COMMONS_THRESHOLD_KEYS];

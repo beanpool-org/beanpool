@@ -19,16 +19,26 @@ interface Props {
     onNavigate?: (tab: string, contextId?: string) => void;
 }
 
+// Tiers are recognition milestones. `floor` is the credit floor reached on ENTERING the tier
+// (floors slide continuously between them). `min` = earned+granted credit needed.
 const TIERS = [
-    { name: 'Newcomer', emoji: '🌱', color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db', min: 0,    floor: -80,   dailyLimit: 20, perks: ['Marketplace access', 'Receive credits', 'Invite members', 'Overdraft unlocks after 1st trade'] },
-    { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 120,  floor: -200,  dailyLimit: null, perks: ['Send credits', 'Invite members', 'Full marketplace'] },
-    { name: 'Steward',  emoji: '🏛️', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', min: 520,  floor: -600,  dailyLimit: null, perks: ['All Resident perks', 'Trusted trader status'] },
-    { name: 'Elder',    emoji: '⛰️', color: '#d97706', bg: '#fffbeb', border: '#fde68a', min: 1320, floor: -1400, dailyLimit: null, perks: ['All perks', 'Community governance voice'] },
+    { name: 'Newcomer', emoji: '🌱', color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db', min: 0,    floor: -80,   perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+    { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 120,  floor: -200,  perks: ['Credit floor deepens toward -200'] },
+    { name: 'Steward',  emoji: '🏛️', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', min: 520,  floor: -600,  perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
+    { name: 'Elder',    emoji: '⛰️', color: '#d97706', bg: '#fffbeb', border: '#fde68a', min: 1320, floor: -1400, perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
 ];
 
-const W_TRADES = 8;
-const W_PARTNERS = 40;
-const W_DAYS = 2;
+// Trust curve (mirrors beanpool-core/protocol.ts): earned trust is a saturating function of
+// qualified, diversity-capped trade VALUE. Floors slide continuously; gifts build no trust.
+const CREDIT_MAX_EARNED = 1920;
+const TRUST_CURVE_K = 5000;
+const PER_COUNTERPARTY_CAP = 5000;
+// Inverse of the curve: qualified value needed to reach a target earned credit.
+function valueForEarned(target: number): number {
+    if (target <= 0) return 0;
+    if (target >= CREDIT_MAX_EARNED) return Infinity;
+    return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
+}
 
 export function LedgerPage({ identity, onNavigate }: Props) {
     const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
@@ -121,24 +131,34 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
     const balance = balanceInfo?.balance ?? 0;
     const floor = balanceInfo?.floor ?? -80;
-    const ec = balanceInfo?.earnedCredit ?? 0;
+    const earned = balanceInfo?.earnedCredit ?? 0;     // from the saturating value curve
+    const granted = balanceInfo?.grantedCredit ?? 0;   // vouch/genesis/admin (separate lane)
+    const totalCredit = Math.min(CREDIT_MAX_EARNED, earned + granted);
+    const ec = totalCredit;                            // "trust" shown to the user
+    const qualifiedValue = balanceInfo?.qualifiedValue ?? 0;
+    const avgRating = balanceInfo?.avgRating ?? 0;
+    const reviewCount = balanceInfo?.reviewCount ?? 0;
+    const canSend = earned > 0;                        // real send gate: any completed trade (PR#4)
     const ts = balanceInfo?.trustStats;
-
-    const tradeCount = ts?.tradeCount ?? 0;
     const uniquePartners = ts?.uniquePartners ?? 0;
-    const ageDays = ts?.ageDays ?? 0;
 
-    const tierIdx = ec >= 1320 ? 3 : ec >= 520 ? 2 : ec >= 120 ? 1 : 0;
+    // Tier: trust the server's authoritative tier name; fall back to the credit threshold.
+    const TIER_NAMES = ['Newcomer', 'Resident', 'Steward', 'Elder'];
+    const serverIdx = TIER_NAMES.indexOf(balanceInfo?.tier?.name ?? '');
+    const tierIdx = serverIdx >= 0 ? serverIdx : (ec >= 1320 ? 3 : ec >= 520 ? 2 : ec >= 120 ? 1 : 0);
     const tier = TIERS[tierIdx];
     const nextTier = TIERS[tierIdx + 1] || null;
     const ELDER_MIN = 1320;
-    const journeyPct = Math.min(1, ec / ELDER_MIN);
-    const creditsToNext = nextTier ? Math.max(0, nextTier.min - ec) : 0;
-    const tradesToLevel = nextTier ? Math.ceil(creditsToNext / W_TRADES) : 0;
-    const partnersToLevel = nextTier ? Math.ceil(creditsToNext / W_PARTNERS) : 0;
-    const daysToLevel = nextTier ? Math.ceil(creditsToNext / W_DAYS) : 0;
+    const journeyPct = Math.min(1, totalCredit / ELDER_MIN);
+    const creditsToNext = nextTier ? Math.max(0, nextTier.min - totalCredit) : 0;
 
-    const canGift = balanceInfo?.tier?.canGift ?? true;
+    // Value needed for the next tier: invert the curve for the earned credit it requires
+    // (granted credit is fixed), minus value already traded → rough "new partners" count.
+    const targetEarned = nextTier ? Math.max(0, nextTier.min - granted) : 0;
+    const valueToNext = nextTier ? Math.max(0, valueForEarned(targetEarned) - qualifiedValue) : 0;
+    const partnersToNext = nextTier && Number.isFinite(valueToNext)
+        ? Math.max(1, Math.ceil(valueToNext / PER_COUNTERPARTY_CAP)) : 0;
+
     const canInvite = balanceInfo?.tier?.canInvite ?? true;
     const hoursEquivalent = Math.abs(balance) / 40;
 
@@ -288,15 +308,6 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                 <div className="text-center mt-3 text-[11px] text-nature-500 dark:text-nature-400 italic">
                     ⚖️ Zero is the sweet spot — you've given as much as you've received.
                 </div>
-
-                {balanceInfo?.velocityGate?.active && (
-                    <div className="mt-4 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl px-3 py-2 text-[11px] font-bold text-indigo-700 dark:text-indigo-400 w-fit">
-                        <span>🛡️</span>
-                        <span>Daily Limit: {(balanceInfo.velocityGate.dailyUsed || 0).toFixed(1)} / {balanceInfo.velocityGate.dailyLimit}B used</span>
-                        <span className="opacity-50">·</span>
-                        <span>Lifts in ~{balanceInfo.velocityGate.unlockHours}h</span>
-                    </div>
-                )}
             </div>
 
             {/* Tab Bar */}
@@ -356,7 +367,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                             })}
                         </div>
                         <div className="flex justify-between mt-6 text-xs font-bold text-nature-500">
-                            <span>{ec} trust points</span>
+                            <span>{ec} trust</span>
                             {nextTier ? (
                                 <span>{creditsToNext} to {nextTier.name}</span>
                             ) : (
@@ -364,11 +375,11 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                             )}
                         </div>
 
-                        {/* Perks */}
+                        {/* Perks — Send unlocks after your 1st completed trade; Invite is open to everyone */}
                         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-nature-100 dark:border-nature-800">
-                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold ${canGift ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 text-nature-400'}`}>
-                                <span>{canGift ? '✓' : '🔒'}</span>
-                                <span>Send Credits</span>
+                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 text-nature-400'}`}>
+                                <span>{canSend ? '✓' : '🔒'}</span>
+                                <span>{canSend ? 'Send Credits' : 'Send (after 1st trade)'}</span>
                             </div>
                             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold ${canInvite ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 text-nature-400'}`}>
                                 <span>{canInvite ? '✓' : '🔒'}</span>
@@ -381,50 +392,45 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                     {nextTier && (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
                             <h3 className="font-extrabold text-[15px] text-nature-950 dark:text-white mb-2">🚀 Reach {nextTier.emoji} {nextTier.name}</h3>
-                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-400 mb-2">{creditsToNext} trust points to go</p>
+                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-400 mb-2">{creditsToNext} trust to go</p>
                             <p className="text-xs text-nature-500 leading-relaxed mb-4">
-                                Trading with someone new is the fastest route — each new partner is worth {W_PARTNERS} points,
-                                vs {W_TRADES} for a repeat trade. You also earn {W_DAYS}/day just by staying active.
+                                Trust grows with the real value you trade. Trading with someone NEW counts fastest —
+                                value with any one partner is capped, so a wide circle beats repeat trades with the same person.
                             </p>
-                            <div className="grid grid-cols-3 gap-3 text-center">
-                                <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl relative">
-                                    <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{partnersToLevel}</div>
-                                    <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">new partners</div>
-                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-indigo-500 text-white font-black text-[8px] uppercase tracking-wider">fastest</span>
+                            <div className="grid grid-cols-2 gap-3 text-center">
+                                <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl relative">
+                                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{Number.isFinite(valueToNext) ? `~${valueToNext}` : '—'}</div>
+                                    <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">beans of value to trade</div>
+                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-emerald-500 text-white font-black text-[8px] uppercase tracking-wider">the lever</span>
                                 </div>
-                                <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl">
-                                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{tradesToLevel}</div>
-                                    <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">repeat trades</div>
-                                </div>
-                                <div className="p-3 bg-orange-50/50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/40 rounded-xl">
-                                    <div className="text-2xl font-black text-orange-600 dark:text-orange-400">~{Math.max(1, Math.round(daysToLevel / 30))}mo</div>
-                                    <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">just waiting</div>
+                                <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl">
+                                    <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{partnersToNext || '—'}</div>
+                                    <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">new partners (roughly)</div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Achievements grid */}
+                    {/* What builds trust: value traded, a diverse circle of partners, and reputation */}
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
-                        <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-4">YOUR ACHIEVEMENTS</span>
+                        <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-4">WHAT BUILDS YOUR TRUST</span>
                         <div className="grid grid-cols-3 gap-3">
                             {[
-                                { icon: '🤝', label: 'TRADES', count: tradeCount, contrib: tradeCount * W_TRADES, target: 50, color: '#10b981', bg: 'bg-emerald-500' },
-                                { icon: '👥', label: 'PARTNERS', count: uniquePartners, contrib: uniquePartners * W_PARTNERS, target: 20, color: '#3b82f6', bg: 'bg-blue-500' },
-                                { icon: '📅', label: 'DAYS', count: ageDays, contrib: ageDays * W_DAYS, target: 365, color: '#f97316', bg: 'bg-orange-500' },
+                                { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1320)), color: '#10b981' },
+                                { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: '#3b82f6' },
+                                { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: '#f97316' },
                             ].map(a => (
                                 <div key={a.label} className="p-3 border border-nature-200 dark:border-nature-800 rounded-xl flex flex-col justify-between">
                                     <div>
                                         <span className="text-xl">{a.icon}</span>
-                                        <div className="text-lg font-black text-nature-950 dark:text-white mt-1 leading-none">{a.count}</div>
+                                        <div className="text-lg font-black text-nature-950 dark:text-white mt-1 leading-none">{a.big}</div>
                                         <div className="text-[9px] font-bold text-nature-400 uppercase tracking-wider mt-1">{a.label}</div>
                                     </div>
                                     <div className="mt-3">
-                                        <div className="text-[10px] font-black" style={{ color: a.color }}>+{a.contrib} pts</div>
-                                        <div className="w-full h-1 bg-nature-100 dark:bg-nature-850 rounded-full mt-1.5 overflow-hidden">
-                                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, (a.count / a.target) * 100)}%`, backgroundColor: a.color }} />
+                                        <div className="w-full h-1 bg-nature-100 dark:bg-nature-850 rounded-full overflow-hidden">
+                                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, a.pct * 100)}%`, backgroundColor: a.color }} />
                                         </div>
-                                        <span className="text-[8px] font-bold text-nature-400 mt-1 block">{a.count}/{a.target}</span>
+                                        <span className="text-[8px] font-bold text-nature-400 mt-1 block">{a.foot}</span>
                                     </div>
                                 </div>
                             ))}
@@ -459,16 +465,12 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                                                 )}
                                             </div>
                                             <p className="text-[11px] text-nature-400 dark:text-nature-500 mt-1">
-                                                {t.min === 0 ? 'Starting tier' : `Requires ${t.min} trust points`}
+                                                {t.min === 0 ? 'Starting tier' : `Reach ${t.min} trust from the value you trade`}
                                             </p>
                                             <div className="mt-2 space-y-1">
                                                 <div className="flex items-center gap-1.5 text-[10px] text-nature-500">
                                                     <span>⚖️</span>
-                                                    <span>Floor: {t.floor}B overdraft</span>
-                                                </div>
-                                                <div className="flex items-center gap-1.5 text-[10px] text-nature-500">
-                                                    <span>⚡</span>
-                                                    <span>{t.dailyLimit ? `Daily limit: ${t.dailyLimit}B` : 'No daily spending limit'}</span>
+                                                    <span>Credit floor → {t.floor}B</span>
                                                 </div>
                                                 <div className="pt-1.5">
                                                     {t.perks.map(p => (
@@ -486,7 +488,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         </div>
                     </div>
                     <span className="text-[10px] font-medium text-nature-400 dark:text-nature-500 text-center italic block">
-                        💡 Credits = (trades × 8) + (partners × 40) + (days as member × 2)
+                        💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.
                     </span>
                 </div>
             ) : (
@@ -523,22 +525,22 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
                     {/* Send credits */}
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
-                        {!canGift && (
+                        {!canSend && (
                             <div className="bg-nature-50 dark:bg-nature-850/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
-                                    🔒 Direct gifting unlocks at <strong>Resident</strong> tier. Trade on the Marketplace to build trust.
+                                    🔒 Sending credits unlocks after your <strong>first completed trade</strong>. Trade on the Marketplace to get started.
                                 </p>
                             </div>
                         )}
                         <button
-                            onClick={() => canGift && setShowSend(!showSend)}
-                            disabled={!canGift}
+                            onClick={() => canSend && setShowSend(!showSend)}
+                            disabled={!canSend}
                             className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer transition-all shadow-md ${
-                                !canGift ? 'bg-nature-100 dark:bg-nature-800 text-nature-450 cursor-not-allowed opacity-60' :
+                                !canSend ? 'bg-nature-100 dark:bg-nature-800 text-nature-450 cursor-not-allowed opacity-60' :
                                 showSend ? 'bg-nature-800 text-white hover:bg-nature-900' : 'bg-[#d97757] text-white hover:bg-[#c26749]'
                             }`}
                         >
-                            {!canGift ? '🔒 Send Credits (Locked)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                            {!canSend ? '🔒 Send Credits (after 1st trade)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
                         </button>
 
                         {/* Send Form */}

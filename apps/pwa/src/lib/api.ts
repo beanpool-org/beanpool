@@ -333,18 +333,16 @@ export interface BalanceInfo {
 
     tier: TierInfo;
     earnedCredit?: number;
+    grantedCredit?: number;   // vouch/genesis/admin grants (separate lane, no vote weight)
+    qualifiedValue?: number;  // diversity-capped trade value behind the earned score
+    avgRating?: number;       // reputation multiplier inputs
+    reviewCount?: number;
     commonsBalance: number;
     callsign: string;
     trustStats?: {
         tradeCount: number;
         uniquePartners: number;
         ageDays: number;
-    };
-    velocityGate?: {
-        active: boolean;
-        dailyLimit?: number;
-        dailyUsed?: number;
-        unlockHours?: number;
     };
     /** Elder who vouched for this member, if any. */
     elderVouchedBy?: string | null;

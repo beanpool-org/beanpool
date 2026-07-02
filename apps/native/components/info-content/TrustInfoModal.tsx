@@ -142,42 +142,46 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        Your <Text style={styles.boldWhiteText}>Trust Tier</Text> determines your spending capabilities, overdraft limits, and network permissions.
+                        Tiers are <Text style={styles.boldWhiteText}>recognition milestones</Text> — they mark how far your trust has grown. The one reward that deepens with them is your <Text style={styles.boldWhiteText}>credit floor</Text> (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.
                     </Text>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.brand.primary }]}>
-                        <Text style={styles.tierTitle}>🔑 Founding Status (0 Trades)</Text>
-                        <ListItem>A temporary level that only lasts until you complete your <Text style={styles.boldWhiteText}>very first trade</Text></ListItem>
-                        <ListItem>Shows as <Text style={styles.boldWhiteText}>🔑 FOUNDING</Text> on profiles and listings</ListItem>
-                        <ListItem>Alerts other members to prioritize helping you complete your first trade</ListItem>
-                        <ListItem>Automatically graduates to <Text style={styles.boldWhiteText}>Newcomer</Text> once your first transaction is completed!</ListItem>
+                        <Text style={styles.tierTitle}>🔑 Founding Status (before 1st trade)</Text>
+                        <ListItem>A starting state that lasts until you complete your <Text style={styles.boldWhiteText}>very first trade</Text></ListItem>
+                        <ListItem>Shows as <Text style={styles.boldWhiteText}>🔑 FOUNDING</Text> so members know to help you get started</ListItem>
+                        <ListItem>Your credit floor stays at <Text style={styles.boldWhiteText}>0</Text> until that first trade — no overdraft yet</ListItem>
+                        <ListItem>Graduates to <Text style={styles.boldWhiteText}>Newcomer</Text> automatically once you trade</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.newcomer.fg }]}>
-                        <Text style={styles.tierTitle}>🌱 Newcomer (0 - 119 pts)</Text>
-                        <ListItem>Base overdraft floor: <Text style={styles.boldWhiteText}>-80B</Text> (unlocks after <Text style={styles.boldWhiteText}>1st trade</Text>)</ListItem>
-                        <ListItem>Rolling <Text style={styles.boldWhiteText}>20B</Text> daily spending limit for safety</ListItem>
-                        <ListItem>Can receive credits and view marketplace</ListItem>
+                        <Text style={styles.tierTitle}>🌱 Newcomer</Text>
+                        <ListItem>Credit floor opens to <Text style={styles.boldWhiteText}>-80B</Text> after your 1st trade</ListItem>
+                        <ListItem>Browse & trade the marketplace, receive credits</ListItem>
+                        <ListItem><Text style={styles.boldWhiteText}>Sending credits</Text> unlocks the moment you complete that first trade</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.resident.fg }]}>
-                        <Text style={styles.tierTitle}>🏠 Resident (120 - 519 pts)</Text>
-                        <ListItem>Overdraft floor deepens to <Text style={styles.boldWhiteText}>-200B</Text></ListItem>
-                        <ListItem>Daily <Text style={styles.boldWhiteText}>spending limits removed</Text></ListItem>
-                        <ListItem>Unlocks <Text style={styles.boldWhiteText}>P2P credit sending</Text></ListItem>
+                        <Text style={styles.tierTitle}>🏠 Resident</Text>
+                        <ListItem>Credit floor deepens toward <Text style={styles.boldWhiteText}>-200B</Text> as you trade more value</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.steward.fg }]}>
-                        <Text style={styles.tierTitle}>🏛️ Steward (520 - 1319 pts)</Text>
-                        <ListItem>Overdraft floor deepens to <Text style={styles.boldWhiteText}>-600B</Text></ListItem>
-                        <ListItem>Unlocks <Text style={styles.boldWhiteText}>member invitations</Text></ListItem>
+                        <Text style={styles.tierTitle}>🏛️ Steward</Text>
+                        <ListItem>Credit floor deepens toward <Text style={styles.boldWhiteText}>-600B</Text></ListItem>
+                        <ListItem>Trusted-trader recognition across the community</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.elder.fg }]}>
-                        <Text style={styles.tierTitle}>⛰️ Elder (1320+ pts)</Text>
-                        <ListItem>Overdraft floor deepens to <Text style={styles.boldWhiteText}>-1400B</Text></ListItem>
-                        <ListItem>Premium <Text style={styles.boldWhiteText}>gold highlight border</Text> on listings</ListItem>
-                        <ListItem>Unlocks <Text style={styles.boldWhiteText}>community governance voice</Text></ListItem>
+                        <Text style={styles.tierTitle}>⛰️ Elder</Text>
+                        <ListItem>Credit floor deepens toward <Text style={styles.boldWhiteText}>-1400B</Text> (max <Text style={styles.boldWhiteText}>-2000B</Text>)</ListItem>
+                        <ListItem>Recognised as a long-standing, high-trust member</ListItem>
+                    </View>
+
+                    <View style={styles.cardContainer}>
+                        <Text style={styles.cardLabel}>OPEN TO EVERYONE — NO TIER REQUIRED</Text>
+                        <ListItem><Text style={styles.boldWhiteText}>Inviting new members</Text> — share BeanPool freely from day one.</ListItem>
+                        <ListItem><Text style={styles.boldWhiteText}>A governance voice</Text> — voting power scales with the value you trade, so anyone who trades has a say.</ListItem>
+                        <ListItem><Text style={styles.boldWhiteText}>No daily spending limits</Text> — your credit floor is the only guardrail.</ListItem>
                     </View>
                 </View>
             )

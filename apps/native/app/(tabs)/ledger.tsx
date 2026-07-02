@@ -20,18 +20,30 @@ import { SliderInfoModal } from '../../components/info-content/SliderInfoModal';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 
-// ── Tier constants (mirrors beanpool-core/protocol.ts) ──
-// floor: the credit limit at that tier (negative = how far into debt you can go)
-// dailyLimit: velocity gate bean limit (null = unrestricted)
-const BASE_FLOOR = -80; // Everyone starts here
-const CIRC_TICKS = [200, 500, 1000]; // Circulation rate change points
-const W_TRADES = 8, W_PARTNERS = 40, W_DAYS = 2;
+// ── Trust model constants (mirrors beanpool-core/protocol.ts) ──
+// Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
+//   earned = floor(CREDIT_MAX_EARNED × V / (V + TRUST_CURVE_K))
+// Your credit floor slides continuously with earned+granted credit; tiers are just
+// recognition milestones along the way (they don't set the floor). Gifts build no trust.
+const BASE_FLOOR = -80;              // floor at zero trust
+const CREDIT_MAX_EARNED = 1920;      // cap on earned+granted credit (floor bottoms at -2000)
+const TRUST_CURVE_K = 5000;          // curve constant (higher = stricter)
+const PER_COUNTERPARTY_CAP = 5000;   // diversity: value with any ONE partner counts at most this much
+const CIRC_TICKS = [200, 500, 1000]; // circulation rate change points
 
-function getTierIndex(ec: number) {
-    if (ec >= 1320) return 3;
-    if (ec >= 520)  return 2;
-    if (ec >= 120)  return 1;
+// Tier credit thresholds (earned+granted). They map to the floor breakpoints
+// -200/-600/-1400 the server uses in getTier().
+function getTierIndex(credit: number) {
+    if (credit >= 1320) return 3;
+    if (credit >= 520)  return 2;
+    if (credit >= 120)  return 1;
     return 0;
+}
+// Inverse of the curve: qualified value needed to reach a target earned credit.
+function valueForEarned(target: number): number {
+    if (target <= 0) return 0;
+    if (target >= CREDIT_MAX_EARNED) return Infinity;
+    return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
 export default function LedgerScreen() {
@@ -39,11 +51,13 @@ export default function LedgerScreen() {
     const { identity } = useIdentity();
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+    // Tiers are recognition milestones. `floor` is the credit floor you reach on ENTERING
+    // the tier (floors slide continuously between them). `min` = earned+granted credit needed.
     const TIERS = useMemo(() => [
-        { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: -80,   dailyLimit: 20, perks: ['Marketplace access', 'Receive credits', 'Invite members', 'Overdraft unlocks after 1st trade'] },
-        { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 120,  floor: -200,  dailyLimit: null, perks: ['Send credits', 'Invite members', 'Full marketplace'] },
-        { name: 'Steward',  emoji: '🏛️', color: colors.trust.steward.fg, bg: colors.trust.steward.bg, border: colors.trust.steward.border, min: 520,  floor: -600,  dailyLimit: null, perks: ['All Resident perks', 'Trusted trader status'] },
-        { name: 'Elder',    emoji: '⛰️', color: colors.trust.elder.fg, bg: colors.trust.elder.bg, border: colors.trust.elder.border, min: 1320, floor: -1400, dailyLimit: null, perks: ['All perks', 'Community governance voice'] },
+        { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: -80,   perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+        { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 120,  floor: -200,  perks: ['Credit floor deepens toward -200'] },
+        { name: 'Steward',  emoji: '🏛️', color: colors.trust.steward.fg, bg: colors.trust.steward.bg, border: colors.trust.steward.border, min: 520,  floor: -600,  perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
+        { name: 'Elder',    emoji: '⛰️', color: colors.trust.elder.fg, bg: colors.trust.elder.bg, border: colors.trust.elder.border, min: 1320, floor: -1400, perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
     ], [colors]);
 
     React.useEffect(() => {
@@ -144,7 +158,6 @@ export default function LedgerScreen() {
         achieveCount: { fontSize: 24, fontWeight: '900', marginBottom: 1 },
         achieveLabel: { fontSize: 9, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5 },
         achieveText: { fontSize: 12, fontWeight: '700' },
-        achieveContrib: { fontSize: 10, color: colors.text.muted, fontWeight: '600', marginBottom: 8 },
         achieveBarBg: { height: 5, borderRadius: 3, overflow: 'hidden', marginBottom: 4 },
         achieveBarFill: { height: '100%', borderRadius: 3 },
         achieveFooter: { fontSize: 9, color: colors.text.muted, fontWeight: '600' },
@@ -223,21 +236,6 @@ export default function LedgerScreen() {
         txnTime: { fontSize: 11, color: colors.text.muted },
         txnAmount: { fontSize: 16, fontWeight: '800' },
 
-        // Velocity gate meter
-        velocityCard: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.indigo50, borderRadius: 16, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.indigo200 },
-        velocityTitle: { fontSize: 14, fontWeight: '800', color: theme === 'dark' ? colors.text.heading : palette.indigo800, marginLeft: 8 },
-        velocityLabel: { fontSize: 10, fontWeight: '800', color: theme === 'dark' ? colors.text.secondary : palette.indigo600, letterSpacing: 1, textTransform: 'uppercase' as const, marginBottom: 6 },
-        velocityBarBg: { height: 8, backgroundColor: theme === 'dark' ? colors.border.strong : palette.indigo100, borderRadius: 4, overflow: 'hidden' as const },
-        velocityBarFill: { height: '100%' as const, borderRadius: 4 },
-        velocityUsed: { fontSize: 12, fontWeight: '700', color: colors.text.body },
-        velocityLimit: { fontSize: 12, fontWeight: '700', color: colors.text.secondary },
-        velocityRemaining: { fontSize: 12, fontWeight: '600', color: colors.text.body, marginTop: 6 },
-        velocityWarning: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginTop: 8, backgroundColor: colors.feedback.danger.bg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-        velocityWarningText: { fontSize: 12, fontWeight: '700', color: colors.feedback.danger.fg, flex: 1 },
-        velocityUnlock: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, marginTop: 10, backgroundColor: colors.feedback.success.bg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-        velocityUnlockText: { fontSize: 12, fontWeight: '700', color: colors.feedback.success.fg },
-        velocityExplainer: { fontSize: 11, color: colors.text.muted, marginTop: 10, lineHeight: 16 },
-
         // ── Credit Spectrum Bar (ruler/mercury design) ──
         creditBarOuter: { backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10 },
         rulerWrap: { height: 88, position: 'relative', marginBottom: 4 },
@@ -263,9 +261,6 @@ export default function LedgerScreen() {
         rulerBeadWrap: { position: 'absolute', alignItems: 'center', width: 64, top: 3, marginLeft: -32 },
         rulerBeadLabel: { fontSize: 12, fontWeight: '800', marginBottom: 3, textAlign: 'center' },
         rulerBead: { width: 16, height: 16, borderRadius: 8, borderWidth: 2.5, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 3 },
-        velocityPill: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 5, marginTop: 6, backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.indigo50, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, alignSelf: 'flex-start' as const, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.indigo200 },
-        velocityPillText: { fontSize: 11, fontWeight: '600', color: theme === 'dark' ? colors.text.heading : palette.indigo600 },
-        velocityPillDot: { fontSize: 11, color: colors.text.muted },
     }));
 
     const loadData = () => {
@@ -326,21 +321,35 @@ export default function LedgerScreen() {
         } finally { setSending(false); }
     };
 
-    // Trust calculations
-    const ec = balanceState.earnedCredit || 0;
+    // Trust calculations (value-based)
+    const earned = balanceState.earnedCredit || 0;   // from the saturating value curve
+    const granted = balanceState.grantedCredit || 0; // vouch/genesis/admin (separate lane)
+    const totalCredit = Math.min(CREDIT_MAX_EARNED, earned + granted); // this is what backs the floor & tier
+    const ec = totalCredit;                            // "trust" shown to the user
+    const qualifiedValue = balanceState.qualifiedValue || 0;
+    const avgRating = balanceState.avgRating || 0;
+    const reviewCount = balanceState.reviewCount || 0;
+    const canSend = earned > 0;                        // real send gate: any completed trade (PR#4)
     const ts = balanceState.trustStats;
-    const tradeCount    = ts?.tradeCount     || 0;
     const uniquePartners = ts?.uniquePartners || 0;
-    const ageDays       = ts?.ageDays        || 0;
-    const tierIdx = getTierIndex(ec);
+
+    // Tier: trust the server's authoritative tier name; fall back to the credit threshold.
+    const TIER_NAMES = ['Newcomer', 'Resident', 'Steward', 'Elder'];
+    const serverIdx = TIER_NAMES.indexOf(balanceState.tier?.name);
+    const tierIdx = serverIdx >= 0 ? serverIdx : getTierIndex(totalCredit);
     const tier = TIERS[tierIdx];
     const nextTier = TIERS[tierIdx + 1] || null;
     const ELDER_MIN = TIERS[TIERS.length - 1].min;
-    const journeyPct = ELDER_MIN > 0 ? Math.min(1, ec / ELDER_MIN) : 1; // cumulative progress toward Elder
-    const creditsToNext = nextTier ? Math.max(0, nextTier.min - ec) : 0;
-    const tradesToLevel   = nextTier ? Math.ceil(creditsToNext / W_TRADES)   : 0;
-    const partnersToLevel = nextTier ? Math.ceil(creditsToNext / W_PARTNERS) : 0;
-    const daysToLevel     = nextTier ? Math.ceil(creditsToNext / W_DAYS)     : 0;
+    const journeyPct = ELDER_MIN > 0 ? Math.min(1, totalCredit / ELDER_MIN) : 1; // progress toward Elder
+    const creditsToNext = nextTier ? Math.max(0, nextTier.min - totalCredit) : 0;
+
+    // Value needed for the next tier: invert the curve for the earned credit that tier
+    // requires (granted credit is fixed), minus the value already traded. Then translate
+    // to a rough "new partners" count (value with any one partner is diversity-capped).
+    const targetEarned = nextTier ? Math.max(0, nextTier.min - granted) : 0;
+    const valueToNext = nextTier ? Math.max(0, valueForEarned(targetEarned) - qualifiedValue) : 0;
+    const partnersToNext = nextTier && Number.isFinite(valueToNext)
+        ? Math.max(1, Math.ceil(valueToNext / PER_COUNTERPARTY_CAP)) : 0;
 
     const selectedMember = members.find(m => m.publicKey === sendTo);
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
@@ -412,8 +421,6 @@ export default function LedgerScreen() {
             { rate: '2%',   pos: (P_1000 + P_2000) / 2 }, // 1000–2000
             { rate: '2.5%', pos: (P_2000 + 1) / 2 },      // 2000+
         ];
-
-        const vg = balanceState.velocityGate;
 
         return (
             <Pressable
@@ -493,17 +500,6 @@ export default function LedgerScreen() {
                     </Text>
                 </View>
 
-                {/* ── Velocity gate pill — Newcomer only ── */}
-                {vg?.active && (
-                    <View style={styles.velocityPill}>
-                        <MaterialCommunityIcons name="shield-check-outline" size={13} color={palette.indigo500} />
-                        <Text style={styles.velocityPillText}>
-                            Daily: {(vg.dailyUsed || 0).toFixed(1)} / {vg.dailyLimit}B used
-                        </Text>
-                        <Text style={styles.velocityPillDot}>·</Text>
-                        <Text style={styles.velocityPillText}>Lifts in ~{vg.unlockHours}h</Text>
-                    </View>
-                )}
             </Pressable>
         );
     };
@@ -555,22 +551,22 @@ export default function LedgerScreen() {
                     })}
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
-                    <Text style={styles.progressLabel}>{ec} trust points</Text>
+                    <Text style={styles.progressLabel}>{ec} trust</Text>
                     {nextTier
                         ? <Text style={styles.progressLabel}>{creditsToNext} to {nextTier.name}</Text>
                         : <Text style={[styles.progressLabel, { color: theme === 'dark' ? palette.amber400 : palette.amber600, fontWeight: '700' }]}>✨ Maximum level!</Text>
                     }
                 </View>
 
-                {/* Perks */}
+                {/* Perks — Send unlocks after your 1st completed trade; Invite is open to everyone */}
                 <View style={styles.perksRow}>
-                    <View style={[styles.perkPill, { borderColor: balanceState.tier.canGift ? palette.green200 : colors.border.default, backgroundColor: balanceState.tier.canGift ? palette.green50 : colors.surface.app }]}>
-                        <MaterialCommunityIcons name={balanceState.tier.canGift ? 'check-circle' : 'lock-outline'} size={13} color={balanceState.tier.canGift ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: balanceState.tier.canGift ? colors.brand.dark : colors.text.muted }]}>Send Credits</Text>
+                    <View style={[styles.perkPill, { borderColor: canSend ? palette.green200 : colors.border.default, backgroundColor: canSend ? palette.green50 : colors.surface.app }]}>
+                        <MaterialCommunityIcons name={canSend ? 'check-circle' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
+                        <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : 'Send (after 1st trade)'}</Text>
                     </View>
-                    <View style={[styles.perkPill, { borderColor: balanceState.tier.canInvite ? palette.green200 : colors.border.default, backgroundColor: balanceState.tier.canInvite ? palette.green50 : colors.surface.app }]}>
-                        <MaterialCommunityIcons name={balanceState.tier.canInvite ? 'check-circle' : 'lock-outline'} size={13} color={balanceState.tier.canInvite ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: balanceState.tier.canInvite ? colors.brand.dark : colors.text.muted }]}>Invite Members</Text>
+                    <View style={[styles.perkPill, { borderColor: palette.green200, backgroundColor: palette.green50 }]}>
+                        <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
+                        <Text style={[styles.perkText, { color: colors.brand.dark }]}>Invite Members</Text>
                     </View>
                 </View>
             </Pressable>
@@ -592,36 +588,33 @@ export default function LedgerScreen() {
                             <MaterialCommunityIcons name="information-outline" size={14} color={palette.indigo500} />
                         </View>
                     </View>
-                    <Text style={styles.pathGap}>{creditsToNext} trust points to go</Text>
+                    <Text style={styles.pathGap}>{creditsToNext} trust to go</Text>
                     <Text style={styles.pathHint}>
-                        Trading with someone new is the fastest route — each new partner is worth {W_PARTNERS} points,
-                        vs {W_TRADES} for a repeat trade. You also earn {W_DAYS}/day just by staying active.
+                        Trust grows with the real value you trade. Trading with someone NEW counts fastest —
+                        value with any one partner is capped, so a wide circle beats repeat trades with the same person.
                     </Text>
                     <View style={styles.pathRow}>
                         <View style={styles.pathOption}>
-                            <Text style={[styles.pathNumber, { color: palette.blue500 }]}>{partnersToLevel}</Text>
-                            <Text style={styles.pathLabel} numberOfLines={2}>new partners</Text>
-                            <Text style={[styles.pathLeverTag, { color: palette.blue500 }]}>fastest</Text>
+                            <Text style={[styles.pathNumber, { color: colors.brand.primary }]}>{Number.isFinite(valueToNext) ? `~${valueToNext}` : '—'}</Text>
+                            <Text style={styles.pathLabel} numberOfLines={2}>beans of value to trade</Text>
+                            <Text style={[styles.pathLeverTag, { color: colors.brand.primary }]}>the lever</Text>
                         </View>
                         <View style={styles.pathOption}>
-                            <Text style={[styles.pathNumber, { color: colors.brand.primary }]}>{tradesToLevel}</Text>
-                            <Text style={styles.pathLabel} numberOfLines={2}>repeat trades</Text>
-                        </View>
-                        <View style={styles.pathOption}>
-                            <Text style={[styles.pathNumber, { color: palette.orange500 }]}>~{Math.max(1, Math.round(daysToLevel / 30))}mo</Text>
-                            <Text style={styles.pathLabel} numberOfLines={2}>just waiting</Text>
+                            <Text style={[styles.pathNumber, { color: palette.blue500 }]}>{partnersToNext || '—'}</Text>
+                            <Text style={styles.pathLabel} numberOfLines={2}>new partners (roughly)</Text>
                         </View>
                     </View>
                 </Pressable>
             )}
 
-            {/* Achievement cards */}
-            <Text style={styles.sectionLabel}>YOUR ACHIEVEMENTS</Text>
+            {/* Achievement cards — the things that actually build trust: value traded, a diverse
+                circle of partners, and your reputation (which scales the earned score). */}
+            <Text style={styles.sectionLabel}>WHAT BUILDS YOUR TRUST</Text>
             <View style={styles.achieveRow}>
                 {[
-                    { icon: '🤝', label: 'TRADES',   count: tradeCount,     contrib: tradeCount * W_TRADES,     target: 50,  color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
-                    { icon: '👥', label: 'TRADE PARTNERS', count: uniquePartners, contrib: uniquePartners * W_PARTNERS, target: 20, color: palette.blue500, trackBg: theme === 'dark' ? 'rgba(59,130,246,0.15)' : palette.blue50 },
-                    { icon: '📅', label: 'DAYS',     count: ageDays,        contrib: ageDays * W_DAYS,          target: 365, color: palette.orange500, trackBg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : palette.orange50 },
+                    { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1320)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
+                    { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: palette.blue500, trackBg: theme === 'dark' ? 'rgba(59,130,246,0.15)' : palette.blue50 },
+                    { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: palette.orange500, trackBg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : palette.orange50 },
                 ].map(a => (
                     <Pressable
                         key={a.label}
@@ -633,13 +626,12 @@ export default function LedgerScreen() {
                         }}
                     >
                         <Text style={{ fontSize: 22, marginBottom: 4 }}>{a.icon}</Text>
-                        <Text numberOfLines={1} style={[styles.achieveCount, { color: a.color }]}>{a.count}</Text>
+                        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.achieveCount, { color: a.color }]}>{a.big}</Text>
                         <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.achieveLabel}>{a.label}</Text>
-                        <Text style={styles.achieveContrib}>+{a.contrib} pts</Text>
                         <View style={[styles.achieveBarBg, { backgroundColor: a.trackBg }]}>
-                            <View style={[styles.achieveBarFill, { width: `${Math.min(100, (a.count / a.target) * 100)}%`, backgroundColor: a.color }]} />
+                            <View style={[styles.achieveBarFill, { width: `${Math.min(100, a.pct * 100)}%`, backgroundColor: a.color }]} />
                         </View>
-                        <Text style={styles.achieveFooter}>{a.count}/{a.target}</Text>
+                        <Text style={styles.achieveFooter}>{a.foot}</Text>
                     </Pressable>
                 ))}
             </View>
@@ -678,24 +670,16 @@ export default function LedgerScreen() {
                                         }
                                     </View>
 
-                                    {/* Credits required */}
+                                    {/* Trust required to reach this milestone */}
                                     <Text style={styles.ladderReq}>
-                                        {t.min === 0 ? 'Starting tier' : `Earn ${t.min} pts via trades, partners & days`}
+                                        {t.min === 0 ? 'Starting tier' : `Reach ${t.min} trust from the value you trade`}
                                     </Text>
 
-                                    {/* Floor info */}
+                                    {/* Milestone floor (floors slide continuously — this is the floor on arrival) */}
                                     <View style={styles.ladderDetail}>
                                         <MaterialCommunityIcons name="scale-balance" size={11} color={colors.text.secondary} />
                                         <Text style={styles.ladderDetailText}>
-                                            Floor {t.floor} · ≈{hoursEquiv}hrs credit
-                                        </Text>
-                                    </View>
-
-                                    {/* Daily limit */}
-                                    <View style={styles.ladderDetail}>
-                                        <MaterialCommunityIcons name={t.dailyLimit ? 'shield-check-outline' : 'infinity'} size={11} color={t.dailyLimit ? palette.indigo500 : colors.brand.primary} />
-                                        <Text style={styles.ladderDetailText}>
-                                            {t.dailyLimit ? `Daily limit: ${t.dailyLimit}B (new account protection)` : 'No daily spending limit'}
+                                            Credit floor → {t.floor} · ≈{hoursEquiv}hrs
                                         </Text>
                                     </View>
 
@@ -714,7 +698,7 @@ export default function LedgerScreen() {
                     );
                 })}
             </View>
-            <Text style={styles.formula}>💡 Credits = (trades × 8) + (partners × 40) + (days as member × 2)</Text>
+            <Text style={styles.formula}>💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.</Text>
         </ScrollView>
     );
 
@@ -742,57 +726,6 @@ export default function LedgerScreen() {
                         <Text style={styles.balCardSub}>🌱 Community Pool</Text>
                     </Pressable>
                 </View>
-
-                {/* Velocity Gate — usage meter for new accounts */}
-                {balanceState.velocityGate?.active && (() => {
-                    const vg = balanceState.velocityGate;
-                    const used = vg.dailyUsed || 0;
-                    const limit = vg.dailyLimit || 1;
-                    const pct = Math.min(1, used / limit);
-                    const remaining = Math.max(0, limit - used);
-                    const isHigh = pct >= 0.8;
-                    const isFull = pct >= 1;
-                    return (
-                        <View style={styles.velocityCard}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                                <MaterialCommunityIcons name="shield-check-outline" size={18} color={palette.indigo500} />
-                                <Text style={styles.velocityTitle}>New Account Protection</Text>
-                            </View>
-
-                            <Text style={styles.velocityLabel}>DAILY USAGE (24hr rolling)</Text>
-                            <View style={styles.velocityBarBg}>
-                                <View style={[styles.velocityBarFill, {
-                                    width: `${pct * 100}%`,
-                                    backgroundColor: isFull ? colors.feedback.danger.solid : isHigh ? palette.amber500 : palette.indigo500,
-                                }]} />
-                            </View>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                                <Text style={styles.velocityUsed}>{used.toFixed(1)}B used</Text>
-                                <Text style={styles.velocityLimit}>{limit}B limit</Text>
-                            </View>
-
-                            {isFull ? (
-                                <View style={styles.velocityWarning}>
-                                    <MaterialCommunityIcons name="clock-alert-outline" size={14} color={palette.red600} />
-                                    <Text style={styles.velocityWarningText}>Daily limit reached — resets on a rolling 24hr window</Text>
-                                </View>
-                            ) : (
-                                <Text style={styles.velocityRemaining}>{remaining.toFixed(1)}B remaining today</Text>
-                            )}
-
-                            <View style={styles.velocityUnlock}>
-                                <MaterialCommunityIcons name="lock-open-variant-outline" size={14} color={colors.brand.primary} />
-                                <Text style={styles.velocityUnlockText}>
-                                    Full access unlocks in ~{vg.unlockHours}h
-                                </Text>
-                            </View>
-
-                            <Text style={styles.velocityExplainer}>
-                                To protect the community, new accounts have daily spending limits that increase over time. Keep trading to build trust!
-                            </Text>
-                        </View>
-                    );
-                })()}
 
                 {balanceState.balance > 0 && (
                     <Pressable style={[styles.circBox, amber && styles.circBoxAmber]} accessibilityRole="button" onPress={() => setShowCirculationInfo(true)}>
@@ -847,13 +780,13 @@ export default function LedgerScreen() {
                 )}
 
                 <Pressable
-                    style={[styles.sendBtn, showSend && styles.sendBtnOpen, !balanceState.tier.canGift && styles.sendBtnLocked]}
+                    style={[styles.sendBtn, showSend && styles.sendBtnOpen, !canSend && styles.sendBtnLocked]}
                     accessibilityRole="button"
                     onPress={async () => {
-                        if (!balanceState.tier.canGift) {
+                        if (!canSend) {
                             Alert.alert(
-                                'Sending Locked', 
-                                'Your current Trust Level does not permit sending credits yet.\n\nEarn points by trading and inviting partners to reach the next tier! See the Trust Level tab for your progress.', 
+                                'Sending unlocks after your 1st trade',
+                                'Direct sends are for helping out — they open up the moment you complete your first Marketplace trade.\n\nBrowse the Marketplace to make that first trade!',
                                 [{ text: 'OK' }]
                             );
                             return;
@@ -867,10 +800,10 @@ export default function LedgerScreen() {
                     }}
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        <Text style={[styles.sendBtnText, !balanceState.tier.canGift && { color: colors.text.secondary }]}>
-                            {!balanceState.tier.canGift ? '🔒 Send Credits (Locked)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                        <Text style={[styles.sendBtnText, !canSend && { color: colors.text.secondary }]}>
+                            {!canSend ? '🔒 Send Credits (after 1st trade)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
                         </Text>
-                        {!balanceState.tier.canGift && (
+                        {!canSend && (
                             <MaterialCommunityIcons name="information-outline" size={16} color={colors.text.muted} />
                         )}
                     </View>

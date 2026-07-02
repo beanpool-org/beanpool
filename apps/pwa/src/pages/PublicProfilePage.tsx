@@ -73,20 +73,21 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         return '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
     };
 
-    // Elder vouch: an Elder can endorse anyone. For a founding member this also
-    // lifts their no-overdraft floor-gate; for everyone it shows as a profile badge.
-    const isViewerElder = (isSelf ? balanceInfo : viewerBalance)?.tier?.name === 'Elder';
-    const canVouch = !isSelf && isViewerElder && !profile?.elderVouchedBy;
+    // Vouch: an appointed voucher (admin-granted can_vouch capability) can vouch for anyone.
+    // Gated on the viewer's server-provided canVouch — NOT their tier. A vouch hands out the
+    // chosen level's credit floor, lifting the newcomer's no-overdraft gate.
+    const viewerCanVouch = !!(isSelf ? balanceInfo : viewerBalance)?.canVouch;
+    const canVouch = !isSelf && viewerCanVouch && !profile?.elderVouchedBy;
 
-    const handleVouch = async () => {
+    const handleVouch = async (level: 1 | 2 | 3) => {
         if (vouching) return;
         setVouching(true);
         try {
-            await vouchMemberApi(pubkey);
+            await vouchMemberApi(pubkey, level);
             const fresh = await getMemberProfile(pubkey, identity.publicKey).catch(() => null);
             if (fresh) setProfile(fresh);
-        } catch (e: any) {
-            alert(e?.message || 'Could not vouch for this member');
+        } catch (e) {
+            alert(e instanceof Error ? e.message : 'Could not vouch for this member');
         } finally {
             setVouching(false);
         }
@@ -146,7 +147,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
                     {profile?.elderVouchedBy && (
                         <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold">
-                            ⛰️ Vouched by {profile.elderVouchedByCallsign || 'an Elder'}
+                            🤝 Vouched by {profile.elderVouchedByCallsign || 'a sponsor'}
                         </div>
                     )}
 
@@ -169,13 +170,23 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     )}
 
                     {canVouch && (
-                        <button
-                            onClick={handleVouch}
-                            disabled={vouching}
-                            className="mt-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-white border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
-                        >
-                            🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}
-                        </button>
+                        <div className="mt-3 w-full max-w-sm">
+                            <div className="text-xs font-semibold text-nature-500 dark:text-nature-400 text-center mb-1.5">🤝 Vouch — extend a credit line (no beans leave your wallet)</div>
+                            <div className="flex gap-2 justify-center">
+                                {([[1, 'Light', '−25'], [2, 'Standard', '−50'], [3, 'Deep', '−100']] as const).map(([lvl, label, amt]) => (
+                                    <button
+                                        key={lvl}
+                                        onClick={() => handleVouch(lvl)}
+                                        disabled={vouching}
+                                        className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-white border-none rounded-xl px-3 py-2 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex flex-col items-center leading-tight"
+                                    >
+                                        <span className="text-[13px]">{label}</span>
+                                        <span className="text-[11px] opacity-90 font-mono">{amt}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            {vouching && <div className="text-xs text-center text-nature-400 mt-1">Vouching…</div>}
+                        </div>
                     )}
                 </div>
 

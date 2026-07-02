@@ -39,6 +39,22 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
 }
 
+// Turn a server trade-gate rejection into a friendly message. The covenant / contribution /
+// holiday gates carry a stable "PREFIX: <human text>"; strip the prefix for a clean alert.
+function explainTradeError(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (raw.startsWith('COVENANT_REQUIRED')) {
+        return '🎣 Post an Offer first — to spend on community credit (take your balance negative) you need at least one active Offer posted, so others can trade with you in return.';
+    }
+    if (raw.startsWith('CONTRIBUTION_REQUIRED')) {
+        return 'List at least one Offer of your own before you can request or accept from others.';
+    }
+    if (raw.startsWith('HOLIDAY_MODE')) {
+        return '🌴 Holiday mode is on — turn it off in Settings before trading.';
+    }
+    return raw.replace(/^[A-Z_]+:\s*/, '');
+}
+
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile }: Props) {
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>('all');
@@ -919,7 +935,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                                 setShowAcceptConfirm(false);
                                             } catch (err) {
-                                                alert(`Failed: ${(err as Error).message}`);
+                                                alert(explainTradeError(err));
                                             } finally {
                                                 setAccepting(false);
                                             }

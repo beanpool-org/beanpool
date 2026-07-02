@@ -855,15 +855,30 @@ export default function LedgerScreen() {
                 </Pressable>
             </View>
 
-            {/* ── Credit position — zero is the sweet spot ── */}
-            <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Credit position — tap to learn how it works"
-                onPress={() => setShowSliderInfo(true)}
-                style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
-            >
-                <CreditBar balance={balanceState.balance} floor={balanceState.floor} colors={colors} />
-            </Pressable>
+            {/* ── Credit position — zero is the sweet spot. Un-vouched members have no credit line
+                 yet (floor 0), so show a plain-language "get vouched" prompt instead of the bar. ── */}
+            {balanceState.activated === false ? (
+                <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: palette.green50, borderWidth: 1, borderColor: palette.green200, borderRadius: 12, padding: 12 }}>
+                        <Text style={{ fontSize: 20 }}>🌱</Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.brand.dark }}>No credit line yet</Text>
+                            <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>
+                                You can trade right now with the beans you hold. When a community sponsor vouches for you, you'll unlock a credit line — letting you spend a little before you earn it back.
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+            ) : (
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Credit position — tap to learn how it works"
+                    onPress={() => setShowSliderInfo(true)}
+                    style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
+                >
+                    <CreditBar balance={balanceState.balance} floor={balanceState.floor} colors={colors} />
+                </Pressable>
+            )}
 
             {/* ── Tab bar ── */}
             <View style={styles.tabBar}>

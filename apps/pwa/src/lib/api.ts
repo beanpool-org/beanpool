@@ -210,8 +210,8 @@ export async function updateMemberProfile(publicKey: string, update: {
 
 /** Vouch for a member — hands out the -20 credit floor. Signed POST; server verifies the
  *  actor holds the vouch capability (an admin-appointed voucher). */
-export async function vouchMemberApi(targetPubkey: string): Promise<{ success: boolean }> {
-    return request('POST', '/api/profile/vouch', { targetPubkey });
+export async function vouchMemberApi(targetPubkey: string, level: 1 | 2 | 3 = 1): Promise<{ success: boolean; level: number }> {
+    return request('POST', '/api/profile/vouch', { targetPubkey, level });
 }
 
 /** Withdraw a vouch. The original voucher (or an admin) only; blocked while the target is negative. */
@@ -367,6 +367,12 @@ export interface BalanceInfo {
     hasListedOffer?: boolean;
     /** True while the member still needs to list an Offer before posting Needs / accepting Offers. */
     isBlockedFromTrading?: boolean;
+    /** True once the member has a credit line at all (vouched or granted). Un-vouched → false. */
+    activated?: boolean;
+    /** True if this member holds the appointed-voucher capability (can hand out the vouch floor). */
+    canVouch?: boolean;
+    /** True if the member has ≥1 live Offer posted (offer covenant, Gate 2). */
+    hasLiveOffer?: boolean;
 }
 
 export interface Transaction {

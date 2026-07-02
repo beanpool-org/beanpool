@@ -858,6 +858,9 @@ export async function getBalance(pubkey: string) {
     let reviewCount = 0;
     let isBlockedFromTrading = false;
     let elderVouchedBy: string | null = null;
+    let canVouch = false;      // this account may hand out the -20/-50/-100 vouch floor
+    let activated = false;     // has a credit line at all (vouched or granted)
+    let hasLiveOffer = false;  // has ≥1 live Offer posted (offer covenant)
 
     // Background fetch to ensure parity
     AsyncStorage.getItem('beanpool_anchor_url').then((anchorUrl: string | null) => {
@@ -906,6 +909,9 @@ export async function getBalance(pubkey: string) {
                         trustStats: balData.trustStats ?? null,
                         isBlockedFromTrading: !!balData.isBlockedFromTrading,
                         elderVouchedBy: balData.elderVouchedBy ?? null,
+                        canVouch: !!balData.canVouch,
+                        activated: !!balData.activated,
+                        hasLiveOffer: !!balData.hasLiveOffer,
                     });
                     const prevTierStr = await AsyncStorage.getItem(`bp_tier_${pubkey}`);
                     if (prevTierStr !== newTierStr) {
@@ -935,6 +941,9 @@ export async function getBalance(pubkey: string) {
             trustStats = parsed.trustStats ?? null;
             isBlockedFromTrading = !!parsed.isBlockedFromTrading;
             elderVouchedBy = parsed.elderVouchedBy ?? null;
+            canVouch = !!parsed.canVouch;
+            activated = !!parsed.activated;
+            hasLiveOffer = !!parsed.hasLiveOffer;
         }
     } catch { /* ignore */ }
 
@@ -951,6 +960,9 @@ export async function getBalance(pubkey: string) {
         commons: commons?.balance || 0,
         isBlockedFromTrading,
         elderVouchedBy,
+        canVouch,
+        activated,
+        hasLiveOffer,
     };
 }
 
@@ -2786,11 +2798,11 @@ export async function signedRequest(endpoint: string, payload: any) {
     return _signedRequest(endpoint, payload);
 }
 
-// Elder endorsement of a member. Signed POST — the server verifies the actor is
-// an Elder and rejects self-vouch. Optimistically mirrors the vouch locally so the
-// badge/floor reflect immediately; applyDelta later reconciles from the server.
-export async function vouchMember(targetPubkey: string): Promise<{ success: boolean }> {
-    const result = await _signedRequest('/api/profile/vouch', { targetPubkey });
+// Vouch for a member at a level (1=-25, 2=-50, 3=-100). Signed POST — the server verifies the
+// actor holds the vouch capability and rejects self-vouch. Optimistically mirrors the vouch
+// locally so the badge/floor reflect immediately; applyDelta later reconciles from the server.
+export async function vouchMember(targetPubkey: string, level: 1 | 2 | 3 = 1): Promise<{ success: boolean }> {
+    const result = await _signedRequest('/api/profile/vouch', { targetPubkey, level });
     try {
         const identity = await loadIdentity();
         if (identity) {

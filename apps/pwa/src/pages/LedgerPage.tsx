@@ -147,6 +147,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
     const balance = balanceInfo?.balance ?? 0;
     const floor = balanceInfo?.floor ?? -80;
+    const activated = balanceInfo?.activated;   // has a credit line at all (vouched/granted)
     const earned = balanceInfo?.earnedCredit ?? 0;     // from the saturating value curve
     const granted = balanceInfo?.grantedCredit ?? 0;   // vouch/genesis/admin (separate lane)
     const totalCredit = Math.min(CREDIT_MAX_EARNED, earned + granted);
@@ -212,10 +213,25 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                 </div>
             </div>
 
-            {/* Credit position — zero is the sweet spot */}
-            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
-                <CreditBar balance={balance} floor={floor} />
-            </div>
+            {/* Credit position — zero is the sweet spot. Un-vouched members have no credit line yet
+                (floor 0), so show a plain-language "get vouched" prompt instead of the bar. */}
+            {activated === false ? (
+                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-4 mb-4 shadow-sm">
+                    <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
+                        <span className="text-xl leading-none">🌱</span>
+                        <div>
+                            <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">No credit line yet</div>
+                            <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">
+                                You can trade right now with the beans you hold. When a community sponsor vouches for you, you'll unlock a credit line — letting you spend a little before you earn it back.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
+                    <CreditBar balance={balance} floor={floor} />
+                </div>
+            )}
 
             {/* Tab Bar */}
             <div className="flex bg-white dark:bg-nature-900 border-b border-nature-200 dark:border-nature-800 rounded-t-2xl shadow-sm overflow-hidden">

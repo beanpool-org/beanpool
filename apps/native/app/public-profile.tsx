@@ -289,24 +289,40 @@ export default function PublicProfileScreen() {
         return '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
     };
 
-    // Elder vouch: an Elder can endorse anyone. For a founding member this also
-    // lifts their no-overdraft floor-gate; for everyone it shows as a profile badge.
-    const isViewerElder = (isSelf ? balanceInfo : viewerBalance)?.tier?.name === 'Elder';
-    const canVouch = !isSelf && isViewerElder && !trust?.elderVouch;
+    // Vouch: an appointed voucher (admin-granted can_vouch capability) can vouch for anyone.
+    // A vouch hands out the -20-style credit floor at the chosen level, lifting the newcomer's
+    // no-overdraft gate. Gated on the viewer's server-provided canVouch — NOT their tier.
+    const viewerCanVouch = !!(isSelf ? balanceInfo : viewerBalance)?.canVouch;
+    const canVouch = !isSelf && viewerCanVouch && !trust?.elderVouch;
 
-    const handleVouch = async () => {
+    const handleVouch = async (level: 1 | 2 | 3) => {
         if (vouching || !pubKeyStr) return;
         setVouching(true);
         try {
-            await vouchMember(pubKeyStr);
+            await vouchMember(pubKeyStr, level);
             const fresh = await getTrustProfile(pubKeyStr).catch(() => null);
             if (fresh) setTrust(fresh);
-            else setTrust((t: any) => t ? { ...t, elderVouch: { callsign: identity?.callsign || 'an Elder' } } : t);
+            else setTrust((t: any) => t ? { ...t, elderVouch: { callsign: identity?.callsign || 'a sponsor' } } : t);
         } catch (e: any) {
             Alert.alert('Could not vouch', e?.message || 'Please try again.');
         } finally {
             setVouching(false);
         }
+    };
+
+    // Let the voucher choose how much of a credit line to extend (their call on confidence).
+    const chooseVouchLevel = () => {
+        if (vouching || !pubKeyStr) return;
+        Alert.alert(
+            `Vouch for ${profile?.callsign || 'this member'}`,
+            "Choose how deep a credit line to extend. This lets them trade on credit down to that floor — it reflects your confidence in them. No beans leave your wallet.",
+            [
+                { text: 'Light · −25', onPress: () => handleVouch(1) },
+                { text: 'Standard · −50', onPress: () => handleVouch(2) },
+                { text: 'Deep · −100', onPress: () => handleVouch(3) },
+                { text: 'Cancel', style: 'cancel' },
+            ]
+        );
     };
 
     return (
@@ -479,12 +495,12 @@ export default function PublicProfileScreen() {
                             </View>
                         )}
 
-                        {/* Elder vouch action — endorse this member */}
+                        {/* Vouch action — extend a credit line to this member (voucher picks the level) */}
                         {canVouch && (
                             <Pressable
                                 accessibilityRole="button"
                                 disabled={vouching}
-                                onPress={handleVouch}
+                                onPress={chooseVouchLevel}
                                 style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f59e0b', opacity: vouching ? 0.6 : 1 }}
                             >
                                 <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }} allowFontScaling={false}>🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}</Text>

@@ -2075,7 +2075,8 @@ export async function startHttpsServer(port: number): Promise<void> {
         const txn = transfer(from, to, parsedAmount, memo || '', undefined, true, (ctx.state as any).authSig);
         if (!txn) {
             ctx.status = 400;
-            ctx.body = { error: 'Transfer failed — insufficient credit or unknown member' };
+            // Direct sends are positive-balance-only and require a first completed trade.
+            ctx.body = { error: 'Send failed — you can only send beans you currently hold, and only after your first completed trade.' };
             return;
         }
         ctx.body = { success: true, transaction: txn };

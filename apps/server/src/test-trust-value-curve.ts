@@ -112,9 +112,14 @@ function main() {
     assert(transfer('noTrade', 'rcpt', 10, 'gift', 'direct') === null,
         'no completed trade → direct send blocked');
     seedMember('didTrade'); seedMember('aSeller');
-    mtx('didTrade', 'aSeller', 5000); // real trade → earnedCredit 960, floor ≈ -980 (voucher+earned)
+    mtx('didTrade', 'aSeller', 5000); // real trade → earnedCredit 960 (opens the send gate)
+    transfer('genesis', 'didTrade', 100, 'seed', 'direct'); // give didTrade 100 real beans to hold
     assert(transfer('didTrade', 'rcpt', 60, 'gift', 'direct') !== null,
-        'after a completed trade → direct send allowed, with NO velocity cap (60 > old 20/day)');
+        'after a trade, holding beans → direct send allowed (60 of 100), no velocity cap');
+    // ...but you can NEVER send into debt: gifting beyond your positive balance is blocked (floor 0),
+    // even though this account has a deep earned CREDIT line (~-980) that IS usable for trading.
+    assert(transfer('didTrade', 'rcpt', 1000, 'gift', 'direct') === null,
+        'cannot gift beyond positive balance — direct sends never draw on the overdraft/credit line');
 
     // ── 10. Velocity gate is gone from the balance shape ──
     assert(!('velocityGate' in getBalance('didTrade')), 'getBalance no longer exposes a velocityGate');

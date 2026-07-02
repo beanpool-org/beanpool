@@ -113,6 +113,12 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
     async function handleSend() {
         if (!sendTo || !sendAmount) return;
+        // Sends are positive-balance only — you can only send beans you actually hold. Your credit
+        // line (overdraft) is for trading, not for gifting yourself into debt.
+        if (Number(sendAmount) > balance) {
+            setError(`You can only send beans you hold — your balance is ${balance.toFixed(2)}B.`);
+            return;
+        }
         setSending(true);
         setError(null);
         try {

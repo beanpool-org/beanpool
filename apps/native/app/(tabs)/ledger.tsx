@@ -307,6 +307,12 @@ export default function LedgerScreen() {
         if (!sendTo || !sendAmount || !identity?.publicKey) return;
         const amount = parseFloat(sendAmount);
         if (isNaN(amount) || amount <= 0) { setSendError('Enter a valid amount'); return; }
+        // Sends are positive-balance only — you can only send beans you actually hold. Your credit
+        // line (overdraft) is for trading, not for gifting yourself into debt.
+        if (amount > balanceState.balance) {
+            setSendError(`You can only send beans you hold — your balance is ${balanceState.balance.toFixed(2)}B.`);
+            return;
+        }
         setSending(true); setSendError(null); setSendSuccess(false);
         try {
             await sendTransfer(identity.publicKey, sendTo, amount, sendMemo || '');

@@ -1,9 +1,11 @@
 /**
  * Economic hardening tests (audit findings A2-14, A2-18, A2-26).
  *
- *   A2-26 outbound volume counts at most PER_COUNTERPARTY_VOLUME_CAP per recipient,
- *         so Sybil wash-trading between two identities can't inflate governance
- *         credit (or earned credit), while diverse trade is unaffected.
+ *   A2-26 governance credit = qualified trade value (completed marketplace trades, both
+ *         sides, capped at PER_COUNTERPARTY_VOLUME_CAP per counterparty) — the SAME basis
+ *         as earned trust. So Sybil wash-trading between two identities can't inflate
+ *         voting power, diverse trade is unaffected, and direct gifts grant NO vote weight
+ *         (you can't buy a louder vote with something that builds no trust).
  *   A2-14 importRemoteState counts an amount≤0 transaction as an explicit skip
  *         (no silent INSERT-OR-IGNORE drop that would desync balances/ledger).
  *   A2-18 the public transfer route rejects synthetic recipients (escrow_*, etc.).
@@ -35,9 +37,19 @@ function seedMember(pk: string) {
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 let txc = 0;
+// A direct peer-to-peer transfer (gift) — must NOT grant governance credit.
 function tx(from: string, to: string, amount: number) {
     db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('etx' + (txc++), from, to, amount, 'm', new Date().toISOString());
+}
+// A COMPLETED marketplace (escrow) trade — the qualified value that backs trust AND votes.
+// FK enforcement is on, so back each trade with a real post (authored by the seller).
+function mtx(buyer: string, seller: string, credits: number) {
+    const pid = 'ehp-' + (txc++);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
+        .run(pid, credits, seller);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?,?,?,?,?, 'completed')`)
+        .run('emtx-' + (txc++), pid, buyer, seller, credits);
 }
 
 async function main() {
@@ -49,18 +61,26 @@ async function main() {
     const nodeId = node.peerId.toString();
 
     try {
-        // A2-26 — wash (concentrated) volume is capped; diverse volume is not.
+        // A2-26 — governance credit = qualified trade value (marketplace trades),
+        // per-counterparty capped. Wash (concentrated) volume is capped; diverse is not.
         const wash = 'wash-' + Date.now();
-        seedMember(wash);
-        for (let i = 0; i < 10; i++) tx(wash, 'sybilPartner', 2000); // 20000 to ONE counterparty
+        seedMember(wash); seedMember('sybilPartner');
+        for (let i = 0; i < 10; i++) mtx(wash, 'sybilPartner', 2000); // 20000 traded with ONE counterparty
         assert(getGovernanceCredits(wash).totalCredits === 5000,
-            'A2-26: 20000 washed to one counterparty counts as only 5000 (per-counterparty cap)');
+            'A2-26: 20000 traded with one counterparty counts as only 5000 (per-counterparty cap)');
 
         const diverse = 'diverse-' + Date.now();
         seedMember(diverse);
-        for (let i = 0; i < 6; i++) tx(diverse, 'partner' + i, 1000); // 6 distinct counterparties
+        for (let i = 0; i < 6; i++) { seedMember('partner' + i); mtx(diverse, 'partner' + i, 1000); } // 6 distinct counterparties
         assert(getGovernanceCredits(diverse).totalCredits === 6000,
             'A2-26: 6000 across 6 counterparties counts fully (diversity not penalized)');
+
+        // A2-26 (F3 alignment) — direct gifts build NO governance credit, at any size.
+        const gifter = 'gifter-' + Date.now();
+        seedMember(gifter); seedMember('giftee');
+        for (let i = 0; i < 10; i++) tx(gifter, 'giftee', 2000); // 20000 gifted directly
+        assert(getGovernanceCredits(gifter).totalCredits === 0,
+            'A2-26: 20000 in direct gifts grants 0 governance credit (gifts ≠ qualified trade)');
 
         // A2-14 — an amount≤0 imported txn is an explicit skip, not a silent drop.
         setNodeRole('backup');

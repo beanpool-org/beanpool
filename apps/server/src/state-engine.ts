@@ -1172,14 +1172,6 @@ const PER_COUNTERPARTY_VOLUME_CAP = 5000;
  * Sum of a member's outbound volume, counting at most PER_COUNTERPARTY_VOLUME_CAP
  * per distinct recipient (anti-Sybil-wash weighting — A2-26).
  */
-function countedOutboundVolume(publicKey: string): number {
-    const rows = db.prepare(`
-        SELECT to_pubkey, COALESCE(SUM(amount), 0) as v
-        FROM transactions WHERE from_pubkey = ? GROUP BY to_pubkey
-    `).all(publicKey) as { to_pubkey: string; v: number }[];
-    return rows.reduce((sum, r) => sum + Math.min(r.v, PER_COUNTERPARTY_VOLUME_CAP), 0);
-}
-
 /**
  * F3 — value that counts toward EARNED TRUST: only COMPLETED marketplace (escrow) trades.
  *
@@ -5212,7 +5204,7 @@ export function voteForProject(voterPubkey: string, projectId: string, voteCount
     // QV: Cost = N²
     const creditCost = voteCount * voteCount;
 
-    // Derive governance credits from energyCycled (total beans transacted by this member)
+    // Governance credits = qualified trade value (same basis as earned trust; see getGovernanceCredits)
     const credits = getGovernanceCredits(voterPubkey);
     if (creditCost > credits.availableCredits) {
         return { success: false, error: `Insufficient credits: ${voteCount} votes costs ${creditCost} credits, but you have ${credits.availableCredits.toFixed(0)} available` };
@@ -5232,13 +5224,19 @@ export function voteForProject(voterPubkey: string, projectId: string, voteCount
 }
 
 /**
- * Returns governance credits for a member based on their energyCycled history.
- * Credits = total beans sent (energyCycled). Used credits are the sum of all QV costs in the active round.
+ * Returns governance (quadratic-voting) credits for a member.
+ *
+ * Credits = the SAME qualified trade value that backs earned trust: only COMPLETED
+ * marketplace (escrow) trades, attributed to the real counterparty, both sides credited,
+ * and diversity-capped per counterparty (A2-26). This deliberately excludes direct
+ * "send credits" gifts — previously governance ran on raw outbound transfer volume, which
+ * let a member mint voting power by gifting beans to alt accounts (Sybil funnel), even
+ * though those gifts build no trust. Aligning the two closes that gap: you cannot buy a
+ * louder vote with anything you couldn't also turn into trust. Used credits are the sum of
+ * all QV costs (voteCount²) in the active round.
  */
 export function getGovernanceCredits(pubkey: string): { totalCredits: number; usedCredits: number; availableCredits: number } {
-    // Total credits = volume cycled, A2-26: counted with the per-counterparty cap so
-    // Sybil wash-trading between two identities can't manufacture voting power.
-    const totalCredits = Math.round(countedOutboundVolume(pubkey) * 100) / 100;
+    const totalCredits = Math.round(qualifiedTradeValue(pubkey) * 100) / 100;
 
     // Used credits = sum of creditsUsed in the active voting round
     let usedCredits = 0;

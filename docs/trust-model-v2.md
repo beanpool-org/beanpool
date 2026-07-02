@@ -103,10 +103,13 @@ work lands until this is closed.
       and build **no** trust (per product ruling — real trades go through escrow). This also fixed
       three latent bugs: sellers earned nothing, unique escrow accounts defeated the diversity cap,
       and escrow synthetics counted as counterparties. Verified in test-trust-value-curve.ts.
-    - *Follow-ups:* (a) **governance credit** still uses the raw `countedOutboundVolume` — move it to
-      `qualifiedTradeValue` for consistency (needs the A2-26 test reseeded to marketplace trades);
-      (b) the **first-trade gate** still lifts the −80 base on *any* first transaction incl. a received
-      gift — decide whether it should require a *completed marketplace* trade (stricter, "sell first").
+    - *Follow-ups:* (a) ~~**governance credit** still uses the raw `countedOutboundVolume`~~ **DONE**
+      (2026-07, PR #6) — `getGovernanceCredits` now uses `qualifiedTradeValue` (marketplace-only,
+      both-sides, diversity-capped), so votes and trust share one basis and direct gifts grant zero
+      voting power; `countedOutboundVolume` deleted, A2-26 test reseeded to marketplace trades +
+      gift-grants-nothing regression added. (b) the **first-trade gate** still lifts the −80 base on
+      *any* first transaction incl. a received gift — decide whether it should require a *completed
+      marketplace* trade (stricter, "sell first"). ← still open
     - *(F4's old "raise volumeBonus cap / de-weight partners" is moot — value **is** the score now.)*
 - [ ] **F5 — Demurrage-split mitigation** — aggregate/identity-aware green-zone so socks under 200
       don't each get 0%.

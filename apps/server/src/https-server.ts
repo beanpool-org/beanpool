@@ -51,7 +51,7 @@ import {
     getCommunityInfo, addWsClient, removeWsClient,
     generateInvite, redeemInvite, redeemOfflineTicket, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
-    vouchMember, hasListedOffer,
+    vouchMember, unvouchMember, hasListedOffer,
     updateProfile, getProfile, getAllProfiles,
     createConversation, sendMessage, editMessage, getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
@@ -60,7 +60,7 @@ import {
     addRating, getRatings, getAverageRating, getRatingsGiven,
     submitReport, getReports, dismissReport, actionReport, getReportCount,
     getFriends, addFriend, removeFriend, setGuardian,
-    adminSetUserStatus, adminSetElder, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
+    adminSetUserStatus, adminSetElder, adminSetVoucher, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     getAdminPubkey, recordActivity,
     markConversationRead, getUnreadCounts,
@@ -1051,9 +1051,10 @@ export async function startHttpsServer(port: number): Promise<void> {
         ctx.body = { success: true };
     });
 
-    // Promote a member to (or demote from) the Elder tier so they can help verify
-    // (vouch for) other members. Grants the Elder vouch capability + Elder standing,
-    // but NOT password-admin powers. Body: { password, grant?: boolean } (defaults to grant).
+    // Promote a member to (or demote from) the Elder tier — grants Elder *standing* (a deep
+    // credit floor via granted credit), but NOT password-admin powers. NOTE: Elder standing no
+    // longer confers the power to vouch; that is the separate, explicit voucher capability below.
+    // Body: { password, grant?: boolean } (defaults to grant).
     router.post('/api/local/admin/users/:pubkey/elder', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         const body = (ctx as any).requestBody || {};
@@ -1065,6 +1066,24 @@ export async function startHttpsServer(port: number): Promise<void> {
         } catch (e: any) {
             ctx.status = 400;
             ctx.body = { error: e?.message || 'Failed to update Elder status' };
+        }
+    });
+
+    // Grant or revoke the vouch capability (the "appointed voucher" / super-Elder switch). This
+    // is the single Sybil-critical power: an appointed voucher can hand out the -20 credit floor
+    // to newcomers. Admin-only, decoupled from tier so grinding to Elder never confers it.
+    // Body: { password, grant?: boolean } (defaults to grant).
+    router.post('/api/local/admin/users/:pubkey/voucher', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        const body = (ctx as any).requestBody || {};
+        const grant = body.grant !== false; // default: grant
+        try {
+            adminSetVoucher(ctx.params.pubkey, grant);
+            logger.info('ADMIN', `${grant ? 'Granted' : 'Revoked'} vouch capability for ${ctx.params.pubkey.substring(0, 12)}`);
+            ctx.body = { success: true, granted: grant };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e?.message || 'Failed to update voucher capability' };
         }
     });
 
@@ -1992,13 +2011,14 @@ export async function startHttpsServer(port: number): Promise<void> {
         ctx.body = profile;
     });
 
-    // Elder vouch: the (signed) viewer endorses targetPubkey. Server-authoritative —
-    // vouchMember() verifies the actor is an Elder and rejects self-vouch. For a
-    // founding member this also lifts their floor-gate; for everyone else it's a badge.
+    // Vouch: the (signed) viewer vouches for targetPubkey, handing them the -20 credit floor.
+    // Server-authoritative — vouchMember() verifies the actor holds the vouch capability
+    // (members.can_vouch, admin-granted) and rejects self-vouch. This lifts the target's
+    // no-overdraft activation gate, unlocking the welcome voucher + any earned trust banked.
     router.post('/api/profile/vouch', async (ctx) => {
-        const elder = ctx.state.actor as string | undefined;
+        const voucher = ctx.state.actor as string | undefined;
         const { targetPubkey } = (ctx as any).requestBody || {};
-        if (!elder) {
+        if (!voucher) {
             ctx.status = 401;
             ctx.body = { error: 'A signed request is required' };
             return;
@@ -2009,11 +2029,36 @@ export async function startHttpsServer(port: number): Promise<void> {
             return;
         }
         try {
-            vouchMember(elder, targetPubkey);
+            vouchMember(voucher, targetPubkey);
             ctx.body = { success: true };
         } catch (e: any) {
             ctx.status = 400;
             ctx.body = { error: e?.message || 'Vouch failed' };
+        }
+    });
+
+    // Withdraw a vouch. The original voucher may withdraw their own; the admin may force-revoke.
+    // unvouchMember() blocks a non-admin withdrawal while the target is still carrying a negative
+    // balance (they'd be stranded below the new floor of 0).
+    router.post('/api/profile/unvouch', async (ctx) => {
+        const actor = ctx.state.actor as string | undefined;
+        const { targetPubkey } = (ctx as any).requestBody || {};
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'A signed request is required' };
+            return;
+        }
+        if (!targetPubkey) {
+            ctx.status = 400;
+            ctx.body = { error: 'targetPubkey is required' };
+            return;
+        }
+        try {
+            unvouchMember(actor, targetPubkey);
+            ctx.body = { success: true };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e?.message || 'Withdraw failed' };
         }
     });
 

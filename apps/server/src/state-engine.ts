@@ -1207,6 +1207,8 @@ export function getMemberTrustProfile(publicKey: string): {
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
+    vouched: boolean;
+    activated: boolean;
 } {
     const stats = getMemberTrustStats(publicKey);
 
@@ -1239,25 +1241,29 @@ export function getMemberTrustProfile(publicKey: string): {
     const multiplier = reviewCount > 0 ? (0.5 + 0.5 * (avgRating / 5.0)) : 1.0;
     const earnedCredit = Math.max(0, Math.floor(rawEarned * multiplier));
 
-    // Activation gate: no overdraft (and no welcome voucher) until the account has completed a real
-    // marketplace trade — i.e. qualifiedTradeValue > 0 — unless a grant or an Elder vouch has
-    // graduated a founding member ahead of it. Crucially this keys off qualified trade VALUE, not
-    // stats.tradeCount: tradeCount also counts direct `transactions`, so merely RECEIVING a gift
-    // would otherwise activate a sock account and mint it a -20 voucher — a Sybil faucet (gift 1 bean
-    // to N socks → 20N beans of unbacked credit). Real trades go through escrow; gifts don't activate.
-    const activated = value > 0 || grantedCredit > 0 || elderVouched;
-    const welcomeVoucher = activated ? c.NEWCOMER_VOUCHER : 0;
+    // Activation gate — a member has NO credit line at all (floor stays at 0; no overdraft) until an
+    // appointed voucher vouches for them, or an admin/genesis grant graduates a founding member.
+    // Completing a trade NO LONGER activates: that was a Sybil faucet — N sock accounts each doing
+    // one throwaway trade with a colluding creator would each mint themselves the -20 voucher (gift
+    // 1 bean to N socks → 20N beans of unbacked credit). The -20 floor is now *handed out* by a
+    // vouch: the one human-gated, admin-appointed way in (see vouchMember / can_vouch). Nice
+    // property — when a member is finally vouched, any earned trust they'd already banked unlocks
+    // alongside the welcome voucher, so their floor jumps straight to reflect their real trading.
+    const activated = elderVouched || grantedCredit > 0;
+    const allowance = activated
+        ? Math.min(c.CREDIT_FLOOR_CAP, c.NEWCOMER_VOUCHER + earnedCredit + grantedCredit)
+        : 0;
 
-    // Floor = -(voucher + earned + granted), clamped so the deepest floor is -CREDIT_FLOOR_CAP.
-    // CREDIT_BASE_FLOOR is 0 — there is no baked-in overdraft; every bean of credit is explicit.
-    const floor = c.CREDIT_BASE_FLOOR - Math.min(c.CREDIT_FLOOR_CAP, welcomeVoucher + earnedCredit + grantedCredit);
+    // Floor = -(voucher + earned + granted) once activated, clamped so the deepest floor is
+    // -CREDIT_FLOOR_CAP; 0 for an un-vouched member. CREDIT_BASE_FLOOR is 0 — no baked-in overdraft.
+    const floor = c.CREDIT_BASE_FLOOR - allowance;
 
     const tier = getTier(floor);
 
     // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
     // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation
     // multiplier inputs, surfaced so the client can show them honestly.
-    return { stats, floor, tier, earnedCredit, grantedCredit, qualifiedValue: value, avgRating, reviewCount };
+    return { stats, floor, tier, earnedCredit, grantedCredit, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated };
 }
 
 // ===================== TRUST PROFILE (VIEWER-AWARE) =====================
@@ -1692,6 +1698,13 @@ function validatePostPhotos(photos: string[] | undefined): void {
 // specific rejection and show the "list an Offer" prompt instead of a raw error.
 export const CONTRIBUTION_REQUIRED_ERROR = 'CONTRIBUTION_REQUIRED: list at least one Offer before you can post Needs or accept Offers.';
 
+// Offer covenant (Gate 2). To spend on community credit — i.e. take (or keep) your balance
+// negative — you must have at least one LIVE Offer posted right now. Carrying a negative balance
+// means the community is holding credit for you; the covenant is that you keep a line in the
+// water so others can call on you to repay it in kind. Stable prefix so clients can detect this
+// rejection and show the "post an Offer" prompt rather than a raw error.
+export const COVENANT_REQUIRED_ERROR = 'COVENANT_REQUIRED: keep at least one active Offer posted to spend on community credit (a negative balance).';
+
 /**
  * Has this member ever listed an Offer? Founding members must contribute an
  * Offer of their own before they can post Needs or accept/request Offers.
@@ -1706,19 +1719,64 @@ export function hasListedOffer(publicKey: string): boolean {
 }
 
 /**
- * Record an Elder's vouch for a member. Server-authoritative: only an Elder (or
- * the system admin) may vouch, and never for themselves. For a founding member
- * this lifts the no-overdraft floor-gate (see getMemberTrustProfile), graduating
- * them to Newcomer; for everyone else it is a trust badge shown on their profile.
- * Monotonic — a later vouch by another Elder simply overwrites the recorded one.
+ * Does this member have at least one LIVE Offer posted right now? Unlike hasListedOffer
+ * ("ever listed one"), this requires a currently-visible Offer (active row, status 'active').
+ * Enforces the offer covenant: you may only spend into a negative balance while you keep a
+ * line in the water. The system admin is exempt (it acts at the system level).
  */
-export function vouchMember(elderPubkey: string, targetPubkey: string): { ok: true } {
-    if (elderPubkey === targetPubkey) throw new Error('You cannot vouch for yourself');
-    if (!getMember(elderPubkey)) throw new Error('Voucher not found');
+export function hasLiveOffer(publicKey: string): boolean {
+    if (publicKey === getAdminPubkey()) return true;
+    const row = db.prepare(`SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' AND active = 1 AND status = 'active' LIMIT 1`).get(publicKey);
+    return !!row;
+}
+
+/**
+ * Does this member hold the vouch capability (the "appointed voucher" / super-Elder)?
+ * Handing out the -20 credit floor is the one Sybil-critical power, so it is NOT derived
+ * from Elder *tier* (an earned cosmetic badge — grinding to Elder must not confer the power
+ * to mint floors for a sock army). It is an explicit, admin-granted flag (members.can_vouch,
+ * set via adminSetVoucher), plus the system admin who always holds it.
+ */
+export function canVouch(publicKey: string): boolean {
+    if (publicKey === getAdminPubkey()) return true;
+    const row = db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(publicKey) as any;
+    return !!row?.can_vouch;
+}
+
+/**
+ * Record an appointed voucher's vouch for a member. Server-authoritative: only a member
+ * holding the vouch capability (or the system admin) may vouch, and never for themselves.
+ * A vouch hands out the -20 credit floor: it lifts the no-overdraft activation gate (see
+ * getMemberTrustProfile), unlocking the welcome voucher plus any earned trust already banked.
+ * Monotonic — a later vouch by another voucher simply overwrites the recorded one.
+ */
+export function vouchMember(voucherPubkey: string, targetPubkey: string): { ok: true } {
+    if (voucherPubkey === targetPubkey) throw new Error('You cannot vouch for yourself');
+    if (!getMember(voucherPubkey)) throw new Error('Voucher not found');
     if (!getMember(targetPubkey)) throw new Error('Member not found');
-    const isElder = elderPubkey === getAdminPubkey() || getBalance(elderPubkey).tier.name === 'Elder';
-    if (!isElder) throw new Error('Only Elders can vouch for members');
-    db.prepare(`UPDATE members SET elder_vouched_by = ? WHERE public_key = ?`).run(elderPubkey, targetPubkey);
+    if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
+    db.prepare(`UPDATE members SET elder_vouched_by = ? WHERE public_key = ?`).run(voucherPubkey, targetPubkey);
+    broadcast({ type: 'profile_updated', publicKey: targetPubkey });
+    return { ok: true };
+}
+
+/**
+ * Withdraw a vouch. The original voucher may withdraw their own; the system admin may
+ * force-revoke anyone's. Removing a vouch removes the -20 floor, so a non-admin withdrawal
+ * is blocked while the member is still carrying a negative balance (they'd be stranded below
+ * the new floor of 0) — they must return to >= 0 first. Idempotent when not currently vouched.
+ */
+export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: true } {
+    if (!getMember(targetPubkey)) throw new Error('Member not found');
+    const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
+    const vouchedBy = row?.elder_vouched_by || null;
+    if (!vouchedBy) return { ok: true };
+    const isAdmin = actorPubkey === getAdminPubkey();
+    if (!isAdmin && actorPubkey !== vouchedBy) throw new Error('Only the voucher who vouched, or an admin, can withdraw a vouch');
+    if (!isAdmin && getBalance(targetPubkey).balance < 0) {
+        throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
+    }
+    db.prepare(`UPDATE members SET elder_vouched_by = NULL WHERE public_key = ?`).run(targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -1962,6 +2020,8 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
     const cost = post.price_type !== 'fixed' ? (post.credits * (hours || 1)) : post.credits;
     const { balance, floor } = getBalance(payerPubkey);
     if (balance - cost < floor) throw new Error('Insufficient balance to request this post.');
+    // Offer covenant: spending into (or deeper into) a negative balance requires a live Offer of your own.
+    if (balance - cost < 0 && !hasLiveOffer(payerPubkey)) throw new Error(COVENANT_REQUIRED_ERROR);
 
     const transactionId = crypto.randomUUID();
     
@@ -2143,6 +2203,8 @@ export function acceptPost(postId: string, buyerPublicKey: string, hours?: numbe
     // Check balance
     const { balance, floor } = getBalance(buyerPublicKey);
     if (balance - finalCredits < floor) throw new Error('Insufficient balance to accept this offer');
+    // Offer covenant: spending into (or deeper into) a negative balance requires a live Offer of your own.
+    if (balance - finalCredits < 0 && !hasLiveOffer(buyerPublicKey)) throw new Error(COVENANT_REQUIRED_ERROR);
 
     const tx: MarketplaceTransaction = {
         id: crypto.randomUUID(), postId: post.id, postTitle: post.title, buyerPublicKey,
@@ -4955,6 +5017,19 @@ export function adminSetElder(publicKey: string, granted: boolean): { ok: true }
     if (!getMember(publicKey)) throw new Error('Member not found');
     const earned = granted ? PROTOCOL_CONSTANTS.GENESIS_ELDER_EARNED : 0;
     db.prepare("UPDATE members SET earned_credit=? WHERE public_key=?").run(earned, publicKey);
+    broadcast({ type: 'profile_updated', publicKey });
+    return { ok: true };
+}
+
+/**
+ * Grant or revoke the vouch capability (the "appointed voucher" / super-Elder switch).
+ * Admin-only — this is the single Sybil-critical power (handing out the -20 floor), so it is
+ * never derived from tier; an admin appoints trusted members (typically Elders) explicitly.
+ * Toggling can_vouch mints no beans and changes no floors of its own. Idempotent.
+ */
+export function adminSetVoucher(publicKey: string, granted: boolean): { ok: true } {
+    if (!getMember(publicKey)) throw new Error('Member not found');
+    db.prepare("UPDATE members SET can_vouch=? WHERE public_key=?").run(granted ? 1 : 0, publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
 }

@@ -21,7 +21,7 @@ export const PROTOCOL_CONSTANTS = {
     CREDIT_BASE_FLOOR: 0,              // no baked-in credit — starting hand is the voucher below
     CREDIT_MAX_EARNED: 1920,           // asymptote of the earned-trust curve (see earnedCreditFromValue)
     CREDIT_FLOOR_CAP: 2000,            // deepest possible floor is -2000 (≈ 50 hours) across ALL sources
-    NEWCOMER_VOUCHER: 20,              // starting credit granted AFTER a member's first genuine trade
+    NEWCOMER_VOUCHER: 20,              // the -20 credit floor an appointed voucher hands out on a vouch (see getMemberTrustProfile)
 
     // === Trust Curve (Trust Model v2 — value-based, saturating) ===
     // Earned credit is a saturating function of qualified, diversity-capped value cycled (V):

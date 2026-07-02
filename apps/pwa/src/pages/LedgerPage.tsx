@@ -22,10 +22,18 @@ interface Props {
 // Tiers are recognition milestones. `floor` is the credit floor reached on ENTERING the tier
 // (floors slide continuously between them). `min` = earned+granted credit needed.
 const TIERS = [
-    { name: 'Newcomer', emoji: '🌱', color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db', min: 0,    floor: -20,   perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
-    { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 180,  floor: -200,  perks: ['Credit floor deepens toward -200'] },
-    { name: 'Steward',  emoji: '🏛️', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', min: 580,  floor: -600,  perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
-    { name: 'Elder',    emoji: '⛰️', color: '#d97706', bg: '#fffbeb', border: '#fde68a', min: 1380, floor: -1400, perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
+    { name: 'Newcomer', emoji: '🌱', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', min: 0,    floor: -20,
+      blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — a small welcome voucher gets you moving.",
+      perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+    { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 180,  floor: -200,
+      blurb: "You've traded real value with the community. Your credit line deepens, so you can give more before settling back to balance.",
+      perks: ['Credit floor deepens toward -200'] },
+    { name: 'Steward',  emoji: '🏛️', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', min: 580,  floor: -600,
+      blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
+      perks: ['Credit floor deepens toward -600', 'Trusted-trader recognition'] },
+    { name: 'Elder',    emoji: '⛰️', color: '#d97706', bg: '#fffbeb', border: '#fde68a', min: 1380, floor: -1400,
+      blurb: "A pillar of the commons — the deepest credit line and the community's highest recognition.",
+      perks: ['Credit floor deepens toward -1400 (max -2000)', 'Recognised as a community Elder'] },
 ];
 
 // Trust curve (mirrors beanpool-core/protocol.ts): earned trust is a saturating function of
@@ -47,6 +55,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'trust' | 'financials'>('trust');
+    const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
 
     // Send form
     const [showSend, setShowSend] = useState(false);
@@ -164,6 +173,12 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     const valueToNext = nextTier ? Math.max(0, valueForEarned(targetEarned) - qualifiedValue) : 0;
     const partnersToNext = nextTier && Number.isFinite(valueToNext)
         ? Math.max(1, Math.ceil(valueToNext / PER_COUNTERPARTY_CAP)) : 0;
+
+    const selLevel = selectedLevel ?? tierIdx;
+    const sel = TIERS[selLevel];
+    const selReached = tierIdx >= selLevel;
+    const selCurrent = tierIdx === selLevel;
+    const selNeeded = Math.max(0, sel.min - ec);
 
     const canInvite = balanceInfo?.tier?.canInvite ?? true;
     const hoursEquivalent = Math.abs(balance) / 40;
@@ -326,7 +341,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                     }`}
                     onClick={() => setActiveTab('trust')}
                 >
-                    🛡️ Trust Level
+                    🛡️ Levels
                 </button>
                 <button
                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
@@ -336,62 +351,123 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                     }`}
                     onClick={() => setActiveTab('financials')}
                 >
-                    💸 Financials
+                    💸 Wallet
                 </button>
             </div>
 
             {/* Tab Content */}
             {activeTab === 'trust' ? (
                 <div className="flex flex-col gap-4 mt-4 animate-in fade-in duration-300">
-                    {/* Tier Hero */}
-                    <div className="border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 rounded-2xl p-5 shadow-sm" style={{ borderLeftColor: tier.color, borderLeftWidth: '6px' }}>
-                        <div className="flex justify-between items-start mb-4">
-                            <div>
-                                <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest">YOUR TRUST LEVEL</span>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-3xl select-none">{tier.emoji}</span>
-                                    <span className="text-xl font-black text-nature-950 dark:text-white" style={{ color: tier.color }}>{tier.name}</span>
+
+                    {/* ── Standing hero ── */}
+                    <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm relative" style={{ borderColor: tier.border, backgroundColor: tier.bg }}>
+                        <div className="flex items-center gap-4">
+                            {/* Circular progress ring around the emoji */}
+                            <div className="shrink-0">
+                                <svg width="80" height="80" viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="42" fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                                    <circle cx="50" cy="50" r="42" fill="none" stroke={tier.color} strokeWidth="6"
+                                        strokeLinecap="round"
+                                        strokeDasharray={`${journeyPct * 263.9} 263.9`}
+                                        transform="rotate(-90 50 50)" />
+                                    <text x="50" y="60" textAnchor="middle" fontSize="32">{tier.emoji}</text>
+                                </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>YOUR TRUST LEVEL</span>
+                                <div className="text-2xl font-black leading-tight mt-0.5" style={{ color: tier.color }}>{tier.name}</div>
+                                <div className="text-xs font-semibold text-nature-500 mt-1">Level {tierIdx + 1} of {TIERS.length} · {ec} trust</div>
+                                <div className="text-xs font-semibold mt-2 text-nature-700 dark:text-nature-300">
+                                    {nextTier
+                                        ? <><span className="font-black" style={{ color: tier.color }}>{creditsToNext}</span> more trust to {nextTier.emoji} {nextTier.name}</>
+                                        : <span className="text-amber-500 font-black">✨ Highest level reached</span>
+                                    }
                                 </div>
                             </div>
-                            <span className="text-xs font-bold px-2 py-1 rounded bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 border">
-                                Level {tierIdx + 1} / {TIERS.length}
-                            </span>
                         </div>
 
-                        {/* Journey to Elder Progress Bar */}
-                        <div className="relative h-2 bg-nature-200 dark:bg-nature-800 rounded-full mt-6 mb-2">
-                            <div className="absolute h-full rounded-full" style={{ width: `${journeyPct * 100}%`, backgroundColor: tier.color }} />
-                            {TIERS.filter(t => t.min > 0).map(t => {
-                                const pos = Math.min(1, t.min / ELDER_MIN);
-                                const reached = ec >= t.min;
-                                return (
-                                    <div key={t.name} className="absolute flex flex-col items-center -top-0.5" style={{ left: `${pos * 100}%`, transform: 'translateX(-50%)' }}>
-                                        <div className={`w-[2px] h-[12px] ${reached ? 'bg-emerald-500' : 'bg-nature-400'}`} />
-                                        <span className="text-[10px] mt-1">{t.emoji}</span>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <div className="flex justify-between mt-6 text-xs font-bold text-nature-500">
-                            <span>{ec} trust</span>
-                            {nextTier ? (
-                                <span>{creditsToNext} to {nextTier.name}</span>
-                            ) : (
-                                <span className="text-amber-500">✨ Maximum level!</span>
-                            )}
-                        </div>
-
-                        {/* Perks — Send unlocks after your 1st completed trade; Invite is open to everyone */}
-                        <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-nature-100 dark:border-nature-800">
-                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 text-nature-400'}`}>
-                                <span>{canSend ? '✓' : '🔒'}</span>
+                        {/* Capability pills */}
+                        <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-nature-100 dark:border-nature-800" style={{ borderColor: tier.border }}>
+                            <button
+                                onClick={() => { if (canSend) { setActiveTab('financials'); setShowSend(true); } }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600 hover:bg-emerald-100' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 text-nature-400 cursor-default'}`}
+                                style={{ background: 'none', font: 'inherit' }}
+                            >
+                                <span>{canSend ? '💸' : '🔒'}</span>
                                 <span>{canSend ? 'Send Credits' : 'Send (after 1st trade)'}</span>
-                            </div>
-                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold ${canInvite ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 text-nature-400'}`}>
-                                <span>{canInvite ? '✓' : '🔒'}</span>
+                            </button>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600">
+                                <span>✓</span>
                                 <span>Invite Members</span>
                             </div>
                         </div>
+                    </div>
+
+                    {/* ── Medallion shelf ── */}
+                    <div>
+                        <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-3">ALL LEVELS</span>
+                        <div className="grid grid-cols-4 gap-2">
+                            {TIERS.map((t, i) => {
+                                const reached = tierIdx >= i;
+                                const isSel = selLevel === i;
+                                return (
+                                    <button
+                                        key={t.name}
+                                        onClick={() => setSelectedLevel(i)}
+                                        className="flex flex-col items-center py-3 px-1 rounded-xl border-2 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1"
+                                        style={{
+                                            background: isSel ? t.bg : '#fff',
+                                            borderColor: isSel ? t.color : '#e5e7eb',
+                                            opacity: reached ? 1 : 0.55,
+                                            fontFamily: 'inherit',
+                                        }}
+                                    >
+                                        <span className="text-3xl leading-none">{t.emoji}</span>
+                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: reached ? t.color : '#9ca3af' }}>{t.name}</span>
+                                        <span className="text-[9px] font-semibold text-nature-400 mt-1 leading-none">
+                                            {tierIdx === i ? "You're here" : reached ? 'Reached' : `${t.min} trust`}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* ── Selected-level detail ── */}
+                    <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm" style={{ borderColor: sel.border }}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <span className="text-3xl leading-none">{sel.emoji}</span>
+                            <div className="flex-1">
+                                <div className="text-xl font-black" style={{ color: sel.color }}>{sel.name}</div>
+                                <div className="text-xs text-nature-400 font-semibold">Level {selLevel + 1} of {TIERS.length}</div>
+                            </div>
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : '#f9fafb', color: selReached ? sel.color : '#9ca3af' }}>
+                                {selCurrent ? "You're here" : selReached ? 'Reached ✓' : '🔒 Locked'}
+                            </span>
+                        </div>
+
+                        <p className="text-[13px] text-nature-700 dark:text-nature-300 leading-relaxed mb-4">{sel.blurb}</p>
+
+                        {/* Credit line mechanical benefit */}
+                        <div className="flex items-center gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
+                            <span>⚖️</span>
+                            <span className="flex-1 text-[13px] text-nature-600 dark:text-nature-400 font-semibold">Credit line reaches</span>
+                            <span className="text-xl font-black font-mono" style={{ color: sel.color }}>{sel.floor}</span>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            {sel.perks.map(p => (
+                                <div key={p} className="flex items-start gap-2 text-[13px]">
+                                    <span className="mt-0.5 shrink-0" style={{ color: selReached ? '#10b981' : '#d1d5db' }}>{selReached ? '✓' : '○'}</span>
+                                    <span className="text-nature-700 dark:text-nature-300">{p}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {!selReached && selNeeded > 0 && (
+                            <p className="text-[11px] text-nature-400 italic mt-4">Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</p>
+                        )}
+                        <p className="text-[11px] text-nature-400 italic mt-2">Everyone can invite and vote. Sending opens after your first trade. Higher levels deepen your credit line and recognition.</p>
                     </div>
 
                     {/* How to reach next tier */}
@@ -443,56 +519,6 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         </div>
                     </div>
 
-                    {/* Trust Ladder */}
-                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl shadow-sm overflow-hidden">
-                        <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block p-5 pb-0">TRUST LADDER</span>
-                        <div className="flex flex-col mt-4">
-                            {TIERS.map((t, i) => {
-                                const reached = tierIdx >= i;
-                                const isCurrent = tierIdx === i;
-                                const creditsNeeded = Math.max(0, t.min - ec);
-                                return (
-                                    <div key={t.name} className={`p-4 border-b border-nature-100 dark:border-nature-800 last:border-0 flex gap-3 ${isCurrent ? 'bg-indigo-50/20 dark:bg-indigo-950/10' : ''}`}>
-                                        <div className="flex flex-col items-center">
-                                            <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0" style={{ borderColor: t.color, backgroundColor: reached ? t.color : 'transparent' }}>
-                                                {reached && <span className="text-[10px] text-white">✓</span>}
-                                            </div>
-                                            <div className="w-[1px] h-full bg-nature-200 dark:bg-nature-800 last:hidden" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-center">
-                                                <span className={`font-black text-sm flex items-center gap-1.5 ${reached ? 'text-nature-950 dark:text-white' : 'text-nature-400 dark:text-nature-500'}`}>
-                                                    <span>{t.emoji}</span>
-                                                    <span>{t.name}</span>
-                                                    {isCurrent && <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-wider">current</span>}
-                                                </span>
-                                                {!reached && creditsNeeded > 0 && (
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded border border-indigo-150 text-indigo-600 dark:text-indigo-400">{creditsNeeded} pts to go</span>
-                                                )}
-                                            </div>
-                                            <p className="text-[11px] text-nature-400 dark:text-nature-500 mt-1">
-                                                {t.min === 0 ? 'Starting tier' : `Reach ${t.min} trust from the value you trade`}
-                                            </p>
-                                            <div className="mt-2 space-y-1">
-                                                <div className="flex items-center gap-1.5 text-[10px] text-nature-500">
-                                                    <span>⚖️</span>
-                                                    <span>Credit floor → {t.floor}B</span>
-                                                </div>
-                                                <div className="pt-1.5">
-                                                    {t.perks.map(p => (
-                                                        <div key={p} className="flex items-center gap-1 text-[10px] text-nature-500 dark:text-nature-400">
-                                                            <span className={reached ? 'text-emerald-500' : 'text-nature-300'}>{reached ? '✓' : '•'}</span>
-                                                            <span>{p}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
                     <span className="text-[10px] font-medium text-nature-400 dark:text-nature-500 text-center italic block">
                         💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.
                     </span>

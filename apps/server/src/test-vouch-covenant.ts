@@ -13,6 +13,7 @@
 import {
     initStateEngine, getAdminPubkey, canVouch, vouchMember, unvouchMember, adminSetVoucher,
     getMemberTrustProfile, requestPost, hasLiveOffer, reconcileLedgerFromDb,
+    isOnHoliday, setHolidayMode, getPosts,
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -89,6 +90,24 @@ function main() {
     assert(hasLiveOffer('payer') === true, 'payer now has a live offer');
     const tx = requestPost(sOffer, 'payer');
     assert(!!tx && tx.status === 'requested', 'with a live offer → the credit spend is allowed');
+
+    // ── 5. Holiday mode ──
+    seedMember('holA');
+    assert(isOnHoliday('holA') === false, 'default: a member is not on holiday');
+    setHolidayMode('holA', true);
+    assert(isOnHoliday('holA') === true, 'holiday switches on when there are no open trades');
+    const sOffer2 = offer('seller', true, 5);
+    throws(() => requestPost(sOffer2, 'holA'), 'HOLIDAY_MODE', 'on holiday → cannot initiate a trade');
+    setHolidayMode('holA', false);
+    assert(isOnHoliday('holA') === false, 'holiday switches back off');
+    // open-trades guard: an in-flight deal blocks turning holiday ON
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES ('mt-hol', ?, 'holA', 'seller', 5, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(sOffer2);
+    throws(() => setHolidayMode('holA', true), 'active trade', 'cannot go on holiday with an open trade in progress');
+    // feed-hide: an away member's offer is excluded from the general feed, but visible on their own listing view
+    seedMember('holB'); const hbOffer = offer('holB', true, 7);
+    setHolidayMode('holB', true);
+    assert(!getPosts({ limit: 200 }).some(p => p.id === hbOffer), 'an away member\'s offer is hidden from the general feed');
+    assert(getPosts({ authorPubkey: 'holB' }).some(p => p.id === hbOffer), 'but it is still visible when viewing that author\'s own listings');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

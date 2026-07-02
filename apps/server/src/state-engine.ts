@@ -1790,6 +1790,7 @@ export function createPost(
         return null;
     }
     assertProfileComplete(authorPublicKey);
+    assertNotOnHoliday(authorPublicKey);
     validatePostPhotos(photos);
 
     // Contribution-first gate: listing an Offer is always allowed (it's what
@@ -1841,6 +1842,12 @@ export function getPosts(filter?: { id?: string; type?: string; category?: strin
     if (!filter?.id && !filter?.updatedAfter) {
         // Regular client paginated fetch: only active/pending
         query += " AND p.active = 1 AND p.status IN ('active', 'pending')";
+        // Holiday mode: hide away members' posts from the general feed. NOT applied when viewing a
+        // specific author's own listings (authorPubkey) or during sync (updatedAfter) — those carry
+        // every state so each node can re-apply this read-time filter itself.
+        if (!filter?.authorPubkey) {
+            query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
+        }
     } else if (filter?.updatedAfter) {
         // Sync daemon fetch: MUST include completed/cancelled/deleted states to sync deletions
     } else {
@@ -1997,10 +2004,12 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
 export function requestPost(postId: string, requesterPublicKey: string, hours?: number): MarketplaceTransaction {
     assertMemberActive(requesterPublicKey);
     assertProfileComplete(requesterPublicKey);
+    assertNotOnHoliday(requesterPublicKey);
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
     if (!post) throw new Error('Post not found');
     if (post.status !== 'active') throw new Error('Post is not active');
     if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
+    if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
     // One open request per member per post — prevents accidental double-taps and request spam
     const existingRequest = db.prepare(`SELECT id FROM marketplace_transactions WHERE post_id=? AND status='requested' AND (buyer_pubkey=? OR seller_pubkey=?)`)
@@ -2181,9 +2190,11 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
 
 export function acceptPost(postId: string, buyerPublicKey: string, hours?: number): MarketplaceTransaction {
     assertMemberActive(buyerPublicKey);
+    assertNotOnHoliday(buyerPublicKey);
     const post = getPosts({ id: postId, status: 'active' })[0];
     if (!post) throw new Error('Post not found or not active');
     if (post.authorPublicKey === buyerPublicKey) throw new Error('Cannot accept your own post');
+    if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
     if (post.type !== 'offer') {
         throw new Error('Only Offers can be 1-step accepted');
@@ -5758,6 +5769,52 @@ export function setMemberPreferences(publicKey: string, preferences: Record<stri
         console.error('[Prefs] Failed to set preferences:', e);
         return false;
     }
+}
+
+// ===================== HOLIDAY MODE =====================
+
+// Is this member on holiday? Queried directly (NOT via getMemberPreference, which defaults
+// UNSET keys to 'true' — that default would read every member as away). Absent → false.
+export function isOnHoliday(publicKey: string): boolean {
+    const row = db.prepare(`SELECT pref_value FROM member_preferences WHERE public_key = ? AND pref_key = 'holiday_mode'`).get(publicKey) as any;
+    return row?.pref_value === 'true';
+}
+
+// Open (in-flight) trades where this member is a party — a requested or escrow-funded deal.
+// Holiday mode may only be switched ON when this is zero: going away mid-deal would strand a
+// counterparty's escrow or an open request.
+export function countOpenTrades(publicKey: string): number {
+    const row = db.prepare(
+        `SELECT COUNT(*) as n FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested','pending')`
+    ).get(publicKey, publicKey) as any;
+    return row?.n || 0;
+}
+
+// Stable prefix so clients can detect the holiday-block and prompt "turn off holiday mode".
+export const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
+
+export function assertNotOnHoliday(publicKey: string): void {
+    if (isOnHoliday(publicKey)) throw new Error(HOLIDAY_MODE_ERROR);
+}
+
+/**
+ * Switch holiday mode on/off. Turning it ON is gated on having zero open trades — otherwise a
+ * counterparty would be left with escrow locked or an unanswered request. On holiday, the
+ * member's Offers are hidden from the marketplace feed (getPosts) and they can neither post nor
+ * initiate trades (assertNotOnHoliday). No trades or floors change. Throws with `.openTrades`
+ * set when blocked so the client can name the count.
+ */
+export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true; openTrades: number } {
+    if (!getMember(publicKey)) throw new Error('Member not found');
+    const open = countOpenTrades(publicKey);
+    if (enabled && open > 0) {
+        const err: any = new Error(`You have ${open} active trade${open === 1 ? '' : 's'} in progress. Complete or cancel ${open === 1 ? 'it' : 'them'} before switching on holiday mode.`);
+        err.openTrades = open;
+        throw err;
+    }
+    db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', ?)`).run(publicKey, enabled ? 'true' : 'false');
+    broadcast({ type: 'profile_updated', publicKey });
+    return { ok: true, openTrades: open };
 }
 
 // ===================== GENERIC PUSH DISPATCHER =====================

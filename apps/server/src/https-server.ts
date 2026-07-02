@@ -71,7 +71,7 @@ import {
     exportSyncState, getNodeRole,
     recordReplicationAccess, getReplicationAccessLog,
     registerPushToken, removePushToken,
-    getMemberPreferences, setMemberPreferences,
+    getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
     getGuardiansOf, createRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery
 } from './state-engine.js';
@@ -2370,6 +2370,25 @@ export async function startHttpsServer(port: number): Promise<void> {
         }
         const success = setMemberPreferences(publicKey, preferences);
         ctx.body = { success };
+    });
+
+    // Holiday mode: switch on/off (signed). Turning it ON is gated on having zero open trades —
+    // setHolidayMode throws with `.openTrades` set when blocked so the client can name the count.
+    router.post('/api/members/holiday', async (ctx) => {
+        const publicKey = ctx.state.actor as string | undefined;
+        const { enabled } = (ctx as any).requestBody || {};
+        if (!publicKey) {
+            ctx.status = 401;
+            ctx.body = { error: 'A signed request is required' };
+            return;
+        }
+        try {
+            const result = setHolidayMode(publicKey, !!enabled);
+            ctx.body = { success: true, enabled: !!enabled, openTrades: result.openTrades };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e?.message || 'Failed to update holiday mode', openTrades: e?.openTrades };
+        }
     });
 
     // ===================== MARKETPLACE API (PUBLIC) =====================

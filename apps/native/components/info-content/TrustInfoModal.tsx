@@ -155,7 +155,7 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.newcomer.fg }]}>
                         <Text style={styles.tierTitle}>🌱 Newcomer</Text>
-                        <ListItem>Credit floor opens to <Text style={styles.boldWhiteText}>-80B</Text> after your 1st trade</ListItem>
+                        <ListItem>A <Text style={styles.boldWhiteText}>-20B</Text> welcome voucher opens your floor after your 1st trade</ListItem>
                         <ListItem>Browse & trade the marketplace, receive credits</ListItem>
                         <ListItem><Text style={styles.boldWhiteText}>Sending credits</Text> unlocks the moment you complete that first trade</ListItem>
                     </View>

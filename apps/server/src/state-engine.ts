@@ -1239,14 +1239,15 @@ export function getMemberTrustProfile(publicKey: string): {
     const multiplier = reviewCount > 0 ? (0.5 + 0.5 * (avgRating / 5.0)) : 1.0;
     const earnedCredit = Math.max(0, Math.floor(rawEarned * multiplier));
 
-    // Floor from earned + granted, capped at CREDIT_MAX_EARNED total.
-    let floor = c.CREDIT_BASE_FLOOR - Math.min(c.CREDIT_MAX_EARNED, earnedCredit + grantedCredit);
+    // Activation gate: no overdraft until the account's FIRST genuine trade — unless a grant or
+    // an Elder vouch has graduated a founding member ahead of their first trade. Only an activated
+    // member receives the welcome voucher (so an army of un-traded sock accounts gets 0 credit).
+    const activated = stats.tradeCount > 0 || grantedCredit > 0 || elderVouched;
+    const welcomeVoucher = activated ? c.NEWCOMER_VOUCHER : 0;
 
-    // Floor-gate: no overdraft until the account's FIRST genuine trade — unless a grant or an
-    // Elder vouch has graduated a founding member ahead of their first trade.
-    if (stats.tradeCount === 0 && grantedCredit === 0 && !elderVouched) {
-        floor = 0;
-    }
+    // Floor = -(voucher + earned + granted), clamped so the deepest floor is -CREDIT_FLOOR_CAP.
+    // CREDIT_BASE_FLOOR is 0 — there is no baked-in overdraft; every bean of credit is explicit.
+    const floor = c.CREDIT_BASE_FLOOR - Math.min(c.CREDIT_FLOOR_CAP, welcomeVoucher + earnedCredit + grantedCredit);
 
     const tier = getTier(floor);
 

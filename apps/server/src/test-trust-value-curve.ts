@@ -62,11 +62,11 @@ function main() {
     assert(earnedCreditFromValue(10000) > earnedCreditFromValue(2000), 'curve is monotonic increasing');
     assert(Number.isInteger(earnedCreditFromValue(1234)), 'curve returns an integer (deterministic)');
 
-    // ── 2. A small completed trade → shallow floor, and BOTH sides earn it ──
+    // ── 2. A small completed trade → shallow floor (20 voucher + ~0 earned), BOTH sides earn it ──
     seedMember('buyer3'); seedMember('seller3');
     mtx('buyer3', 'seller3', 3);
-    assert(floorOf('buyer3') === -81, `3-bean completed trade → buyer floor −81, got ${floorOf('buyer3')}`);
-    assert(floorOf('seller3') === -81, `3-bean completed trade → seller ALSO earns it (floor −81), got ${floorOf('seller3')}`);
+    assert(floorOf('buyer3') === -21, `3-bean completed trade → buyer floor −21 (20 voucher + 1 earned), got ${floorOf('buyer3')}`);
+    assert(floorOf('seller3') === -21, `3-bean completed trade → seller ALSO earns it (floor −21), got ${floorOf('seller3')}`);
 
     // ── 3. Direct transfers (gifts) build NO trust, at any size ──
     seedMember('gifter'); seedMember('friend');
@@ -80,28 +80,28 @@ function main() {
     // ── 4. Self-funding farm stays dead: 40 tiny completed trades ──
     seedMember('farmer');
     for (let i = 0; i < 40; i++) { const s = 'fsock' + i; seedMember(s); mtx('farmer', s, 1); }
-    assert(floorOf('farmer') === -95, `40 × 1-bean completed trades → floor −95 (not −2000), got ${floorOf('farmer')}`);
+    assert(floorOf('farmer') === -35, `40 × 1-bean completed trades → floor −35 (20 voucher + 15 earned, not −2000), got ${floorOf('farmer')}`);
 
     // ── 5. Real, diverse trade → real floor (~Steward at 2000 across 5 sellers) ──
     seedMember('trader');
     for (let i = 0; i < 5; i++) { const s = 'tseller' + i; seedMember(s); mtx('trader', s, 400); }
-    assert(floorOf('trader') === -628, `2000 across 5 sellers → floor −628, got ${floorOf('trader')}`);
+    assert(floorOf('trader') === -568, `2000 across 5 sellers → floor −568 (20 voucher + 548 earned), got ${floorOf('trader')}`);
 
     // ── 6. Diversity cap: 10k with ONE partner counts as 5k ──
     seedMember('whale'); seedMember('buddy');
     mtx('whale', 'buddy', 10000);
-    assert(floorOf('whale') === -1040, `10k with one partner capped at 5k → floor −1040, got ${floorOf('whale')}`);
+    assert(floorOf('whale') === -980, `10k with one partner capped at 5k → floor −980 (20 voucher + 960 earned), got ${floorOf('whale')}`);
 
-    // ── 7. Grant lane: deepens floor, earnedCredit stays 0 (governance-safe) ──
+    // ── 7. Grant lane: deepens floor (+voucher, since a grant activates), earnedCredit stays 0 ──
     seedMember('granted');
     db.prepare(`UPDATE members SET earned_credit = ? WHERE public_key = ?`).run(520, 'granted');
     const gp = profile('granted');
-    assert(gp.floor === -600, `grant of 520 → floor −600, got ${gp.floor}`);
+    assert(gp.floor === -540, `grant of 520 → floor −540 (20 voucher + 520 granted), got ${gp.floor}`);
     assert(gp.earnedCredit === 0 && gp.grantedCredit === 520, `grant is a separate lane (earned 0, granted 520), got earned=${gp.earnedCredit} granted=${gp.grantedCredit}`);
 
-    // ── 8. First-trade gate: no trade / grant / vouch → no overdraft ──
+    // ── 8. Activation gate: no trade / grant / vouch → floor 0, and NO welcome voucher ──
     seedMember('fresh');
-    assert(floorOf('fresh') === 0, `fresh account → floor 0, got ${floorOf('fresh')}`);
+    assert(floorOf('fresh') === 0, `fresh account → floor 0 (voucher withheld until 1st trade), got ${floorOf('fresh')}`);
 
     // ── 9. Send gate: no completed trade → can't gift; after a trade → can (and no velocity cap) ──
     seedMember('noTrade'); seedMember('rcpt');
@@ -109,8 +109,7 @@ function main() {
     assert(transfer('noTrade', 'rcpt', 10, 'gift', 'direct') === null,
         'no completed trade → direct send blocked');
     seedMember('didTrade'); seedMember('aSeller');
-    mtx('didTrade', 'aSeller', 100); // earns trust as buyer → earnedCredit > 0
-    db.prepare(`UPDATE accounts SET balance = 50 WHERE public_key = ?`).run('didTrade');
+    mtx('didTrade', 'aSeller', 5000); // real trade → earnedCredit 960, floor ≈ -980 (voucher+earned)
     assert(transfer('didTrade', 'rcpt', 60, 'gift', 'direct') !== null,
         'after a completed trade → direct send allowed, with NO velocity cap (60 > old 20/day)');
 

@@ -16,8 +16,12 @@ export const PROTOCOL_CONSTANTS = {
     REFERENCE_LABEL: 'hour',
 
     // === Credit Formula (Sliding Scale) ===
-    CREDIT_BASE_FLOOR: -80,            // Ghost starts here (≈ 2 hours of credit)
-    CREDIT_MAX_EARNED: 1920,           // Max additional earned (total cap: -2000 ≈ 50 hours)
+    // No automatic overdraft: the floor starts at 0 and deepens with a welcome voucher +
+    // earned trust + any grants. floor = -min(CREDIT_FLOOR_CAP, voucher + earned + granted).
+    CREDIT_BASE_FLOOR: 0,              // no baked-in credit — starting hand is the voucher below
+    CREDIT_MAX_EARNED: 1920,           // asymptote of the earned-trust curve (see earnedCreditFromValue)
+    CREDIT_FLOOR_CAP: 2000,            // deepest possible floor is -2000 (≈ 50 hours) across ALL sources
+    NEWCOMER_VOUCHER: 20,              // starting credit granted AFTER a member's first genuine trade
 
     // === Trust Curve (Trust Model v2 — value-based, saturating) ===
     // Earned credit is a saturating function of qualified, diversity-capped value cycled (V):
@@ -46,14 +50,15 @@ export const PROTOCOL_CONSTANTS = {
     // floor ≤ -1400 = Elder
 
     // === Admin Genesis Invite Pre-seeds ===
-    // These are pre-seeded earnedCredit values that place the new member
-    // at the target tier threshold. The formula is:
-    //   floor = BASE_FLOOR - earnedCredit → solve for earnedCredit
-    //   Trusted:   -200 = -80 - earned → earned = 120
-    //   Ambassador: -600 = -80 - earned → earned = 520
-    GENESIS_TRUSTED_EARNED: 120,       // Places new member at -200 floor (Resident)
-    GENESIS_AMBASSADOR_EARNED: 520,    // Places new member at -600 floor (Steward)
-    GENESIS_ELDER_EARNED: 1320,        // Places new member at -1400 floor (Elder)
+    // Pre-seeded GRANTED credit that places a new member at a target tier floor. A grant
+    // activates the member (like a first trade), so the welcome voucher also applies:
+    //   floor = -(granted + NEWCOMER_VOUCHER) → granted = |floor| - 20
+    //   Trusted:    -200 → granted = 180
+    //   Ambassador: -600 → granted = 580
+    //   Elder:     -1400 → granted = 1380
+    GENESIS_TRUSTED_EARNED: 180,       // Places new member at -200 floor (Resident)
+    GENESIS_AMBASSADOR_EARNED: 580,    // Places new member at -600 floor (Steward)
+    GENESIS_ELDER_EARNED: 1380,        // Places new member at -1400 floor (Elder)
 
     // === Transaction Guardrails ===
     TRANSACTION_WARNING_THRESHOLD: 0.5, // Warn when using >50% of remaining credit

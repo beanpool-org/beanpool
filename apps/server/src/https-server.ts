@@ -51,7 +51,7 @@ import {
     getCommunityInfo, addWsClient, removeWsClient,
     generateInvite, redeemInvite, redeemOfflineTicket, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
-    vouchMember, unvouchMember, hasListedOffer,
+    vouchMember, unvouchMember, hasListedOffer, hasLiveOffer,
     updateProfile, getProfile, getAllProfiles,
     createConversation, sendMessage, editMessage, getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
@@ -60,7 +60,7 @@ import {
     addRating, getRatings, getAverageRating, getRatingsGiven,
     submitReport, getReports, dismissReport, actionReport, getReportCount,
     getFriends, addFriend, removeFriend, setGuardian,
-    adminSetUserStatus, adminSetElder, adminSetVoucher, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
+    adminSetUserStatus, adminSetElder, adminSetVoucher, adminSetTier, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     getAdminPubkey, recordActivity,
     markConversationRead, getUnreadCounts,
@@ -1087,6 +1087,28 @@ export async function startHttpsServer(port: number): Promise<void> {
         }
     });
 
+    // Assign a TIER BADGE to a member. The badge grants that tier's trust value (granted-credit
+    // lane), landing the member's floor at the tier entry: Resident -200, Steward -600, Elder
+    // -1400, Newcomer clears it. Distinct from the vouch capability above. Body: { password, tier }.
+    router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        const body = (ctx as any).requestBody || {};
+        const tier = body.tier;
+        if (!['Newcomer', 'Resident', 'Steward', 'Elder'].includes(tier)) {
+            ctx.status = 400;
+            ctx.body = { error: 'tier must be one of Newcomer, Resident, Steward, Elder' };
+            return;
+        }
+        try {
+            adminSetTier(ctx.params.pubkey, tier);
+            logger.info('ADMIN', `Set tier ${tier} for ${ctx.params.pubkey.substring(0, 12)}`);
+            ctx.body = { success: true, tier };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e?.message || 'Failed to set tier' };
+        }
+    });
+
     router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         adminPruneUser(ctx.params.pubkey);
@@ -1982,6 +2004,8 @@ export async function startHttpsServer(port: number): Promise<void> {
             hasListedOffer: listedOffer,
             // Gate 1: blocked from posting Needs / accepting Offers until an Offer is listed.
             isBlockedFromTrading: !listedOffer,
+            // Gate 2 (offer covenant): must keep a LIVE Offer to spend into a negative balance.
+            hasLiveOffer: hasLiveOffer(publicKey),
         };
     });
 
@@ -2017,7 +2041,7 @@ export async function startHttpsServer(port: number): Promise<void> {
     // no-overdraft activation gate, unlocking the welcome voucher + any earned trust banked.
     router.post('/api/profile/vouch', async (ctx) => {
         const voucher = ctx.state.actor as string | undefined;
-        const { targetPubkey } = (ctx as any).requestBody || {};
+        const { targetPubkey, level } = (ctx as any).requestBody || {};
         if (!voucher) {
             ctx.status = 401;
             ctx.body = { error: 'A signed request is required' };
@@ -2029,8 +2053,10 @@ export async function startHttpsServer(port: number): Promise<void> {
             return;
         }
         try {
-            vouchMember(voucher, targetPubkey);
-            ctx.body = { success: true };
+            // Level 1 = -25, 2 = -50, 3 = -100 credit floor. Default to 1 if omitted/invalid.
+            const lvl = level === 2 || level === 3 ? level : 1;
+            vouchMember(voucher, targetPubkey, lvl);
+            ctx.body = { success: true, level: lvl };
         } catch (e: any) {
             ctx.status = 400;
             ctx.body = { error: e?.message || 'Vouch failed' };

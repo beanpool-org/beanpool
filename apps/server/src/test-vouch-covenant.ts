@@ -3,17 +3,19 @@
  *
  * Proves:
  *   1. canVouch: the system admin always can; a plain member cannot; adminSetVoucher toggles it.
- *   2. vouchMember: rejects self-vouch and non-vouchers; a voucher's vouch hands out the -20 floor.
+ *   2. vouchMember: rejects self-vouch and non-vouchers; a voucher's vouch hands out the credit floor.
  *   3. unvouchMember: the original voucher can withdraw (balance ≥ 0); blocked while the target is
  *      negative; the admin can force-revoke; withdrawing removes the floor.
  *   4. Offer covenant: spending into a negative balance requires a LIVE offer (COVENANT_REQUIRED).
+ *   5. Vouch levels: the voucher picks -25 / -50 / -100; a re-vouch changes the level.
+ *   6. Admin tier badges (adminSetTier): grant a tier's entry floor (Resident -200 … Elder -1400).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-vouch-covenant.ts
  */
 import {
     initStateEngine, getAdminPubkey, canVouch, vouchMember, unvouchMember, adminSetVoucher,
     getMemberTrustProfile, requestPost, hasLiveOffer, reconcileLedgerFromDb,
-    isOnHoliday, setHolidayMode, getPosts,
+    isOnHoliday, setHolidayMode, getPosts, adminSetTier,
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -63,7 +65,7 @@ function main() {
     throws(() => vouchMember('plain', 'newbie'), 'appointed vouchers', 'a non-voucher cannot vouch');
     assert(floorOf('newbie') === 0, 'un-vouched newbie → floor 0 (no credit line)');
     vouchMember('elderA', 'newbie');
-    assert(floorOf('newbie') === -20, 'after a vouch → floor -20 (welcome voucher unlocked)');
+    assert(floorOf('newbie') === -25, 'after a default (light) vouch → floor -25');
 
     // ── 3. unvouchMember: ownership + negative-balance guard + admin force ──
     seedMember('other'); adminSetVoucher('other', true);
@@ -91,7 +93,27 @@ function main() {
     const tx = requestPost(sOffer, 'payer');
     assert(!!tx && tx.status === 'requested', 'with a live offer → the credit spend is allowed');
 
-    // ── 5. Holiday mode ──
+    // ── 5. Vouch levels: the voucher picks -25 / -50 / -100 (a re-vouch can change it) ──
+    seedMember('lvlUser');
+    vouchMember('elderA', 'lvlUser', 1);
+    assert(floorOf('lvlUser') === -25, 'level 1 vouch → floor -25');
+    vouchMember('elderA', 'lvlUser', 2);
+    assert(floorOf('lvlUser') === -50, 're-vouch at level 2 → floor -50');
+    vouchMember('elderA', 'lvlUser', 3);
+    assert(floorOf('lvlUser') === -100, 're-vouch at level 3 → floor -100');
+
+    // ── 6. Admin tier badges grant the tier's entry floor ──
+    seedMember('badgeUser');
+    adminSetTier('badgeUser', 'Resident');
+    assert(floorOf('badgeUser') === -200, 'Resident badge → floor -200');
+    adminSetTier('badgeUser', 'Steward');
+    assert(floorOf('badgeUser') === -600, 'Steward badge → floor -600');
+    adminSetTier('badgeUser', 'Elder');
+    assert(floorOf('badgeUser') === -1400, 'Elder badge → floor -1400');
+    adminSetTier('badgeUser', 'Newcomer');
+    assert(floorOf('badgeUser') === 0, 'Newcomer badge clears the grant → floor 0');
+
+    // ── 7. Holiday mode ──
     seedMember('holA');
     assert(isOnHoliday('holA') === false, 'default: a member is not on holiday');
     setHolidayMode('holA', true);

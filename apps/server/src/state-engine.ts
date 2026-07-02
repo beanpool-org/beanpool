@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, earnedCreditFromValue, getTier, getGenesisEarnedCredit, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, earnedCreditFromValue, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName } from '@beanpool/core';
 import { getThresholds, getLocalConfig } from './local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
 import { readFileSync } from 'node:fs';
@@ -1216,9 +1216,12 @@ export function getMemberTrustProfile(publicKey: string): {
     // Stored in members.earned_credit (legacy column name). It is a credit-*limit* input only —
     // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
     // the floor but never count as "earned" (governance votes use earned/value only, not grants).
-    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by FROM members WHERE public_key = ?").get(publicKey) as any;
+    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by, vouch_credit FROM members WHERE public_key = ?").get(publicKey) as any;
     const grantedCredit = memberRow?.earned_credit || 0;
     const elderVouched = !!memberRow?.elder_vouched_by;
+    // The vouch level's credit floor (25/50/100). A vouch recorded before the level system, or
+    // with no stored amount, defaults to the light level.
+    const vouchCredit = elderVouched ? (memberRow?.vouch_credit > 0 ? memberRow.vouch_credit : PROTOCOL_CONSTANTS.VOUCH_CREDIT_LIGHT) : 0;
 
     const c = PROTOCOL_CONSTANTS;
 
@@ -1251,7 +1254,7 @@ export function getMemberTrustProfile(publicKey: string): {
     // alongside the welcome voucher, so their floor jumps straight to reflect their real trading.
     const activated = elderVouched || grantedCredit > 0;
     const allowance = activated
-        ? Math.min(c.CREDIT_FLOOR_CAP, c.NEWCOMER_VOUCHER + earnedCredit + grantedCredit)
+        ? Math.min(c.CREDIT_FLOOR_CAP, vouchCredit + earnedCredit + grantedCredit)
         : 0;
 
     // Floor = -(voucher + earned + granted) once activated, clamped so the deepest floor is
@@ -1509,15 +1512,19 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; tier: TierInfo; earnedCredit: number; commonsBalance: number } {
+export function getBalance(publicKey: string): { balance: number; floor: number; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean } {
     const account = ledger.getAccount(publicKey);
-    const { floor, tier, earnedCredit } = getMemberTrustProfile(publicKey);
+    const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
     return {
         balance: Math.round(account.balance * 100) / 100,
         floor,
         tier,
         earnedCredit,
         commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
+        // activated: has a credit line at all (vouched/granted) — un-vouched newcomers are false.
+        // canVouch: this member holds the appointed-voucher capability (drives the client vouch UI).
+        activated,
+        canVouch: canVouch(publicKey),
     };
 }
 
@@ -1744,18 +1751,21 @@ export function canVouch(publicKey: string): boolean {
 }
 
 /**
- * Record an appointed voucher's vouch for a member. Server-authoritative: only a member
- * holding the vouch capability (or the system admin) may vouch, and never for themselves.
- * A vouch hands out the -20 credit floor: it lifts the no-overdraft activation gate (see
- * getMemberTrustProfile), unlocking the welcome voucher plus any earned trust already banked.
- * Monotonic — a later vouch by another voucher simply overwrites the recorded one.
+ * Record an appointed voucher's vouch for a member at a chosen level. Server-authoritative:
+ * only a member holding the vouch capability (or the system admin) may vouch, and never for
+ * themselves. A vouch hands out the level's credit floor (level 1 = -25, 2 = -50, 3 = -100):
+ * it lifts the no-overdraft activation gate (see getMemberTrustProfile), unlocking that floor
+ * plus any earned trust already banked. Monotonic — a later vouch overwrites the recorded one
+ * (a re-vouch can raise or lower the level).
  */
-export function vouchMember(voucherPubkey: string, targetPubkey: string): { ok: true } {
+export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
     if (voucherPubkey === targetPubkey) throw new Error('You cannot vouch for yourself');
     if (!getMember(voucherPubkey)) throw new Error('Voucher not found');
     if (!getMember(targetPubkey)) throw new Error('Member not found');
     if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
-    db.prepare(`UPDATE members SET elder_vouched_by = ? WHERE public_key = ?`).run(voucherPubkey, targetPubkey);
+    const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
+    const vouchCredit = vouchCreditForLevel(lvl);
+    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ? WHERE public_key = ?`).run(voucherPubkey, vouchCredit, targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -1776,7 +1786,7 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
     }
-    db.prepare(`UPDATE members SET elder_vouched_by = NULL WHERE public_key = ?`).run(targetPubkey);
+    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0 WHERE public_key = ?`).run(targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -5024,12 +5034,24 @@ export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabl
  * OR negative) and the double-entry books stay balanced. Granting only widens their credit
  * limit; revoking (back to 0) narrows it, leaving any balance untouched. Idempotent.
  */
-export function adminSetElder(publicKey: string, granted: boolean): { ok: true } {
+/**
+ * Assign a tier BADGE to a member (admin-only). The badge grants that tier's trust value into
+ * the granted-credit lane, so the member's floor lands at the tier's entry (Resident -200,
+ * Steward -600, Elder -1400; Newcomer clears the grant). Balance-safe — grants a credit *limit*,
+ * mints/moves no beans. This is a floor grant only; the separate can_vouch capability
+ * (adminSetVoucher) is what confers the power to vouch. Idempotent.
+ */
+export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     if (!getMember(publicKey)) throw new Error('Member not found');
-    const earned = granted ? PROTOCOL_CONSTANTS.GENESIS_ELDER_EARNED : 0;
-    db.prepare("UPDATE members SET earned_credit=? WHERE public_key=?").run(earned, publicKey);
+    const granted = grantedCreditForTier(tier);
+    db.prepare("UPDATE members SET earned_credit=? WHERE public_key=?").run(granted, publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
+}
+
+// Back-compat wrapper: Elder is simply the top tier badge.
+export function adminSetElder(publicKey: string, granted: boolean): { ok: true } {
+    return adminSetTier(publicKey, granted ? 'Elder' : 'Newcomer');
 }
 
 /**

@@ -323,6 +323,8 @@ export default function SettingsScreen() {
     const [notifMarketplace, setNotifMarketplace] = useState(true);
     const [notifEscrow, setNotifEscrow] = useState(true);
     const [notifLoading, setNotifLoading] = useState(false);
+    const [holidayMode, setHolidayMode] = useState(false);
+    const [holidayLoading, setHolidayLoading] = useState(false);
     const [editCallsign, setEditCallsign] = useState(identity?.callsign || '');
     const [avatar, setAvatar] = useState<string | null>(null);
     const [bio, setBio] = useState('');
@@ -346,6 +348,43 @@ export default function SettingsScreen() {
             }).catch(() => {});
         }
     }, []);
+
+    // Load holiday-mode state on mount (queried so an unset flag reads as OFF, not the pref default).
+    React.useEffect(() => {
+        (async () => {
+            try {
+                const url = await AsyncStorage.getItem('beanpool_anchor_url');
+                if (url && identity?.publicKey) {
+                    const res = await fetch(`${url}/api/members/preferences?publicKey=${identity.publicKey}`);
+                    if (res.ok) {
+                        const prefs = await res.json();
+                        setHolidayMode(prefs.holiday_mode === 'true');
+                    }
+                }
+            } catch { }
+        })();
+    }, []);
+
+    const handleToggleHoliday = async () => {
+        if (!identity?.publicKey || holidayLoading) return;
+        const next = !holidayMode;
+        setHolidayLoading(true);
+        try {
+            await signedRequest('/api/members/holiday', { enabled: next });
+            setHolidayMode(next);
+            Alert.alert(
+                next ? '🌴 Holiday mode on' : 'Welcome back',
+                next
+                    ? "Your offers are hidden and you won't get new trade requests. Turn this off anytime to come back."
+                    : 'Your offers are live again.'
+            );
+        } catch (e: any) {
+            // Server blocks turning it on while trades are in progress — surface that message.
+            Alert.alert(next ? "Can't start holiday yet" : 'Update failed', e?.message || 'Please try again.');
+        } finally {
+            setHolidayLoading(false);
+        }
+    };
 
     const loadDiagnostics = async () => {
         setDiagLoading(true);
@@ -1040,20 +1079,38 @@ export default function SettingsScreen() {
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
-                    <View style={[styles.menuBtn, styles.menuBtnLast]}>
+                    <View style={styles.menuBtn}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📍</Text></View>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.menuText}>Location</Text>
                             <Text style={styles.menuSub}>{locationEnabled ? 'Enabled — used for nearby posts & map' : 'Disabled — tap to enable'}</Text>
                         </View>
-                        <Pressable 
-                            style={[styles.toggle, locationEnabled && styles.toggleOn]} 
-                            accessibilityRole="button" 
-                            accessibilityLabel="Toggle Location permission" 
-                            accessibilityState={{ checked: locationEnabled }} 
+                        <Pressable
+                            style={[styles.toggle, locationEnabled && styles.toggleOn]}
+                            accessibilityRole="button"
+                            accessibilityLabel="Toggle Location permission"
+                            accessibilityState={{ checked: locationEnabled }}
                             onPress={handleLocationToggle}
                         >
                             <View style={[styles.toggleThumb, locationEnabled && styles.toggleThumbOn]} />
+                        </Pressable>
+                    </View>
+                    {/* Holiday Mode — pause your presence; hides your offers, stops new requests */}
+                    <View style={[styles.menuBtn, styles.menuBtnLast]}>
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌴</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Holiday Mode</Text>
+                            <Text style={styles.menuSub}>{holidayMode ? "You're away — offers hidden, no new requests" : 'Going away? Hide your offers and pause requests'}</Text>
+                        </View>
+                        <Pressable
+                            style={[styles.toggle, holidayMode && styles.toggleOn, holidayLoading && { opacity: 0.5 }]}
+                            accessibilityRole="button"
+                            accessibilityLabel="Toggle Holiday Mode"
+                            accessibilityState={{ checked: holidayMode }}
+                            disabled={holidayLoading}
+                            onPress={handleToggleHoliday}
+                        >
+                            <View style={[styles.toggleThumb, holidayMode && styles.toggleThumbOn]} />
                         </Pressable>
                     </View>
                 </View>

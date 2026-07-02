@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { type BeanPoolIdentity, importIdentity, wipeIdentity } from '../lib/identity';
 
-import { getMemberProfile, redeemInvite, type MemberProfile } from '../lib/api';
+import { getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
 import { type Theme } from '../lib/useTheme';
@@ -42,6 +42,33 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         const next = privacyTier === '3' ? '0' : '3';
         setPrivacyTier(next);
         localStorage.setItem('beanpool-privacy-tier', next);
+    };
+
+    // Holiday mode — pause presence. Queried directly so an unset flag reads OFF.
+    const [holidayMode, setHolidayMode] = useState(false);
+    const [holidayLoading, setHolidayLoading] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        getMemberPreferences(identity.publicKey)
+            .then(prefs => { if (!cancelled) setHolidayMode(prefs.holiday_mode === 'true'); })
+            .catch(() => { });
+        return () => { cancelled = true; };
+    }, [identity.publicKey]);
+
+    const handleToggleHoliday = async () => {
+        if (holidayLoading) return;
+        const next = !holidayMode;
+        setHolidayLoading(true);
+        try {
+            await setHolidayModeApi(next);
+            setHolidayMode(next);
+        } catch (e) {
+            // Server blocks turning it on while trades are in progress — surface that message.
+            window.alert(e instanceof Error ? e.message : 'Could not update holiday mode.');
+        } finally {
+            setHolidayLoading(false);
+        }
     };
 
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced'>(initialMode || 'menu');
@@ -204,6 +231,28 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                     >
                         <span className={`block w-[22px] h-[22px] rounded-full bg-white absolute top-[2px] shadow-sm transform transition-transform duration-300 ease-in-out ${
                             privacyTier === '3' ? 'translate-x-[26px]' : 'translate-x-[2px]'
+                        }`} />
+                    </button>
+                </div>
+
+                {/* Holiday Mode Toggle */}
+                <div className="bg-white dark:bg-nature-900 rounded-2xl px-6 py-5 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 flex justify-between items-center transition-colors">
+                    <div>
+                        <span className="block text-[15px] font-bold text-nature-900 dark:text-white transition-colors">🌴 Holiday Mode</span>
+                        <span className="block text-xs text-nature-500 dark:text-nature-400 mt-0.5">
+                            {holidayMode ? "You're away — offers hidden, no new requests" : 'Going away? Hide your offers and pause requests'}
+                        </span>
+                    </div>
+                    <button
+                        onClick={handleToggleHoliday}
+                        disabled={holidayLoading}
+                        className={`w-14 h-[30px] rounded-full relative cursor-pointer outline-none transition-colors duration-300 ease-in-out border-2 shadow-inner disabled:opacity-50 ${
+                            holidayMode ? 'bg-amber-500 border-amber-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300 dark:border-nature-600'
+                        }`}
+                        aria-label="Toggle Holiday Mode"
+                    >
+                        <span className={`block w-[22px] h-[22px] rounded-full bg-white absolute top-[2px] shadow-sm transform transition-transform duration-300 ease-in-out ${
+                            holidayMode ? 'translate-x-[26px]' : 'translate-x-[2px]'
                         }`} />
                     </button>
                 </div>

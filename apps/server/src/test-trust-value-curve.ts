@@ -72,6 +72,9 @@ function main() {
     seedMember('gifter'); seedMember('friend');
     tx('gifter', 'friend', 5000);
     assert(profile('gifter').earnedCredit === 0, `5000 direct gift → earnedCredit 0 (gifts aren't trades), got ${profile('gifter').earnedCredit}`);
+    // ...and RECEIVING a gift does NOT activate the account: no marketplace trade → no welcome voucher,
+    // floor stays 0. (Closes the faucet: gifting 1 bean to N socks can't mint them -20 floors each.)
+    assert(floorOf('friend') === 0, `received a 5000 gift but no real trade → not activated, floor 0 (no voucher faucet), got ${floorOf('friend')}`);
     // contrast: the SAME 5000 as a completed trade earns real trust
     seedMember('mbuyer'); seedMember('mseller');
     mtx('mbuyer', 'mseller', 5000);

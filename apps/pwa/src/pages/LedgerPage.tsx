@@ -13,6 +13,7 @@ import {
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
+import { CreditBar } from '../components/CreditBar';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -183,55 +184,6 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     const canInvite = balanceInfo?.tier?.canInvite ?? true;
     const hoursEquivalent = Math.abs(balance) / 40;
 
-    // Piecewise Credit Bar setup
-    const ANCHORS: [number, number][] = [
-        [-1400, 0.04],
-        [-600,  0.13],
-        [-200,  0.24],
-        [-80,   0.35],
-        [0,     0.46],
-        [200,   0.57],
-        [500,   0.68],
-        [1000,  0.79],
-        [2000,  0.91],
-    ];
-
-    const toPos = (v: number): number => {
-        if (v <= ANCHORS[0][0]) return ANCHORS[0][1];
-        if (v >= ANCHORS[ANCHORS.length - 1][0]) return ANCHORS[ANCHORS.length - 1][1];
-        for (let i = 0; i < ANCHORS.length - 1; i++) {
-            const [v0, p0] = ANCHORS[i];
-            const [v1, p1] = ANCHORS[i + 1];
-            if (v >= v0 && v <= v1) {
-                const t = (v - v0) / (v1 - v0);
-                return p0 + t * (p1 - p0);
-            }
-        }
-        return 0.5;
-    };
-
-    const balancePct = toPos(balance);
-
-    const tierMarkers = [...TIERS].reverse().map(t => ({
-        ...t,
-        pos: ANCHORS.find(a => a[0] === t.floor)?.[1] ?? toPos(t.floor),
-    }));
-
-    const circMarkers = [
-        { v: 200,  pos: 0.57  },
-        { v: 500,  pos: 0.68  },
-        { v: 1000, pos: 0.79  },
-        { v: 2000, pos: 0.91  },
-    ];
-
-    const zoneRates = [
-        { rate: '0%',   pos: (0.46 + 0.57) / 2, color: '#10b981' },
-        { rate: '1%',   pos: (0.57 + 0.68) / 2 },
-        { rate: '1.5%', pos: (0.68 + 0.79) / 2 },
-        { rate: '2%',   pos: (0.79 + 0.91) / 2 },
-        { rate: '2.5%', pos: (0.91 + 1.00) / 2 },
-    ];
-
     const selectedMember = members.find(m => m.publicKey === sendTo);
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
 
@@ -260,75 +212,9 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                 </div>
             </div>
 
-            {/* Credit Spectrum Bar */}
-            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 mb-4 shadow-sm relative overflow-hidden">
-                <div className="h-[96px] relative select-none w-full">
-                    {/* Background Bar Segments */}
-                    {/* Red left: <= -600 */}
-                    <div className="absolute h-3 top-6 left-[2%] w-[11%] bg-red-500 rounded-l-md" />
-                    {/* Orange left: -600 to -200 */}
-                    <div className="absolute h-3 top-6 left-[13%] w-[11%] bg-orange-500" />
-                    {/* Yellow left: -200 to -80 */}
-                    <div className="absolute h-3 top-6 left-[24%] w-[11%] bg-yellow-500" />
-                    {/* Green overdraft: -80 to 0 */}
-                    <div className="absolute h-3 top-6 left-[35%] w-[11%] bg-emerald-500" />
-                    {/* Green tax-free: 0 to 200 */}
-                    <div className="absolute h-3 top-6 left-[46%] w-[11%] bg-emerald-500" />
-                    {/* Lime: 200 to 500 */}
-                    <div className="absolute h-3 top-6 left-[57%] w-[11%] bg-lime-500" />
-                    {/* Yellow right: 500 to 1000 */}
-                    <div className="absolute h-3 top-6 left-[68%] w-[11%] bg-yellow-500" />
-                    {/* Orange right: 1000 to 2000 */}
-                    <div className="absolute h-3 top-6 left-[79%] w-[12%] bg-orange-500" />
-                    {/* Red right: 2000+ */}
-                    <div className="absolute h-3 top-6 left-[91%] w-[7%] bg-red-500 rounded-r-md" />
-
-                    {/* Zero Line */}
-                    <div className="absolute w-[2px] h-[16px] top-9 left-[46%] bg-nature-900 dark:bg-white" />
-                    <span className="absolute top-[56px] left-[46%] -translate-x-1/2 text-[9px] font-bold text-nature-800 dark:text-white">0</span>
-
-                    {/* Tier Floor Ticks */}
-                    {tierMarkers.map(t => {
-                        const isCurrent = t.name === tier.name;
-                        return (
-                            <div key={t.name} className="absolute flex flex-col items-center top-9" style={{ left: `${t.pos * 100}%`, transform: 'translateX(-50%)' }}>
-                                <div className="w-[1px] h-[6px] bg-nature-400 dark:bg-nature-600" />
-                                <span className={`text-[8px] font-bold ${isCurrent ? 'text-indigo-600 dark:text-indigo-400 font-black' : 'text-nature-400 dark:text-nature-500'}`}>{t.floor}</span>
-                                <div className={`mt-0.5 px-1 rounded flex items-center justify-center ${isCurrent ? 'border-2 border-indigo-500 bg-white dark:bg-nature-950 scale-110 shadow-sm' : ''}`}>
-                                    <span className="text-[10px]">{t.emoji}</span>
-                                </div>
-                                {isCurrent && <span className="text-[6px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">YOU</span>}
-                            </div>
-                        );
-                    })}
-
-                    {/* Circ Markers */}
-                    {circMarkers.map(c => (
-                        <div key={c.v} className="absolute flex flex-col items-center top-9" style={{ left: `${c.pos * 100}%`, transform: 'translateX(-50%)' }}>
-                            <div className="w-[1px] h-[6px] bg-nature-400 dark:bg-nature-600" />
-                            <span className="text-[8px] font-bold text-nature-400 dark:text-nature-500">{c.v}</span>
-                        </div>
-                    ))}
-
-                    {/* Tax Rates */}
-                    {zoneRates.map(z => (
-                        <span key={z.rate} className="absolute top-[56px] text-[8px] font-black text-nature-500 dark:text-nature-450" style={{ left: `${z.pos * 100}%`, transform: 'translateX(-50%)', color: z.color }}>
-                            {z.rate}
-                        </span>
-                    ))}
-
-                    {/* Balance Bead */}
-                    <div className="absolute flex flex-col items-center w-16 top-0" style={{ left: `${balancePct * 100}%`, transform: 'translateX(-50%)' }}>
-                        <span className={`text-[10px] font-extrabold mb-1 ${balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
-                            {balance >= 0 ? '+' : ''}{balance.toFixed(1)}
-                        </span>
-                        <div className="w-4 h-4 rounded-full border-2 border-white dark:border-nature-900 shadow-md" style={{ backgroundColor: tier.color }} />
-                    </div>
-                </div>
-
-                <div className="text-center mt-3 text-[11px] text-nature-500 dark:text-nature-400 italic">
-                    ⚖️ Zero is the sweet spot — you've given as much as you've received.
-                </div>
+            {/* Credit position — zero is the sweet spot */}
+            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
+                <CreditBar balance={balance} floor={floor} />
             </div>
 
             {/* Tab Bar */}

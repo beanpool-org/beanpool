@@ -34,7 +34,13 @@ floor(m)                = − min( 2000, welcomeVoucher + earnedCredit + granted
 
 governanceCredits(m)    = qualifiedTradeValue(m)                                 (quadratic voting: N votes cost N²)
 canSendCredits(m)       = earnedCredit > 0                                       (i.e. ≥1 completed trade of real value)
+sendableBeans(m)        = max(0, balance)                                        (positive balance ONLY — a gift never uses the credit line)
 ```
+
+> **Sends never go into debt.** A direct "send credits" gift spends only beans you actually hold
+> (`floor 0` for direct transfers). The overdraft/credit line is for *trading* — settled through
+> escrow, backed by a promise to reciprocate — not for gifting yourself negative. Marketplace spends
+> still draw on the full credit line down to your floor.
 
 Constants (`packages/beanpool-core/src/protocol.ts`): `CREDIT_BASE_FLOOR = 0`,
 `NEWCOMER_VOUCHER = 20`, `CREDIT_FLOOR_CAP = 2000`, `CREDIT_MAX_EARNED = 1920` (curve asymptote),

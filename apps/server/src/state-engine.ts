@@ -1562,11 +1562,16 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // (Ghost velocity gate removed — the sliding value-based floor already bounds how much a new
     // account can move, so a daily rate-limit keyed off the now-cosmetic "Newcomer" tier is moot.)
 
-    // Calculate dynamic floor for the sender (escrow wallets are exempt).
-    // Use getMemberTrustProfile so the SAME floor definition applies to direct
-    // transfers as to marketplace spends — including the first-trade gate and the
-    // genesis-vouched exemption.
-    const senderFloor = (from.startsWith('escrow_') || from === 'COMMONS_POOL' || from === 'genesis') ? -Infinity : getMemberTrustProfile(from).floor;
+    // Sender's spending limit:
+    //  • System wallets (escrow_*, COMMONS_POOL, genesis) — unbounded.
+    //  • Marketplace / escrow spends — the full earned credit LINE (your floor, may be negative):
+    //    the overdraft exists so you can trade for real goods/services, backed by a promise to reciprocate.
+    //  • Direct "send credits" gifts — POSITIVE BALANCE ONLY (floor 0). You can only gift beans you
+    //    actually hold; you can never go into debt to give beans away.
+    const isSystemFrom = from.startsWith('escrow_') || from === 'COMMONS_POOL' || from === 'genesis';
+    const senderFloor = isSystemFrom ? -Infinity
+        : isEscrow ? getMemberTrustProfile(from).floor
+        : 0;
     const success = ledger.transfer(from, to, amount, senderFloor, isFeeExempt);
     if (!success) return null;
 

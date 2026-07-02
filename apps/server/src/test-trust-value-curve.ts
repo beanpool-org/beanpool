@@ -117,6 +117,14 @@ function main() {
     // ── 10. Velocity gate is gone from the balance shape ──
     assert(!('velocityGate' in getBalance('didTrade')), 'getBalance no longer exposes a velocityGate');
 
+    // ── 11. Profile exposes value/ratings detail for the client Trust tab ──
+    assert(profile('mbuyer').qualifiedValue === 5000, `profile exposes qualifiedValue (5000), got ${profile('mbuyer').qualifiedValue}`);
+    assert(profile('whale').qualifiedValue === 5000, `qualifiedValue is diversity-capped (10k with one partner → 5k), got ${profile('whale').qualifiedValue}`);
+    assert(profile('fresh').qualifiedValue === 0, `no trades → qualifiedValue 0, got ${profile('fresh').qualifiedValue}`);
+    assert(typeof profile('mbuyer').avgRating === 'number' && typeof profile('mbuyer').reviewCount === 'number',
+        'profile exposes numeric avgRating & reviewCount');
+    assert(profile('mbuyer').reviewCount === 0, `no ratings left yet → reviewCount 0, got ${profile('mbuyer').reviewCount}`);
+
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);
 }

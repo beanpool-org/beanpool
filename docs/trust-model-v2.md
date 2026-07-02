@@ -263,20 +263,20 @@ badge**. Genesis invites already tier the seed: `standard/trusted/ambassador/eld
 - [ ] **Onboarding question** — 2-step "What's one thing you can offer? / Anything you're looking
       for?" with coaching for the "I've got nothing" case; seeds marketplace + sets give-and-take
       tone.
-- [ ] **Trust Level card overhaul** — cleanly separate the two number-lines that today share icons:
-      the **balance/credit-spectrum** (the slider) vs the **trust progression** (the ladder). Fix the
-      hidden-Newcomer bug (`ledger.tsx:549`, `TIERS.filter(t => t.min > 0)`).
-    - **Badges = milestones, not mechanics.** Post-rebase, tiers do not set your credit line (that's
-      continuous now). Present them as earned **recognition + milestone markers** on the scale:
-      current badge → simple progress to the next → **what the next badge actually unlocks** (be
-      honest: velocity loosens, then governance — the rest is recognition) → **how you earn it**
-      (cycle more qualified value). Show **all** badges incl. Newcomer.
-- [ ] **Slider** — remove the tier icons from the − side; add a **single floor chevron** at the
-      member's own floor. Negative coloured bands **stay informational** (proximity to floor /
-      carrying pressure) — **no debt tax**.
-- [ ] *(Standalone quick win: the plain icon-removal + chevron can ship independently, ahead of the
-      full overhaul, if a visible change is wanted while core work is in flight.)*
-- [ ] **PWA parity** — mirror all UI in `LedgerPage.tsx`, `WelcomePage.tsx`.
+- [x] **Trust Level card overhaul** (shipped 2026-07, PR #5) — the whole Trust tab was rebuilt on the
+      value model in BOTH clients. Achievements now show **value traded / diverse partners / rating**
+      (was `trades×8 / partners×40 / days×2`); "reach next tier" inverts the saturating curve to show
+      **beans-of-value to trade** (+ rough new-partner count); the ladder shows **continuous milestone
+      floors** (no fake per-tier daily limits / tier-gated perks); the formula footer describes the
+      curve. Perks pills + Send button re-keyed to the **real** gate (`earned > 0`); invites shown
+      open to all. `TrustInfoModal` "Tiers & Perks" rewritten: recognition + deeper floor, governance
+      is trade-weighted & open to everyone (never Elder-gated). Backend now exposes `qualifiedValue /
+      grantedCredit / avgRating / reviewCount` on `/api/ledger/balance` to drive it.
+    - **Badges = milestones, not mechanics.** ✅ presented as recognition + milestone markers; honest
+      about what actually unlocks (send after 1st trade; the rest is recognition + a deeper floor).
+- [x] **Slider** — tier icons removed from the − side; single floor chevron at the member's own floor
+      (shipped in PR #2). Negative bands stay informational — no debt tax.
+- [x] **PWA parity** — `LedgerPage.tsx` Trust tab mirrored in PR #5. *(WelcomePage onboarding still open.)*
 - [ ] Honour **small-screen** (320dp + 1.3× font) and **no-hard-gates** plain-language states
       throughout.
 

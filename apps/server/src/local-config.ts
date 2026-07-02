@@ -69,11 +69,6 @@ export interface Thresholds {
     sybilFunnelMinInvitees: number;  // Min invitees funneling back to flag (default: 2)
     sybilFunnelMinAmount: number;    // Min total beans funneled to flag (default: 100)
     sybilFunnelWindowDays: number;   // Rolling window in days (default: 30)
-    // Ghost velocity gate
-    ghostVelocityTier1Hours: number;   // First tier cutoff in hours (default: 24)
-    ghostVelocityTier1Limit: number;   // Max daily spend in tier 1 (default: 20)
-    ghostVelocityTier2Hours: number;   // Second tier cutoff in hours (default: 72)
-    ghostVelocityTier2Limit: number;   // Max daily spend in tier 2 (default: 40)
 }
 
 const DEFAULT_CONFIG: LocalConfig = {
@@ -320,10 +315,6 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
     sybilFunnelMinInvitees: 2,
     sybilFunnelMinAmount: 100,
     sybilFunnelWindowDays: 30,
-    ghostVelocityTier1Hours: 24,
-    ghostVelocityTier1Limit: 20,
-    ghostVelocityTier2Hours: 72,
-    ghostVelocityTier2Limit: 40,
 };
 
 export function getThresholds(): Thresholds {

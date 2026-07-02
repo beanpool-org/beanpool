@@ -852,6 +852,10 @@ export async function getBalance(pubkey: string) {
 
     let floor = -100;
     let earnedCredit = 0;
+    let grantedCredit = 0;
+    let qualifiedValue = 0;
+    let avgRating = 0;
+    let reviewCount = 0;
     let isBlockedFromTrading = false;
     let elderVouchedBy: string | null = null;
 
@@ -895,8 +899,11 @@ export async function getBalance(pubkey: string) {
                         tier: balData.tier || tier,
                         floor: balData.floor ?? floor,
                         earnedCredit: balData.earnedCredit ?? 0,
+                        grantedCredit: balData.grantedCredit ?? 0,
+                        qualifiedValue: balData.qualifiedValue ?? 0,
+                        avgRating: balData.avgRating ?? 0,
+                        reviewCount: balData.reviewCount ?? 0,
                         trustStats: balData.trustStats ?? null,
-                        velocityGate: balData.velocityGate ?? null,
                         isBlockedFromTrading: !!balData.isBlockedFromTrading,
                         elderVouchedBy: balData.elderVouchedBy ?? null,
                     });
@@ -914,7 +921,6 @@ export async function getBalance(pubkey: string) {
 
     // Try to load cached tier data
     let trustStats: any = null;
-    let velocityGate: any = null;
     try {
         const cached = await AsyncStorage.getItem(`bp_tier_${pubkey}`);
         if (cached) {
@@ -922,8 +928,11 @@ export async function getBalance(pubkey: string) {
             tier = parsed.tier || tier;
             floor = parsed.floor ?? floor;
             earnedCredit = parsed.earnedCredit ?? 0;
+            grantedCredit = parsed.grantedCredit ?? 0;
+            qualifiedValue = parsed.qualifiedValue ?? 0;
+            avgRating = parsed.avgRating ?? 0;
+            reviewCount = parsed.reviewCount ?? 0;
             trustStats = parsed.trustStats ?? null;
-            velocityGate = parsed.velocityGate ?? null;
             isBlockedFromTrading = !!parsed.isBlockedFromTrading;
             elderVouchedBy = parsed.elderVouchedBy ?? null;
         }
@@ -934,8 +943,11 @@ export async function getBalance(pubkey: string) {
         floor,
         tier,
         earnedCredit,
+        grantedCredit,
+        qualifiedValue,
+        avgRating,
+        reviewCount,
         trustStats,
-        velocityGate,
         commons: commons?.balance || 0,
         isBlockedFromTrading,
         elderVouchedBy,

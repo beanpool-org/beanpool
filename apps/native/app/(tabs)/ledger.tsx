@@ -58,7 +58,7 @@ export default function LedgerScreen() {
     const TIERS = useMemo(() => [
         { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: -20,
           blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — a small welcome voucher gets you moving.",
-          perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+          perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits when your balance is positive'] },
         { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 180,  floor: -200,
           blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
           perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
@@ -368,8 +368,8 @@ export default function LedgerScreen() {
     const openSend = async () => {
         if (!canSend) {
             Alert.alert(
-                'Sending unlocks after your 1st trade',
-                'Direct sends are for helping out — they open up the moment you complete your first Marketplace trade.\n\nBrowse the Marketplace to make that first trade!',
+                'No balance to send',
+                'You can send credits whenever your balance is positive — earn some by completing a trade on the Marketplace.',
                 [{ text: 'OK' }]
             );
             return;
@@ -393,7 +393,7 @@ export default function LedgerScreen() {
     const qualifiedValue = balanceState.qualifiedValue || 0;
     const avgRating = balanceState.avgRating || 0;
     const reviewCount = balanceState.reviewCount || 0;
-    const canSend = earned > 0;                        // real send gate: any completed trade (PR#4)
+    const canSend = balanceState.balance > 0;           // gate: positive balance only (tiers are merit badges, not gates)
     const ts = balanceState.trustStats;
     const uniquePartners = ts?.uniquePartners || 0;
 
@@ -466,7 +466,7 @@ export default function LedgerScreen() {
                     }
                 </View>
 
-                {/* Capabilities — Send opens after your 1st trade; Invite is open to everyone */}
+                {/* Quick actions */}
                 <View style={styles.perksRow}>
                     <Pressable
                         accessibilityRole="button"
@@ -474,7 +474,7 @@ export default function LedgerScreen() {
                         onPress={openSend}
                     >
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : 'Send (after 1st trade)'}</Text>
+                        <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : 'Send (needs +ve balance)'}</Text>
                     </Pressable>
                     <View style={[styles.perkPill, { borderColor: palette.green200, backgroundColor: palette.green50 }]}>
                         <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
@@ -552,7 +552,7 @@ export default function LedgerScreen() {
                 {!selReached && selNeeded > 0 && (
                     <Text style={styles.detailNote}>Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</Text>
                 )}
-                <Text style={styles.detailNote}>Your floor deepens continuously as you trade — it's not capped at the tier entry value. Higher standing just unlocks a deeper possible range.</Text>
+                <Text style={styles.detailNote}>Levels are merit badges — they don't gate any action. Anyone can invite. Anyone with a positive balance can send. Higher levels mean a deeper credit line and community recognition.</Text>
             </View>
 
             {/* How to reach the next tier — leads with the highest-leverage lever */}
@@ -709,7 +709,7 @@ export default function LedgerScreen() {
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                         <Text style={[styles.sendBtnText, !canSend && { color: colors.text.secondary }]}>
-                            {!canSend ? '🔒 Send Credits (after 1st trade)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                            {!canSend ? '🔒 Send Credits (needs positive balance)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
                         </Text>
                         {!canSend && (
                             <MaterialCommunityIcons name="information-outline" size={16} color={colors.text.muted} />

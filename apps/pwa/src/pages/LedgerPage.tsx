@@ -25,7 +25,7 @@ interface Props {
 const TIERS = [
     { name: 'Newcomer', emoji: '🌱', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', min: 0,    floor: -20,
       blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — a small welcome voucher gets you moving.",
-      perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite new members', 'Send credits after your 1st trade'] },
+      perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits when your balance is positive'] },
     { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 180,  floor: -200,
       blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
       perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
@@ -154,7 +154,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     const qualifiedValue = balanceInfo?.qualifiedValue ?? 0;
     const avgRating = balanceInfo?.avgRating ?? 0;
     const reviewCount = balanceInfo?.reviewCount ?? 0;
-    const canSend = earned > 0;                        // real send gate: any completed trade (PR#4)
+    const canSend = balance > 0;                        // gate: positive balance (tiers are merit badges, not gates)
     const ts = balanceInfo?.trustStats;
     const uniquePartners = ts?.uniquePartners ?? 0;
 
@@ -280,7 +280,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                                 style={{ background: 'none', font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
-                                <span>{canSend ? 'Send Credits' : 'Send (after 1st trade)'}</span>
+                                <span>{canSend ? 'Send Credits' : 'Send (needs +ve balance)'}</span>
                             </button>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600">
                                 <span>✓</span>
@@ -362,7 +362,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         {!selReached && selNeeded > 0 && (
                             <p className="text-[11px] text-nature-400 italic mt-4">Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</p>
                         )}
-                        <p className="text-[11px] text-nature-400 italic mt-2">Your floor deepens continuously as you trade — it's not capped at the tier entry value. Higher standing just unlocks a deeper possible range.</p>
+                        <p className="text-[11px] text-nature-400 italic mt-2">Levels are merit badges — they don't gate any action. Anyone can invite. Anyone with a positive balance can send. Higher levels mean a deeper credit line and community recognition.</p>
                     </div>
 
                     {/* How to reach next tier */}
@@ -455,7 +455,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         {!canSend && (
                             <div className="bg-nature-50 dark:bg-nature-850/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
-                                    🔒 Sending credits unlocks after your <strong>first completed trade</strong>. Trade on the Marketplace to get started.
+                                    🔒 You can send credits whenever your balance is positive — earn some by completing a trade on the Marketplace.
                                 </p>
                             </div>
                         )}
@@ -467,7 +467,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                                 showSend ? 'bg-nature-800 text-white hover:bg-nature-900' : 'bg-[#d97757] text-white hover:bg-[#c26749]'
                             }`}
                         >
-                            {!canSend ? '🔒 Send Credits (after 1st trade)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                            {!canSend ? '🔒 Send Credits (needs positive balance)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
                         </button>
 
                         {/* Send Form */}

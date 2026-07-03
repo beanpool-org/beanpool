@@ -51,7 +51,7 @@ import {
     getCommunityInfo, addWsClient, removeWsClient,
     generateInvite, redeemInvite, redeemOfflineTicket, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
-    vouchMember, unvouchMember, hasListedOffer, hasLiveOffer,
+    vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer,
     updateProfile, getProfile, getAllProfiles,
     createConversation, sendMessage, editMessage, getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
@@ -922,7 +922,9 @@ export async function startHttpsServer(port: number): Promise<void> {
     router.post('/api/local/admin/data', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         ctx.body = {
-            members: getAllMembers(),
+            // Enrich each member with canVouch — the admin panel's voucher toggle reflects it.
+            // (rowToMember drops the can_vouch column, so surface it explicitly here.)
+            members: getAllMembers().map(m => ({ ...m, canVouch: canVouch(m.publicKey) })),
             profiles: getAllProfiles(),
             posts: getPosts().filter(p => p.status !== 'cancelled'),
             health: getCommunityHealth(),

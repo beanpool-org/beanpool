@@ -467,6 +467,50 @@
         .stats-card .stat-row .value { color: #f8fafc; font-weight: 600; font-variant-numeric: tabular-nums; }
         .stats-card .stat-row.full-width { grid-column: 1 / -1; }
 
+        /* Members & Audit Tree — row layout + search polish. Each row is a triangle + a body
+           column (identity line → active line → a single left-aligned action toolbar). The old
+           name-left / actions-right + space-between layout fragmented the toolbar across ragged
+           right-aligned lines when it wrapped; this keeps it predictable at any width. */
+        #admin-members-tree details { margin-bottom: 0.35rem; }
+        #admin-members-tree summary { list-style: none; padding: 0.55rem 0.7rem; }
+        #admin-members-tree summary::-webkit-details-marker { display: none; }
+        #admin-members-tree .member-node { display: flex; align-items: flex-start; gap: 0.5rem; }
+        #admin-members-tree .member-tri { color: #64748b; font-size: 0.7rem; margin-top: 0.3rem; flex: 0 0 auto; transition: transform 0.15s; }
+        #admin-members-tree details[open] > summary .member-tri { transform: rotate(90deg); }
+        #admin-members-tree .member-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+        #admin-members-tree .member-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem; }
+        #admin-members-tree .member-head strong { font-size: 0.9rem; }
+        #admin-members-tree .member-id { font-size: 0.62rem; font-family: monospace; color: #475569; }
+        #admin-members-tree .member-active { font-size: 0.7rem; color: #94a3b8; }
+        #admin-members-tree .member-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+        /* Single-line buttons at natural width — flex-shrink was squeezing "Grant vouch" /
+           "Prune User" into ragged two-line buttons. min-height keeps every control the same height. */
+        #admin-members-tree .member-actions .btn,
+        #admin-members-tree .member-actions .tier-select { white-space: nowrap; flex-shrink: 0; min-height: 1.95rem; }
+        #admin-members-tree .member-actions .btn { padding: 0.32rem 0.6rem; font-size: 0.7rem; line-height: 1.1; }
+        #admin-members-tree .member-actions .tier-select {
+            width: auto; min-width: 128px; padding: 0 0.55rem; font-size: 0.72rem;
+            background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 6px; cursor: pointer;
+        }
+        /* Highlight the node(s) matching the current search */
+        #admin-members-tree details.search-hit > summary {
+            background: #243b53 !important;
+            box-shadow: inset 3px 0 0 #60a5fa;
+        }
+        #member-search-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; }
+        #member-search {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 0.45rem 2rem;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #f8fafc;
+            font-size: 0.8rem;
+            font-family: inherit;
+        }
+        #member-search:focus { outline: none; border-color: #60a5fa; }
+
         /* Collapsible threshold groups */
         details.threshold-group { margin-bottom: 0.75rem; }
         details.threshold-group summary {
@@ -1125,10 +1169,22 @@
             <!-- Admin Members & Audit -->
             <div class="glass" data-tab="members" style="display:none;">
                 <h3>🌳 Members & Audit Tree</h3>
-                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem;">Manage members and prune suspicious branches. Members with pending reports show a 🚩 badge. Use <strong style="color:#fbbf24;">⛰️ Make Elder</strong> to promote a trusted member so they can help verify (vouch for) others — this only widens their credit limit; their balance is never touched.</p>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem;">Manage members and prune suspicious branches. Members with pending reports show a 🚩 badge. Use the <strong style="color:#fbbf24;">Tier</strong> picker to set a member's credit-floor badge (🥚 Newcomer → ⛰️ Elder) — this only widens/narrows their credit limit; their balance is never touched. Use <strong style="color:#34d399;">🤝 Grant vouch</strong> to appoint a trusted member as a voucher so they can verify (vouch for) newcomers, handing them the welcome floor. Tier and vouch are separate: a badge sets the floor; the vouch capability is the explicit power to bring newcomers in.</p>
+                <div id="member-search-row">
+                    <div style="position:relative; flex:1;">
+                        <span style="position:absolute; left:0.6rem; top:50%; transform:translateY(-50%); color:#64748b; font-size:0.8rem; pointer-events:none;">🔍</span>
+                        <input id="member-search" type="text" autocomplete="off" spellcheck="false"
+                            placeholder="Search members by name or ID…" oninput="setMemberSearch(this.value)">
+                        <button id="member-search-clear" onclick="setMemberSearch('')" title="Clear search"
+                            style="position:absolute; right:0.4rem; top:50%; transform:translateY(-50%); display:none; background:none; border:none; color:#64748b; cursor:pointer; font-size:0.9rem; padding:0 0.3rem;">✕</button>
+                    </div>
+                    <span id="member-result-count" style="font-size:0.72rem; color:#64748b; white-space:nowrap;"></span>
+                </div>
                 <div id="audit-filter-bar" style="font-size: 0.75rem; display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; padding: 0.4rem 0;">
                     <button class="audit-filter-btn active" data-filter="all" onclick="setAuditFilter('all')"
                         style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:#334155;color:#f8fafc;cursor:pointer;font-size:0.72rem;font-weight:600;">All</button>
+                    <button class="audit-filter-btn" data-filter="voucher" onclick="setAuditFilter('voucher')"
+                        style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#34d399;cursor:pointer;font-size:0.72rem;font-weight:600;">🤝 Vouchers <span class="filter-count" data-count="voucher"></span></button>
                     <button class="audit-filter-btn" data-filter="invite_spam" onclick="setAuditFilter('invite_spam')"
                         style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#ef4444;cursor:pointer;font-size:0.72rem;font-weight:600;">⚠️ Sybil <span class="filter-count" data-count="invite_spam"></span></button>
                     <button class="audit-filter-btn" data-filter="sybil_funnel" onclick="setAuditFilter('sybil_funnel')"
@@ -1142,7 +1198,7 @@
                     <button class="audit-filter-btn" data-filter="reported" onclick="setAuditFilter('reported')"
                         style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#ef4444;cursor:pointer;font-size:0.72rem;font-weight:600;">🚩 Reported <span class="filter-count" data-count="reported"></span></button>
                 </div>
-                <div id="admin-members-tree" style="margin-bottom:0.75rem; max-height:400px; overflow-y:auto; border:1px solid #1e293b; border-radius:8px; padding:0.5rem;"></div>
+                <div id="admin-members-tree" style="margin-bottom:0.75rem; max-height:540px; overflow-y:auto; border:1px solid #1e293b; border-radius:8px; padding:0.5rem;"></div>
                 <button class="btn btn-outline btn-full" onclick="loadAdminData()">🔄 Refresh Data</button>
             </div>
 

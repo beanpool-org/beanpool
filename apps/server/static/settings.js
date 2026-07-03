@@ -1184,6 +1184,34 @@
             }
         }
 
+        // Tier-badge picker handler. Uses its own confirm (not adminAction's generic one) so that a
+        // cancel or failure can re-render the member list, snapping the <select> back to the stored
+        // tier instead of leaving it showing an unapplied choice.
+        async function setMemberTier(pubkey, tier) {
+            const labels = { Newcomer: '🥚 Newcomer', Resident: '🏠 Resident', Steward: '🏛️ Steward', Elder: '⛰️ Elder' };
+            if (!confirm(`Set tier badge to ${labels[tier] || tier}?\n\nThis adjusts the member's credit floor only — their balance is never touched.`)) {
+                renderAdminMembers();
+                return;
+            }
+            try {
+                const res = await fetch('/api/local/admin/users/' + pubkey + '/tier', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tier, password: authToken })
+                });
+                if (res.ok) {
+                    loadAdminData();
+                } else {
+                    const err = await res.json();
+                    alert('Action failed: ' + (err.error || 'unknown error'));
+                    renderAdminMembers();
+                }
+            } catch (err) {
+                alert('Network error.');
+                renderAdminMembers();
+            }
+        }
+
         // ======================== MODERATION: REPORT FILTER STATE ========================
         let reportFilterState = 'all';
         let postSearchDebounce = null;
@@ -1470,6 +1498,18 @@
             renderAdminMembers();
         };
 
+        // Free-text member search (callsign or public key). Works alongside the flag filters:
+        // a node must satisfy both the active filter and the search term to count as a match.
+        let memberSearch = '';
+        window.setMemberSearch = function(val) {
+            memberSearch = val || '';
+            const input = document.getElementById('member-search');
+            if (input && input.value !== memberSearch) input.value = memberSearch;
+            const clearBtn = document.getElementById('member-search-clear');
+            if (clearBtn) clearBtn.style.display = memberSearch ? 'block' : 'none';
+            renderAdminMembers();
+        };
+
         function renderAdminMembers() {
             const el = document.getElementById('admin-members-tree');
             if (!el || !adminDataCache) return;
@@ -1552,9 +1592,19 @@
                 const memberReportCount = reportsByMember[pubkey] || 0;
                 
                 const isSystemAccount = pubkey === 'SYSTEM' || member.callsign === 'Admin' || member.callsign === 'System';
-                // Elder grant = pre-seeded earned_credit at the Elder threshold (1320 =
-                // GENESIS_ELDER_EARNED in protocol.ts). Same lever as a genesis Elder invite.
-                const isElderGranted = (member.earnedCredit || 0) >= 1320;
+                // Tier badge lives in the granted-credit lane (earned_credit column) at fixed grant
+                // values (Resident 200, Steward 600, Elder 1400; Newcomer clears it — protocol.ts).
+                // Derive the current badge here so the tier picker and the Elder pill agree on one
+                // source of truth. adminSetTier is the single lever behind both.
+                const earnedGrant = member.earnedCredit || 0;
+                const badgeTier = earnedGrant >= 1320 ? 'Elder'
+                    : earnedGrant >= 600 ? 'Steward'
+                    : earnedGrant >= 200 ? 'Resident'
+                    : 'Newcomer';
+                const isElderGranted = badgeTier === 'Elder';
+                // Appointed-voucher capability (members.can_vouch) — surfaced by the admin /data
+                // endpoint. Distinct from tier: it's the explicit power to hand out the welcome floor.
+                const canV = !!member.canVouch;
 
                 const bFlags = getBranchFlags(pubkey);
                 const hasFlags = bFlags.length > 0;
@@ -1570,7 +1620,11 @@
                 }
                 let elderPill = '';
                 if (isElderGranted) {
-                    elderPill = `<span style="background:#f59e0b;color:#fff;font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:12px;margin-left:0.3rem;font-weight:700;" title="Elder — can verify (vouch for) members">⛰️ Elder</span>`;
+                    elderPill = `<span style="background:#f59e0b;color:#fff;font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:12px;margin-left:0.3rem;font-weight:700;" title="Elder tier badge — floor −1400">⛰️ Elder</span>`;
+                }
+                let voucherPill = '';
+                if (canV) {
+                    voucherPill = `<span style="background:#10b981;color:#fff;font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:12px;margin-left:0.3rem;font-weight:700;" title="Appointed voucher — can verify (vouch for) newcomers, handing them the welcome floor">🤝 Voucher</span>`;
                 }
 
                 // Personal stat chips (compact inline indicators)
@@ -1589,7 +1643,7 @@
                 let statsBtn = '';
                 let statsCard = '';
                 if (hasBranch || s.deals > 0 || s.posts > 0) {
-                    statsBtn = `<button class="btn btn-sm btn-outline" onclick="event.preventDefault();event.stopPropagation();const c=document.getElementById('${statsCardId}');c.style.display=c.style.display==='none'?'grid':'none';" title="Toggle stats" style="padding:2px 6px;font-size:0.65rem;">📊</button>`;
+                    statsBtn = `<button class="btn btn-sm btn-outline" onclick="event.preventDefault();event.stopPropagation();const c=document.getElementById('${statsCardId}');c.style.display=c.style.display==='none'?'grid':'none';" title="Toggle stats">📊</button>`;
                     statsCard = `<div id="${statsCardId}" class="stats-card" style="display:none;">
                         <div class="stat-row"><span class="label">📦 Posts</span><span class="value">${s.posts}</span></div>
                         <div class="stat-row"><span class="label">💬 Messages</span><span class="value">${s.messages}</span></div>
@@ -1606,40 +1660,60 @@
 
                 const childrenHtml = children.map(c => buildNode(c.publicKey, depth + 1)).join('');
 
-                // Filter: when a filter is active, check if this node or descendants match
+                // Filter + search: a node "matches" only if it satisfies BOTH the active flag filter
+                // and the free-text search term. Non-matching ancestors are kept (dimmed) so a deep
+                // match still shows its place in the tree.
                 const directFlags = nodeFlags[member.callsign] || nodeFlags[pubkey] || [];
-                const matchesFilter = auditFilter === 'all' ? true
+                const matchesType = auditFilter === 'all' ? true
                     : auditFilter === 'reported' ? memberReportCount > 0
+                    : auditFilter === 'voucher' ? canV
                     : directFlags.some(f => f.type === auditFilter);
+                const q = memberSearch.trim().toLowerCase();
+                const matchesSearch = !q
+                    || (member.callsign || '').toLowerCase().includes(q)
+                    || pubkey.toLowerCase().includes(q);
+                const matchesFilter = matchesType && matchesSearch;
+                const filterActive = auditFilter !== 'all' || !!q;
 
-                if (auditFilter !== 'all' && !matchesFilter && !childrenHtml.trim()) {
+                if (matchesFilter) matchCount++;
+
+                if (filterActive && !matchesFilter && !childrenHtml.trim()) {
                     return ''; // No match and no matching descendants — hide completely
                 }
 
-                // Dim non-matching ancestor nodes but keep full UI
-                const dimStyle = (auditFilter !== 'all' && !matchesFilter) ? 'opacity:0.4;' : '';
+                const dimStyle = (filterActive && !matchesFilter) ? 'opacity:0.4;' : '';
+                const isSearchHit = !!q && matchesFilter;
 
                 const hasChildren = children.length > 0;
-                
+
                 let html = `
-                    <details ${depth < 3 || hasFlags || memberReportCount > 0 ? 'open' : ''} style="margin-left:${depth === 0 ? 0 : 15}px;">
-                        <summary style="margin-bottom:0.4rem; padding:0.4rem; background:#1e293b; border-left:2px solid ${isPruned ? '#475569' : isActive ? '#10b981' : '#f59e0b'}; border-radius:0 8px 8px 0; cursor:${hasChildren ? 'pointer' : 'default'}; ${dimStyle}">
-                            <div style="display:inline-flex; width: calc(100% - 20px); justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; vertical-align: top;">
-                                <div>
-                                    <strong style="font-size:0.85rem;color:${isPruned ? '#64748b' : isActive ? '#f8fafc' : '#f59e0b'}">${isPruned ? '🗑️ ' : !isActive ? '⏸️ ' : ''}${esc(member.callsign)} <span style="font-size:0.6rem;font-family:monospace;color:#475569;">(${pubkey.substring(0,8)})</span></strong>
-                                    ${flagPill}${reportPill}${elderPill}${chipHtml}
-                                    <div style="font-size:0.7rem;color:#94a3b8;">Active: ${profile?.lastActiveAt ? new Date(profile.lastActiveAt).toLocaleString() : 'Never'}</div>
-                                </div>
-                                <div style="display:flex;gap:0.3rem;align-items:center;">
-                                    ${statsBtn}
-                                    <button class="btn btn-sm btn-outline" onclick="event.preventDefault(); viewMemberPosts('${pubkey}')" title="View posts by this member" style="padding:2px 6px;font-size:0.65rem;">📦 Posts</button>
-                                    ${!isGenesis && !isPruned ? `<button class="btn btn-sm ${isActive?'btn-outline':'btn-primary'}" onclick="event.preventDefault(); adminAction('/users/${pubkey}/status', {status:'${isActive?'disabled':'active'}'})">${isActive?'Pause':'Resume'}</button>` : ''}
-                                    ${!isSystemAccount && !isPruned ? (isElderGranted
-                                        ? `<button class="btn btn-sm btn-outline" style="border-color:#f59e0b;color:#fbbf24;" onclick="event.preventDefault(); adminAction('/users/${pubkey}/elder', {grant:false})" title="Remove Elder standing — sets pre-seeded credit back to 0. Balance is untouched.">⛰️ Revoke Elder</button>`
-                                        : `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border-color:#f59e0b;" onclick="event.preventDefault(); adminAction('/users/${pubkey}/elder', {grant:true})" title="Promote to Elder so they can help verify (vouch for) members. Balance is untouched.">⛰️ Make Elder</button>`) : ''}
-                                    ${!isSystemAccount && !isPruned ? `<button class="btn btn-sm btn-danger" onclick="event.preventDefault(); adminAction('/users/${pubkey}/prune')">Prune User</button>` : ''}
-                                    ${!isSystemAccount && children.length > 0 ? `<button class="btn btn-sm btn-danger" onclick="event.preventDefault(); adminAction('/branches/${pubkey}/prune')">Prune Branch</button>` : ''}
-                                    ${!isPruned ? `<button class="btn btn-sm btn-primary" style="background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.preventDefault(); promptWarning('${pubkey}')">✉️ Message</button>` : ''}
+                    <details class="${isSearchHit ? 'search-hit' : ''}" ${depth < 3 || hasFlags || memberReportCount > 0 || filterActive ? 'open' : ''} style="margin-left:${depth === 0 ? 0 : 15}px;">
+                        <summary style="background:#1e293b; border-left:3px solid ${isPruned ? '#475569' : isActive ? '#10b981' : '#f59e0b'}; border-radius:0 8px 8px 0; cursor:${hasChildren ? 'pointer' : 'default'}; ${dimStyle}">
+                            <div class="member-node">
+                                <span class="member-tri" ${hasChildren ? '' : 'style="visibility:hidden;"'}>▶</span>
+                                <div class="member-body">
+                                    <div class="member-head">
+                                        <strong style="color:${isPruned ? '#64748b' : isActive ? '#f8fafc' : '#f59e0b'}">${isPruned ? '🗑️ ' : !isActive ? '⏸️ ' : ''}${esc(member.callsign)} <span class="member-id">(${pubkey.substring(0,8)})</span></strong>
+                                        ${flagPill}${reportPill}${elderPill}${voucherPill}${chipHtml}
+                                    </div>
+                                    <div class="member-active">Active: ${profile?.lastActiveAt ? new Date(profile.lastActiveAt).toLocaleString() : 'Never'}</div>
+                                    <div class="member-actions">
+                                        ${statsBtn}
+                                        <button class="btn btn-sm btn-outline" onclick="event.preventDefault(); viewMemberPosts('${pubkey}')" title="View posts by this member">📦 Posts</button>
+                                        ${!isGenesis && !isPruned ? `<button class="btn btn-sm ${isActive?'btn-outline':'btn-primary'}" onclick="event.preventDefault(); adminAction('/users/${pubkey}/status', {status:'${isActive?'disabled':'active'}'})">${isActive?'Pause':'Resume'}</button>` : ''}
+                                        ${!isSystemAccount && !isPruned ? `<select class="tier-select" onclick="event.stopPropagation();" onchange="setMemberTier('${pubkey}', this.value)" title="Tier badge — sets this member's credit floor (Resident −200, Steward −600, Elder −1400; Newcomer clears the grant). This widens/narrows their credit limit only — their balance is never touched.">
+                                            <option value="Newcomer" ${badgeTier==='Newcomer'?'selected':''}>🥚 Newcomer</option>
+                                            <option value="Resident" ${badgeTier==='Resident'?'selected':''}>🏠 Resident</option>
+                                            <option value="Steward" ${badgeTier==='Steward'?'selected':''}>🏛️ Steward</option>
+                                            <option value="Elder" ${badgeTier==='Elder'?'selected':''}>⛰️ Elder</option>
+                                        </select>` : ''}
+                                        ${!isSystemAccount && !isPruned ? (canV
+                                            ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border-color:#10b981;" onclick="event.preventDefault(); adminAction('/users/${pubkey}/voucher', {grant:false})" title="Revoke the vouch capability — this member can no longer hand the welcome floor to newcomers. Mints/moves no beans.">🤝 Voucher ✓</button>`
+                                            : `<button class="btn btn-sm btn-outline" style="border-color:#10b981;color:#34d399;" onclick="event.preventDefault(); adminAction('/users/${pubkey}/voucher', {grant:true})" title="Grant the vouch capability so this trusted member can verify (vouch for) newcomers, handing them the welcome floor. Mints/moves no beans.">🤝 Grant vouch</button>`) : ''}
+                                        ${!isSystemAccount && !isPruned ? `<button class="btn btn-sm btn-danger" onclick="event.preventDefault(); adminAction('/users/${pubkey}/prune')">Prune User</button>` : ''}
+                                        ${!isSystemAccount && children.length > 0 ? `<button class="btn btn-sm btn-danger" onclick="event.preventDefault(); adminAction('/branches/${pubkey}/prune')">Prune Branch</button>` : ''}
+                                        ${!isPruned ? `<button class="btn btn-sm btn-primary" style="background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.preventDefault(); promptWarning('${pubkey}')">✉️ Message</button>` : ''}
+                                    </div>
                                 </div>
                             </div>
                         </summary>
@@ -1652,9 +1726,24 @@
                 return html;
             }
 
+            let matchCount = 0; // incremented inside buildNode for every node matching the filter/search
             const roots = tree['genesis'] || [];
-            if (roots.length === 0) el.innerHTML = '<div style="padding:1rem;color:#64748b;">No tree found</div>';
-            else el.innerHTML = roots.map(r => buildNode(r.publicKey, 0)).join('');
+            if (roots.length === 0) {
+                el.innerHTML = '<div style="padding:1rem;color:#64748b;">No tree found</div>';
+            } else {
+                const rendered = roots.map(r => buildNode(r.publicKey, 0)).join('');
+                el.innerHTML = rendered.trim()
+                    ? rendered
+                    : `<div style="padding:1.25rem;color:#64748b;text-align:center;">No members match ${memberSearch.trim() ? '“' + esc(memberSearch.trim()) + '”' : 'this filter'}.</div>`;
+            }
+
+            // Result count next to the search box — reflects the active search/filter.
+            const totalMembers = members.filter(m => m.publicKey !== 'SYSTEM').length;
+            const countEl = document.getElementById('member-result-count');
+            if (countEl) {
+                const filtering = auditFilter !== 'all' || !!memberSearch.trim();
+                countEl.textContent = filtering ? `${matchCount} of ${totalMembers} match` : `${totalMembers} members`;
+            }
 
             // Update filter count badges (count unique members, not flag instances)
             const membersByFlag = {};
@@ -1666,6 +1755,8 @@
                 const type = el.dataset.count;
                 const count = type === 'reported'
                     ? Object.keys(reportsByMember).length
+                    : type === 'voucher'
+                    ? members.filter(m => m.canVouch).length
                     : membersByFlag[type]?.size || 0;
                 el.textContent = count > 0 ? count : '';
             });

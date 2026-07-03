@@ -74,6 +74,7 @@
       "./plugins/withAndroidLargeHeap",
       "expo-router",
       "expo-notifications",
+      "expo-image",
       [
         "expo-image-picker",
         {

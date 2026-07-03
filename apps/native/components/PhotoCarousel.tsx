@@ -6,7 +6,6 @@
 import React, { useState } from 'react';
 import {
     View,
-    Image,
     ScrollView,
     Text,
     StyleSheet,
@@ -14,6 +13,7 @@ import {
     NativeScrollEvent,
     LayoutChangeEvent,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { colors } from '../constants/colors';
 
 interface Props {
@@ -53,7 +53,7 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16 }: Props
             >
                 {width > 0 &&
                     valid.map((uri, i) => (
-                        <Image key={i} source={{ uri }} style={{ width, height }} resizeMode="cover" />
+                        <Image key={i} source={{ uri }} style={{ width, height }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ))}
             </ScrollView>
 

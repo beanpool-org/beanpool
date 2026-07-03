@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import { getMarketplaceTransactions, getPosts } from '../utils/db';
 import { ReviewModal } from './ReviewModal';
@@ -364,7 +365,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                     isPending && { backgroundColor: palette.green50, borderColor: palette.green200 },
                 ]}>
                     {item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? (
-                        <Image source={{ uri: item.coverImage }} style={styles.dealThumb} resizeMode="cover" />
+                        <ExpoImage source={{ uri: item.coverImage }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
                         <View style={[styles.dealThumb, styles.dealThumbFallback]}>
                             <Text style={{ fontSize: 24, opacity: 0.5 }}>{isBuyer ? '🛒' : '🏷️'}</Text>
@@ -462,7 +463,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push(`/post/${item.id}`); }}>
                 <View style={[styles.dealCard, highlightStyle]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <Image source={{ uri: coverImage }} style={styles.dealThumb} resizeMode="cover" />
+                        <ExpoImage source={{ uri: coverImage }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
                         <View style={[styles.dealThumb, styles.dealThumbFallback]}>
                             <Text style={{ fontSize: 24, opacity: 0.5 }}>📦</Text>

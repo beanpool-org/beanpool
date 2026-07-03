@@ -1673,7 +1673,10 @@ function rowToPost(row: any, photosByPost: Map<string, any[]>): MarketplacePost 
         completedAt: row.completed_at,
         lat: row.lat,
         lng: row.lng,
-        photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => `/api/marketplace/posts/${row.id}/photos/${p.order_num}`),
+        // Version the URL with the photo's updated_at so it can be cached immutably: the URL only
+        // changes when the photo actually changes (edit → tombstone/re-insert bumps updated_at),
+        // so clients cache forever yet never show a stale image.
+        photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => `/api/marketplace/posts/${row.id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`),
         originNode: row.origin_node,
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
@@ -1900,7 +1903,7 @@ export function getPosts(filter?: { id?: string; type?: string; category?: strin
     // (a few short strings per post) while the client can render the full set. The actual
     // image data downloads lazily per-photo when each URL is rendered (e.g. post detail
     // carousel), so the data-light feed behaviour is preserved.
-    const photos = selectInChunks(postIds, ph => `SELECT post_id, order_num FROM post_photos WHERE post_id IN (${ph})`);
+    const photos = selectInChunks(postIds, ph => `SELECT post_id, order_num, updated_at FROM post_photos WHERE post_id IN (${ph})`);
 
     // ⚡ Bolt: Group photos by post_id to avoid O(N²) nested filtering, turning it to O(N) lookup.
     const photosByPost = new Map<string, any[]>();
@@ -1943,7 +1946,7 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
                 .map(r => [r.order_num, r.photo_data])
         );
         updates.photos = updates.photos.map(p => {
-            const m = typeof p === 'string' ? p.match(/\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d+)$/) : null;
+            const m = typeof p === 'string' ? p.match(/\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d+)(?:\?.*)?$/) : null;
             if (m && m[1] === id) {
                 const data = existingByOrder.get(Number(m[2]));
                 if (data) return data;

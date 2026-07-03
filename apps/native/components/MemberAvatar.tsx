@@ -11,7 +11,8 @@
  * - Letter-initial fallback when no image is available
  */
 import React from 'react';
-import { View, Image, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { avatarUri } from '../utils/image-processing';
 import { resolveBundledAvatar } from '../utils/bundled-avatars';
 import { colors, palette } from '../constants/colors';
@@ -64,9 +65,9 @@ export function MemberAvatar({
             return (
                 <Image
                     source={bundledSource}
-                    accessible={true}
-                    accessibilityRole="image"
                     accessibilityLabel={`${callsign}'s avatar`}
+                    cachePolicy="memory-disk"
+                    transition={120}
                     style={[
                         styles.image,
                         { width: size, height: size, borderRadius: radius, overflow: 'hidden', flexShrink: 0 },
@@ -83,9 +84,9 @@ export function MemberAvatar({
         return (
             <Image
                 source={{ uri }}
-                accessible={true}
-                accessibilityRole="image"
                 accessibilityLabel={`${callsign}'s avatar`}
+                cachePolicy="memory-disk"
+                transition={120}
                 style={[
                     styles.image,
                     { width: size, height: size, borderRadius: radius, overflow: 'hidden', flexShrink: 0 },

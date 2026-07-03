@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, Pressable, SafeAreaView, Platform, Alert, Image, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Pressable, SafeAreaView, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
@@ -1135,7 +1136,7 @@ export default function MarketScreen() {
                 >
                     <View style={styles.gridImageWrapper}>
                         {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                            <Image source={{ uri: coverImage }} style={styles.gridImage} accessibilityLabel={item.title} />
+                            <Image source={{ uri: coverImage }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                         ) : (
                             <View style={[styles.gridImage, styles.gridFallback]}>
                                 <Text style={styles.gridFallbackEmoji}>
@@ -1211,7 +1212,7 @@ export default function MarketScreen() {
             <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${item.id}`)}>
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }} resizeMode="cover" />
+                        <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
                         <View style={{ width: 96, height: '100%', minHeight: 96, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }}>
                             <Text style={{ fontSize: 32, opacity: 0.5 }}>

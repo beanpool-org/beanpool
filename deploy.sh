@@ -84,9 +84,9 @@ for NODE in "${TARGETS[@]}"; do
 
   # Azure nodes use the lattice SSH key; others use default
   if [ "$USER" = "azureuser" ]; then
-    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -i ~/.ssh/id_azure_lattice"
+    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes -i ~/.ssh/id_azure_lattice"
   else
-    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes"
   fi
 
   echo "====================================="

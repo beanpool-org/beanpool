@@ -81,6 +81,11 @@ export function initSchema() {
     // Elder vouch column — added BEFORE schema.sql exec so the re-created
     // members_touch_updated_at trigger (which whitelists elder_vouched_by) compiles.
     try { db.prepare(`ALTER TABLE members ADD COLUMN elder_vouched_by TEXT REFERENCES members(public_key)`).run(); } catch { }
+    // Vouch capability (super-Elder). Added BEFORE schema.sql exec so the re-created
+    // members_touch_updated_at trigger (which whitelists can_vouch) compiles.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN can_vouch INTEGER DEFAULT 0`).run(); } catch { }
+    // Vouch level's credit floor (25/50/100). Also added before schema.sql for the trigger whitelist.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN vouch_credit REAL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run(); } catch { }

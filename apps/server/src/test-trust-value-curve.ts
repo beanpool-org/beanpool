@@ -5,13 +5,13 @@
  *
  * Proves:
  *   1. earnedCreditFromValue(): proportional low end, saturating, integer/deterministic.
- *   2. A small (3-bean) completed trade earns ~nothing (no "3-bean → -128" cliff) — and credits BOTH sides.
+ *   2. A small (3-bean) completed trade banks ~nothing; floor stays 0 until a vouch unlocks it.
  *   3. Direct transfers (gifts) build NO trust, at any size.
- *   4. The self-funding farm stays dead: 40 tiny completed trades ≠ a maxed floor.
- *   5. Real, diverse trade earns a real floor (~Steward at ~2000 across many sellers).
+ *   4. The self-funding farm stays dead: 40 tiny completed trades ≠ a maxed floor (even vouched).
+ *   5. Real, diverse trade earns a real floor (~Steward at ~2000 across many sellers), once vouched.
  *   6. Per-counterparty diversity cap holds (10k with ONE partner counts as 5k).
  *   7. A grant deepens the floor but returns earnedCredit = 0 (governance-safe).
- *   8. First-trade gate: no trade/grant/vouch → no overdraft.
+ *   8. Vouch gate: only an appointed voucher's vouch (or a grant) hands out the credit floor (light vouch = -25) — trading alone does not.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-trust-value-curve.ts
  */
@@ -44,12 +44,19 @@ function tx(from: string, to: string, amount: number) {
     db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('t' + (seq++), from, to, amount, 'm', new Date().toISOString());
 }
+// An appointed voucher vouches for a member — hands out the -20 floor and unlocks any earned
+// trust already banked (see getMemberTrustProfile activation gate). FK: elder_vouched_by
+// references members(public_key), so we point it at a real seeded voucher ('voucherX').
+function vouch(target: string) {
+    db.prepare(`UPDATE members SET elder_vouched_by = 'voucherX' WHERE public_key = ?`).run(target);
+}
 const profile = (pk: string) => getMemberTrustProfile(pk);
 const floorOf = (pk: string) => profile(pk).floor;
 
 function main() {
     console.log('Running Trust Model v2 + F3 value-curve test...\n');
     initStateEngine();
+    seedMember('voucherX'); // the appointed voucher used by vouch() below
 
     // ── 1. Pure curve: proportional low end, saturating, integer/deterministic ──
     assert(earnedCreditFromValue(0) === 0, 'curve(0) = 0');
@@ -62,11 +69,14 @@ function main() {
     assert(earnedCreditFromValue(10000) > earnedCreditFromValue(2000), 'curve is monotonic increasing');
     assert(Number.isInteger(earnedCreditFromValue(1234)), 'curve returns an integer (deterministic)');
 
-    // ── 2. A small completed trade → shallow floor (20 voucher + ~0 earned), BOTH sides earn it ──
+    // ── 2. A small completed trade banks earned trust, but the floor stays 0 until a vouch ──
     seedMember('buyer3'); seedMember('seller3');
     mtx('buyer3', 'seller3', 3);
-    assert(floorOf('buyer3') === -21, `3-bean completed trade → buyer floor −21 (20 voucher + 1 earned), got ${floorOf('buyer3')}`);
-    assert(floorOf('seller3') === -21, `3-bean completed trade → seller ALSO earns it (floor −21), got ${floorOf('seller3')}`);
+    assert(floorOf('buyer3') === 0, `traded but not vouched → floor 0 (trading no longer activates), got ${floorOf('buyer3')}`);
+    assert(profile('buyer3').earnedCredit === 1, `...but the 1 earned is banked, ready to unlock, got ${profile('buyer3').earnedCredit}`);
+    vouch('buyer3'); vouch('seller3');
+    assert(floorOf('buyer3') === -26, `once vouched (light, -25) → buyer floor −26 (25 vouch + 1 earned unlocked), got ${floorOf('buyer3')}`);
+    assert(floorOf('seller3') === -26, `the seller ALSO earned it → floor −26 once vouched, got ${floorOf('seller3')}`);
 
     // ── 3. Direct transfers (gifts) build NO trust, at any size ──
     seedMember('gifter'); seedMember('friend');
@@ -80,44 +90,49 @@ function main() {
     mtx('mbuyer', 'mseller', 5000);
     assert(profile('mbuyer').earnedCredit === 960, `5000 completed trade → earnedCredit 960 (vs 0 for the identical gift), got ${profile('mbuyer').earnedCredit}`);
 
-    // ── 4. Self-funding farm stays dead: 40 tiny completed trades ──
-    seedMember('farmer');
+    // ── 4. Self-funding farm stays dead: 40 tiny completed trades (even once vouched) ──
+    seedMember('farmer'); vouch('farmer');
     for (let i = 0; i < 40; i++) { const s = 'fsock' + i; seedMember(s); mtx('farmer', s, 1); }
-    assert(floorOf('farmer') === -35, `40 × 1-bean completed trades → floor −35 (20 voucher + 15 earned, not −2000), got ${floorOf('farmer')}`);
+    assert(floorOf('farmer') === -40, `40 × 1-bean completed trades, vouched → floor −40 (25 vouch + 15 earned, not −2000), got ${floorOf('farmer')}`);
 
-    // ── 5. Real, diverse trade → real floor (~Steward at 2000 across 5 sellers) ──
-    seedMember('trader');
+    // ── 5. Real, diverse trade → real floor (~Steward at 2000 across 5 sellers), once vouched ──
+    seedMember('trader'); vouch('trader');
     for (let i = 0; i < 5; i++) { const s = 'tseller' + i; seedMember(s); mtx('trader', s, 400); }
-    assert(floorOf('trader') === -568, `2000 across 5 sellers → floor −568 (20 voucher + 548 earned), got ${floorOf('trader')}`);
+    assert(floorOf('trader') === -573, `2000 across 5 sellers, vouched → floor −573 (25 vouch + 548 earned), got ${floorOf('trader')}`);
 
-    // ── 6. Diversity cap: 10k with ONE partner counts as 5k ──
-    seedMember('whale'); seedMember('buddy');
+    // ── 6. Diversity cap: 10k with ONE partner counts as 5k (once vouched) ──
+    seedMember('whale'); seedMember('buddy'); vouch('whale');
     mtx('whale', 'buddy', 10000);
-    assert(floorOf('whale') === -980, `10k with one partner capped at 5k → floor −980 (20 voucher + 960 earned), got ${floorOf('whale')}`);
+    assert(floorOf('whale') === -985, `10k with one partner capped at 5k, vouched → floor −985 (25 vouch + 960 earned), got ${floorOf('whale')}`);
 
     // ── 7. Grant lane: deepens floor (+voucher, since a grant activates), earnedCredit stays 0 ──
     seedMember('granted');
     db.prepare(`UPDATE members SET earned_credit = ? WHERE public_key = ?`).run(520, 'granted');
     const gp = profile('granted');
-    assert(gp.floor === -540, `grant of 520 → floor −540 (20 voucher + 520 granted), got ${gp.floor}`);
+    assert(gp.floor === -520, `grant of 520 (not vouched) → floor −520 (grant is the whole floor, no vouch), got ${gp.floor}`);
     assert(gp.earnedCredit === 0 && gp.grantedCredit === 520, `grant is a separate lane (earned 0, granted 520), got earned=${gp.earnedCredit} granted=${gp.grantedCredit}`);
 
-    // ── 8. Activation gate: no trade / grant / vouch → floor 0, and NO welcome voucher ──
+    // ── 8. Activation gate: only a vouch (or grant) hands out the -20 floor ──
     seedMember('fresh');
-    assert(floorOf('fresh') === 0, `fresh account → floor 0 (voucher withheld until 1st trade), got ${floorOf('fresh')}`);
+    assert(floorOf('fresh') === 0, `un-vouched account → floor 0 (no credit line at all), got ${floorOf('fresh')}`);
+    seedMember('vouchedFresh'); vouch('vouchedFresh');
+    assert(floorOf('vouchedFresh') === -25, `vouched (light), no trades → floor −25 (vouch credit only), got ${floorOf('vouchedFresh')}`);
 
-    // ── 9. Send gate: no completed trade → can't gift; after a trade → can (and no velocity cap) ──
+    // ── 9. Send gate keys off EARNED trust (a real trade), independent of the vouch: no completed
+    //       trade → can't gift; after a trade → can (and no velocity cap) ──
     seedMember('noTrade'); seedMember('rcpt');
     db.prepare(`UPDATE accounts SET balance = 100 WHERE public_key = ?`).run('noTrade');
     assert(transfer('noTrade', 'rcpt', 10, 'gift', 'direct') === null,
-        'no completed trade → direct send blocked');
+        'no completed trade → direct send blocked (even holding 100 beans, un-vouched)');
     seedMember('didTrade'); seedMember('aSeller');
     mtx('didTrade', 'aSeller', 5000); // real trade → earnedCredit 960 (opens the send gate)
+    vouch('didTrade');                // + a vouch → real overdraft line (−980) for trading
     transfer('genesis', 'didTrade', 100, 'seed', 'direct'); // give didTrade 100 real beans to hold
     assert(transfer('didTrade', 'rcpt', 60, 'gift', 'direct') !== null,
         'after a trade, holding beans → direct send allowed (60 of 100), no velocity cap');
-    // ...but you can NEVER send into debt: gifting beyond your positive balance is blocked (floor 0),
-    // even though this account has a deep earned CREDIT line (~-980) that IS usable for trading.
+    // ...but you can NEVER send into debt: gifting beyond your positive balance is blocked (floor 0
+    // for gifts), even though this account has a deep earned CREDIT line (−980) usable for trading.
+    assert(floorOf('didTrade') === -985, `vouched (light) + 5000 trade → trading floor −985, got ${floorOf('didTrade')}`);
     assert(transfer('didTrade', 'rcpt', 1000, 'gift', 'direct') === null,
         'cannot gift beyond positive balance — direct sends never draw on the overdraft/credit line');
 

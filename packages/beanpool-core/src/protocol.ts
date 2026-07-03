@@ -16,12 +16,18 @@ export const PROTOCOL_CONSTANTS = {
     REFERENCE_LABEL: 'hour',
 
     // === Credit Formula (Sliding Scale) ===
-    // No automatic overdraft: the floor starts at 0 and deepens with a welcome voucher +
-    // earned trust + any grants. floor = -min(CREDIT_FLOOR_CAP, voucher + earned + granted).
-    CREDIT_BASE_FLOOR: 0,              // no baked-in credit — starting hand is the voucher below
+    // No automatic overdraft: the floor starts at 0 and deepens with a vouch + earned trust +
+    // any grants. floor = -min(CREDIT_FLOOR_CAP, vouchCredit + earned + granted). A member has
+    // no credit line at all until an appointed voucher vouches (vouchCredit > 0) or an admin/
+    // genesis grant graduates them (granted > 0). See getMemberTrustProfile.
+    CREDIT_BASE_FLOOR: 0,              // no baked-in credit — every bean of the floor is explicit
     CREDIT_MAX_EARNED: 1920,           // asymptote of the earned-trust curve (see earnedCreditFromValue)
     CREDIT_FLOOR_CAP: 2000,            // deepest possible floor is -2000 (≈ 50 hours) across ALL sources
-    NEWCOMER_VOUCHER: 20,              // starting credit granted AFTER a member's first genuine trade
+
+    // === Vouch Levels — the credit floor an appointed voucher hands a newcomer (voucher picks one) ===
+    VOUCH_CREDIT_LIGHT: 25,            // level 1 — a light vouch (-25 floor)
+    VOUCH_CREDIT_STANDARD: 50,         // level 2 — a standard vouch (-50 floor)
+    VOUCH_CREDIT_DEEP: 100,            // level 3 — a deep vouch (-100 floor)
 
     // === Trust Curve (Trust Model v2 — value-based, saturating) ===
     // Earned credit is a saturating function of qualified, diversity-capped value cycled (V):
@@ -49,16 +55,16 @@ export const PROTOCOL_CONSTANTS = {
     STEWARD_THRESHOLD: -1400,          // -600 ≥ floor > -1400 = Steward
     // floor ≤ -1400 = Elder
 
-    // === Admin Genesis Invite Pre-seeds ===
-    // Pre-seeded GRANTED credit that places a new member at a target tier floor. A grant
-    // activates the member (like a first trade), so the welcome voucher also applies:
-    //   floor = -(granted + NEWCOMER_VOUCHER) → granted = |floor| - 20
-    //   Trusted:    -200 → granted = 180
-    //   Ambassador: -600 → granted = 580
-    //   Elder:     -1400 → granted = 1380
-    GENESIS_TRUSTED_EARNED: 180,       // Places new member at -200 floor (Resident)
-    GENESIS_AMBASSADOR_EARNED: 580,    // Places new member at -600 floor (Steward)
-    GENESIS_ELDER_EARNED: 1380,        // Places new member at -1400 floor (Elder)
+    // === Admin Tier-Badge / Genesis Grants ===
+    // Pre-seeded GRANTED credit that places a member at a tier's ENTRY floor. An admin can assign
+    // a tier badge (adminSetTier), or a genesis invite can pre-seed it. On this granted path the
+    // grant IS the whole floor (no separate vouch component): floor = -(granted + earned).
+    //   Resident: -200 → granted = 200
+    //   Steward:  -600 → granted = 600
+    //   Elder:   -1400 → granted = 1400
+    GENESIS_TRUSTED_EARNED: 200,       // Resident badge — floor -200
+    GENESIS_AMBASSADOR_EARNED: 600,    // Steward badge — floor -600
+    GENESIS_ELDER_EARNED: 1400,        // Elder badge — floor -1400
 
     // === Transaction Guardrails ===
     TRANSACTION_WARNING_THRESHOLD: 0.5, // Warn when using >50% of remaining credit
@@ -148,6 +154,29 @@ export function getGenesisEarnedCredit(type: GenesisInviteType): number {
         case 'ambassador': return c.GENESIS_AMBASSADOR_EARNED;
         case 'elder': return c.GENESIS_ELDER_EARNED;
         default: return 0;
+    }
+}
+
+// Vouch level → the credit-floor beans an appointed voucher hands out (see vouchMember).
+export type VouchLevel = 1 | 2 | 3;
+export function vouchCreditForLevel(level: VouchLevel): number {
+    const c = PROTOCOL_CONSTANTS;
+    switch (level) {
+        case 3: return c.VOUCH_CREDIT_DEEP;      // -100
+        case 2: return c.VOUCH_CREDIT_STANDARD;  // -50
+        default: return c.VOUCH_CREDIT_LIGHT;    // -25 (level 1)
+    }
+}
+
+// Admin tier badge → the GRANTED credit that lands a member at that tier's entry floor.
+// Newcomer clears the grant (0). Mirrors the genesis pre-seed values.
+export function grantedCreditForTier(tier: TierName): number {
+    const c = PROTOCOL_CONSTANTS;
+    switch (tier) {
+        case 'Elder': return c.GENESIS_ELDER_EARNED;        // 1400 → -1400
+        case 'Steward': return c.GENESIS_AMBASSADOR_EARNED; // 600  → -600
+        case 'Resident': return c.GENESIS_TRUSTED_EARNED;   // 200  → -200
+        default: return 0;                                  // Newcomer — no grant
     }
 }
 

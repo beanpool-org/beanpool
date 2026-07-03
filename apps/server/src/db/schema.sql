@@ -17,6 +17,13 @@ CREATE TABLE IF NOT EXISTS members (
     -- (0 completed trades, not genesis pre-seeded) this also lifts the no-overdraft
     -- floor-gate. Distinct from `invited_by` ("Vouched in by" — who brought them in).
     elder_vouched_by TEXT REFERENCES members(public_key),
+    -- Vouch capability (the "appointed voucher" / super-Elder switch). Admin-granted only,
+    -- via adminSetVoucher. Handing out the -20 credit floor is the one Sybil-critical power,
+    -- so it is NOT derived from Elder *tier* (an earned cosmetic badge) — it is this flag.
+    can_vouch INTEGER DEFAULT 0,
+    -- The vouch level's credit floor (25/50/100) recorded when an appointed voucher vouches.
+    -- 0 when not vouched. Paired with elder_vouched_by (who vouched).
+    vouch_credit REAL DEFAULT 0,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -327,7 +334,7 @@ CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
-    elder_vouched_by, joined_at, public_key
+    elder_vouched_by, can_vouch, vouch_credit, joined_at, public_key
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

@@ -24,6 +24,22 @@ import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
 import { colors, palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 
+// Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
+// / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
+function explainTradeError(e: any): { title: string; message: string } {
+    const raw = String(e?.message || e || 'Something went wrong');
+    if (raw.startsWith('COVENANT_REQUIRED')) {
+        return { title: '🎣 Post an Offer first', message: 'To spend on community credit (take your balance negative) you need at least one active Offer posted — a line in the water so others can trade with you in return. Post an Offer, then try again.' };
+    }
+    if (raw.startsWith('CONTRIBUTION_REQUIRED')) {
+        return { title: 'List an Offer first', message: 'List at least one Offer of your own before you can request or accept from others.' };
+    }
+    if (raw.startsWith('HOLIDAY_MODE')) {
+        return { title: '🌴 Holiday mode is on', message: 'Turn off holiday mode in Settings before trading.' };
+    }
+    return { title: 'Error', message: raw.replace(/^[A-Z_]+:\s*/, '') };
+}
+
 export default function PostDetailModal() {
     const insets = useSafeAreaInsets();
     const { theme, colors } = useTheme();
@@ -1131,16 +1147,17 @@ export default function PostDetailModal() {
                                             
                                             // Fallback if chat fails
                                             router.replace({ pathname: '/(tabs)', params: { tab: 'deals', dealsTab: 'pending' } });
-                                        } catch (e: any) { 
+                                        } catch (e: any) {
                                             if (e.message?.includes('not found') || e.message?.includes('not active')) {
                                                 Alert.alert('Already Updated', 'This post was already accepted or modified elsewhere. Refreshing your screen...');
                                                 const { requestSync } = require('../../services/pillar-sync');
                                                 requestSync().catch(console.error);
                                                 setShowAcceptConfirm(false);
                                             } else {
-                                                Alert.alert('Error', e.message); 
+                                                const x = explainTradeError(e);
+                                                Alert.alert(x.title, x.message);
                                             }
-                                        } finally { 
+                                        } finally {
                                             setAccepting(false); 
                                         }
                                     }}>

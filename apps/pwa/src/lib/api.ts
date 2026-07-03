@@ -208,9 +208,26 @@ export async function updateMemberProfile(publicKey: string, update: {
     return request('POST', '/api/profile/update', { publicKey, ...update });
 }
 
-/** Elder endorsement of a member. Signed POST — server verifies the actor is an Elder. */
-export async function vouchMemberApi(targetPubkey: string): Promise<{ success: boolean }> {
-    return request('POST', '/api/profile/vouch', { targetPubkey });
+/** Vouch for a member — hands out the -20 credit floor. Signed POST; server verifies the
+ *  actor holds the vouch capability (an admin-appointed voucher). */
+export async function vouchMemberApi(targetPubkey: string, level: 1 | 2 | 3 = 1): Promise<{ success: boolean; level: number }> {
+    return request('POST', '/api/profile/vouch', { targetPubkey, level });
+}
+
+/** Withdraw a vouch. The original voucher (or an admin) only; blocked while the target is negative. */
+export async function unvouchMemberApi(targetPubkey: string): Promise<{ success: boolean }> {
+    return request('POST', '/api/profile/unvouch', { targetPubkey });
+}
+
+/** Read a member's preference flags (holiday_mode, notify_*). Unset keys are absent. */
+export async function getMemberPreferences(publicKey: string): Promise<Record<string, string>> {
+    return request('GET', `/api/members/preferences?publicKey=${encodeURIComponent(publicKey)}`);
+}
+
+/** Toggle holiday mode. Turning it ON throws (with the open-trade count in the message) when the
+ *  member still has in-flight trades. Signed POST — the actor is taken from the signature. */
+export async function setHolidayModeApi(enabled: boolean): Promise<{ success: boolean; enabled: boolean; openTrades: number }> {
+    return request('POST', '/api/members/holiday', { enabled });
 }
 
 export async function getMemberProfile(publicKey: string, requester?: string): Promise<MemberProfile> {
@@ -350,6 +367,12 @@ export interface BalanceInfo {
     hasListedOffer?: boolean;
     /** True while the member still needs to list an Offer before posting Needs / accepting Offers. */
     isBlockedFromTrading?: boolean;
+    /** True once the member has a credit line at all (vouched or granted). Un-vouched → false. */
+    activated?: boolean;
+    /** True if this member holds the appointed-voucher capability (can hand out the vouch floor). */
+    canVouch?: boolean;
+    /** True if the member has ≥1 live Offer posted (offer covenant, Gate 2). */
+    hasLiveOffer?: boolean;
 }
 
 export interface Transaction {

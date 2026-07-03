@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, earnedCreditFromValue, getTier, getGenesisEarnedCredit, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, earnedCreditFromValue, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName } from '@beanpool/core';
 import { getThresholds, getLocalConfig } from './local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
 import { readFileSync } from 'node:fs';
@@ -1207,6 +1207,8 @@ export function getMemberTrustProfile(publicKey: string): {
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
+    vouched: boolean;
+    activated: boolean;
 } {
     const stats = getMemberTrustStats(publicKey);
 
@@ -1214,9 +1216,12 @@ export function getMemberTrustProfile(publicKey: string): {
     // Stored in members.earned_credit (legacy column name). It is a credit-*limit* input only —
     // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
     // the floor but never count as "earned" (governance votes use earned/value only, not grants).
-    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by FROM members WHERE public_key = ?").get(publicKey) as any;
+    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by, vouch_credit FROM members WHERE public_key = ?").get(publicKey) as any;
     const grantedCredit = memberRow?.earned_credit || 0;
     const elderVouched = !!memberRow?.elder_vouched_by;
+    // The vouch level's credit floor (25/50/100). A vouch recorded before the level system, or
+    // with no stored amount, defaults to the light level.
+    const vouchCredit = elderVouched ? (memberRow?.vouch_credit > 0 ? memberRow.vouch_credit : PROTOCOL_CONSTANTS.VOUCH_CREDIT_LIGHT) : 0;
 
     const c = PROTOCOL_CONSTANTS;
 
@@ -1239,25 +1244,29 @@ export function getMemberTrustProfile(publicKey: string): {
     const multiplier = reviewCount > 0 ? (0.5 + 0.5 * (avgRating / 5.0)) : 1.0;
     const earnedCredit = Math.max(0, Math.floor(rawEarned * multiplier));
 
-    // Activation gate: no overdraft (and no welcome voucher) until the account has completed a real
-    // marketplace trade — i.e. qualifiedTradeValue > 0 — unless a grant or an Elder vouch has
-    // graduated a founding member ahead of it. Crucially this keys off qualified trade VALUE, not
-    // stats.tradeCount: tradeCount also counts direct `transactions`, so merely RECEIVING a gift
-    // would otherwise activate a sock account and mint it a -20 voucher — a Sybil faucet (gift 1 bean
-    // to N socks → 20N beans of unbacked credit). Real trades go through escrow; gifts don't activate.
-    const activated = value > 0 || grantedCredit > 0 || elderVouched;
-    const welcomeVoucher = activated ? c.NEWCOMER_VOUCHER : 0;
+    // Activation gate — a member has NO credit line at all (floor stays at 0; no overdraft) until an
+    // appointed voucher vouches for them, or an admin/genesis grant graduates a founding member.
+    // Completing a trade NO LONGER activates: that was a Sybil faucet — N sock accounts each doing
+    // one throwaway trade with a colluding creator would each mint themselves the -20 voucher (gift
+    // 1 bean to N socks → 20N beans of unbacked credit). The -20 floor is now *handed out* by a
+    // vouch: the one human-gated, admin-appointed way in (see vouchMember / can_vouch). Nice
+    // property — when a member is finally vouched, any earned trust they'd already banked unlocks
+    // alongside the welcome voucher, so their floor jumps straight to reflect their real trading.
+    const activated = elderVouched || grantedCredit > 0;
+    const allowance = activated
+        ? Math.min(c.CREDIT_FLOOR_CAP, vouchCredit + earnedCredit + grantedCredit)
+        : 0;
 
-    // Floor = -(voucher + earned + granted), clamped so the deepest floor is -CREDIT_FLOOR_CAP.
-    // CREDIT_BASE_FLOOR is 0 — there is no baked-in overdraft; every bean of credit is explicit.
-    const floor = c.CREDIT_BASE_FLOOR - Math.min(c.CREDIT_FLOOR_CAP, welcomeVoucher + earnedCredit + grantedCredit);
+    // Floor = -(voucher + earned + granted) once activated, clamped so the deepest floor is
+    // -CREDIT_FLOOR_CAP; 0 for an un-vouched member. CREDIT_BASE_FLOOR is 0 — no baked-in overdraft.
+    const floor = c.CREDIT_BASE_FLOOR - allowance;
 
     const tier = getTier(floor);
 
     // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
     // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation
     // multiplier inputs, surfaced so the client can show them honestly.
-    return { stats, floor, tier, earnedCredit, grantedCredit, qualifiedValue: value, avgRating, reviewCount };
+    return { stats, floor, tier, earnedCredit, grantedCredit, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated };
 }
 
 // ===================== TRUST PROFILE (VIEWER-AWARE) =====================
@@ -1503,15 +1512,19 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; tier: TierInfo; earnedCredit: number; commonsBalance: number } {
+export function getBalance(publicKey: string): { balance: number; floor: number; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean } {
     const account = ledger.getAccount(publicKey);
-    const { floor, tier, earnedCredit } = getMemberTrustProfile(publicKey);
+    const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
     return {
         balance: Math.round(account.balance * 100) / 100,
         floor,
         tier,
         earnedCredit,
         commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
+        // activated: has a credit line at all (vouched/granted) — un-vouched newcomers are false.
+        // canVouch: this member holds the appointed-voucher capability (drives the client vouch UI).
+        activated,
+        canVouch: canVouch(publicKey),
     };
 }
 
@@ -1692,6 +1705,13 @@ function validatePostPhotos(photos: string[] | undefined): void {
 // specific rejection and show the "list an Offer" prompt instead of a raw error.
 export const CONTRIBUTION_REQUIRED_ERROR = 'CONTRIBUTION_REQUIRED: list at least one Offer before you can post Needs or accept Offers.';
 
+// Offer covenant (Gate 2). To spend on community credit — i.e. take (or keep) your balance
+// negative — you must have at least one LIVE Offer posted right now. Carrying a negative balance
+// means the community is holding credit for you; the covenant is that you keep a line in the
+// water so others can call on you to repay it in kind. Stable prefix so clients can detect this
+// rejection and show the "post an Offer" prompt rather than a raw error.
+export const COVENANT_REQUIRED_ERROR = 'COVENANT_REQUIRED: keep at least one active Offer posted to spend on community credit (a negative balance).';
+
 /**
  * Has this member ever listed an Offer? Founding members must contribute an
  * Offer of their own before they can post Needs or accept/request Offers.
@@ -1706,19 +1726,67 @@ export function hasListedOffer(publicKey: string): boolean {
 }
 
 /**
- * Record an Elder's vouch for a member. Server-authoritative: only an Elder (or
- * the system admin) may vouch, and never for themselves. For a founding member
- * this lifts the no-overdraft floor-gate (see getMemberTrustProfile), graduating
- * them to Newcomer; for everyone else it is a trust badge shown on their profile.
- * Monotonic — a later vouch by another Elder simply overwrites the recorded one.
+ * Does this member have at least one LIVE Offer posted right now? Unlike hasListedOffer
+ * ("ever listed one"), this requires a currently-visible Offer (active row, status 'active').
+ * Enforces the offer covenant: you may only spend into a negative balance while you keep a
+ * line in the water. The system admin is exempt (it acts at the system level).
  */
-export function vouchMember(elderPubkey: string, targetPubkey: string): { ok: true } {
-    if (elderPubkey === targetPubkey) throw new Error('You cannot vouch for yourself');
-    if (!getMember(elderPubkey)) throw new Error('Voucher not found');
+export function hasLiveOffer(publicKey: string): boolean {
+    if (publicKey === getAdminPubkey()) return true;
+    const row = db.prepare(`SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' AND active = 1 AND status = 'active' LIMIT 1`).get(publicKey);
+    return !!row;
+}
+
+/**
+ * Does this member hold the vouch capability (the "appointed voucher" / super-Elder)?
+ * Handing out the -20 credit floor is the one Sybil-critical power, so it is NOT derived
+ * from Elder *tier* (an earned cosmetic badge — grinding to Elder must not confer the power
+ * to mint floors for a sock army). It is an explicit, admin-granted flag (members.can_vouch,
+ * set via adminSetVoucher), plus the system admin who always holds it.
+ */
+export function canVouch(publicKey: string): boolean {
+    if (publicKey === getAdminPubkey()) return true;
+    const row = db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(publicKey) as any;
+    return !!row?.can_vouch;
+}
+
+/**
+ * Record an appointed voucher's vouch for a member at a chosen level. Server-authoritative:
+ * only a member holding the vouch capability (or the system admin) may vouch, and never for
+ * themselves. A vouch hands out the level's credit floor (level 1 = -25, 2 = -50, 3 = -100):
+ * it lifts the no-overdraft activation gate (see getMemberTrustProfile), unlocking that floor
+ * plus any earned trust already banked. Monotonic — a later vouch overwrites the recorded one
+ * (a re-vouch can raise or lower the level).
+ */
+export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
+    if (voucherPubkey === targetPubkey) throw new Error('You cannot vouch for yourself');
+    if (!getMember(voucherPubkey)) throw new Error('Voucher not found');
     if (!getMember(targetPubkey)) throw new Error('Member not found');
-    const isElder = elderPubkey === getAdminPubkey() || getBalance(elderPubkey).tier.name === 'Elder';
-    if (!isElder) throw new Error('Only Elders can vouch for members');
-    db.prepare(`UPDATE members SET elder_vouched_by = ? WHERE public_key = ?`).run(elderPubkey, targetPubkey);
+    if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
+    const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
+    const vouchCredit = vouchCreditForLevel(lvl);
+    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ? WHERE public_key = ?`).run(voucherPubkey, vouchCredit, targetPubkey);
+    broadcast({ type: 'profile_updated', publicKey: targetPubkey });
+    return { ok: true };
+}
+
+/**
+ * Withdraw a vouch. The original voucher may withdraw their own; the system admin may
+ * force-revoke anyone's. Removing a vouch removes the -20 floor, so a non-admin withdrawal
+ * is blocked while the member is still carrying a negative balance (they'd be stranded below
+ * the new floor of 0) — they must return to >= 0 first. Idempotent when not currently vouched.
+ */
+export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: true } {
+    if (!getMember(targetPubkey)) throw new Error('Member not found');
+    const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
+    const vouchedBy = row?.elder_vouched_by || null;
+    if (!vouchedBy) return { ok: true };
+    const isAdmin = actorPubkey === getAdminPubkey();
+    if (!isAdmin && actorPubkey !== vouchedBy) throw new Error('Only the voucher who vouched, or an admin, can withdraw a vouch');
+    if (!isAdmin && getBalance(targetPubkey).balance < 0) {
+        throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
+    }
+    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0 WHERE public_key = ?`).run(targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -1732,6 +1800,7 @@ export function createPost(
         return null;
     }
     assertProfileComplete(authorPublicKey);
+    assertNotOnHoliday(authorPublicKey);
     validatePostPhotos(photos);
 
     // Contribution-first gate: listing an Offer is always allowed (it's what
@@ -1783,6 +1852,12 @@ export function getPosts(filter?: { id?: string; type?: string; category?: strin
     if (!filter?.id && !filter?.updatedAfter) {
         // Regular client paginated fetch: only active/pending
         query += " AND p.active = 1 AND p.status IN ('active', 'pending')";
+        // Holiday mode: hide away members' posts from the general feed. NOT applied when viewing a
+        // specific author's own listings (authorPubkey) or during sync (updatedAfter) — those carry
+        // every state so each node can re-apply this read-time filter itself.
+        if (!filter?.authorPubkey) {
+            query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
+        }
     } else if (filter?.updatedAfter) {
         // Sync daemon fetch: MUST include completed/cancelled/deleted states to sync deletions
     } else {
@@ -1939,10 +2014,12 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
 export function requestPost(postId: string, requesterPublicKey: string, hours?: number): MarketplaceTransaction {
     assertMemberActive(requesterPublicKey);
     assertProfileComplete(requesterPublicKey);
+    assertNotOnHoliday(requesterPublicKey);
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
     if (!post) throw new Error('Post not found');
     if (post.status !== 'active') throw new Error('Post is not active');
     if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
+    if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
     // One open request per member per post — prevents accidental double-taps and request spam
     const existingRequest = db.prepare(`SELECT id FROM marketplace_transactions WHERE post_id=? AND status='requested' AND (buyer_pubkey=? OR seller_pubkey=?)`)
@@ -1962,6 +2039,8 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
     const cost = post.price_type !== 'fixed' ? (post.credits * (hours || 1)) : post.credits;
     const { balance, floor } = getBalance(payerPubkey);
     if (balance - cost < floor) throw new Error('Insufficient balance to request this post.');
+    // Offer covenant: spending into (or deeper into) a negative balance requires a live Offer of your own.
+    if (balance - cost < 0 && !hasLiveOffer(payerPubkey)) throw new Error(COVENANT_REQUIRED_ERROR);
 
     const transactionId = crypto.randomUUID();
     
@@ -2121,9 +2200,11 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
 
 export function acceptPost(postId: string, buyerPublicKey: string, hours?: number): MarketplaceTransaction {
     assertMemberActive(buyerPublicKey);
+    assertNotOnHoliday(buyerPublicKey);
     const post = getPosts({ id: postId, status: 'active' })[0];
     if (!post) throw new Error('Post not found or not active');
     if (post.authorPublicKey === buyerPublicKey) throw new Error('Cannot accept your own post');
+    if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
     if (post.type !== 'offer') {
         throw new Error('Only Offers can be 1-step accepted');
@@ -2143,6 +2224,8 @@ export function acceptPost(postId: string, buyerPublicKey: string, hours?: numbe
     // Check balance
     const { balance, floor } = getBalance(buyerPublicKey);
     if (balance - finalCredits < floor) throw new Error('Insufficient balance to accept this offer');
+    // Offer covenant: spending into (or deeper into) a negative balance requires a live Offer of your own.
+    if (balance - finalCredits < 0 && !hasLiveOffer(buyerPublicKey)) throw new Error(COVENANT_REQUIRED_ERROR);
 
     const tx: MarketplaceTransaction = {
         id: crypto.randomUUID(), postId: post.id, postTitle: post.title, buyerPublicKey,
@@ -4951,10 +5034,35 @@ export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabl
  * OR negative) and the double-entry books stay balanced. Granting only widens their credit
  * limit; revoking (back to 0) narrows it, leaving any balance untouched. Idempotent.
  */
-export function adminSetElder(publicKey: string, granted: boolean): { ok: true } {
+/**
+ * Assign a tier BADGE to a member (admin-only). The badge grants that tier's trust value into
+ * the granted-credit lane, so the member's floor lands at the tier's entry (Resident -200,
+ * Steward -600, Elder -1400; Newcomer clears the grant). Balance-safe — grants a credit *limit*,
+ * mints/moves no beans. This is a floor grant only; the separate can_vouch capability
+ * (adminSetVoucher) is what confers the power to vouch. Idempotent.
+ */
+export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     if (!getMember(publicKey)) throw new Error('Member not found');
-    const earned = granted ? PROTOCOL_CONSTANTS.GENESIS_ELDER_EARNED : 0;
-    db.prepare("UPDATE members SET earned_credit=? WHERE public_key=?").run(earned, publicKey);
+    const granted = grantedCreditForTier(tier);
+    db.prepare("UPDATE members SET earned_credit=? WHERE public_key=?").run(granted, publicKey);
+    broadcast({ type: 'profile_updated', publicKey });
+    return { ok: true };
+}
+
+// Back-compat wrapper: Elder is simply the top tier badge.
+export function adminSetElder(publicKey: string, granted: boolean): { ok: true } {
+    return adminSetTier(publicKey, granted ? 'Elder' : 'Newcomer');
+}
+
+/**
+ * Grant or revoke the vouch capability (the "appointed voucher" / super-Elder switch).
+ * Admin-only — this is the single Sybil-critical power (handing out the -20 floor), so it is
+ * never derived from tier; an admin appoints trusted members (typically Elders) explicitly.
+ * Toggling can_vouch mints no beans and changes no floors of its own. Idempotent.
+ */
+export function adminSetVoucher(publicKey: string, granted: boolean): { ok: true } {
+    if (!getMember(publicKey)) throw new Error('Member not found');
+    db.prepare("UPDATE members SET can_vouch=? WHERE public_key=?").run(granted ? 1 : 0, publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
 }
@@ -5683,6 +5791,52 @@ export function setMemberPreferences(publicKey: string, preferences: Record<stri
         console.error('[Prefs] Failed to set preferences:', e);
         return false;
     }
+}
+
+// ===================== HOLIDAY MODE =====================
+
+// Is this member on holiday? Queried directly (NOT via getMemberPreference, which defaults
+// UNSET keys to 'true' — that default would read every member as away). Absent → false.
+export function isOnHoliday(publicKey: string): boolean {
+    const row = db.prepare(`SELECT pref_value FROM member_preferences WHERE public_key = ? AND pref_key = 'holiday_mode'`).get(publicKey) as any;
+    return row?.pref_value === 'true';
+}
+
+// Open (in-flight) trades where this member is a party — a requested or escrow-funded deal.
+// Holiday mode may only be switched ON when this is zero: going away mid-deal would strand a
+// counterparty's escrow or an open request.
+export function countOpenTrades(publicKey: string): number {
+    const row = db.prepare(
+        `SELECT COUNT(*) as n FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested','pending')`
+    ).get(publicKey, publicKey) as any;
+    return row?.n || 0;
+}
+
+// Stable prefix so clients can detect the holiday-block and prompt "turn off holiday mode".
+export const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
+
+export function assertNotOnHoliday(publicKey: string): void {
+    if (isOnHoliday(publicKey)) throw new Error(HOLIDAY_MODE_ERROR);
+}
+
+/**
+ * Switch holiday mode on/off. Turning it ON is gated on having zero open trades — otherwise a
+ * counterparty would be left with escrow locked or an unanswered request. On holiday, the
+ * member's Offers are hidden from the marketplace feed (getPosts) and they can neither post nor
+ * initiate trades (assertNotOnHoliday). No trades or floors change. Throws with `.openTrades`
+ * set when blocked so the client can name the count.
+ */
+export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true; openTrades: number } {
+    if (!getMember(publicKey)) throw new Error('Member not found');
+    const open = countOpenTrades(publicKey);
+    if (enabled && open > 0) {
+        const err: any = new Error(`You have ${open} active trade${open === 1 ? '' : 's'} in progress. Complete or cancel ${open === 1 ? 'it' : 'them'} before switching on holiday mode.`);
+        err.openTrades = open;
+        throw err;
+    }
+    db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', ?)`).run(publicKey, enabled ? 'true' : 'false');
+    broadcast({ type: 'profile_updated', publicKey });
+    return { ok: true, openTrades: open };
 }
 
 // ===================== GENERIC PUSH DISPATCHER =====================

@@ -1,7 +1,9 @@
 services:
   beanpool-node:
     image: ghcr.io/martyinspace/beanpool-node:latest
-    build: .
+    build:
+      context: .
+      network: host
     ports:
       - "80:8080" # Standard HTTP (for QR poster)
       - "443:8443" # Standard HTTPS (clean URLs)

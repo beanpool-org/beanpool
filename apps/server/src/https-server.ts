@@ -2339,6 +2339,11 @@ export async function startHttpsServer(port: number): Promise<void> {
             return;
         }
 
+        // Post photos are immutable per (id, order_num): getPosts versions the URL with the photo's
+        // updated_at (?v=…), so an edited photo is served under a NEW url. That lets clients cache
+        // the bytes forever — killing the cold-start re-download of every photo — with no staleness.
+        ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
+
         // Parse out data URL if present
         const match = photo.photo_data.match(/^data:([^;]+);base64,(.*)$/);
         if (match) {

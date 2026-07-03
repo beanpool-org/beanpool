@@ -64,6 +64,19 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200 }: {
     const tagBg = nearLimit ? RED : overFeeFree ? WARM_BG : colors.text.heading;
     const tagLabel = overFeeFree ? `${fmt(balance)} B · ≈${rate}%/mo` : `${fmt(balance)} B`;
 
+    // Fee ladder — the monthly circulation-fee brackets that live ABOVE the fee-free ceiling.
+    // It "opens up" as the balance climbs past the halfway mark: revealT ramps 0→1 between
+    // feeFreeMax/2 and the ceiling, then stays 1. Positions mirror the anchored scale
+    // (500→80%, 1000→90%, 2000→98%); the current bracket is highlighted.
+    const revealT = Math.max(0, Math.min(1, (balance - feeFreeMax / 2) / (feeFreeMax / 2)));
+    const showFees = revealT > 0;
+    const FEE_ZONES = [
+        { label: '1%', mid: 74, lo: 200, hi: 500 },
+        { label: '1.5%', mid: 85, lo: 500, hi: 1000 },
+        { label: '2%', mid: 94, lo: 1000, hi: 2000 },
+    ];
+    const FEE_TICKS = [80, 90, 98]; // 500 / 1000 / 2000 boundaries
+
     const s = styles(colors);
     return (
         <View style={s.cbar}>
@@ -85,8 +98,27 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200 }: {
                     style={StyleSheet.absoluteFill}
                 />
                 <View style={s.zero} />
+                {showFees && FEE_TICKS.map((t, i) => (
+                    <View key={i} style={[s.feeTick, { left: `${t}%`, opacity: 0.5 * revealT }]} />
+                ))}
                 <View style={[s.bead, { left: `${pct}%` }]} />
             </View>
+
+            {/* Fee ladder — the circulation-fee brackets above +feeFreeMax, revealed as you climb */}
+            {showFees && (
+                <View style={s.feeRow} pointerEvents="none">
+                    <Text style={[s.feeCaption, { opacity: revealT }]}>fee/mo</Text>
+                    {FEE_ZONES.map((z, i) => {
+                        const active = balance > z.lo && balance <= z.hi;
+                        return (
+                            <Text
+                                key={i}
+                                style={[s.feeRate, { left: `${z.mid}%`, opacity: revealT, color: active ? WARM : colors.text.muted, fontWeight: active ? '800' : '600' }]}
+                            >{z.label}</Text>
+                        );
+                    })}
+                </View>
+            )}
 
             {/* Lane 3 — anchors: left / centre / right (space-between can't collide) */}
             <View style={s.anchors}>
@@ -124,6 +156,10 @@ const styles = (colors: any) => StyleSheet.create({
     },
     track: { height: 15, borderRadius: 9, overflow: 'visible' },
     zero: { position: 'absolute', left: '50%', marginLeft: -1, top: -3, bottom: -3, width: 2, backgroundColor: '#fff' },
+    feeTick: { position: 'absolute', top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff' },
+    feeRow: { position: 'relative', height: 12, marginTop: 4 },
+    feeRate: { position: 'absolute', top: 0, width: 44, marginLeft: -22, textAlign: 'center', fontSize: 9, fontVariant: ['tabular-nums'] },
+    feeCaption: { position: 'absolute', top: 1, left: 0, fontSize: 8, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.4 },
     bead: {
         position: 'absolute', top: '50%', marginTop: -9, marginLeft: -9, width: 18, height: 18, borderRadius: 9,
         backgroundColor: '#fff', borderWidth: 4, borderColor: colors.text.heading, zIndex: 2,

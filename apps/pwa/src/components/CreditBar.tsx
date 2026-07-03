@@ -62,6 +62,18 @@ export function CreditBar({ balance, floor, feeFreeMax = 200, className = '' }: 
     const tagBg = nearLimit ? RED : overFeeFree ? WARM_BG : '#16211b';
     const tagLabel = overFeeFree ? `${fmt(balance)} B · ≈${rate}%/mo` : `${fmt(balance)} B`;
 
+    // Fee ladder — the monthly circulation-fee brackets above the fee-free ceiling. Opens up as the
+    // balance climbs past halfway: revealT ramps 0→1 between feeFreeMax/2 and the ceiling, then
+    // stays 1. Positions mirror the anchored scale (500→80%, 1000→90%, 2000→98%).
+    const revealT = Math.max(0, Math.min(1, (balance - feeFreeMax / 2) / (feeFreeMax / 2)));
+    const showFees = revealT > 0;
+    const FEE_ZONES = [
+        { label: '1%', mid: 74, lo: 200, hi: 500 },
+        { label: '1.5%', mid: 85, lo: 500, hi: 1000 },
+        { label: '2%', mid: 94, lo: 1000, hi: 2000 },
+    ];
+    const FEE_TICKS = [80, 90, 98]; // 500 / 1000 / 2000 boundaries
+
     return (
         <div className={`select-none ${className}`} style={{ paddingTop: 28, position: 'relative' }}>
 
@@ -131,7 +143,24 @@ export function CreditBar({ balance, floor, feeFreeMax = 200, className = '' }: 
                     boxShadow: '0 2px 5px rgba(0,0,0,0.28)',
                     zIndex: 2,
                 }} />
+                {/* fee-bracket ticks (500 / 1000 / 2000) */}
+                {showFees && FEE_TICKS.map((t) => (
+                    <div key={t} style={{ position: 'absolute', left: `${t}%`, top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.5 * revealT }} />
+                ))}
             </div>
+
+            {/* Fee ladder — circulation-fee brackets above +feeFreeMax, revealed as you climb */}
+            {showFees && (
+                <div style={{ position: 'relative', height: 12, marginTop: 4, opacity: revealT }}>
+                    <span style={{ position: 'absolute', left: 0, top: 1, fontSize: 8, color: '#929c90', textTransform: 'uppercase', letterSpacing: '0.4px' }}>fee/mo</span>
+                    {FEE_ZONES.map((z) => {
+                        const active = balance > z.lo && balance <= z.hi;
+                        return (
+                            <span key={z.label} style={{ position: 'absolute', left: `${z.mid}%`, top: 0, transform: 'translateX(-50%)', fontSize: 9, fontVariantNumeric: 'tabular-nums', color: active ? WARM : '#929c90', fontWeight: active ? 800 : 600 }}>{z.label}</span>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Lane 3 — anchors (space-between, can't collide) */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>

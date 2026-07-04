@@ -854,16 +854,16 @@ const styles = StyleSheet.create({
     card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
-    input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 10, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },
+    input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },
     fieldHint: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 16, lineHeight: 18 },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderWidth: 1.5, borderColor: colors.border.strong, borderRadius: 12, marginBottom: 16, overflow: 'hidden' },
+    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, marginBottom: 16, overflow: 'hidden' },
     inputFlex: { flex: 1, padding: 16, color: colors.text.heading, fontSize: 16 },
     pasteBtn: { backgroundColor: colors.surface.subtle, paddingHorizontal: 16, paddingVertical: 12, borderLeftWidth: 1, borderColor: colors.border.strong, justifyContent: 'center' },
     pasteBtnText: { color: palette.gray600, fontSize: 14, fontWeight: '600' },
 
     // Callsign (Step 1) — larger, labeled input
     callsignLabel: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8, marginTop: 8 },
-    callsignInput: { backgroundColor: colors.surface.card, borderWidth: 1.5, borderColor: colors.border.strong, borderRadius: 12, padding: 18, color: colors.text.heading, fontSize: 18, marginBottom: 8 },
+    callsignInput: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 18, color: colors.text.heading, fontSize: 18, marginBottom: 8 },
     callsignHelper: { fontSize: 13, color: colors.text.secondary, marginBottom: 4, lineHeight: 18 },
     callsignTip: { fontSize: 13, color: colors.text.muted, marginBottom: 20, fontStyle: 'italic' },
 

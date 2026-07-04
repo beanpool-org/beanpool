@@ -81,7 +81,7 @@ export function CategoryPickerSheet({ visible, selected, onSelect, onClose }: Ca
             justifyContent: 'center',
             paddingVertical: 12,
             borderRadius: 16,
-            borderWidth: 1.5,
+            borderWidth: 1,
             borderColor: colors.border.default,
             backgroundColor: colors.surface.app,
         },

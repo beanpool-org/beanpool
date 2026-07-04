@@ -30,7 +30,7 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
         cardContainer: {
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             borderLeftWidth: 4,
             borderLeftColor: colors.brand.primary,
             marginBottom: 16,
@@ -50,7 +50,7 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
         tierContainer: {
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             borderLeftWidth: 4,
             marginBottom: 16,
         },

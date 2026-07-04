@@ -105,8 +105,8 @@ export default function SettingsScreen() {
 
         // ─── Section Headers ───
         sectionHeader: {
-            fontSize: 12, fontWeight: '700', color: colors.text.muted, letterSpacing: 1.5,
-            marginBottom: 8, marginTop: 24, marginLeft: 4,
+            fontSize: 11, fontWeight: '800', color: colors.text.muted, letterSpacing: 1,
+            textTransform: 'uppercase', marginBottom: 8, marginTop: 24, marginLeft: 4,
         },
 
         // ─── Menu Groups ───
@@ -121,7 +121,7 @@ export default function SettingsScreen() {
         },
         menuBtnLast: { borderBottomWidth: 0 },
         menuIconWrap: {
-            width: 36, height: 36, borderRadius: 10,
+            width: 36, height: 36, borderRadius: 12,
             backgroundColor: theme === 'dark' ? 'rgba(34, 197, 94, 0.15)' : palette.green50,
             justifyContent: 'center', alignItems: 'center', marginRight: 12,
         },
@@ -174,7 +174,7 @@ export default function SettingsScreen() {
         },
         schemeChipSelected: {
             backgroundColor: colors.surface.card,
-            borderWidth: 1.5,
+            borderWidth: 1,
         },
         schemeDot: {
             width: 10,
@@ -214,13 +214,13 @@ export default function SettingsScreen() {
         sectionTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text.heading, marginBottom: 16 },
         input: {
             backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default,
-            borderRadius: 10, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16,
+            borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16,
         },
         primaryBtn: { backgroundColor: colors.text.heading, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
         primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
         backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
         backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
-        dangerBtn: { backgroundColor: colors.feedback.danger.bg, padding: 16, borderRadius: 10, alignItems: 'center', marginTop: 16, borderWidth: 1, borderColor: colors.feedback.danger.border },
+        dangerBtn: { backgroundColor: colors.feedback.danger.bg, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 16, borderWidth: 1, borderColor: colors.feedback.danger.border },
         dangerBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: 'bold' },
         infoText: { fontSize: 14, color: colors.text.secondary, marginBottom: 16, lineHeight: 20 },
         errorText: { color: colors.feedback.danger.solid, marginBottom: 16, textAlign: 'center' },
@@ -243,7 +243,7 @@ export default function SettingsScreen() {
         visibilityLabel: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, marginBottom: 8 },
         visibilityOption: {
             flexDirection: 'row', alignItems: 'center', gap: 12,
-            padding: 14, borderRadius: 12, borderWidth: 1.5,
+            padding: 14, borderRadius: 12, borderWidth: 1,
             borderColor: colors.border.default, backgroundColor: colors.surface.card,
             marginBottom: 8,
         },
@@ -1434,7 +1434,7 @@ export default function SettingsScreen() {
                     {savedNodes.map((node, i) => {
                         const isActive = node.url === anchorUrl;
                         return (
-                            <View key={i} style={[{ padding: 12, borderWidth: isActive ? 2 : 1, borderColor: isActive ? colors.accent.primary : colors.border.default, borderRadius: 10, marginBottom: 10 }]}>
+                            <View key={i} style={[{ padding: 12, borderWidth: isActive ? 2 : 1, borderColor: isActive ? colors.accent.primary : colors.border.default, borderRadius: 14, marginBottom: 10 }]}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                         <Text style={{ fontSize: 16 }}>{node.status === 'pinging' ? '🟡' : node.status === 'online' ? '🟢' : '🔴'}</Text>

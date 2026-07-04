@@ -115,7 +115,7 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
                 </View>
             ) : (
                 isFounding && (
-                    <View style={{ backgroundColor: colors.trust.founding.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: colors.trust.founding.border, marginLeft: 4 }}>
+                    <View style={{ backgroundColor: colors.trust.founding.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.trust.founding.border, marginLeft: 4 }}>
                         <Text style={{ fontSize: 10, fontWeight: '800', color: colors.trust.founding.fg }}>🔑 FOUNDING</Text>
                     </View>
                 )
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
         gap: 3,
         paddingHorizontal: 6,
         paddingVertical: 2,
-        borderRadius: 6,
+        borderRadius: 8,
         borderWidth: 1,
     },
     tierEmojiFull: {

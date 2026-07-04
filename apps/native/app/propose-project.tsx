@@ -34,7 +34,7 @@ export default function ProposeProjectModal() {
         footer: { padding: 20, borderTopWidth: 1, borderTopColor: colors.border.default, backgroundColor: colors.surface.app },
         submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', backgroundColor: colors.brand.primary, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
         submitBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: 'bold', letterSpacing: 1 },
-        toast: { position: 'absolute', bottom: 100, left: 20, right: 20, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber100, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber500, borderWidth: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
+        toast: { position: 'absolute', bottom: 100, left: 20, right: 20, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber100, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber500, borderWidth: 1, padding: 12, borderRadius: 12, alignItems: 'center' },
         toastText: { color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber800, fontWeight: '700', fontSize: 13 },
     }));
 

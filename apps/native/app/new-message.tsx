@@ -146,7 +146,7 @@ export default function NewMessageScreen() {
         memberName: { fontSize: 15, fontWeight: '700', color: colors.text.heading, flexShrink: 1 },
         friendLabel: {
             fontSize: 10, fontWeight: '800', color: colors.trust.resident.fg, backgroundColor: colors.trust.resident.bg,
-            paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, overflow: 'hidden',
+            paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, overflow: 'hidden',
         },
         memberMeta: { fontSize: 12, color: colors.text.muted, marginTop: 2, fontWeight: '500' },
 

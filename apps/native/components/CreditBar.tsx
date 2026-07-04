@@ -13,8 +13,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const RED = '#bb4b32', WARM = '#c07d2a', WARM_BG = '#e9a23e', BEAN = '#2f9e44', BEAN_DEEP = '#1c6e30';
 
-// Offer-covenant bands (mirrors @beanpool/core OFFER_BANDS): live-offer count → unlocked depth.
-const OFFER_BANDS = [200, 500, 1000, 1500, 2000];
+// Offer-covenant bands - a faithful copy of @beanpool/core's OFFER_BANDS, where the array INDEX is
+// the live-offer count (index 0 = 0 offers → 0 unlocked, index 3 = 3 offers → -1000).
+// Kept local to avoid dragging Node/libp2p runtime imports into the client packages.
+const OFFER_BANDS = [0, 200, 500, 1000, 1500, 2000];
 
 // Marginal monthly circulation rate at a positive balance (mirrors the demurrage brackets).
 function marginalRate(b: number): number {
@@ -76,11 +78,11 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
     const hasLocked = showLadder && uFloor > floor;
     const usablePct = toPct(uFloor, floor);
     const floorPct = toPct(floor, floor);
-    const rungs = showLadder ? OFFER_BANDS.filter(b => b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
+    const rungs = showLadder ? OFFER_BANDS.filter(b => b > 0 && b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
     const nextBand = OFFER_BANDS.find(b => b > Math.abs(uFloor));
     const nextUnlock = hasLocked && nextBand ? Math.min(nextBand, Math.abs(floor)) : undefined;
     const fullIdx = OFFER_BANDS.findIndex(b => b >= Math.abs(floor));
-    const offersForFull = fullIdx === -1 ? OFFER_BANDS.length : fullIdx + 1;
+    const offersForFull = fullIdx === -1 ? OFFER_BANDS.length - 1 : fullIdx;
 
     // Fee ladder — the monthly circulation-fee brackets that live ABOVE the fee-free ceiling.
     // It "opens up" as the balance climbs past the halfway mark: revealT ramps 0→1 between
@@ -138,7 +140,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                             </>
                         ) : (
                             <>
-                                <Text style={s.ladderStrong}>Post an Offer</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> offer{offersForFull === 1 ? '' : 's'} unlock your full −{Math.abs(floor)}.
+                                <Text style={s.ladderStrong}>Post an Offer</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your full −{Math.abs(floor)}.
                             </>
                         )}
                     </Text>

@@ -47,8 +47,11 @@ function toPct(v: number, floor: number): number {
 
 const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? n : n.toFixed(1)}`;
 
-// Offer-covenant bands (mirrors @beanpool/core OFFER_BANDS): live-offer count → unlocked depth.
-const OFFER_BANDS = [200, 500, 1000, 1500, 2000];
+// Offer-covenant bands - a faithful copy of @beanpool/core's OFFER_BANDS, where the array INDEX is
+// the live-offer count (index 0 = 0 offers → 0 unlocked, index 3 = 3 offers → -1000).
+// Kept local rather than imported because core's barrel pulls Node/libp2p modules that don't belong
+// in the web bundle (the PWA mirrors core constants throughout). Keep in sync with core if the bands change.
+const OFFER_BANDS = [0, 200, 500, 1000, 1500, 2000];
 
 interface Props {
     balance: number;
@@ -75,15 +78,15 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
     const hasLocked = showLadder && uFloor > floor;          // some earned depth is offer-locked
     const usablePct = toPct(uFloor, floor);                   // right edge of the unlocked (reachable) zone
     const floorPct = toPct(floor, floor);                     // left edge (earned limit)
-    // Band rungs that fall within the earned limit (skip the outermost = the limit itself).
-    const rungs = showLadder ? OFFER_BANDS.filter(b => b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
+    // Band rungs that fall within the earned limit (skip the outermost = the limit itself, and 0).
+    const rungs = showLadder ? OFFER_BANDS.filter(b => b > 0 && b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
     // Next unlock = the next band above what you've unlocked, capped at your earned limit
     // (a 4th offer on a −1400 limit unlocks −1400, not −1500).
     const nextBand = OFFER_BANDS.find(b => b > Math.abs(uFloor));
     const nextUnlock = hasLocked && nextBand ? Math.min(nextBand, Math.abs(floor)) : undefined;
-    // Total live Offers needed to unlock the FULL earned floor (band index + 1, capped at 5).
+    // Total live Offers needed to unlock the FULL earned floor (band index, capped at 5).
     const fullIdx = OFFER_BANDS.findIndex(b => b >= Math.abs(floor));
-    const offersForFull = fullIdx === -1 ? OFFER_BANDS.length : fullIdx + 1;
+    const offersForFull = fullIdx === -1 ? OFFER_BANDS.length - 1 : fullIdx;
 
     // Fee ladder — the monthly circulation-fee brackets above the fee-free ceiling. Opens up as the
     // balance climbs past halfway: revealT ramps 0→1 between feeFreeMax/2 and the ceiling, then
@@ -197,7 +200,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
                     {uFloor < 0 ? (
                         <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM }}>post another</b> → −{nextUnlock}</> : ''}</span>
                     ) : (
-                        <span><b style={{ color: WARM }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} unlock your full −{Math.abs(floor)}.</span>
+                        <span><b style={{ color: WARM }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your full −{Math.abs(floor)}.</span>
                     )}
                 </div>
             )}

@@ -2461,6 +2461,7 @@ export async function startHttpsServer(port: number): Promise<void> {
     });
 
     router.get('/api/marketplace/posts', async (ctx) => {
+        const id = ctx.query.id as string | undefined;
         const type = ctx.query.type as string | undefined;
         const category = ctx.query.category as string | undefined;
         const author = ctx.query.author as string | undefined;
@@ -2469,7 +2470,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         const offset = clampOffset(ctx.query.offset);
         const updatedAfter = ctx.query.updatedAfter as string | undefined;
         // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
-        ctx.body = getPosts({ type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined });
+        ctx.body = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined });
     });
 
     router.post('/api/marketplace/posts', async (ctx) => {

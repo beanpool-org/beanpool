@@ -21,7 +21,7 @@ import { PricingInfoModal } from '../../components/info-content/PricingInfoModal
 import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
-import Constants from 'expo-constants';
+import { HAS_MAPS_KEY } from '../../utils/maps';
 
 const CATEGORIES = [
     { id: 'food', emoji: '🥕', label: 'Food & Produce' },
@@ -222,9 +222,6 @@ export default function MapScreen() {
     const currencyStr = useCurrencyString();
     const { theme, colors } = useTheme();
     const [isDarkMap, setIsDarkMap] = useState(theme === 'dark');
-
-    const HAS_MAPS_KEY = Platform.OS !== 'android' || 
-        !!(Constants.expoConfig?.android?.config?.googleMaps?.apiKey || Constants.expoConfig?.extra?.googleMapsApiKey);
 
     useEffect(() => {
         setIsDarkMap(theme === 'dark');

@@ -3,5 +3,4 @@ release.keystore
 credentials.json
 .env
 .env.*
-
-
+!.env.example

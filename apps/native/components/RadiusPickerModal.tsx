@@ -5,10 +5,7 @@ import Slider from '@react-native-community/slider';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, palette } from '../constants/colors';
-import Constants from 'expo-constants';
-
-const HAS_MAPS_KEY = Platform.OS !== 'android' || 
-    !!(Constants.expoConfig?.android?.config?.googleMaps?.apiKey || Constants.expoConfig?.extra?.googleMapsApiKey);
+import { HAS_MAPS_KEY } from '../utils/maps';
 
 // Default to Mullumbimby for the demo/mock
 const DEFAULT_LAT = -28.5523;

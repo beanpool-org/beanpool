@@ -232,6 +232,16 @@ export default function LedgerScreen() {
         pledgeName: { fontSize: 13, fontWeight: '700', color: colors.text.heading },
         pledgeDate: { fontSize: 11, color: colors.text.muted, marginTop: 2 },
         pledgeAmt: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid },
+        // ── Wallet Hero ──
+        walletHero: { borderRadius: 20, padding: 20, borderWidth: 1, marginBottom: 16 },
+        walletBigBalance: { fontSize: 42, fontWeight: '900', letterSpacing: -2, marginVertical: 8 },
+        walletMetricRow: { flexDirection: 'row', backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 14, overflow: 'hidden', marginTop: 16 },
+        walletMetric: { flex: 1, alignItems: 'center', paddingVertical: 10, gap: 3 },
+        walletMetricDivider: { width: 1, backgroundColor: colors.border.default },
+        walletMetricVal: { fontSize: 15, fontWeight: '800', color: colors.text.heading },
+        walletMetricLabel: { fontSize: 10, fontWeight: '700', color: colors.text.muted, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
+        circRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+        circNextDate: { fontSize: 12, fontWeight: '700' as const },
         txnHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, marginBottom: 4 },
         exportBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.surface.subtle, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
         exportBtnText: { fontSize: 11, color: colors.text.secondary, fontWeight: '700' },
@@ -268,7 +278,7 @@ export default function LedgerScreen() {
         txnIcon: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
         txnIconCredit: { backgroundColor: colors.feedback.success.bg },
         txnIconDebit: { backgroundColor: colors.feedback.danger.bg },
-        txnPeer: { fontSize: 14, fontWeight: '700', color: colors.text.heading, marginBottom: 2 },
+        txnPeer: { fontSize: 14, fontWeight: '800', color: colors.text.heading, marginBottom: 2 },
         txnMemo: { fontSize: 12, color: colors.text.secondary, marginBottom: 2 },
         txnTime: { fontSize: 11, color: colors.text.muted },
         txnAmount: { fontSize: 16, fontWeight: '800' },
@@ -625,7 +635,7 @@ export default function LedgerScreen() {
         );
     };
 
-    // ─── Financials Tab ───────────────────────────────────────────────────────
+    // ─── Wallet Tab ───────────────────────────────────────────────────────────
     const renderActivityHeader = () => {
         const brackets = [{ m: 200, r: 0.0 }, { m: 300, r: 0.010 }, { m: 500, r: 0.015 }, { m: 1000, r: 0.020 }, { m: Infinity, r: 0.025 }];
         let rem = balanceState.balance, monthly = 0;
@@ -634,64 +644,97 @@ export default function LedgerScreen() {
         const now = new Date();
         const nextRun = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const daysUntil = Math.ceil((nextRun.getTime() - now.getTime()) / 86400000);
+        const isPositive = balanceState.balance >= 0;
+        const heroBg = isPositive
+            ? (theme === 'dark' ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.06)')
+            : (theme === 'dark' ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.06)');
+        const heroBorder = isPositive
+            ? (theme === 'dark' ? 'rgba(16,185,129,0.4)' : 'rgba(16,185,129,0.3)')
+            : (theme === 'dark' ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.3)');
 
         return (
             <View>
-                <View style={styles.balanceRow}>
-                    <Pressable style={styles.balanceCard} accessibilityRole="button" onPress={() => setShowBalanceInfo(true)}>
-                        <Text style={styles.balCardLabel}>Balance ⓘ</Text>
-                        <CurrencyDisplay asView style={[styles.balCardAmount, balanceState.balance >= 0 ? styles.pos : styles.neg]} amount={`${balanceState.balance >= 0 ? '+' : ''}${balanceState.balance.toFixed(2)}`} />
-                        <Text style={styles.balCardSub}>≈ {(Math.abs(balanceState.balance) / 40).toFixed(1)} hrs · Floor {balanceState.floor}</Text>
+                {/* ── Balance Hero ── */}
+                <View style={[styles.walletHero, { backgroundColor: heroBg, borderColor: heroBorder }]}>
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="About your balance"
+                        hitSlop={8}
+                        style={styles.heroInfo}
+                        onPress={() => setShowBalanceInfo(true)}
+                    >
+                        <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.muted} />
                     </Pressable>
-                    <Pressable style={styles.balanceCard} accessibilityRole="button" onPress={() => setShowCommonsInfo(true)}>
-                        <Text style={styles.balCardLabel}>Commons ⓘ</Text>
-                        <CurrencyDisplay asView style={styles.commonsAmt} amount={balanceState.commons.toFixed(2)} />
-                        <Text style={styles.balCardSub}>🌱 Community Pool</Text>
-                    </Pressable>
+
+                    <Text style={styles.tierHeroLabel}>YOUR BALANCE</Text>
+                    <CurrencyDisplay
+                        asView
+                        style={[styles.walletBigBalance, isPositive ? styles.pos : styles.neg]}
+                        amount={`${isPositive ? '+' : ''}${balanceState.balance.toFixed(1)}`}
+                    />
+                    <Text style={styles.heroSub}>
+                        ≈ {(Math.abs(balanceState.balance) / 40).toFixed(1)} hrs of value · Floor {balanceState.floor}
+                    </Text>
+
+                    {/* Key metrics strip */}
+                    <View style={styles.walletMetricRow}>
+                        <Pressable style={styles.walletMetric} accessibilityRole="button" onPress={() => setShowCommonsInfo(true)}>
+                            <MaterialCommunityIcons name="sprout" size={14} color={theme === 'dark' ? palette.amber400 : palette.amber600} />
+                            <CurrencyDisplay asView style={[styles.walletMetricVal, { color: theme === 'dark' ? palette.amber400 : palette.amber600 }]} amount={balanceState.commons.toFixed(1)} />
+                            <Text style={styles.walletMetricLabel}>Commons ⓘ</Text>
+                        </Pressable>
+                        <View style={styles.walletMetricDivider} />
+                        <View style={styles.walletMetric}>
+                            <MaterialCommunityIcons name="scale-balance" size={14} color={colors.text.secondary} />
+                            <Text style={styles.walletMetricVal}>{balanceState.floor}</Text>
+                            <Text style={styles.walletMetricLabel}>Credit Floor</Text>
+                        </View>
+                        {escrowTotal > 0 && (
+                            <>
+                                <View style={styles.walletMetricDivider} />
+                                <View style={styles.walletMetric}>
+                                    <MaterialCommunityIcons name="lock-clock" size={14} color={palette.amber500} />
+                                    <Text style={[styles.walletMetricVal, { color: palette.amber500 }]}>{escrowTotal.toFixed(1)}</Text>
+                                    <Text style={styles.walletMetricLabel}>In Escrow</Text>
+                                </View>
+                            </>
+                        )}
+                    </View>
                 </View>
 
+                {/* ── Community Circulation ── */}
                 {balanceState.balance > 0 && (
                     <Pressable style={[styles.circBox, amber && styles.circBoxAmber]} accessibilityRole="button" onPress={() => setShowCirculationInfo(true)}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                            <Text style={[styles.circLabel, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]}>🌿 Community Circulation ⓘ</Text>
+                        <View style={styles.circRow}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <MaterialCommunityIcons name="leaf" size={15} color={amber ? (theme === 'dark' ? palette.amber400 : palette.amber800) : colors.feedback.success.fg} />
+                                <Text style={[styles.circLabel, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]}>Community Circulation ⓘ</Text>
+                            </View>
                             <CurrencyDisplay style={[styles.circRate, amber && { color: theme === 'dark' ? palette.amber400 : palette.amber800 }]} amount={monthly.toFixed(2)} />
                         </View>
-                        <Text style={[styles.circLabel, { color: colors.text.muted, fontSize: 11, marginTop: 2 }]}>per month → commons pool</Text>
-                        {amber && <Text style={{ color: theme === 'dark' ? palette.amber400 : palette.amber600, fontSize: 11, marginTop: 4, fontWeight: '600' }}>Balance above 1000 — consider spending!</Text>}
+                        <View style={styles.circRow}>
+                            <Text style={{ fontSize: 11, fontWeight: '500', color: colors.text.muted }}>per month → commons pool</Text>
+                            <Text style={[styles.circNextDate, { color: amber ? (theme === 'dark' ? palette.amber400 : palette.amber800) : colors.feedback.success.fg }]}>
+                                {nextRun.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} · {daysUntil}d
+                            </Text>
+                        </View>
+                        {amber && (
+                            <Text style={{ color: theme === 'dark' ? palette.amber400 : palette.amber600, fontSize: 11, marginTop: 6, fontWeight: '600' }}>
+                                ⚠️ Balance above 1000 — consider spending!
+                            </Text>
+                        )}
                     </Pressable>
                 )}
 
-                {escrowTotal > 0 && (
-                    <View style={styles.infoCard}>
-                        <View style={styles.infoCardRow}>
-                            <MaterialCommunityIcons name="lock-clock" size={18} color={palette.amber500} />
-                            <Text style={styles.infoCardLabel}>Held in Trust</Text>
-                            <CurrencyDisplay style={styles.infoCardValue} amount={escrowTotal.toFixed(2)} />
-                        </View>
-                        <Text style={styles.infoCardSub}>Beans locked in active deals held in trust</Text>
-                    </View>
-                )}
-
-                {balanceState.balance > 0 && (
-                    <View style={styles.forecastCard}>
-                        <View style={styles.infoCardRow}>
-                            <MaterialCommunityIcons name="calendar-clock" size={18} color={colors.accent.primary} />
-                            <Text style={styles.infoCardLabel}>Next Circulation</Text>
-                            <Text style={styles.forecastDate}>{nextRun.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} · {daysUntil}d</Text>
-                        </View>
-                        <View style={styles.infoCardRow}>
-                            <Text style={styles.forecastSub}>Est. amount</Text>
-                            <CurrencyDisplay style={styles.forecastAmt} amount={`~${monthly.toFixed(1)}`} />
-                        </View>
-                    </View>
-                )}
-
+                {/* ── Project Pledges ── */}
                 {pledgeHistory.length > 0 && (
                     <View style={styles.pledgeSection}>
                         <Text style={styles.sectionLabel}>PROJECT PLEDGES</Text>
                         {pledgeHistory.map((pl: any) => (
                             <View key={pl.id} style={styles.pledgeRow}>
-                                <MaterialCommunityIcons name="sprout" size={16} color={colors.brand.primary} />
+                                <View style={[styles.txnIcon, { backgroundColor: colors.brand.primary + '18' }]}>
+                                    <MaterialCommunityIcons name="sprout" size={17} color={colors.brand.primary} />
+                                </View>
                                 <View style={{ flex: 1, marginLeft: 10 }}>
                                     <Text style={styles.pledgeName} numberOfLines={1}>{pl.projectTitle}</Text>
                                     <Text style={styles.pledgeDate}>{new Date(pl.timestamp).toLocaleDateString()}</Text>
@@ -702,18 +745,21 @@ export default function LedgerScreen() {
                     </View>
                 )}
 
+                {/* ── Send Credits ── */}
                 <Pressable
                     style={[styles.sendBtn, showSend && styles.sendBtnOpen, !canSend && styles.sendBtnLocked]}
                     accessibilityRole="button"
                     onPress={showSend ? () => { setShowSend(false); setSendError(null); setSendSuccess(false); } : openSend}
                 >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                        <MaterialCommunityIcons
+                            name={!canSend ? 'lock-outline' : showSend ? 'close' : 'send'}
+                            size={17}
+                            color={!canSend ? colors.text.secondary : colors.text.inverse}
+                        />
                         <Text style={[styles.sendBtnText, !canSend && { color: colors.text.secondary }]}>
-                            {!canSend ? '🔒 Send Credits (needs positive balance)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                            {!canSend ? 'Send Credits (needs positive balance)' : showSend ? 'Cancel' : 'Send Credits'}
                         </Text>
-                        {!canSend && (
-                            <MaterialCommunityIcons name="information-outline" size={16} color={colors.text.muted} />
-                        )}
                     </View>
                 </Pressable>
 
@@ -726,9 +772,7 @@ export default function LedgerScreen() {
                         {showMemberPicker && (
                             <View style={styles.pickerBox}>
                                 <TextInput style={styles.pickerSearch} accessibilityLabel="Search members" placeholder="Search members..." placeholderTextColor={colors.text.muted} value={memberSearch} onChangeText={setMemberSearch} autoCapitalize="none" autoCorrect={false} />
-                                {/* Plain ScrollView (not a nested FlatList): a vertical FlatList inside the
-                                    outer transactions FlatList has broken scroll on Android. keyboardShouldPersistTaps
-                                    lets a member be tapped while the search keyboard is still open. */}
+                                {/* Plain ScrollView — nested FlatList breaks vertical scroll on Android */}
                                 <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                                     {filteredMembers.length === 0 ? (
                                         <Text style={{ padding: 16, color: colors.text.muted, textAlign: 'center', fontSize: 13 }}>No members found</Text>
@@ -746,7 +790,6 @@ export default function LedgerScreen() {
                         {(() => {
                             const parsedAmount = parseFloat(sendAmount);
                             if (!isNaN(parsedAmount) && parsedAmount > 0) {
-                                // Peer transfers are fee-free — the recipient receives the full amount.
                                 return (
                                     <View style={styles.taxBreakdown}>
                                         <View style={styles.breakdownRow}>

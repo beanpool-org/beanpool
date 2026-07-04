@@ -38,7 +38,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
     // Paused Offers show only to their author (server viewer-aware) — mark them so they're
     // distinguishable in "My Posts" from live listings.
-    const isPaused = (post as any).status === 'paused';
+    const isPaused = post.status === 'paused';
     const pausedPill = isPaused ? (
         <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300/50">⏸ Paused</span>
     ) : null;

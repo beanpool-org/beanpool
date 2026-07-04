@@ -303,7 +303,7 @@ export default function ChatScreen() {
         },
         quoteMe: {
             backgroundColor: colors.chat.quoteMeBg,
-            borderLeftColor: colors.text.inverse,
+            borderLeftColor: colors.chat.messageTextMe,
         },
         quoteOther: {
             backgroundColor: colors.chat.quoteOtherBg,
@@ -315,7 +315,8 @@ export default function ChatScreen() {
             marginBottom: 2,
         },
         quoteAuthorMe: {
-            color: colors.text.inverse,
+            color: colors.chat.messageTextMe,
+            opacity: 0.9,
         },
         quoteAuthorOther: {
             color: colors.accent.primary,

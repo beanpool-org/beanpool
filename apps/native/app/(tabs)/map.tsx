@@ -21,6 +21,7 @@ import { PricingInfoModal } from '../../components/info-content/PricingInfoModal
 import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
+import { HAS_MAPS_KEY } from '../../utils/maps';
 
 const CATEGORIES = [
     { id: 'food', emoji: '🥕', label: 'Food & Produce' },
@@ -750,63 +751,71 @@ export default function MapScreen() {
                     }}
                 />
             )}
-            <MapView
-                ref={mapRef}
-                style={styles.map}
-                provider={PROVIDER_DEFAULT}
-                customMapStyle={isDarkMap ? darkMapStyle : hidePoisStyle}
-                userInterfaceStyle={isDarkMap ? "dark" : "light"}
-                showsUserLocation={true}
-                onRegionChangeComplete={(r: any) => {
-                    setCurrentRegion(r);
-                }}
-                onPress={(e: any) => {
-                    handleMapPress(e);
-                    if (selectedPostPreview) setSelectedPostPreview(null);
-                }}
-                onLongPress={handleMapPress}
-                initialRegion={currentRegion}
-                renderCluster={renderCluster}
-                spiralEnabled={true}
-                animationEnabled={false}
-                radius={15}
-            >
-                {posts.filter(p => {
-                    if (p.status && p.status !== 'active') return false;
-                    if (p.lat == null || p.lng == null) return false;
-                    const l1 = Number(p.lat);
-                    const l2 = Number(p.lng);
-                    if (isNaN(l1) || isNaN(l2)) return false;
+            {HAS_MAPS_KEY ? (
+                <MapView
+                    ref={mapRef}
+                    style={styles.map}
+                    provider={PROVIDER_DEFAULT}
+                    customMapStyle={isDarkMap ? darkMapStyle : hidePoisStyle}
+                    userInterfaceStyle={isDarkMap ? "dark" : "light"}
+                    showsUserLocation={true}
+                    onRegionChangeComplete={(r: any) => {
+                        setCurrentRegion(r);
+                    }}
+                    onPress={(e: any) => {
+                        handleMapPress(e);
+                        if (selectedPostPreview) setSelectedPostPreview(null);
+                    }}
+                    onLongPress={handleMapPress}
+                    initialRegion={currentRegion}
+                    renderCluster={renderCluster}
+                    spiralEnabled={true}
+                    animationEnabled={false}
+                    radius={15}
+                >
+                    {posts.filter(p => {
+                        if (p.status && p.status !== 'active') return false;
+                        if (p.lat == null || p.lng == null) return false;
+                        const l1 = Number(p.lat);
+                        const l2 = Number(p.lng);
+                        if (isNaN(l1) || isNaN(l2)) return false;
 
-                    const pt = (p.type || '').toLowerCase();
-                    if (mapTypeFilter === 'offers' && pt !== 'offer') return false;
-                    if (mapTypeFilter === 'needs' && pt !== 'need') return false;
-                    if (mapCategoryFilter !== 'all' && p.category !== mapCategoryFilter) return false;
+                        const pt = (p.type || '').toLowerCase();
+                        if (mapTypeFilter === 'offers' && pt !== 'offer') return false;
+                        if (mapTypeFilter === 'needs' && pt !== 'need') return false;
+                        if (mapCategoryFilter !== 'all' && p.category !== mapCategoryFilter) return false;
 
-                    return true;
-                }).map(post => {
-                    const catObj = CATEGORIES.find(c => c.id === post.category);
-                    const safePost = { ...post, lat: Number(post.lat), lng: Number(post.lng) };
-                    const isSelected = selectedPostPreview?.id === post.id;
-                    return (
-                        <CustomMapMarker
-                            key={`${post.id}-${isSelected}-${markersReady}`}
-                            coordinate={{ latitude: safePost.lat, longitude: safePost.lng }}
-                            post={safePost}
-                            catObj={catObj}
+                        return true;
+                    }).map(post => {
+                        const catObj = CATEGORIES.find(c => c.id === post.category);
+                        const safePost = { ...post, lat: Number(post.lat), lng: Number(post.lng) };
+                        const isSelected = selectedPostPreview?.id === post.id;
+                        return (
+                            <CustomMapMarker
+                                key={`${post.id}-${isSelected}-${markersReady}`}
+                                coordinate={{ latitude: safePost.lat, longitude: safePost.lng }}
+                                post={safePost}
+                                catObj={catObj}
 
-                            isSelected={isSelected}
-                            onPress={setSelectedPostPreview}
-                            markersReady={markersReady}
-                        />
-                    );
-                })}
+                                isSelected={isSelected}
+                                onPress={setSelectedPostPreview}
+                                markersReady={markersReady}
+                            />
+                        );
+                    })}
 
-                {/* Pin drop preview marker */}
-                {showNewPost && postLat != null && postLng != null && (
-                    <Marker coordinate={{ latitude: postLat, longitude: postLng }} pinColor={postType === 'offer' ? '#10b981' : '#ea580c'} />
-                )}
-            </MapView>
+                    {/* Pin drop preview marker */}
+                    {showNewPost && postLat != null && postLng != null && (
+                        <Marker coordinate={{ latitude: postLat, longitude: postLng }} pinColor={postType === 'offer' ? '#10b981' : '#ea580c'} />
+                    )}
+                </MapView>
+            ) : (
+                <View style={[styles.map, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface.subtle, padding: 24 }]}>
+                    <MaterialCommunityIcons name="map-marker-off" size={48} color={colors.text.muted} />
+                    <Text style={{ marginTop: 12, color: colors.text.body, fontWeight: '700', textAlign: 'center' }}>Google Maps is not configured</Text>
+                    <Text style={{ marginTop: 4, color: colors.text.secondary, fontSize: 12, textAlign: 'center' }}>API key is missing in build config.</Text>
+                </View>
+            )}
 
             {/* Floating Filter Bar */}
             {!showNewPost && !selectedPostPreview && (

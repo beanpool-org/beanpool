@@ -198,7 +198,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
                 <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: '#64748b', fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
                     <span>🎣</span>
                     {uFloor < 0 ? (
-                        <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM }}>{liveOffers + 1} offers</b> → −{nextUnlock}</> : ''}</span>
+                        <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM }}>{liveOffers + 1} offer{liveOffers + 1 === 1 ? '' : 's'}</b> → −{nextUnlock}</> : ''}</span>
                     ) : (
                         <span><b style={{ color: WARM }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your full −{Math.abs(floor)}.</span>
                     )}

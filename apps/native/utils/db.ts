@@ -523,28 +523,38 @@ export async function getPost(id: string) {
     
     // Background fetch to ensure the local DB has the latest post status
     if (anchorUrl) {
-        fetch(`${anchorUrl}/api/marketplace/posts?id=${id}`)
+        fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true&_t=${Date.now()}`)
             .then(res => res.json())
             .then(async posts => {
                 if (Array.isArray(posts) && posts.length > 0) {
                     const serverPost = posts[0];
-                    await database.runAsync(
-                        "UPDATE posts SET status = ?, active = ?, accepted_by = ?, pending_transaction_id = ?, completed_at = ?, updated_at = ? WHERE id = ?",
-                        [
-                            serverPost.status,
-                            serverPost.active ? 1 : 0,
-                            serverPost.accepted_by || null,
-                            serverPost.pending_transaction_id || null,
-                            serverPost.completed_at || null,
-                            serverPost.updated_at || null,
-                            id
-                        ]
-                    );
+                    await acquireSyncLock();
+                    try {
+                        await database.runAsync(
+                            "UPDATE posts SET status = ?, active = ?, accepted_by = ?, pending_transaction_id = ?, completed_at = ?, updated_at = ? WHERE id = ?",
+                            [
+                                serverPost.status || 'active',
+                                serverPost.active !== undefined ? (serverPost.active ? 1 : 0) : 1,
+                                serverPost.acceptedBy || serverPost.accepted_by || null,
+                                serverPost.pendingTransactionId || serverPost.pending_transaction_id || null,
+                                serverPost.completedAt || serverPost.completed_at || null,
+                                serverPost.updatedAt || serverPost.updated_at || null,
+                                id
+                            ]
+                        );
+                    } finally {
+                        releaseSyncLock();
+                    }
                     const { DeviceEventEmitter } = require('react-native');
                     DeviceEventEmitter.emit('sync_data_updated');
                 } else if (Array.isArray(posts) && posts.length === 0) {
                     // Post was deleted on the server, delete it locally
-                    await database.runAsync("DELETE FROM posts WHERE id = ?", [id]);
+                    await acquireSyncLock();
+                    try {
+                        await database.runAsync("DELETE FROM posts WHERE id = ?", [id]);
+                    } finally {
+                        releaseSyncLock();
+                    }
                     const { DeviceEventEmitter } = require('react-native');
                     DeviceEventEmitter.emit('sync_data_updated');
                 }
@@ -1178,26 +1188,8 @@ export async function sendTransfer(from: string, to: string, amount: number, mem
         }
 
         // 2. Refresh both parties' balances from server
-        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (anchorUrl) {
-            for (const pk of [from, to]) {
-                try {
-                    const balRes = await fetch(`${anchorUrl}/api/ledger/balance/${pk}?_t=${Date.now()}`);
-                    if (balRes.ok) {
-                        const balData = await balRes.json();
-                        await acquireSyncLock();
-                        try {
-                            await database.runAsync(
-                                'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                                [pk, balData.balance || 0, balData.last_demurrage_epoch || 0]
-                            );
-                        } finally {
-                            releaseSyncLock();
-                        }
-                    }
-                } catch {}
-            }
-        }
+        refreshBalanceFromServer(from).catch(() => null);
+        refreshBalanceFromServer(to).catch(() => null);
         
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('transaction_completed');
@@ -1370,6 +1362,7 @@ export async function createPost(post: any) {
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.photos || null]
     );
+    refreshBalanceFromServer(post.author_pubkey).catch(() => null);
 }
 
 export async function createProject(project: {
@@ -1646,6 +1639,7 @@ export async function pausePost(id: string) {
     await _signedRequest('/api/marketplace/posts/pause', { postId: id, authorPublicKey: identity.publicKey });
     const database = await getDb();
     await database.runAsync(`UPDATE posts SET status = 'paused' WHERE id = ?`, [id]);
+    refreshBalanceFromServer(identity.publicKey).catch(() => null);
 }
 
 /** Re-activate a paused Offer (owner-only): back in the feed and counting toward the credit line. */
@@ -1655,6 +1649,7 @@ export async function resumePost(id: string) {
     await _signedRequest('/api/marketplace/posts/resume', { postId: id, authorPublicKey: identity.publicKey });
     const database = await getDb();
     await database.runAsync(`UPDATE posts SET status = 'active' WHERE id = ?`, [id]);
+    refreshBalanceFromServer(identity.publicKey).catch(() => null);
 }
 
 export async function deletePost(id: string) {
@@ -1685,6 +1680,7 @@ export async function deletePost(id: string) {
     // 2. Erase from local SQLite Cache
     const database = await getDb();
     await database.runAsync('DELETE FROM posts WHERE id = ?', [id]);
+    refreshBalanceFromServer(identity.publicKey).catch(() => null);
 }
 
 export async function applyDelta(delta: any) {
@@ -2977,30 +2973,7 @@ export async function acceptMarketplacePost(postId: string, buyerPublicKey: stri
     }
 
     // Refresh buyer balance immediately (escrow just deducted from them) - OUTSIDE critical lock section
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (anchorUrl) {
-        try {
-            const balRes = await fetch(`${anchorUrl}/api/ledger/balance/${buyerPublicKey}?_t=${Date.now()}`);
-            if (balRes.ok) {
-                const balData = await balRes.json();
-                await acquireSyncLock();
-                try {
-                    const database = await getDb();
-                    await database.runAsync(
-                        'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                        [buyerPublicKey, balData.balance || 0, balData.last_demurrage_epoch || 0]
-                    );
-                    console.log(`[Escrow] Buyer balance after escrow lock: ${balData.balance}B`);
-                } finally {
-                    releaseSyncLock();
-                }
-                const { DeviceEventEmitter } = require('react-native');
-                DeviceEventEmitter.emit('sync_data_updated');
-            }
-        } catch (e) {
-            console.warn('[Escrow] Balance refresh failed:', e);
-        }
-    }
+    refreshBalanceFromServer(buyerPublicKey).catch(() => null);
     
     return res;
 }
@@ -3036,37 +3009,8 @@ export async function completeMarketplaceTransaction(transactionId: string, conf
     // Immediately refresh BOTH parties' balances from server *outside critical lock section*
     const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
     const sellerPubkey = res?.transaction?.sellerPublicKey || null;
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (anchorUrl) {
-        const pubkeysToRefresh = [buyerPubkey, sellerPubkey].filter(Boolean) as string[];
-        for (const pk of pubkeysToRefresh) {
-            try {
-                const balRes = await fetch(`${anchorUrl}/api/ledger/balance/${pk}?_t=${Date.now()}`);
-                if (balRes.ok) {
-                    const balData = await balRes.json();
-                    await acquireSyncLock();
-                    try {
-                        const database = await getDb();
-                        await database.runAsync(
-                            'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                            [pk, balData.balance || 0, balData.last_demurrage_epoch || 0]
-                        );
-                        console.log(`[Escrow] Balance refreshed for ${pk.slice(0,8)}: ${balData.balance}B`);
-                    } finally {
-                        releaseSyncLock();
-                    }
-                    const { DeviceEventEmitter } = require('react-native');
-                    DeviceEventEmitter.emit('sync_data_updated');
-                } else {
-                    console.warn(`[Escrow] Balance fetch failed for ${pk.slice(0,8)}: HTTP ${balRes.status}`);
-                }
-            } catch (e) {
-                console.warn(`[Escrow] Balance refresh error for ${pk.slice(0,8)}:`, e);
-            }
-        }
-    } else {
-        console.warn('[Escrow] No anchor URL — cannot refresh balances');
-    }
+    if (buyerPubkey) refreshBalanceFromServer(buyerPubkey).catch(() => null);
+    if (sellerPubkey) refreshBalanceFromServer(sellerPubkey).catch(() => null);
 
     return res;
 }

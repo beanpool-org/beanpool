@@ -232,30 +232,14 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                 </div>
             ) : (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
-                    <CreditBar balance={balance} floor={floor} />
-                    {/* Offer covenant (v3): live Offers gate how much of the earned line you can use. */}
-                    {floor < 0 && (
-                        frozen ? (
-                            <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
-                                <span>⚠️</span>
-                                <span>Spending paused — your balance is below what your {liveOffers} active offer{liveOffers === 1 ? '' : 's'} unlock (−{Math.abs(usableFloor)}). Post an Offer or trade back up to lift it. You can still receive and sell.</span>
-                            </div>
-                        ) : usableFloor === floor ? (
-                            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-nature-500 dark:text-nature-400">
-                                <span>🎣</span>
-                                <span>Your {liveOffers} active offer{liveOffers === 1 ? '' : 's'} unlock your full −{Math.abs(floor)} credit line.</span>
-                            </div>
-                        ) : liveOffers === 0 ? (
-                            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-nature-500 dark:text-nature-400">
-                                <span>🎣</span>
-                                <span><b className="text-nature-700 dark:text-nature-200">Post an Offer</b> to open your credit line (you've earned up to −{Math.abs(floor)}).</span>
-                            </div>
-                        ) : (
-                            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-nature-500 dark:text-nature-400">
-                                <span>🎣</span>
-                                <span>{liveOffers} active offer{liveOffers === 1 ? '' : 's'} unlock −{Math.abs(usableFloor)} of your −{Math.abs(floor)} line — <b className="text-nature-700 dark:text-nature-200">post another</b> to unlock more.</span>
-                            </div>
-                        )
+                    {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
+                    <CreditBar balance={balance} floor={floor} usableFloor={usableFloor} liveOffers={liveOffers} />
+                    {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
+                    {frozen && (
+                        <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
+                            <span>⚠️</span>
+                            <span>Spending paused — your balance is below what your {liveOffers} active offer{liveOffers === 1 ? '' : 's'} unlock (−{Math.abs(usableFloor)}). Post an Offer or trade back up to lift it. You can still receive and sell.</span>
+                        </div>
                     )}
                 </div>
             )}

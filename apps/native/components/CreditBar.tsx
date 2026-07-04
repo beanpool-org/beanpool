@@ -79,6 +79,8 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
     const rungs = showLadder ? OFFER_BANDS.filter(b => b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
     const nextBand = OFFER_BANDS.find(b => b > Math.abs(uFloor));
     const nextUnlock = hasLocked && nextBand ? Math.min(nextBand, Math.abs(floor)) : undefined;
+    const fullIdx = OFFER_BANDS.findIndex(b => b >= Math.abs(floor));
+    const offersForFull = fullIdx === -1 ? OFFER_BANDS.length : fullIdx + 1;
 
     // Fee ladder — the monthly circulation-fee brackets that live ABOVE the fee-free ceiling.
     // It "opens up" as the balance climbs past the halfway mark: revealT ramps 0→1 between
@@ -132,11 +134,11 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                     <Text style={s.ladderText}>
                         🎣 {uFloor < 0 ? (
                             <>
-                                <Text style={s.ladderStrong}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</Text> unlock −{Math.abs(uFloor)}{nextUnlock ? ` · post another → −${nextUnlock}` : ''}
+                                <Text style={s.ladderStrong}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? ` · post another → −${nextUnlock}` : ''}
                             </>
                         ) : (
                             <>
-                                <Text style={s.ladderStrong}>Post an Offer</Text> to unlock your credit line (down to −{Math.abs(floor)})
+                                <Text style={s.ladderStrong}>Post an Offer</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> offer{offersForFull === 1 ? '' : 's'} unlock your full −{Math.abs(floor)}.
                             </>
                         )}
                     </Text>
@@ -199,8 +201,8 @@ const styles = (colors: any) => StyleSheet.create({
     lockedZone: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.42)' },
     rung: { position: 'absolute', top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.4 },
     usableMark: { position: 'absolute', top: -3, bottom: -3, width: 2, marginLeft: -1, backgroundColor: WARM_BG, zIndex: 1 },
-    ladderRow: { marginTop: 5 },
-    ladderText: { fontSize: 10, color: colors.text.muted },
+    ladderRow: { marginTop: 6 },
+    ladderText: { fontSize: 11, lineHeight: 15, color: colors.text.body },
     ladderStrong: { color: WARM, fontWeight: '800' },
     feeRow: { position: 'relative', height: 12, marginTop: 4 },
     feeRate: { position: 'absolute', top: 0, width: 44, marginLeft: -22, textAlign: 'center', fontSize: 9, fontVariant: ['tabular-nums'] },

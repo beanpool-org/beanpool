@@ -81,6 +81,9 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
     // (a 4th offer on a −1400 limit unlocks −1400, not −1500).
     const nextBand = OFFER_BANDS.find(b => b > Math.abs(uFloor));
     const nextUnlock = hasLocked && nextBand ? Math.min(nextBand, Math.abs(floor)) : undefined;
+    // Total live Offers needed to unlock the FULL earned floor (band index + 1, capped at 5).
+    const fullIdx = OFFER_BANDS.findIndex(b => b >= Math.abs(floor));
+    const offersForFull = fullIdx === -1 ? OFFER_BANDS.length : fullIdx + 1;
 
     // Fee ladder — the monthly circulation-fee brackets above the fee-free ceiling. Opens up as the
     // balance climbs past halfway: revealT ramps 0→1 between feeFreeMax/2 and the ceiling, then
@@ -187,14 +190,14 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
                 ))}
             </div>
 
-            {/* Offer ladder caption — what your live Offers unlock, and the next rung */}
+            {/* Offer ladder caption — what your live Offers unlock, and how many reach your full line */}
             {showLadder && hasLocked && (
-                <div style={{ marginTop: 5, fontSize: 10, color: '#929c90', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: '#64748b', fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
                     <span>🎣</span>
                     {uFloor < 0 ? (
-                        <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> unlock −{Math.abs(uFloor)}{nextUnlock ? ` · post another → −${nextUnlock}` : ''}</span>
+                        <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM }}>post another</b> → −{nextUnlock}</> : ''}</span>
                     ) : (
-                        <span><b style={{ color: WARM }}>Post an Offer</b> to unlock your credit line (down to −{Math.abs(floor)})</span>
+                        <span><b style={{ color: WARM }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} unlock your full −{Math.abs(floor)}.</span>
                     )}
                 </div>
             )}

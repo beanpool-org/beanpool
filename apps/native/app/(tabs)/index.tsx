@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, Pressable, SafeAreaView, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Pressable, SafeAreaView, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -494,6 +494,20 @@ export default function MarketScreen() {
     // Fresh listings banner dismissal and scroll tracking states
     const [dismissedFreshCount, setDismissedFreshCount] = useState<number>(0);
     const [showFreshBannerOnScroll, setShowFreshBannerOnScroll] = useState(true);
+
+    const [refreshing, setRefreshing] = useState(false);
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        try {
+            await requestSync();
+            await loadPosts();
+        } catch (e) {
+            console.error('Pull-to-refresh failed:', e);
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
     useEffect(() => {
         AsyncStorage.getItem('bp_fav_categories').then(val => {
@@ -1269,6 +1283,14 @@ export default function MarketScreen() {
                 showsVerticalScrollIndicator={false}
                 onScroll={onScrollHandler}
                 scrollEventThrottle={16}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={[colors.brand.primary]}
+                        tintColor={colors.brand.primary}
+                    />
+                }
                 ListEmptyComponent={
                     (!hasActiveFilters && !firstSyncDone && !syncTimedOut) ? (
                         // First-run / initial sync — show a loader, not the empty state.

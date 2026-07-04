@@ -75,7 +75,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
             alignItems: 'center',
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
         },
         flowStepIcon: {
             marginRight: 16,
@@ -134,7 +134,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
         exampleContainer: {
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             borderWidth: 1,
             borderColor: colors.border.default,
         },
@@ -157,7 +157,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
         formulaContainer: {
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             alignItems: 'center',
             marginBottom: 24,
         },
@@ -176,7 +176,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
         },
         qvTable: {
             backgroundColor: colors.surface.subtle,
-            borderRadius: 12,
+            borderRadius: 14,
             padding: 16,
             marginBottom: 32,
         },
@@ -210,7 +210,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
         processContainer: {
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             borderLeftWidth: 4,
             borderLeftColor: colors.text.link,
         },
@@ -230,7 +230,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
             marginTop: 28,
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             borderWidth: 1,
             borderColor: colors.border.default,
         },

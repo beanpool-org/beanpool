@@ -29,7 +29,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
         cardContainer: {
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             borderLeftWidth: 4,
             borderLeftColor: colors.brand.primary,
             marginBottom: 16,
@@ -49,7 +49,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
         spectrumCard: {
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             borderLeftWidth: 4,
             borderLeftColor: colors.brand.primary,
             marginBottom: 16,
@@ -107,7 +107,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
             flexDirection: 'row',
             backgroundColor: colors.brand.tint,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             borderWidth: 1,
             borderColor: colors.brand.dark,
             alignItems: 'center',
@@ -165,7 +165,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
         exampleCard: {
             backgroundColor: colors.surface.subtle,
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 14,
             borderLeftWidth: 4,
             borderLeftColor: colors.brand.primary,
         },

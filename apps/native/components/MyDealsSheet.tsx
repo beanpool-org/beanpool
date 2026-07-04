@@ -191,7 +191,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             backgroundColor: colors.border.default,
             paddingHorizontal: 6,
             paddingVertical: 2,
-            borderRadius: 4,
+            borderRadius: 8,
         },
         statusCompleted: {
             backgroundColor: palette.emerald100,
@@ -208,7 +208,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         typeBadge: {
             paddingHorizontal: 6,
             paddingVertical: 2,
-            borderRadius: 4,
+            borderRadius: 8,
         },
         badgeOffer: {
             backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -224,7 +224,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         pausedBadge: {
             paddingHorizontal: 6,
             paddingVertical: 2,
-            borderRadius: 4,
+            borderRadius: 8,
             backgroundColor: 'rgba(245, 158, 11, 0.15)',
             borderWidth: 1,
             borderColor: 'rgba(245, 158, 11, 0.35)',
@@ -424,7 +424,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                                 needsReview ? (
                                     <Pressable
                                         accessibilityRole="button"
-                                        style={[styles.reviewBtn, { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }]}
+                                        style={[styles.reviewBtn, { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }]}
                                         onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
                                     >
                                         <Text style={[styles.reviewBtnText, { fontSize: 11 }]}>Review</Text>

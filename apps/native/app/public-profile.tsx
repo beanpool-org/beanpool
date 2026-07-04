@@ -238,6 +238,9 @@ export default function PublicProfileScreen() {
     const [stats, setStats] = useState<any>(null);
     const [activePosts, setActivePosts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [ratingsLoading, setRatingsLoading] = useState(true);
+    const [trustLoading, setTrustLoading] = useState(false);
+    const [givenLoading, setGivenLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'listings' | 'reviews' | 'given'>('listings');
     const [balanceInfo, setBalanceInfo] = useState<any>(null);
     const [given, setGiven] = useState<any[]>([]);
@@ -253,36 +256,80 @@ export default function PublicProfileScreen() {
     const callsignStr = (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined);
 
     useEffect(() => {
-        if (!pubKeyStr) { setLoading(false); return; }
+        if (!pubKeyStr) {
+            setLoading(false);
+            setRatingsLoading(false);
+            setTrustLoading(false);
+            setGivenLoading(false);
+            return;
+        }
+
+        // 1. Load local first-class database items instantly
         setLoading(true);
         Promise.all([
             getMemberProfile(pubKeyStr).catch(() => null),
-            getMemberRatings(pubKeyStr).catch(() => null),
             getMemberPosts(pubKeyStr).catch(() => []),
             isSelf ? getBalance(pubKeyStr).catch(() => null) : Promise.resolve(null),
-            isSelf ? getRatingsGiven(pubKeyStr).catch(() => []) : Promise.resolve([]),
             isSelf ? getFriendsLocal(pubKeyStr).catch(() => []) : Promise.resolve([]),
-            isSelf ? Promise.resolve(null) : getTrustProfile(pubKeyStr).catch(() => null),
-            // Viewer's own balance (when viewing someone else) — drives the Elder vouch button.
-            isSelf || !identity?.publicKey ? Promise.resolve(null) : getBalance(identity.publicKey).catch(() => null),
-        ]).then(([prof, rat, posts, bal, givenRatings, friends, trustProfile, viewerBal]) => {
+        ]).then(([prof, posts, bal, friends]) => {
             if (prof) setProfile(prof);
-            if (viewerBal) setViewerBalance(viewerBal);
-            if (rat) {
-                setStats({ average: rat.average, count: rat.count, asProvider: rat.asProvider, asReceiver: rat.asReceiver });
-                setRatings(rat.ratings || []);
-            }
             if (posts) setActivePosts(posts);
             if (bal) setBalanceInfo(bal);
-            if (givenRatings) setGiven(givenRatings);
             if (Array.isArray(friends)) {
                 setFriendsCount(friends.length);
                 setGuardianCount(friends.filter((f: any) => f.isGuardian).length);
             }
-            if (trustProfile) setTrust(trustProfile);
             setLoading(false);
         });
-    }, [pubKeyStr, isSelf]);
+
+        // 2. Load ratings asynchronously in the background
+        setRatingsLoading(true);
+        getMemberRatings(pubKeyStr)
+            .then(rat => {
+                if (rat) {
+                    setStats({ average: rat.average, count: rat.count, asProvider: rat.asProvider, asReceiver: rat.asReceiver });
+                    setRatings(rat.ratings || []);
+                }
+            })
+            .catch(() => null)
+            .finally(() => setRatingsLoading(false));
+
+        // 3. Load trust profile asynchronously in the background (if not self)
+        if (!isSelf) {
+            setTrustLoading(true);
+            getTrustProfile(pubKeyStr)
+                .then(trustProfile => {
+                    if (trustProfile) setTrust(trustProfile);
+                })
+                .catch(() => null)
+                .finally(() => setTrustLoading(false));
+
+            if (identity?.publicKey) {
+                getBalance(identity.publicKey)
+                    .then(viewerBal => {
+                        if (viewerBal) setViewerBalance(viewerBal);
+                    })
+                    .catch(() => null);
+            }
+        } else {
+            setTrustLoading(false);
+            setTrust(null);
+        }
+
+        // 4. Load given ratings asynchronously in the background (if self)
+        if (isSelf) {
+            setGivenLoading(true);
+            getRatingsGiven(pubKeyStr)
+                .then(givenRatings => {
+                    if (givenRatings) setGiven(givenRatings);
+                })
+                .catch(() => null)
+                .finally(() => setGivenLoading(false));
+        } else {
+            setGivenLoading(false);
+            setGiven([]);
+        }
+    }, [pubKeyStr, isSelf, identity?.publicKey]);
 
     const renderStars = (avg: number) => {
         const rounded = Math.round(avg || 0);
@@ -374,139 +421,146 @@ export default function PublicProfileScreen() {
                 </View>
 
                 {/* Trust & safety (other members only) — the "is this person safe to trade with?" panel */}
-                {!isSelf && trust && (
-                    <>
-                        {/* Safety recommendation */}
-                        {(() => {
-                            const band = RISK_BAND[trust.risk?.band] || RISK_BAND.yellow;
-                            return (
-                                <View style={[styles.safetyBanner, { backgroundColor: band.bg, borderColor: band.border }]}>
-                                    <View style={styles.safetyHeaderRow}>
-                                        <Text style={styles.safetyEmoji} allowFontScaling={false}>{band.emoji}</Text>
-                                        <Text style={[styles.safetyHeadline, { color: band.text }]}>{trust.risk?.headline}</Text>
+                {!isSelf && (
+                    trustLoading ? (
+                        <View style={{ marginHorizontal: 16, marginTop: 16, padding: 20, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' }}>
+                            <ActivityIndicator size="small" color={colors.brand.primary} />
+                            <Text style={{ marginTop: 8, color: colors.text.muted, fontSize: 12, fontWeight: '600' }}>Calculating trust signals...</Text>
+                        </View>
+                    ) : trust ? (
+                        <>
+                            {/* Safety recommendation */}
+                            {(() => {
+                                const band = RISK_BAND[trust.risk?.band] || RISK_BAND.yellow;
+                                return (
+                                    <View style={[styles.safetyBanner, { backgroundColor: band.bg, borderColor: band.border }]}>
+                                        <View style={styles.safetyHeaderRow}>
+                                            <Text style={styles.safetyEmoji} allowFontScaling={false}>{band.emoji}</Text>
+                                            <Text style={[styles.safetyHeadline, { color: band.text }]}>{trust.risk?.headline}</Text>
+                                        </View>
+                                        {(trust.risk?.reasons || []).map((r: string, i: number) => (
+                                            <Text key={i} style={styles.safetyReason}>• {r}</Text>
+                                        ))}
+                                        {(trust.risk?.tips || []).length > 0 && (
+                                            <View style={styles.safetyTips}>
+                                                {trust.risk.tips.map((t: string, i: number) => (
+                                                    <Text key={i} style={styles.safetyTip}>⚠️  {t}</Text>
+                                                ))}
+                                            </View>
+                                        )}
                                     </View>
-                                    {(trust.risk?.reasons || []).map((r: string, i: number) => (
-                                        <Text key={i} style={styles.safetyReason}>• {r}</Text>
+                                );
+                            })()}
+
+                            {/* Tier + tenure */}
+                            <View style={styles.trustSignalCard}>
+                                <Text style={styles.trustEmoji} allowFontScaling={false}>{trust.tier?.emoji || '🌱'}</Text>
+                                <View style={{ flexShrink: 1 }}>
+                                    <Text style={styles.trustTierName} numberOfLines={1}>{trust.tier?.name || 'Member'}</Text>
+                                    <Text style={styles.trustSub} numberOfLines={1}>
+                                        {[trust.joinedAt ? `Member since ${fmtMonthYear(trust.joinedAt)}` : '', fmtLastActive(trust.lastActiveAt)].filter(Boolean).join(' · ')}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {/* Track record */}
+                            <View style={styles.statStrip}>
+                                <View style={styles.statTile}>
+                                    <Text style={styles.statTileNum} numberOfLines={1}>{trust.stats?.tradeCount ?? 0}</Text>
+                                    <Text style={styles.statTileLabel} numberOfLines={1}>Trades</Text>
+                                </View>
+                                <View style={styles.statDivider} />
+                                <View style={styles.statTile}>
+                                    <Text style={styles.statTileNum} numberOfLines={1}>{trust.stats?.uniquePartners ?? 0}</Text>
+                                    <Text style={styles.statTileLabel} numberOfLines={1}>Partners</Text>
+                                </View>
+                                <View style={styles.statDivider} />
+                                <View style={styles.statTile}>
+                                    <Text style={styles.statTileNum} numberOfLines={1}>{trust.completionRate === null || trust.completionRate === undefined ? '—' : `${Math.round(trust.completionRate * 100)}%`}</Text>
+                                    <Text style={styles.statTileLabel} numberOfLines={1}>Completion</Text>
+                                </View>
+                            </View>
+
+                            {/* Mutual connections — the line that calms nerves */}
+                            {trust.mutualCount > 0 && (
+                                <View style={styles.mutualCard}>
+                                    <Text style={styles.mutualTitle}>👥 {trust.mutualCount} connection{trust.mutualCount === 1 ? '' : 's'} in common</Text>
+                                    {trust.mutualConnections.map((m: any) => (
+                                        <Pressable
+                                            key={m.publicKey}
+                                            accessibilityRole="button"
+                                            style={styles.mutualRow}
+                                            onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: m.publicKey, callsign: m.callsign || '' } })}
+                                        >
+                                            <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.publicKey} callsign={m.callsign || '?'} size={32} />
+                                            <Text style={styles.mutualName} numberOfLines={1}>{m.callsign || `${m.publicKey?.slice(0, 8)}…`}</Text>
+                                            <Text style={styles.mutualAsk}>Ask about them ›</Text>
+                                        </Pressable>
                                     ))}
-                                    {(trust.risk?.tips || []).length > 0 && (
-                                        <View style={styles.safetyTips}>
-                                            {trust.risk.tips.map((t: string, i: number) => (
-                                                <Text key={i} style={styles.safetyTip}>⚠️  {t}</Text>
-                                            ))}
+                                </View>
+                            )}
+
+                            {/* Vouched in by / trusted as guardian */}
+                            {(trust.vouchedInBy || trust.wardsCount > 0) && (
+                                <View style={styles.vouchCard}>
+                                    {trust.vouchedInBy && trust.vouchedInBy.kind === 'member' && (
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            style={styles.vouchInviterRow}
+                                            onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: trust.vouchedInBy.publicKey, callsign: trust.vouchedInBy.callsign || '' } })}
+                                        >
+                                            <MemberAvatar avatarUrl={trust.vouchedInBy.avatarUrl} pubkey={trust.vouchedInBy.publicKey} callsign={trust.vouchedInBy.callsign || '?'} size={32} />
+                                            <View style={{ flex: 1, minWidth: 0 }}>
+                                                <Text style={styles.vouchInviterName} numberOfLines={1}>🌱 Vouched in by {trust.vouchedInBy.callsign}</Text>
+                                                <Text style={styles.vouchInviterSub} numberOfLines={1}>{trust.vouchedInBy.tier} tier · tap to reach out</Text>
+                                            </View>
+                                            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.secondary} />
+                                        </Pressable>
+                                    )}
+                                    {trust.vouchedInBy && trust.vouchedInBy.kind !== 'member' && (
+                                        <View style={styles.vouchInviterRow}>
+                                            <View style={styles.systemBadge}>
+                                                <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
+                                            </View>
+                                            <View style={{ flex: 1, minWidth: 0 }}>
+                                                <Text style={styles.vouchInviterName} numberOfLines={1}>
+                                                    {trust.vouchedInBy.kind === 'founder' ? 'Founding member' : 'Invited directly by the system admin'}
+                                                </Text>
+                                                <Text style={styles.vouchInviterSub} numberOfLines={1}>
+                                                    {trust.vouchedInBy.kind === 'founder' ? 'Here since the community began' : 'Vetted by the admin at sign-up'}
+                                                </Text>
+                                            </View>
                                         </View>
                                     )}
+                                    {trust.wardsCount > 0 && (
+                                        <Text style={styles.vouchLine} numberOfLines={2}>
+                                            🛡️ {trust.wardsCount} {trust.wardsCount === 1 ? 'person trusts' : 'people trust'} them as a recovery guardian
+                                        </Text>
+                                    )}
                                 </View>
-                            );
-                        })()}
+                            )}
 
-                        {/* Tier + tenure */}
-                        <View style={styles.trustSignalCard}>
-                            <Text style={styles.trustEmoji} allowFontScaling={false}>{trust.tier?.emoji || '🌱'}</Text>
-                            <View style={{ flexShrink: 1 }}>
-                                <Text style={styles.trustTierName} numberOfLines={1}>{trust.tier?.name || 'Member'}</Text>
-                                <Text style={styles.trustSub} numberOfLines={1}>
-                                    {[trust.joinedAt ? `Member since ${fmtMonthYear(trust.joinedAt)}` : '', fmtLastActive(trust.lastActiveAt)].filter(Boolean).join(' · ')}
-                                </Text>
-                            </View>
-                        </View>
+                            {/* Elder endorsement badge */}
+                            {trust.elderVouch && (
+                                <View style={[styles.vouchCard, { flexDirection: 'row', alignItems: 'center', gap: 8, borderColor: '#f59e0b' }]}>
+                                    <Text style={{ fontSize: 18 }} allowFontScaling={false}>⛰️</Text>
+                                    <Text style={styles.vouchInviterName} numberOfLines={1}>Vouched by {trust.elderVouch.callsign || 'an Elder'}</Text>
+                                </View>
+                            )}
 
-                        {/* Track record */}
-                        <View style={styles.statStrip}>
-                            <View style={styles.statTile}>
-                                <Text style={styles.statTileNum} numberOfLines={1}>{trust.stats?.tradeCount ?? 0}</Text>
-                                <Text style={styles.statTileLabel} numberOfLines={1}>Trades</Text>
-                            </View>
-                            <View style={styles.statDivider} />
-                            <View style={styles.statTile}>
-                                <Text style={styles.statTileNum} numberOfLines={1}>{trust.stats?.uniquePartners ?? 0}</Text>
-                                <Text style={styles.statTileLabel} numberOfLines={1}>Partners</Text>
-                            </View>
-                            <View style={styles.statDivider} />
-                            <View style={styles.statTile}>
-                                <Text style={styles.statTileNum} numberOfLines={1}>{trust.completionRate === null || trust.completionRate === undefined ? '—' : `${Math.round(trust.completionRate * 100)}%`}</Text>
-                                <Text style={styles.statTileLabel} numberOfLines={1}>Completion</Text>
-                            </View>
-                        </View>
-
-                        {/* Mutual connections — the line that calms nerves */}
-                        {trust.mutualCount > 0 && (
-                            <View style={styles.mutualCard}>
-                                <Text style={styles.mutualTitle}>👥 {trust.mutualCount} connection{trust.mutualCount === 1 ? '' : 's'} in common</Text>
-                                {trust.mutualConnections.map((m: any) => (
-                                    <Pressable
-                                        key={m.publicKey}
-                                        accessibilityRole="button"
-                                        style={styles.mutualRow}
-                                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: m.publicKey, callsign: m.callsign || '' } })}
+                            {/* Vouch action — extend a credit line to this member (voucher picks the level) */}
+                            {canVouch && (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    disabled={vouching}
+                                    onPress={chooseVouchLevel}
+                                    style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f59e0b', opacity: vouching ? 0.6 : 1 }}
                                     >
-                                        <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.publicKey} callsign={m.callsign || '?'} size={32} />
-                                        <Text style={styles.mutualName} numberOfLines={1}>{m.callsign || `${m.publicKey?.slice(0, 8)}…`}</Text>
-                                        <Text style={styles.mutualAsk}>Ask about them ›</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                        )}
-
-                        {/* Vouched in by / trusted as guardian */}
-                        {(trust.vouchedInBy || trust.wardsCount > 0) && (
-                            <View style={styles.vouchCard}>
-                                {trust.vouchedInBy && trust.vouchedInBy.kind === 'member' && (
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        style={styles.vouchInviterRow}
-                                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: trust.vouchedInBy.publicKey, callsign: trust.vouchedInBy.callsign || '' } })}
-                                    >
-                                        <MemberAvatar avatarUrl={trust.vouchedInBy.avatarUrl} pubkey={trust.vouchedInBy.publicKey} callsign={trust.vouchedInBy.callsign || '?'} size={32} />
-                                        <View style={{ flex: 1, minWidth: 0 }}>
-                                            <Text style={styles.vouchInviterName} numberOfLines={1}>🌱 Vouched in by {trust.vouchedInBy.callsign}</Text>
-                                            <Text style={styles.vouchInviterSub} numberOfLines={1}>{trust.vouchedInBy.tier} tier · tap to reach out</Text>
-                                        </View>
-                                        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.secondary} />
-                                    </Pressable>
-                                )}
-                                {trust.vouchedInBy && trust.vouchedInBy.kind !== 'member' && (
-                                    <View style={styles.vouchInviterRow}>
-                                        <View style={styles.systemBadge}>
-                                            <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
-                                        </View>
-                                        <View style={{ flex: 1, minWidth: 0 }}>
-                                            <Text style={styles.vouchInviterName} numberOfLines={1}>
-                                                {trust.vouchedInBy.kind === 'founder' ? 'Founding member' : 'Invited directly by the system admin'}
-                                            </Text>
-                                            <Text style={styles.vouchInviterSub} numberOfLines={1}>
-                                                {trust.vouchedInBy.kind === 'founder' ? 'Here since the community began' : 'Vetted by the admin at sign-up'}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                )}
-                                {trust.wardsCount > 0 && (
-                                    <Text style={styles.vouchLine} numberOfLines={2}>
-                                        🛡️ {trust.wardsCount} {trust.wardsCount === 1 ? 'person trusts' : 'people trust'} them as a recovery guardian
-                                    </Text>
-                                )}
-                            </View>
-                        )}
-
-                        {/* Elder endorsement badge */}
-                        {trust.elderVouch && (
-                            <View style={[styles.vouchCard, { flexDirection: 'row', alignItems: 'center', gap: 8, borderColor: '#f59e0b' }]}>
-                                <Text style={{ fontSize: 18 }} allowFontScaling={false}>⛰️</Text>
-                                <Text style={styles.vouchInviterName} numberOfLines={1}>Vouched by {trust.elderVouch.callsign || 'an Elder'}</Text>
-                            </View>
-                        )}
-
-                        {/* Vouch action — extend a credit line to this member (voucher picks the level) */}
-                        {canVouch && (
-                            <Pressable
-                                accessibilityRole="button"
-                                disabled={vouching}
-                                onPress={chooseVouchLevel}
-                                style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f59e0b', opacity: vouching ? 0.6 : 1 }}
-                            >
-                                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }} allowFontScaling={false}>🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}</Text>
-                            </Pressable>
-                        )}
-                    </>
+                                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }} allowFontScaling={false}>🤝 {vouching ? 'Vouching…' : 'Vouch for Member'}</Text>
+                                </Pressable>
+                            )}
+                        </>
+                    ) : null
                 )}
 
                 {/* Trust summary (self only) — links to the full Ledger */}
@@ -560,7 +614,11 @@ export default function PublicProfileScreen() {
                 ) : (
                     <>
                         {/* Stats grid */}
-                        {stats && stats.count > 0 && (
+                        {ratingsLoading ? (
+                            <View style={{ marginHorizontal: 16, marginTop: 12, padding: 14, backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, alignItems: 'center', justifyContent: 'center' }}>
+                                <ActivityIndicator size="small" color={colors.brand.primary} />
+                            </View>
+                        ) : stats && stats.count > 0 ? (
                              <View style={styles.statsGrid}>
                                  <View style={styles.statBoxOverall}>
                                      <Text style={styles.starRating} allowFontScaling={false} numberOfLines={1}>{renderStars(stats.average)}</Text>
@@ -578,7 +636,7 @@ export default function PublicProfileScreen() {
                                      <Text style={styles.statLabelReceiver} numberOfLines={1} adjustsFontSizeToFit>AS RECEIVER</Text>
                                  </View>
                              </View>
-                        )}
+                        ) : null}
 
                         {/* Tabs */}
                         <View style={styles.tabBar}>
@@ -669,7 +727,9 @@ export default function PublicProfileScreen() {
                         {/* Reviews tab */}
                         {activeTab === 'reviews' && (
                             <View style={styles.tabContent}>
-                                {ratings.length === 0 ? (
+                                {ratingsLoading ? (
+                                    <ActivityIndicator size="small" color={colors.brand.primary} style={{ marginTop: 24 }} />
+                                ) : ratings.length === 0 ? (
                                     <View style={styles.emptyCard}>
                                         <Text style={styles.emptyIcon}>🌱</Text>
                                         <Text style={styles.emptyText}>No reviews yet.</Text>
@@ -703,7 +763,9 @@ export default function PublicProfileScreen() {
                         {/* Reviews I've given (self only) */}
                         {isSelf && activeTab === 'given' && (
                             <View style={styles.tabContent}>
-                                {given.length === 0 ? (
+                                {givenLoading ? (
+                                    <ActivityIndicator size="small" color={colors.brand.primary} style={{ marginTop: 24 }} />
+                                ) : given.length === 0 ? (
                                     <View style={styles.emptyCard}>
                                         <Text style={styles.emptyIcon}>✍️</Text>
                                         <Text style={styles.emptyText}>You haven't reviewed anyone yet.</Text>

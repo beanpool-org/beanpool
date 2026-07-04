@@ -44,7 +44,7 @@ export default function PeopleScreen() {
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
         navRow: { flexDirection: 'row', padding: 12, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default },
-        pill: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, marginHorizontal: 2 },
+        pill: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12, marginHorizontal: 2 },
         pillActive: { backgroundColor: colors.surface.subtle, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1, borderWidth: 1, borderColor: colors.border.default },
         pillText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
         pillTextActive: { color: colors.text.body, fontWeight: '800' },
@@ -55,7 +55,7 @@ export default function PeopleScreen() {
         emptyDesc: { fontSize: 14, color: colors.text.secondary, textAlign: 'center', lineHeight: 20 },
 
         list: { padding: 16 },
-        infoBanner: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100, marginBottom: 16 },
+        infoBanner: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100, marginBottom: 16 },
         infoText: { color: theme === 'dark' ? colors.text.body : palette.green800, fontSize: 13, lineHeight: 18 },
         boldGreen: { fontWeight: 'bold', color: colors.brand.primary },
 
@@ -90,14 +90,14 @@ export default function PeopleScreen() {
         btnCopyQRText: { color: colors.text.body, fontSize: 14, fontWeight: '700' },
 
         pendingHeader: { fontSize: 12, fontWeight: '800', color: colors.text.muted, marginBottom: 12, letterSpacing: 1 },
-        pendingCard: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
+        pendingCard: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
         pendingFor: { fontSize: 12, fontWeight: '700', color: colors.brand.dark, marginBottom: 4 },
         pendingCode: { fontSize: 13, fontFamily: 'monospace', color: colors.text.heading, fontWeight: '600' },
         btnCopySmall: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, marginLeft: 12 },
         btnCopySmallText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
 
         // Friend-specific styles
-        friendChip: { fontSize: 10, fontWeight: '800', color: palette.amber500, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden', flexShrink: 0 },
+        friendChip: { fontSize: 10, fontWeight: '800', color: palette.amber500, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', flexShrink: 0 },
         addBtnFriended: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, shadowOpacity: 0 },
         addBtnTextFriended: { color: colors.brand.dark },
         friendActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -671,8 +671,8 @@ export default function PeopleScreen() {
                             return (
                             <View style={[
                                 styles.peopleRow,
-                                isFirst && { borderTopLeftRadius: 12, borderTopRightRadius: 12 },
-                                isLast && { borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderBottomWidth: 0 },
+                                isFirst && { borderTopLeftRadius: 14, borderTopRightRadius: 14 },
+                                isLast && { borderBottomLeftRadius: 14, borderBottomRightRadius: 14, borderBottomWidth: 0 },
                                 { overflow: 'hidden' }
                             ]}>
                                 <Pressable

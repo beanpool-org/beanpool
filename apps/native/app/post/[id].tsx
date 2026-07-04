@@ -187,7 +187,7 @@ export default function PostDetailModal() {
             backgroundColor: colors.brand.primary,
             paddingHorizontal: 16,
             paddingVertical: 8,
-            borderRadius: 6
+            borderRadius: 10
         },
         approveBtnText: {
             color: colors.text.inverse,
@@ -198,7 +198,7 @@ export default function PostDetailModal() {
             backgroundColor: colors.surface.card,
             paddingHorizontal: 12,
             paddingVertical: 8,
-            borderRadius: 6,
+            borderRadius: 10,
             borderWidth: 1,
             borderColor: colors.feedback.danger.border
         },

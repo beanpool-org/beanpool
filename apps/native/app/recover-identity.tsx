@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     card: { backgroundColor: palette.neutral900, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: palette.neutral600 },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.inverse, marginBottom: 8 },
     subtitle: { fontSize: 14, color: palette.slate400, marginBottom: 24, lineHeight: 20 },
-    input: { backgroundColor: palette.neutral800, borderWidth: 1, borderColor: palette.neutral700, borderRadius: 10, padding: 14, color: colors.text.inverse, fontSize: 16, marginBottom: 16 },
+    input: { backgroundColor: palette.neutral800, borderWidth: 1, borderColor: palette.neutral700, borderRadius: 12, padding: 14, color: colors.text.inverse, fontSize: 16, marginBottom: 16 },
     primaryBtn: { backgroundColor: colors.brand.primary, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
     backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
@@ -259,6 +259,6 @@ const styles = StyleSheet.create({
     statusLabel: { color: palette.slate400, fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
     statusValue: { color: colors.brand.primary, fontSize: 36, fontWeight: '800' },
     
-    infoBanner: { backgroundColor: colors.feedback.success.bg, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.feedback.success.border, marginBottom: 24 },
+    infoBanner: { backgroundColor: colors.feedback.success.bg, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.feedback.success.border, marginBottom: 24 },
     infoText: { color: palette.emerald300, fontSize: 14, lineHeight: 20 }
 });

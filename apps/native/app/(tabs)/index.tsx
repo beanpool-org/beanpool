@@ -108,7 +108,7 @@ export default function MarketScreen() {
         dealsIconBtn: {
             paddingHorizontal: 14, height: 38, borderRadius: 19,
             backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50,
-            borderWidth: 1.5,
+            borderWidth: 1,
             borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber300,
             justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1
         },
@@ -137,7 +137,7 @@ export default function MarketScreen() {
             paddingVertical: 8,
             paddingHorizontal: 10,
             borderRadius: 20,
-            borderWidth: 1.5,
+            borderWidth: 1,
             borderColor: colors.border.default,
             backgroundColor: colors.surface.card,
             shadowColor: '#000',
@@ -173,7 +173,7 @@ export default function MarketScreen() {
         // Cards
         card: {
             backgroundColor: colors.surface.card,
-            borderRadius: 8,
+            borderRadius: 14,
             marginBottom: 8,
             borderWidth: 1,
             borderColor: colors.border.default,
@@ -198,10 +198,10 @@ export default function MarketScreen() {
         gridFallbackEmoji: { fontSize: 32, opacity: 0.3 },
         gridPriceBadge: { position: 'absolute', bottom: 8, right: 8, backgroundColor: colors.overlay.scrim, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.overlay.scrimEdge },
         gridPriceText: { color: colors.text.inverse, fontSize: 13, fontWeight: 'bold' },
-        gridTypeBadge: { position: 'absolute', top: 8, left: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+        gridTypeBadge: { position: 'absolute', top: 8, left: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
         gridTextContent: { padding: 12 },
         gridCardTitle: { fontSize: 14, fontWeight: '700', color: colors.text.body, marginBottom: 4 },
-        badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+        badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
         badgeOffer: { backgroundColor: colors.market.offer.bg, borderWidth: 0 },
         badgeNeed: { backgroundColor: colors.market.need.bg, borderWidth: 0 },
         badgeText: { fontSize: 11, fontWeight: '800', color: colors.market.offer.fg, letterSpacing: 0.5 },
@@ -210,7 +210,7 @@ export default function MarketScreen() {
         compactRow: {
             flexDirection: 'row',
             backgroundColor: colors.surface.card,
-            borderRadius: 8,
+            borderRadius: 14,
             paddingVertical: 10,
             paddingHorizontal: 12,
             marginBottom: 8,
@@ -248,7 +248,7 @@ export default function MarketScreen() {
         compactBadge: {
             paddingHorizontal: 6,
             paddingVertical: 2,
-            borderRadius: 4,
+            borderRadius: 8,
         },
         compactBadgeOffer: {
             backgroundColor: colors.market.offer.bg,
@@ -257,8 +257,8 @@ export default function MarketScreen() {
             backgroundColor: colors.market.need.bg,
         },
         compactBadgeText: {
-            fontSize: 8,
-            fontWeight: '900',
+            fontSize: 9,
+            fontWeight: '800',
             letterSpacing: 0.5,
         },
         sectionHeader: {
@@ -269,10 +269,11 @@ export default function MarketScreen() {
             paddingHorizontal: 4,
         },
         sectionHeaderText: {
-            fontSize: 12,
-            fontWeight: '900',
+            fontSize: 11,
+            fontWeight: '800',
             color: colors.text.muted,
-            letterSpacing: 1.5,
+            letterSpacing: 1,
+            textTransform: 'uppercase',
         },
         sectionHeaderLine: {
             flex: 1,
@@ -288,7 +289,7 @@ export default function MarketScreen() {
             borderRadius: 16,
             paddingVertical: 12,
             paddingHorizontal: 16,
-            borderWidth: 1.5,
+            borderWidth: 1,
             borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.orange100,
             marginHorizontal: 16,
             marginTop: 8,
@@ -328,7 +329,7 @@ export default function MarketScreen() {
             backgroundColor: colors.accent.tint,
             borderRadius: 16,
             padding: 16,
-            borderWidth: 1.5,
+            borderWidth: 1,
             borderColor: colors.accent.border,
             marginHorizontal: 16,
             marginTop: 8,
@@ -383,7 +384,7 @@ export default function MarketScreen() {
             borderRadius: 16,
             paddingVertical: 10,
             paddingHorizontal: 16,
-            borderWidth: 1.5,
+            borderWidth: 1,
             borderColor: colors.accent.border,
             marginHorizontal: 16,
             marginTop: 4,
@@ -1226,9 +1227,9 @@ export default function MarketScreen() {
             <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${item.id}`)}>
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                        <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
-                        <View style={{ width: 96, height: '100%', minHeight: 96, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }}>
+                        <View style={{ width: 96, height: '100%', minHeight: 96, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}>
                             <Text style={{ fontSize: 32, opacity: 0.5 }}>
                                 {catEmoji}
                             </Text>
@@ -1237,14 +1238,14 @@ export default function MarketScreen() {
                     <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-                                <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, margin: 0 }]}>
+                                <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
                                     <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
                                 </View>
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text.secondary }}>
                                     {catEmoji} {catLabel}
                                 </Text>
                                 {!!item.repeatable && (
-                                    <View style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: colors.border.default }}>
+                                    <View style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>↻ RECURRING</Text>
                                     </View>
                                 )}

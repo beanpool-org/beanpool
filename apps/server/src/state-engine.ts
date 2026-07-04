@@ -2470,14 +2470,14 @@ export function cancelPostTransaction(transactionId: string, cancellerPublicKey:
 }
 
 export function pausePost(postId: string, authorPublicKey: string): boolean {
-    const result = db.prepare(`UPDATE posts SET status='paused' WHERE id=? AND author_pubkey=? AND status='active'`).run(postId, authorPublicKey);
+    const result = db.prepare(`UPDATE posts SET status='paused', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND author_pubkey=? AND status='active'`).run(postId, authorPublicKey);
     if (result.changes === 0) return false;
     broadcast({ type: 'post_updated', post: getPosts({ id: postId })[0] });
     return true;
 }
 
 export function resumePost(postId: string, authorPublicKey: string): boolean {
-    const result = db.prepare(`UPDATE posts SET status='active' WHERE id=? AND author_pubkey=? AND status='paused'`).run(postId, authorPublicKey);
+    const result = db.prepare(`UPDATE posts SET status='active', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND author_pubkey=? AND status='paused'`).run(postId, authorPublicKey);
     if (result.changes === 0) return false;
     broadcast({ type: 'post_updated', post: getPosts({ id: postId })[0] });
     return true;

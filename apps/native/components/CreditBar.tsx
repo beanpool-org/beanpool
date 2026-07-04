@@ -130,20 +130,20 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                 <View style={[s.bead, { left: `${pct}%` }]} />
             </View>
 
-            {/* Offer ladder caption — what your live Offers unlock, and the next rung */}
-            {showLadder && hasLocked && (
-                <View style={s.ladderRow} pointerEvents="none">
-                    <Text style={s.ladderText}>
-                        🎣 {uFloor < 0 ? (
-                            <>
-                                <Text style={s.ladderStrong}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? ` · ${liveOffers + 1} offer${liveOffers + 1 === 1 ? '' : 's'} → −${nextUnlock}` : ''}
-                            </>
-                        ) : (
-                            <>
-                                <Text style={s.ladderStrong}>Post an Offer</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your full −{Math.abs(floor)}.
-                            </>
-                        )}
-                    </Text>
+            {/* Rung value labels — sit directly below each offer-band mark so the tick is self-labelled */}
+            {rungs.length > 0 && (
+                <View style={s.rungLabelRow} pointerEvents="none">
+                    {rungs.map((r) => {
+                        const isUsable = -r.b === uFloor;
+                        return (
+                            <Text
+                                key={r.b}
+                                style={[s.rungLabel, { left: `${r.pct}%`, color: isUsable ? WARM_BG : colors.text.muted }]}
+                            >
+                                −{r.b}
+                            </Text>
+                        );
+                    })}
                 </View>
             )}
 
@@ -184,6 +184,23 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                 <Text style={s.hintText}>← carry credit</Text>
                 <Text style={s.hintText}>hold credit →</Text>
             </View>
+
+            {/* Offer caption — below everything so it reads as context, not a track annotation */}
+            {showLadder && hasLocked && (
+                <View style={s.ladderRow} pointerEvents="none">
+                    <Text style={s.ladderText}>
+                        🎣 {uFloor < 0 ? (
+                            <>
+                                <Text style={s.ladderStrong}>{liveOffers} offer listing{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? ` · ${liveOffers + 1} listing${liveOffers + 1 === 1 ? '' : 's'} → −${nextUnlock}` : ''}
+                            </>
+                        ) : (
+                            <>
+                                <Text style={s.ladderStrong}>Post an offer listing</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> listing{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your full −{Math.abs(floor)}.
+                            </>
+                        )}
+                    </Text>
+                </View>
+            )}
         </View>
     );
 }
@@ -203,6 +220,8 @@ const styles = (colors: any) => StyleSheet.create({
     lockedZone: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.42)' },
     rung: { position: 'absolute', top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.4 },
     usableMark: { position: 'absolute', top: -3, bottom: -3, width: 2, marginLeft: -1, backgroundColor: WARM_BG, zIndex: 1 },
+    rungLabelRow: { position: 'relative', height: 14, marginTop: 2 },
+    rungLabel: { position: 'absolute', fontSize: 9, fontWeight: '700', textAlign: 'center', width: 32, marginLeft: -16, fontVariant: ['tabular-nums'] },
     ladderRow: { marginTop: 6 },
     ladderText: { fontSize: 11, lineHeight: 15, color: colors.text.body },
     ladderStrong: { color: WARM, fontWeight: '800' },
@@ -213,7 +232,7 @@ const styles = (colors: any) => StyleSheet.create({
         position: 'absolute', top: '50%', marginTop: -9, marginLeft: -9, width: 18, height: 18, borderRadius: 9,
         backgroundColor: '#fff', borderWidth: 4, borderColor: colors.text.heading, zIndex: 2,
     },
-    anchors: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+    anchors: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
     aVal: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
     aSub: { fontSize: 9, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 1 },
     hint: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 },

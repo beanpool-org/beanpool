@@ -22,26 +22,27 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../utils/LocalAuth';
 
 
-function getDatabaseFilePath(dbFilename: string): string {
-    if (!FileSystem.documentDirectory) return '';
+function getDatabaseFilePaths(dbFilename: string): string[] {
+    if (!FileSystem.documentDirectory) return [];
     const docDir = FileSystem.documentDirectory;
     
     if (Platform.OS === 'android') {
-        if (docDir.endsWith('/files/')) {
-            return docDir.slice(0, -7) + '/databases/' + dbFilename;
-        } else if (docDir.includes('/files')) {
-            return docDir.replace('/files', '/databases') + dbFilename;
-        }
-        return docDir + 'databases/' + dbFilename;
+        const path = docDir.endsWith('/files/')
+            ? docDir.slice(0, -7) + '/databases/' + dbFilename
+            : docDir.includes('/files')
+                ? docDir.replace('/files', '/databases') + dbFilename
+                : docDir + 'databases/' + dbFilename;
+        return [path];
     } else if (Platform.OS === 'ios') {
-        if (docDir.endsWith('/Documents/')) {
-            return docDir.slice(0, -11) + '/Library/Application Support/SQLite/' + dbFilename;
-        } else if (docDir.includes('/Documents')) {
-            return docDir.replace('/Documents', '/Library/Application Support/SQLite') + dbFilename;
-        }
-        return docDir + 'SQLite/' + dbFilename;
+        const devPath = docDir + 'SQLite/' + dbFilename;
+        const prodPath = docDir.endsWith('/Documents/')
+            ? docDir.slice(0, -11) + '/Library/Application Support/SQLite/' + dbFilename
+            : docDir.includes('/Documents')
+                ? docDir.replace('/Documents', '/Library/Application Support/SQLite') + dbFilename
+                : docDir + 'SQLite/' + dbFilename;
+        return [devPath, prodPath];
     }
-    return docDir + 'SQLite/' + dbFilename;
+    return [docDir + 'SQLite/' + dbFilename];
 }
 
 export default function SettingsScreen() {
@@ -403,8 +404,8 @@ export default function SettingsScreen() {
                 dbUrl = null;
             }
             const dbFilename = getDatabaseFilenameForNode(dbUrl);
-            const dbPath = getDatabaseFilePath(dbFilename);
-            console.log('[Diagnostics] Computed Database Path:', dbPath);
+            const dbPaths = getDatabaseFilePaths(dbFilename);
+            console.log('[Diagnostics] Computed Database Paths:', dbPaths);
             
             // Log local directory structures to diagnose exact database location
             try {
@@ -433,10 +434,20 @@ export default function SettingsScreen() {
                 console.warn('[Diagnostics] Directory scan failed:', err);
             }
 
-            const fileInfo = await FileSystem.getInfoAsync(dbPath);
-            console.log('[Diagnostics] File Info:', fileInfo);
-            if (fileInfo.exists) {
-                const sizeBytes = fileInfo.size;
+            let sizeBytes = 0;
+            let fileFound = false;
+            for (const p of dbPaths) {
+                try {
+                    const fileInfo = await FileSystem.getInfoAsync(p);
+                    console.log(`[Diagnostics] File Info for ${p}:`, fileInfo);
+                    if (fileInfo.exists) {
+                        sizeBytes = fileInfo.size;
+                        fileFound = true;
+                        break;
+                    }
+                } catch {}
+            }
+            if (fileFound) {
                 if (sizeBytes >= 1024 * 1024) {
                     setDbSize(`${(sizeBytes / 1024 / 1024).toFixed(2)} MB`);
                 } else {
@@ -537,8 +548,15 @@ export default function SettingsScreen() {
                 const enriched = await Promise.all(nodes.map(async node => {
                     let size = 0;
                     try {
-                        const fileInfo = await FileSystem.getInfoAsync(getDatabaseFilePath(getDatabaseFilenameForNode(node.url)));
-                        if (fileInfo.exists) size = fileInfo.size;
+                        const filename = getDatabaseFilenameForNode(node.url);
+                        const paths = getDatabaseFilePaths(filename);
+                        for (const p of paths) {
+                            const fileInfo = await FileSystem.getInfoAsync(p);
+                            if (fileInfo.exists) {
+                                size = fileInfo.size;
+                                break;
+                            }
+                        }
                     } catch(e) {}
                     return { ...node, status: 'pinging' as const, sizeBytes: size };
                 }));
@@ -717,7 +735,11 @@ export default function SettingsScreen() {
                             await removeSavedNode(targetUrl);
                             setSavedNodes(remainingNodes);
                             try {
-                                await FileSystem.deleteAsync(getDatabaseFilePath(getDatabaseFilenameForNode(targetUrl)), { idempotent: true });
+                                const filename = getDatabaseFilenameForNode(targetUrl);
+                                const paths = getDatabaseFilePaths(filename);
+                                for (const p of paths) {
+                                    await FileSystem.deleteAsync(p, { idempotent: true });
+                                }
                             } catch(e) {}
                             
                             // Automatically pivot to the next available node
@@ -742,7 +764,11 @@ export default function SettingsScreen() {
                         setSavedNodes(prev => prev.filter(n => n.url !== targetUrl));
                         // Physically delete the dormant .db file from the OS folder
                         try {
-                            await FileSystem.deleteAsync(getDatabaseFilePath(getDatabaseFilenameForNode(targetUrl)), { idempotent: true });
+                            const filename = getDatabaseFilenameForNode(targetUrl);
+                            const paths = getDatabaseFilePaths(filename);
+                            for (const p of paths) {
+                                    await FileSystem.deleteAsync(p, { idempotent: true });
+                            }
                         } catch(e) {}
                     }
                 }
@@ -877,7 +903,11 @@ export default function SettingsScreen() {
                         // Physically delete dormant DB files for all saved nodes to reclaim disk space
                         for (const node of savedNodes) {
                             try {
-                                await FileSystem.deleteAsync(getDatabaseFilePath(getDatabaseFilenameForNode(node.url)), { idempotent: true });
+                                const filename = getDatabaseFilenameForNode(node.url);
+                                const paths = getDatabaseFilePaths(filename);
+                                for (const p of paths) {
+                                    await FileSystem.deleteAsync(p, { idempotent: true });
+                                }
                             } catch (e) {}
                         }
                         

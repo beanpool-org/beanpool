@@ -28,6 +28,11 @@ import { useTheme, useStyles } from '../ThemeContext';
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
 function explainTradeError(e: any): { title: string; message: string } {
     const raw = String(e?.message || e || 'Something went wrong');
+    // Offer covenant, banded (Trust Model v3): "FLOOR_LOCKED:live:need:unlockedAt:wouldReach: <sentence>".
+    // The trailing sentence already has the exact numbers — surface it verbatim.
+    if (raw.startsWith('FLOOR_LOCKED')) {
+        return { title: '🎣 Post an Offer to go deeper', message: raw.replace(/^FLOOR_LOCKED(:\d+){4}:\s*/, '') };
+    }
     if (raw.startsWith('COVENANT_REQUIRED')) {
         return { title: '🎣 Post an Offer first', message: 'To spend on community credit (take your balance negative) you need at least one active Offer posted — a line in the water so others can trade with you in return. Post an Offer, then try again.' };
     }

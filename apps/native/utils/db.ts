@@ -859,8 +859,11 @@ export async function getBalance(pubkey: string) {
     let isBlockedFromTrading = false;
     let elderVouchedBy: string | null = null;
     let canVouch = false;      // this account may hand out the -20/-50/-100 vouch floor
-    let activated = false;     // has a credit line at all (vouched or granted)
+    let activated = false;     // has a credit line at all (earned/vouched/granted)
     let hasLiveOffer = false;  // has ≥1 live Offer posted (offer covenant)
+    let usableFloor: number | undefined = undefined; // v3: offer-gated usable floor (≤ earned floor)
+    let liveOffers = 0;        // v3: count of live Offers (drives the credit ladder)
+    let frozen = false;        // v3: debt below usable floor → spending paused
 
     // Background fetch to ensure parity
     AsyncStorage.getItem('beanpool_anchor_url').then((anchorUrl: string | null) => {
@@ -912,6 +915,9 @@ export async function getBalance(pubkey: string) {
                         canVouch: !!balData.canVouch,
                         activated: !!balData.activated,
                         hasLiveOffer: !!balData.hasLiveOffer,
+                        usableFloor: balData.usableFloor ?? balData.floor ?? floor,
+                        liveOffers: balData.liveOffers ?? 0,
+                        frozen: !!balData.frozen,
                     });
                     const prevTierStr = await AsyncStorage.getItem(`bp_tier_${pubkey}`);
                     if (prevTierStr !== newTierStr) {
@@ -944,6 +950,9 @@ export async function getBalance(pubkey: string) {
             canVouch = !!parsed.canVouch;
             activated = !!parsed.activated;
             hasLiveOffer = !!parsed.hasLiveOffer;
+            usableFloor = parsed.usableFloor ?? floor;
+            liveOffers = parsed.liveOffers ?? 0;
+            frozen = !!parsed.frozen;
         }
     } catch { /* ignore */ }
 
@@ -963,6 +972,9 @@ export async function getBalance(pubkey: string) {
         canVouch,
         activated,
         hasLiveOffer,
+        usableFloor: usableFloor ?? floor,
+        liveOffers,
+        frozen,
     };
 }
 

@@ -373,6 +373,12 @@ export interface BalanceInfo {
     canVouch?: boolean;
     /** True if the member has ≥1 live Offer posted (offer covenant, Gate 2). */
     hasLiveOffer?: boolean;
+    /** Trust Model v3 — the floor you may actually reach now = shallower of earned limit & what your live Offers unlock. */
+    usableFloor?: number;
+    /** Trust Model v3 — count of currently-live Offers (drives the offer-band credit ladder). */
+    liveOffers?: number;
+    /** Trust Model v3 — true when your debt is below your usable floor (spending is frozen until you recover or post Offers). */
+    frozen?: boolean;
 }
 
 export interface Transaction {

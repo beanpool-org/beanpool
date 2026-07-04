@@ -16,7 +16,7 @@ const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').the
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
 import { loadEnabledPeers, togglePeer } from '../lib/peer-prefs';
 import {
-    getMarketplacePosts, removeMarketplacePost, updateMarketplacePost,
+    getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     getMemberProfile, createConversationApi, sendTransfer,
     submitRating, getMemberRatings, reportAbuse, getRatingsGiven,
     getNodeInfo, getRemotePosts, sendRemoteTransfer, sendFederationMessage,
@@ -43,6 +43,11 @@ interface Props {
 // holiday gates carry a stable "PREFIX: <human text>"; strip the prefix for a clean alert.
 function explainTradeError(err: unknown): string {
     const raw = err instanceof Error ? err.message : String(err);
+    // Offer covenant, banded (Trust Model v3): server sends "FLOOR_LOCKED:live:need:unlockedAt:wouldReach: <sentence>".
+    // The sentence is already user-ready with the exact numbers — surface it verbatim.
+    if (raw.startsWith('FLOOR_LOCKED')) {
+        return `🎣 ${raw.replace(/^FLOOR_LOCKED(:\d+){4}:\s*/, '')}`;
+    }
     if (raw.startsWith('COVENANT_REQUIRED')) {
         return '🎣 Post an Offer first — to spend on community credit (take your balance negative) you need at least one active Offer posted, so others can trade with you in return.';
     }
@@ -93,6 +98,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         }
     };
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [toggling, setToggling] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -1132,6 +1138,35 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <div className="flex flex-col gap-2 mt-4">
                         {!editMode ? (
                             <>
+                                {/* Active/Paused toggle (Offers only). A live Offer counts toward your
+                                    credit line (offer covenant, v3); pausing it drops it from the feed. */}
+                                {selectedPost.type === 'offer' && (
+                                    <button
+                                        onClick={async () => {
+                                            if (!identity || !selectedPost) return;
+                                            const isPaused = selectedPost.status === 'paused';
+                                            setToggling(true);
+                                            try {
+                                                if (isPaused) await resumeMarketplacePost(selectedPost.id, identity.publicKey);
+                                                else await pauseMarketplacePost(selectedPost.id, identity.publicKey);
+                                                setSelectedPost(null);
+                                                refresh();
+                                            } catch (e: any) {
+                                                setError(e.message || 'Failed to update offer');
+                                            } finally {
+                                                setToggling(false);
+                                            }
+                                        }}
+                                        disabled={toggling}
+                                        className={`w-full py-3 rounded-xl border font-bold text-sm transition-colors ${
+                                            selectedPost.status === 'paused'
+                                                ? 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'
+                                                : 'border-amber-300 text-amber-600 hover:bg-amber-50'
+                                        }`}
+                                    >
+                                        {toggling ? 'Updating…' : selectedPost.status === 'paused' ? '▶️ Activate Offer' : '⏸️ Pause Offer'}
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => {
                                         setEditType(selectedPost.type);

@@ -15,7 +15,7 @@
 import {
     initStateEngine, getAdminPubkey, canVouch, vouchMember, unvouchMember, adminSetVoucher,
     getMemberTrustProfile, requestPost, hasLiveOffer, reconcileLedgerFromDb,
-    isOnHoliday, setHolidayMode, getPosts, adminSetTier,
+    isOnHoliday, setHolidayMode, getPosts, adminSetTier, getBalance,
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -37,7 +37,7 @@ function seedMember(pk: string, balance = 0) {
 // Insert an Offer row directly. live=false → a paused/soft-deleted offer that still counts for the
 // "ever listed" contribution gate but is NOT a live offer for the covenant.
 function offer(author: string, live: boolean, credits = 10): string {
-    const pid = 'post-' + (seq++);
+    const pid = 'test-post-' + (seq++) + '-' + Math.random().toString(36).slice(2, 9);
     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, active, status) VALUES (?, 'offer', 'misc', 't', 't', ?, 'fixed', ?, ?, ?)`)
         .run(pid, credits, author, live ? 1 : 0, live ? 'active' : 'paused');
     return pid;
@@ -81,17 +81,37 @@ function main() {
     unvouchMember('elderA', 'newbie'); // settled → the voucher can now withdraw
     assert(floorOf('newbie') === 0, 'voucher withdraws once the target has settled → floor 0');
 
-    // ── 4. Offer covenant: to spend into a negative balance you must keep a live Offer ──
+    // ── 4. Offer covenant (v3, BANDED): live-offer count gates how deep you may spend on credit ──
+    // Give the payer a deep earned limit (Elder −1400) so the OFFER band is the binding constraint.
     seedMember('payer'); seedMember('seller');
-    vouchMember('elderA', 'payer'); // floor -20, balance 0
+    adminSetTier('payer', 'Elder'); // earned limit -1400, balance 0
     const sOffer = offer('seller', true, 10); // seller's live offer, costs 10
-    offer('payer', false); // payer has listed an offer (clears contribution gate) but it is NOT live
+    offer('payer', false); // payer has LISTED an offer (clears contribution gate) but it is NOT live
     assert(hasLiveOffer('payer') === false, 'payer has no live offer');
-    throws(() => requestPost(sOffer, 'payer'), 'COVENANT_REQUIRED', 'spending negative with no live offer → covenant blocks');
-    offer('payer', true); // now payer keeps a live offer
-    assert(hasLiveOffer('payer') === true, 'payer now has a live offer');
+    assert(getBalance('payer').usableFloor === 0, '0 live offers → usable floor 0 (no credit line to draw)');
+    throws(() => requestPost(sOffer, 'payer'), 'FLOOR_LOCKED', 'no live offer → banded covenant blocks the credit spend');
+    offer('payer', true); // 1 live offer → unlocks −200
+    assert(getBalance('payer').usableFloor === -200, '1 live offer → usable floor -200');
     const tx = requestPost(sOffer, 'payer');
-    assert(!!tx && tx.status === 'requested', 'with a live offer → the credit spend is allowed');
+    assert(!!tx && tx.status === 'requested', 'spend within the unlocked band → allowed');
+
+    // Band boundaries: each extra live offer unlocks a deeper band, capped by the earned limit.
+    seedMember('deep'); adminSetTier('deep', 'Elder'); // earned limit -1400
+    assert(getBalance('deep').usableFloor === 0, 'deep: 0 offers → 0');
+    offer('deep', true); assert(getBalance('deep').usableFloor === -200,  'deep: 1 offer → -200');
+    offer('deep', true); assert(getBalance('deep').usableFloor === -500,  'deep: 2 offers → -500');
+    offer('deep', true); assert(getBalance('deep').usableFloor === -1000, 'deep: 3 offers → -1000');
+    offer('deep', true); assert(getBalance('deep').usableFloor === -1400, 'deep: 4 offers → full earned -1400 (band -1500 capped by limit)');
+
+    // Freeze: dropping below the offers your debt needs freezes spending (inbound stays open).
+    seedMember('frozen'); adminSetTier('frozen', 'Elder');
+    const fOfferA = offer('frozen', true); offer('frozen', true); // 2 offers → -500 line
+    db.prepare(`UPDATE accounts SET balance = -400 WHERE public_key = 'frozen'`).run();
+    reconcileLedgerFromDb();
+    assert(getBalance('frozen').frozen === false, 'debt -400 within the 2-offer -500 line → not frozen');
+    db.prepare(`UPDATE posts SET status='paused', active=0 WHERE id = ?`).run(fOfferA); // pause one → 1 live offer
+    assert(getBalance('frozen').usableFloor === -200, 'after pausing one offer → usable floor -200');
+    assert(getBalance('frozen').frozen === true, 'debt -400 now below the -200 line → frozen');
 
     // ── 5. Vouch levels: the voucher picks -25 / -50 / -100 (a re-vouch can change it) ──
     seedMember('lvlUser');

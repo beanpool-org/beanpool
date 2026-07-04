@@ -864,7 +864,7 @@ export default function LedgerScreen() {
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 14, fontWeight: '800', color: colors.brand.dark }}>No credit line yet</Text>
                             <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>
-                                You can trade right now with the beans you hold. When a community sponsor vouches for you, you'll unlock a credit line — letting you spend a little before you earn it back.
+                                You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)
                             </Text>
                         </View>
                     </View>
@@ -877,6 +877,22 @@ export default function LedgerScreen() {
                     style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}
                 >
                     <CreditBar balance={balanceState.balance} floor={balanceState.floor} colors={colors} />
+                    {/* Offer covenant (v3): live Offers gate how much of the earned line you can use. */}
+                    {balanceState.floor < 0 && (() => {
+                        const earnedFloor = balanceState.floor;
+                        const uf = balanceState.usableFloor ?? earnedFloor;
+                        const lo = balanceState.liveOffers ?? 0;
+                        const fr = !!balanceState.frozen;
+                        const s = lo === 1 ? '' : 's';
+                        const msg = fr
+                            ? `⚠️  Spending paused — your balance is below what your ${lo} active offer${s} unlock (−${Math.abs(uf)}). Post an Offer or trade back up to lift it. You can still receive and sell.`
+                            : uf === earnedFloor
+                                ? `🎣  Your ${lo} active offer${s} unlock your full −${Math.abs(earnedFloor)} credit line.`
+                                : lo === 0
+                                    ? `🎣  Post an Offer to open your credit line (you've earned up to −${Math.abs(earnedFloor)}).`
+                                    : `🎣  ${lo} active offer${s} unlock −${Math.abs(uf)} of your −${Math.abs(earnedFloor)} line — post another to unlock more.`;
+                        return <Text style={{ fontSize: 11.5, color: fr ? '#d97706' : colors.text.muted, lineHeight: 16, marginTop: 8 }}>{msg}</Text>;
+                    })()}
                 </Pressable>
             )}
 

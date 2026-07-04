@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, earnedCreditFromValue, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, earnedCreditFromValue, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName } from '@beanpool/core';
 import { getThresholds, getLocalConfig } from './local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
@@ -1252,7 +1252,10 @@ export function getMemberTrustProfile(publicKey: string): {
     // vouch: the one human-gated, admin-appointed way in (see vouchMember / can_vouch). Nice
     // property — when a member is finally vouched, any earned trust they'd already banked unlocks
     // alongside the welcome voucher, so their floor jumps straight to reflect their real trading.
-    const activated = elderVouched || grantedCredit > 0;
+    // Trust Model v3: a completed real trade (earnedCredit > 0) opens the floor on its own — no
+    // vouch required. Restores the documented behaviour (docs/trust-model-shipped.md §1) that the
+    // #15 vouch-gating pass dropped, which left earned-trust members showing "no credit line".
+    const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0;
     const allowance = activated
         ? Math.min(c.CREDIT_FLOOR_CAP, vouchCredit + earnedCredit + grantedCredit)
         : 0;
@@ -1512,16 +1515,24 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean } {
     const account = ledger.getAccount(publicKey);
     const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
+    const balance = Math.round(account.balance * 100) / 100;
+    const liveOffers = liveOfferCount(publicKey);
+    // usableFloor: the deepest you may actually spend right now (Trust Model v3) — the shallower of
+    // your earned limit and what your live Offers unlock. frozen: your debt sits below that line.
+    const uFloor = Math.max(floor, -offerCapForCount(liveOffers));
     return {
-        balance: Math.round(account.balance * 100) / 100,
+        balance,
         floor,
+        usableFloor: uFloor,
+        liveOffers,
+        frozen: balance < uFloor,
         tier,
         earnedCredit,
         commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
-        // activated: has a credit line at all (vouched/granted) — un-vouched newcomers are false.
+        // activated: has a credit line at all (earned/vouched/granted) — a brand-new member is false.
         // canVouch: this member holds the appointed-voucher capability (drives the client vouch UI).
         activated,
         canVouch: canVouch(publicKey),
@@ -1583,7 +1594,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     //    actually hold; you can never go into debt to give beans away.
     const isSystemFrom = from.startsWith('escrow_') || from === 'COMMONS_POOL' || from === 'genesis';
     const senderFloor = isSystemFrom ? -Infinity
-        : isEscrow ? getMemberTrustProfile(from).floor
+        : isEscrow ? usableFloor(from)   // v3: marketplace spends bounded by the offer-banded floor
         : 0;
     const success = ledger.transfer(from, to, amount, senderFloor, isFeeExempt);
     if (!success) return null;
@@ -1715,6 +1726,27 @@ export const CONTRIBUTION_REQUIRED_ERROR = 'CONTRIBUTION_REQUIRED: list at least
 // rejection and show the "post an Offer" prompt rather than a raw error.
 export const COVENANT_REQUIRED_ERROR = 'COVENANT_REQUIRED: keep at least one active Offer posted to spend on community credit (a negative balance).';
 
+// Offer covenant — BANDED (Trust Model v3). How deep you may spend on credit scales with how many
+// LIVE offers you keep posted (see docs/trust-model-v3.md §3-4). Superset of the flat covenant
+// above: 0 offers → no credit; 1→−200, 2→−500, 3→−1000, 4→−1500, 5→−2000. Stable prefix so clients
+// can detect it and show the ladder / "post another Offer" prompt with the exact numbers.
+export const FLOOR_LOCKED_PREFIX = 'FLOOR_LOCKED';
+function floorLockedError(publicKey: string, postBalance: number): Error {
+    const live = liveOfferCount(publicKey);
+    const need = offersRequiredForDepth(Math.abs(postBalance));
+    const more = Math.max(1, need - live);
+    const unlockedAt = offerCapForCount(live);
+    const wouldReach = offerCapForCount(need);
+    // Machine-parseable prefix + fields, then a human sentence the client can also show verbatim.
+    return new Error(
+        `${FLOOR_LOCKED_PREFIX}:${live}:${need}:${unlockedAt}:${wouldReach}: ` +
+        (live === 0
+            ? `Post an Offer to open your credit line — your first Offer lets you spend down to −200.`
+            : `Your ${live} active Offer${live === 1 ? '' : 's'} unlock a −${unlockedAt} credit line. ` +
+              `Post ${more} more Offer${more === 1 ? '' : 's'} to spend down to −${wouldReach}.`)
+    );
+}
+
 /**
  * Has this member ever listed an Offer? Founding members must contribute an
  * Offer of their own before they can post Needs or accept/request Offers.
@@ -1738,6 +1770,26 @@ export function hasLiveOffer(publicKey: string): boolean {
     if (publicKey === getAdminPubkey()) return true;
     const row = db.prepare(`SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' AND active = 1 AND status = 'active' LIMIT 1`).get(publicKey);
     return !!row;
+}
+
+/**
+ * Count of a member's currently-LIVE Offers (active row, status 'active'). Drives the banded
+ * offer covenant (Trust Model v3): how deep a member may spend on credit scales with this count.
+ * Admin is exempt — treated as fully unlocked (max band).
+ */
+export function liveOfferCount(publicKey: string): number {
+    if (publicKey === getAdminPubkey()) return OFFER_BANDS.length - 1;
+    const row = db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE author_pubkey = ? AND type = 'offer' AND active = 1 AND status = 'active'`).get(publicKey) as any;
+    return row?.c || 0;
+}
+
+/**
+ * The floor a member may actually USE right now = the shallower of their earned limit and the
+ * depth their live Offers unlock. Returns a value in [floor, 0] (0 when they hold no live Offer).
+ */
+export function usableFloor(publicKey: string): number {
+    const { floor } = getMemberTrustProfile(publicKey);        // earned limit (≤ 0)
+    return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
 }
 
 /**
@@ -2040,10 +2092,11 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
 
     // Check if the PAYER has enough balance at the time of request to prevent spam
     const cost = post.price_type !== 'fixed' ? (post.credits * (hours || 1)) : post.credits;
-    const { balance, floor } = getBalance(payerPubkey);
+    const { balance, floor, usableFloor: uFloor } = getBalance(payerPubkey);
     if (balance - cost < floor) throw new Error('Insufficient balance to request this post.');
-    // Offer covenant: spending into (or deeper into) a negative balance requires a live Offer of your own.
-    if (balance - cost < 0 && !hasLiveOffer(payerPubkey)) throw new Error(COVENANT_REQUIRED_ERROR);
+    // Offer covenant (v3): how deep you may spend on credit is gated by your live-Offer count —
+    // uFloor already caps the earned floor by the band, so this one check covers "no offer" too.
+    if (balance - cost < uFloor) throw floorLockedError(payerPubkey, balance - cost);
 
     const transactionId = crypto.randomUUID();
     
@@ -2225,10 +2278,10 @@ export function acceptPost(postId: string, buyerPublicKey: string, hours?: numbe
     const finalCredits = post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
 
     // Check balance
-    const { balance, floor } = getBalance(buyerPublicKey);
+    const { balance, floor, usableFloor: uFloor } = getBalance(buyerPublicKey);
     if (balance - finalCredits < floor) throw new Error('Insufficient balance to accept this offer');
-    // Offer covenant: spending into (or deeper into) a negative balance requires a live Offer of your own.
-    if (balance - finalCredits < 0 && !hasLiveOffer(buyerPublicKey)) throw new Error(COVENANT_REQUIRED_ERROR);
+    // Offer covenant (v3): how deep you may spend on credit is gated by your live-Offer count.
+    if (balance - finalCredits < uFloor) throw floorLockedError(buyerPublicKey, balance - finalCredits);
 
     const tx: MarketplaceTransaction = {
         id: crypto.randomUUID(), postId: post.id, postTitle: post.title, buyerPublicKey,

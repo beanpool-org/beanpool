@@ -180,6 +180,31 @@ export function grantedCreditForTier(tier: TierName): number {
     }
 }
 
+// ===================== OFFER COVENANT (Trust Model v3) =====================
+// Earned trust sets your credit LIMIT (how deep your floor could go); the number of LIVE offers
+// you keep posted gates how much of that limit you may actually USE. Offers do not create floor —
+// they meter access to a limit you already earned. See docs/trust-model-v3.md.
+//
+// Live offers → deepest usable floor (magnitude, beans):
+//   0 → 0 (spend held beans only)   1 → 200   2 → 500   3 → 1000   4 → 1500   5 → 2000
+// The first band (−200) mirrors the +200 fee-free "green zone" above zero.
+export const OFFER_BANDS = [0, 200, 500, 1000, 1500, 2000] as const;
+
+/** Deepest floor magnitude (0…2000) that `liveOffers` live offers unlock. Capped at 5 offers. */
+export function offerCapForCount(liveOffers: number): number {
+    const n = Math.max(0, Math.min(OFFER_BANDS.length - 1, Math.floor(liveOffers || 0)));
+    return OFFER_BANDS[n];
+}
+
+/** Smallest live-offer count that unlocks spending to `magnitude` (the size of a negative balance). */
+export function offersRequiredForDepth(magnitude: number): number {
+    const m = Math.max(0, magnitude);
+    for (let n = 0; n < OFFER_BANDS.length; n++) {
+        if (OFFER_BANDS[n] >= m) return n;
+    }
+    return OFFER_BANDS.length - 1; // beyond the −2000 cap (shouldn't happen) → require the max
+}
+
 /**
  * Formats a bean amount as an approximate time equivalent.
  * Examples: 5 → "≈ 8min", 40 → "≈ 1.0hr", 320 → "≈ 8hr"

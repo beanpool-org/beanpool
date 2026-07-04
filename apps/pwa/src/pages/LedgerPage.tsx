@@ -146,8 +146,11 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     }
 
     const balance = balanceInfo?.balance ?? 0;
-    const floor = balanceInfo?.floor ?? -80;
-    const activated = balanceInfo?.activated;   // has a credit line at all (vouched/granted)
+    const floor = balanceInfo?.floor ?? -80;              // earned credit LIMIT (how deep you could go)
+    const usableFloor = balanceInfo?.usableFloor ?? floor; // v3: how deep you may go NOW (gated by live offers)
+    const liveOffers = balanceInfo?.liveOffers ?? 0;       // v3: currently-live Offer count
+    const frozen = balanceInfo?.frozen ?? false;           // v3: debt below usable floor → spending paused
+    const activated = balanceInfo?.activated;   // has a credit line at all (earned/vouched/granted)
     const earned = balanceInfo?.earnedCredit ?? 0;     // from the saturating value curve
     const granted = balanceInfo?.grantedCredit ?? 0;   // vouch/genesis/admin (separate lane)
     const totalCredit = Math.min(CREDIT_MAX_EARNED, earned + granted);
@@ -213,8 +216,8 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                 </div>
             </div>
 
-            {/* Credit position — zero is the sweet spot. Un-vouched members have no credit line yet
-                (floor 0), so show a plain-language "get vouched" prompt instead of the bar. */}
+            {/* Credit position — zero is the sweet spot. A brand-new member (no trades yet) has no
+                credit line (floor 0); their line opens automatically on their first real trade. */}
             {activated === false ? (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-4 mb-4 shadow-sm">
                     <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
@@ -222,7 +225,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         <div>
                             <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">No credit line yet</div>
                             <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">
-                                You can trade right now with the beans you hold. When a community sponsor vouches for you, you'll unlock a credit line — letting you spend a little before you earn it back.
+                                You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)
                             </div>
                         </div>
                     </div>
@@ -230,6 +233,30 @@ export function LedgerPage({ identity, onNavigate }: Props) {
             ) : (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
                     <CreditBar balance={balance} floor={floor} />
+                    {/* Offer covenant (v3): live Offers gate how much of the earned line you can use. */}
+                    {floor < 0 && (
+                        frozen ? (
+                            <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
+                                <span>⚠️</span>
+                                <span>Spending paused — your balance is below what your {liveOffers} active offer{liveOffers === 1 ? '' : 's'} unlock (−{Math.abs(usableFloor)}). Post an Offer or trade back up to lift it. You can still receive and sell.</span>
+                            </div>
+                        ) : usableFloor === floor ? (
+                            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-nature-500 dark:text-nature-400">
+                                <span>🎣</span>
+                                <span>Your {liveOffers} active offer{liveOffers === 1 ? '' : 's'} unlock your full −{Math.abs(floor)} credit line.</span>
+                            </div>
+                        ) : liveOffers === 0 ? (
+                            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-nature-500 dark:text-nature-400">
+                                <span>🎣</span>
+                                <span><b className="text-nature-700 dark:text-nature-200">Post an Offer</b> to open your credit line (you've earned up to −{Math.abs(floor)}).</span>
+                            </div>
+                        ) : (
+                            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-nature-500 dark:text-nature-400">
+                                <span>🎣</span>
+                                <span>{liveOffers} active offer{liveOffers === 1 ? '' : 's'} unlock −{Math.abs(usableFloor)} of your −{Math.abs(floor)} line — <b className="text-nature-700 dark:text-nature-200">post another</b> to unlock more.</span>
+                            </div>
+                        )
+                    )}
                 </div>
             )}
 

@@ -1886,7 +1886,7 @@ export function createPost(
     return post;
 }
 
-export function getPosts(filter?: { id?: string; type?: string; category?: string; status?: string; offset?: number; limit?: number; updatedAfter?: string; query?: string; authorPubkey?: string; viewerPubkey?: string }): MarketplacePost[] {
+export function getPosts(filter?: { id?: string; type?: string; category?: string; status?: string; offset?: number; limit?: number; updatedAfter?: string; query?: string; authorPubkey?: string; viewerPubkey?: string; sync?: boolean }): MarketplacePost[] {
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
                COALESCE((SELECT SUM(amount) FROM transactions WHERE from_pubkey = m.public_key), 0) as author_energy_cycled,
@@ -1908,7 +1908,7 @@ export function getPosts(filter?: { id?: string; type?: string; category?: strin
     `;
     const params: any[] = [];
 
-    if (!filter?.id && !filter?.updatedAfter) {
+    if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
         // Regular client paginated fetch: only active/pending — PLUS the author's own paused posts
         // when they're viewing themselves (so they can find & re-activate them). Viewer-aware: paused
         // is included only when the signed requester IS the author, never leaked to profile viewers.
@@ -1922,7 +1922,7 @@ export function getPosts(filter?: { id?: string; type?: string; category?: strin
         if (!filter?.authorPubkey) {
             query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
         }
-    } else if (filter?.updatedAfter) {
+    } else if (filter?.updatedAfter || filter?.sync) {
         // Sync daemon fetch: MUST include completed/cancelled/deleted states to sync deletions
     } else {
         query += " AND p.active = 1";

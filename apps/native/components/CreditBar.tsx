@@ -136,7 +136,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                     <Text style={s.ladderText}>
                         🎣 {uFloor < 0 ? (
                             <>
-                                <Text style={s.ladderStrong}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? ` · post another → −${nextUnlock}` : ''}
+                                <Text style={s.ladderStrong}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? ` · ${liveOffers + 1} offer${liveOffers + 1 === 1 ? '' : 's'} → −${nextUnlock}` : ''}
                             </>
                         ) : (
                             <>

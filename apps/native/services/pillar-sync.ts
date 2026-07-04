@@ -260,7 +260,7 @@ export async function performSync(): Promise<SyncResult> {
 
         let postsData = [];
         try {
-            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000${lastSyncParam}&_t=${Date.now()}`, {
+            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${lastSyncParam}&_t=${Date.now()}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: postsController.signal

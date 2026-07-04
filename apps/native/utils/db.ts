@@ -520,6 +520,48 @@ export async function getMyPosts(pubkey: string) {
 export async function getPost(id: string) {
     const database = await waitForInit();
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
+    
+    // Background fetch to ensure the local DB has the latest post status
+    if (anchorUrl) {
+        fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true&_t=${Date.now()}`)
+            .then(res => res.json())
+            .then(async posts => {
+                if (Array.isArray(posts) && posts.length > 0) {
+                    const serverPost = posts[0];
+                    await acquireSyncLock();
+                    try {
+                        await database.runAsync(
+                            "UPDATE posts SET status = ?, active = ?, accepted_by = ?, pending_transaction_id = ?, completed_at = ?, updated_at = ? WHERE id = ?",
+                            [
+                                serverPost.status || 'active',
+                                serverPost.active !== undefined ? (serverPost.active ? 1 : 0) : 1,
+                                serverPost.acceptedBy || serverPost.accepted_by || null,
+                                serverPost.pendingTransactionId || serverPost.pending_transaction_id || null,
+                                serverPost.completedAt || serverPost.completed_at || null,
+                                serverPost.updatedAt || serverPost.updated_at || null,
+                                id
+                            ]
+                        );
+                    } finally {
+                        releaseSyncLock();
+                    }
+                    const { DeviceEventEmitter } = require('react-native');
+                    DeviceEventEmitter.emit('sync_data_updated');
+                } else if (Array.isArray(posts) && posts.length === 0) {
+                    // Post was deleted on the server, delete it locally
+                    await acquireSyncLock();
+                    try {
+                        await database.runAsync("DELETE FROM posts WHERE id = ?", [id]);
+                    } finally {
+                        releaseSyncLock();
+                    }
+                    const { DeviceEventEmitter } = require('react-native');
+                    DeviceEventEmitter.emit('sync_data_updated');
+                }
+            })
+            .catch(() => null);
+    }
+
     const row = await database.getFirstAsync<any>(`
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
         FROM posts p
@@ -867,6 +909,74 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
     return result?.count || 0;
 }
 
+export async function refreshBalanceFromServer(pubkey: string) {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) return;
+    try {
+        const res = await fetch(`${anchorUrl}/api/ledger/balance/${pubkey}?_t=${Date.now()}`);
+        if (!res.ok) return;
+        const balData = await res.json();
+        const database = await getDb();
+        const commons = await database.getFirstAsync<any>('SELECT balance FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
+        const row = await database.getFirstAsync<any>('SELECT balance, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
+        
+        let changed = false;
+        await acquireSyncLock();
+        try {
+            if (typeof balData.balance === 'number') {
+                if (balData.balance !== (row?.balance || 0)) changed = true;
+                await database.runAsync(
+                    'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
+                    [pubkey, balData.balance, balData.last_demurrage_epoch || 0]
+                );
+            }
+            if (typeof balData.commonsBalance === 'number') {
+                if (balData.commonsBalance !== (commons?.balance || 0)) changed = true;
+                await database.runAsync(
+                    'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
+                    ['COMMONS', balData.commonsBalance, 0]
+                );
+            }
+        } finally {
+            releaseSyncLock();
+        }
+        
+        if (balData.tier || balData.floor !== undefined) {
+            let floor = -100;
+            let tier = { name: 'Ghost', emoji: '👻', canGift: false, canInvite: false };
+            const newTierStr = JSON.stringify({
+                tier: balData.tier || tier,
+                floor: balData.floor ?? floor,
+                earnedCredit: balData.earnedCredit ?? 0,
+                grantedCredit: balData.grantedCredit ?? 0,
+                qualifiedValue: balData.qualifiedValue ?? 0,
+                avgRating: balData.avgRating ?? 0,
+                reviewCount: balData.reviewCount ?? 0,
+                trustStats: balData.trustStats ?? null,
+                isBlockedFromTrading: !!balData.isBlockedFromTrading,
+                elderVouchedBy: balData.elderVouchedBy ?? null,
+                canVouch: !!balData.canVouch,
+                activated: !!balData.activated,
+                hasLiveOffer: !!balData.hasLiveOffer,
+                usableFloor: balData.usableFloor ?? balData.floor ?? floor,
+                liveOffers: balData.liveOffers ?? 0,
+                frozen: !!balData.frozen,
+            });
+            const prevTierStr = await AsyncStorage.getItem(`bp_tier_${pubkey}`);
+            if (prevTierStr !== newTierStr) {
+                await AsyncStorage.setItem(`bp_tier_${pubkey}`, newTierStr);
+                changed = true;
+            }
+        }
+        if (changed) {
+            const { DeviceEventEmitter } = require('react-native');
+            DeviceEventEmitter.emit('sync_data_updated');
+        }
+    } catch (e) {
+        console.warn(`[refreshBalanceFromServer] Failed for ${pubkey}:`, e);
+    }
+}
+
 export async function getBalance(pubkey: string) {
     const database = await getDb();
     const row = await database.getFirstAsync<any>('SELECT balance, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
@@ -891,70 +1001,7 @@ export async function getBalance(pubkey: string) {
     let frozen = false;        // v3: debt below usable floor → spending paused
 
     // Background fetch to ensure parity
-    AsyncStorage.getItem('beanpool_anchor_url').then((anchorUrl: string | null) => {
-        if (!anchorUrl) return;
-        const { DeviceEventEmitter } = require('react-native');
-        fetch(`${anchorUrl}/api/ledger/balance/${pubkey}?_t=${Date.now()}`)
-            .then(res => res.json())
-            .then(async balData => {
-                let changed = false;
-                // Hold the shared write lock across these account upserts — every other
-                // writer (applyDelta, escrow) uses it to avoid concurrent-write "database is
-                // locked" errors on expo-sqlite. No network happens inside the lock.
-                await acquireSyncLock();
-                try {
-                    if (typeof balData.balance === 'number') {
-                        if (balData.balance !== (row?.balance || 0)) changed = true;
-                        await database.runAsync(
-                            'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                            [pubkey, balData.balance, balData.last_demurrage_epoch || 0]
-                        );
-                    }
-                    if (typeof balData.commonsBalance === 'number') {
-                        if (balData.commonsBalance !== (commons?.balance || 0)) changed = true;
-                        await database.runAsync(
-                            'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                            ['COMMONS', balData.commonsBalance, 0]
-                        );
-                    }
-                } finally {
-                    releaseSyncLock();
-                }
-                // Store protocol fields in AsyncStorage for UI access.
-                // Only flag `changed` (which emits 'sync_data_updated') when the tier
-                // data ACTUALLY differs from what's cached — otherwise a listener that
-                // re-calls getBalance (e.g. the ledger screen) creates an infinite
-                // emit→reload→emit loop ("Maximum update depth exceeded").
-                if (balData.tier || balData.floor !== undefined) {
-                    const newTierStr = JSON.stringify({
-                        tier: balData.tier || tier,
-                        floor: balData.floor ?? floor,
-                        earnedCredit: balData.earnedCredit ?? 0,
-                        grantedCredit: balData.grantedCredit ?? 0,
-                        qualifiedValue: balData.qualifiedValue ?? 0,
-                        avgRating: balData.avgRating ?? 0,
-                        reviewCount: balData.reviewCount ?? 0,
-                        trustStats: balData.trustStats ?? null,
-                        isBlockedFromTrading: !!balData.isBlockedFromTrading,
-                        elderVouchedBy: balData.elderVouchedBy ?? null,
-                        canVouch: !!balData.canVouch,
-                        activated: !!balData.activated,
-                        hasLiveOffer: !!balData.hasLiveOffer,
-                        usableFloor: balData.usableFloor ?? balData.floor ?? floor,
-                        liveOffers: balData.liveOffers ?? 0,
-                        frozen: !!balData.frozen,
-                    });
-                    const prevTierStr = await AsyncStorage.getItem(`bp_tier_${pubkey}`);
-                    if (prevTierStr !== newTierStr) {
-                        await AsyncStorage.setItem(`bp_tier_${pubkey}`, newTierStr);
-                        changed = true;
-                    }
-                }
-                if (changed) {
-                    DeviceEventEmitter.emit('sync_data_updated');
-                }
-            }).catch(() => null);
-    });
+    refreshBalanceFromServer(pubkey).catch(() => null);
 
     // Try to load cached tier data
     let trustStats: any = null;
@@ -1141,26 +1188,8 @@ export async function sendTransfer(from: string, to: string, amount: number, mem
         }
 
         // 2. Refresh both parties' balances from server
-        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (anchorUrl) {
-            for (const pk of [from, to]) {
-                try {
-                    const balRes = await fetch(`${anchorUrl}/api/ledger/balance/${pk}?_t=${Date.now()}`);
-                    if (balRes.ok) {
-                        const balData = await balRes.json();
-                        await acquireSyncLock();
-                        try {
-                            await database.runAsync(
-                                'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                                [pk, balData.balance || 0, balData.last_demurrage_epoch || 0]
-                            );
-                        } finally {
-                            releaseSyncLock();
-                        }
-                    }
-                } catch {}
-            }
-        }
+        refreshBalanceFromServer(from).catch(() => null);
+        refreshBalanceFromServer(to).catch(() => null);
         
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('transaction_completed');
@@ -1333,6 +1362,7 @@ export async function createPost(post: any) {
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.photos || null]
     );
+    refreshBalanceFromServer(post.author_pubkey).catch(() => null);
 }
 
 export async function createProject(project: {
@@ -1609,6 +1639,7 @@ export async function pausePost(id: string) {
     await _signedRequest('/api/marketplace/posts/pause', { postId: id, authorPublicKey: identity.publicKey });
     const database = await getDb();
     await database.runAsync(`UPDATE posts SET status = 'paused' WHERE id = ?`, [id]);
+    refreshBalanceFromServer(identity.publicKey).catch(() => null);
 }
 
 /** Re-activate a paused Offer (owner-only): back in the feed and counting toward the credit line. */
@@ -1618,6 +1649,7 @@ export async function resumePost(id: string) {
     await _signedRequest('/api/marketplace/posts/resume', { postId: id, authorPublicKey: identity.publicKey });
     const database = await getDb();
     await database.runAsync(`UPDATE posts SET status = 'active' WHERE id = ?`, [id]);
+    refreshBalanceFromServer(identity.publicKey).catch(() => null);
 }
 
 export async function deletePost(id: string) {
@@ -1648,6 +1680,7 @@ export async function deletePost(id: string) {
     // 2. Erase from local SQLite Cache
     const database = await getDb();
     await database.runAsync('DELETE FROM posts WHERE id = ?', [id]);
+    refreshBalanceFromServer(identity.publicKey).catch(() => null);
 }
 
 export async function applyDelta(delta: any) {
@@ -2940,30 +2973,7 @@ export async function acceptMarketplacePost(postId: string, buyerPublicKey: stri
     }
 
     // Refresh buyer balance immediately (escrow just deducted from them) - OUTSIDE critical lock section
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (anchorUrl) {
-        try {
-            const balRes = await fetch(`${anchorUrl}/api/ledger/balance/${buyerPublicKey}?_t=${Date.now()}`);
-            if (balRes.ok) {
-                const balData = await balRes.json();
-                await acquireSyncLock();
-                try {
-                    const database = await getDb();
-                    await database.runAsync(
-                        'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                        [buyerPublicKey, balData.balance || 0, balData.last_demurrage_epoch || 0]
-                    );
-                    console.log(`[Escrow] Buyer balance after escrow lock: ${balData.balance}B`);
-                } finally {
-                    releaseSyncLock();
-                }
-                const { DeviceEventEmitter } = require('react-native');
-                DeviceEventEmitter.emit('sync_data_updated');
-            }
-        } catch (e) {
-            console.warn('[Escrow] Balance refresh failed:', e);
-        }
-    }
+    refreshBalanceFromServer(buyerPublicKey).catch(() => null);
     
     return res;
 }
@@ -2999,37 +3009,8 @@ export async function completeMarketplaceTransaction(transactionId: string, conf
     // Immediately refresh BOTH parties' balances from server *outside critical lock section*
     const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
     const sellerPubkey = res?.transaction?.sellerPublicKey || null;
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (anchorUrl) {
-        const pubkeysToRefresh = [buyerPubkey, sellerPubkey].filter(Boolean) as string[];
-        for (const pk of pubkeysToRefresh) {
-            try {
-                const balRes = await fetch(`${anchorUrl}/api/ledger/balance/${pk}?_t=${Date.now()}`);
-                if (balRes.ok) {
-                    const balData = await balRes.json();
-                    await acquireSyncLock();
-                    try {
-                        const database = await getDb();
-                        await database.runAsync(
-                            'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                            [pk, balData.balance || 0, balData.last_demurrage_epoch || 0]
-                        );
-                        console.log(`[Escrow] Balance refreshed for ${pk.slice(0,8)}: ${balData.balance}B`);
-                    } finally {
-                        releaseSyncLock();
-                    }
-                    const { DeviceEventEmitter } = require('react-native');
-                    DeviceEventEmitter.emit('sync_data_updated');
-                } else {
-                    console.warn(`[Escrow] Balance fetch failed for ${pk.slice(0,8)}: HTTP ${balRes.status}`);
-                }
-            } catch (e) {
-                console.warn(`[Escrow] Balance refresh error for ${pk.slice(0,8)}:`, e);
-            }
-        }
-    } else {
-        console.warn('[Escrow] No anchor URL — cannot refresh balances');
-    }
+    if (buyerPubkey) refreshBalanceFromServer(buyerPubkey).catch(() => null);
+    if (sellerPubkey) refreshBalanceFromServer(sellerPubkey).catch(() => null);
 
     return res;
 }

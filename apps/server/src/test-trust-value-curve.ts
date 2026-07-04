@@ -69,10 +69,10 @@ function main() {
     assert(earnedCreditFromValue(10000) > earnedCreditFromValue(2000), 'curve is monotonic increasing');
     assert(Number.isInteger(earnedCreditFromValue(1234)), 'curve returns an integer (deterministic)');
 
-    // ── 2. A small completed trade banks earned trust, but the floor stays 0 until a vouch ──
+    // ── 2. A small completed trade banks earned trust, and opens the floor immediately ──
     seedMember('buyer3'); seedMember('seller3');
     mtx('buyer3', 'seller3', 3);
-    assert(floorOf('buyer3') === 0, `traded but not vouched → floor 0 (trading no longer activates), got ${floorOf('buyer3')}`);
+    assert(floorOf('buyer3') === -1, `completed trade activates floor to -1, got ${floorOf('buyer3')}`);
     assert(profile('buyer3').earnedCredit === 1, `...but the 1 earned is banked, ready to unlock, got ${profile('buyer3').earnedCredit}`);
     vouch('buyer3'); vouch('seller3');
     assert(floorOf('buyer3') === -26, `once vouched (light, -25) → buyer floor −26 (25 vouch + 1 earned unlocked), got ${floorOf('buyer3')}`);

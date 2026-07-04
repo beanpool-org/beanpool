@@ -1,10 +1,14 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, SafeAreaView, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, SafeAreaView, Alert, Linking, Platform } from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
 import Slider from '@react-native-community/slider';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, palette } from '../constants/colors';
+import Constants from 'expo-constants';
+
+const HAS_MAPS_KEY = Platform.OS !== 'android' || 
+    !!(Constants.expoConfig?.android?.config?.googleMaps?.apiKey || Constants.expoConfig?.extra?.googleMapsApiKey);
 
 // Default to Mullumbimby for the demo/mock
 const DEFAULT_LAT = -28.5523;
@@ -111,29 +115,37 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                 </View>
 
                 <View style={styles.mapContainer}>
-                    <MapView 
-                        ref={mapRef}
-                        style={styles.map} 
-                        initialRegion={region}
-                        region={region}
-                        provider={PROVIDER_DEFAULT}
-                        customMapStyle={mapStyle}
-                        onPress={(e) => setCenter(e.nativeEvent.coordinate)}
-                    >
-                        <Marker 
-                            coordinate={center} 
-                            draggable 
-                            onDragEnd={(e) => setCenter(e.nativeEvent.coordinate)} 
-                        />
-                        <Circle 
-                            center={center}
-                            radius={radius * 1000} // meters
-                            strokeWidth={2}
-                            strokeColor={palette.amber400}
-                            lineDashPattern={[5, 5]}
-                            fillColor="rgba(251, 191, 36, 0.15)"
-                        />
-                    </MapView>
+                    {HAS_MAPS_KEY ? (
+                        <MapView 
+                            ref={mapRef}
+                            style={styles.map} 
+                            initialRegion={region}
+                            region={region}
+                            provider={PROVIDER_DEFAULT}
+                            customMapStyle={mapStyle}
+                            onPress={(e) => setCenter(e.nativeEvent.coordinate)}
+                        >
+                            <Marker 
+                                coordinate={center} 
+                                draggable 
+                                onDragEnd={(e) => setCenter(e.nativeEvent.coordinate)} 
+                            />
+                            <Circle 
+                                center={center}
+                                radius={radius * 1000} // meters
+                                strokeWidth={2}
+                                strokeColor={palette.amber400}
+                                lineDashPattern={[5, 5]}
+                                fillColor="rgba(251, 191, 36, 0.15)"
+                            />
+                        </MapView>
+                    ) : (
+                        <View style={[styles.map, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface.subtle, padding: 24 }]}>
+                            <MaterialCommunityIcons name="map-marker-off" size={48} color={colors.text.muted} />
+                            <Text style={{ marginTop: 12, color: colors.text.body, fontWeight: '700', textAlign: 'center' }}>Google Maps is not configured</Text>
+                            <Text style={{ marginTop: 4, color: colors.text.secondary, fontSize: 12, textAlign: 'center' }}>API key is missing in build config.</Text>
+                        </View>
+                    )}
 
                     {/* Floating GPS Button */}
                     <Pressable

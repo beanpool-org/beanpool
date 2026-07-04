@@ -1,4 +1,7 @@
 release.keystore
 *.keystore
 credentials.json
+.env
+.env.*
+
 

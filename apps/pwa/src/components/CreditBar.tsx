@@ -47,20 +47,40 @@ function toPct(v: number, floor: number): number {
 
 const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? n : n.toFixed(1)}`;
 
+// Offer-covenant bands (mirrors @beanpool/core OFFER_BANDS): live-offer count → unlocked depth.
+const OFFER_BANDS = [200, 500, 1000, 1500, 2000];
+
 interface Props {
     balance: number;
-    floor: number;
+    floor: number;                 // earned credit LIMIT (deepest the floor could ever reach)
+    usableFloor?: number;          // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
+    liveOffers?: number;           // v3: current live-offer count (for the ladder caption)
     feeFreeMax?: number;
     className?: string;
 }
 
-export function CreditBar({ balance, floor, feeFreeMax = 200, className = '' }: Props) {
+export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFreeMax = 200, className = '' }: Props) {
     const pct = toPct(balance, floor);
     const overFeeFree = balance > feeFreeMax;
     const nearLimit = floor < 0 && balance - floor < Math.abs(floor) * 0.12;
     const rate = marginalRate(balance);
     const tagBg = nearLimit ? RED : overFeeFree ? WARM_BG : '#16211b';
     const tagLabel = overFeeFree ? `${fmt(balance)} B · ≈${rate}%/mo` : `${fmt(balance)} B`;
+
+    // Offer ladder — the negative side mirrors the fee ladder above zero. `usableFloor` is the depth
+    // your live Offers currently unlock; anything deeper (usableFloor → floor) is LOCKED until you
+    // post more Offers. Only drawn when usableFloor is provided and the member has an earned line.
+    const uFloor = usableFloor ?? floor;
+    const showLadder = usableFloor !== undefined && floor < 0;
+    const hasLocked = showLadder && uFloor > floor;          // some earned depth is offer-locked
+    const usablePct = toPct(uFloor, floor);                   // right edge of the unlocked (reachable) zone
+    const floorPct = toPct(floor, floor);                     // left edge (earned limit)
+    // Band rungs that fall within the earned limit (skip the outermost = the limit itself).
+    const rungs = showLadder ? OFFER_BANDS.filter(b => b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
+    // Next unlock = the next band above what you've unlocked, capped at your earned limit
+    // (a 4th offer on a −1400 limit unlocks −1400, not −1500).
+    const nextBand = OFFER_BANDS.find(b => b > Math.abs(uFloor));
+    const nextUnlock = hasLocked && nextBand ? Math.min(nextBand, Math.abs(floor)) : undefined;
 
     // Fee ladder — the monthly circulation-fee brackets above the fee-free ceiling. Opens up as the
     // balance climbs past halfway: revealT ramps 0→1 between feeFreeMax/2 and the ceiling, then
@@ -129,6 +149,24 @@ export function CreditBar({ balance, floor, feeFreeMax = 200, className = '' }: 
                     backgroundColor: '#fff',
                     boxShadow: '0 0 0 1px rgba(0,0,0,0.18)',
                 }} />
+                {/* Offer-locked zone: earned depth your live Offers haven't unlocked yet (hatched) */}
+                {hasLocked && (
+                    <div style={{
+                        position: 'absolute',
+                        left: `${floorPct}%`,
+                        width: `${usablePct - floorPct}%`,
+                        top: 0, bottom: 0,
+                        background: 'repeating-linear-gradient(45deg, rgba(15,23,42,0.55) 0 5px, rgba(15,23,42,0.30) 5px 10px)',
+                    }} />
+                )}
+                {/* Offer-band rungs (the "ladder") */}
+                {rungs.map((r) => (
+                    <div key={r.b} style={{ position: 'absolute', left: `${r.pct}%`, top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.4 }} />
+                ))}
+                {/* Current usable-floor marker — how deep you can actually spend right now */}
+                {hasLocked && uFloor < 0 && (
+                    <div style={{ position: 'absolute', left: `${usablePct}%`, top: -3, bottom: -3, width: 2, marginLeft: -1, backgroundColor: WARM_BG, boxShadow: '0 0 0 1px rgba(0,0,0,0.25)', zIndex: 1 }} />
+                )}
                 {/* bead */}
                 <div style={{
                     position: 'absolute',
@@ -148,6 +186,18 @@ export function CreditBar({ balance, floor, feeFreeMax = 200, className = '' }: 
                     <div key={t} style={{ position: 'absolute', left: `${t}%`, top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.5 * revealT }} />
                 ))}
             </div>
+
+            {/* Offer ladder caption — what your live Offers unlock, and the next rung */}
+            {showLadder && hasLocked && (
+                <div style={{ marginTop: 5, fontSize: 10, color: '#929c90', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span>🎣</span>
+                    {uFloor < 0 ? (
+                        <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> unlock −{Math.abs(uFloor)}{nextUnlock ? ` · post another → −${nextUnlock}` : ''}</span>
+                    ) : (
+                        <span><b style={{ color: WARM }}>Post an Offer</b> to unlock your credit line (down to −{Math.abs(floor)})</span>
+                    )}
+                </div>
+            )}
 
             {/* Fee ladder — circulation-fee brackets above +feeFreeMax, revealed as you climb */}
             {showFees && (

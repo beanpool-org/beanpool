@@ -13,6 +13,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const RED = '#bb4b32', WARM = '#c07d2a', WARM_BG = '#e9a23e', BEAN = '#2f9e44', BEAN_DEEP = '#1c6e30';
 
+// Offer-covenant bands (mirrors @beanpool/core OFFER_BANDS): live-offer count → unlocked depth.
+const OFFER_BANDS = [200, 500, 1000, 1500, 2000];
+
 // Marginal monthly circulation rate at a positive balance (mirrors the demurrage brackets).
 function marginalRate(b: number): number {
     if (b <= 200) return 0;
@@ -50,11 +53,13 @@ function toPct(v: number, floor: number): number {
 
 const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? n : n.toFixed(1)}`;
 
-export function CreditBar({ balance, floor, colors, feeFreeMax = 200 }: {
+export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloor, liveOffers = 0 }: {
     balance: number;
     floor: number;
     colors: any;
     feeFreeMax?: number;
+    usableFloor?: number;   // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
+    liveOffers?: number;    // v3: current live-offer count (for the ladder caption)
 }) {
     const [tagW, setTagW] = useState(0);
     const pct = toPct(balance, floor);
@@ -63,6 +68,17 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200 }: {
     const rate = marginalRate(balance);
     const tagBg = nearLimit ? RED : overFeeFree ? WARM_BG : colors.text.heading;
     const tagLabel = overFeeFree ? `${fmt(balance)} B · ≈${rate}%/mo` : `${fmt(balance)} B`;
+
+    // Offer ladder — the negative side mirrors the fee ladder above zero. usableFloor is the depth
+    // your live Offers currently unlock; earned depth beyond it (usableFloor → floor) is LOCKED.
+    const uFloor = usableFloor === undefined ? floor : usableFloor;
+    const showLadder = usableFloor !== undefined && floor < 0;
+    const hasLocked = showLadder && uFloor > floor;
+    const usablePct = toPct(uFloor, floor);
+    const floorPct = toPct(floor, floor);
+    const rungs = showLadder ? OFFER_BANDS.filter(b => b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
+    const nextBand = OFFER_BANDS.find(b => b > Math.abs(uFloor));
+    const nextUnlock = hasLocked && nextBand ? Math.min(nextBand, Math.abs(floor)) : undefined;
 
     // Fee ladder — the monthly circulation-fee brackets that live ABOVE the fee-free ceiling.
     // It "opens up" as the balance climbs past the halfway mark: revealT ramps 0→1 between
@@ -98,11 +114,34 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200 }: {
                     style={StyleSheet.absoluteFill}
                 />
                 <View style={s.zero} />
+                {/* Offer-locked zone: earned depth your live Offers haven't unlocked yet */}
+                {hasLocked && <View style={[s.lockedZone, { left: `${floorPct}%`, width: `${usablePct - floorPct}%` }]} />}
+                {/* Offer-band rungs (the "ladder") */}
+                {rungs.map((r) => (<View key={r.b} style={[s.rung, { left: `${r.pct}%` }]} />))}
+                {/* Current usable-floor marker — how deep you can actually spend right now */}
+                {hasLocked && uFloor < 0 && <View style={[s.usableMark, { left: `${usablePct}%` }]} />}
                 {showFees && FEE_TICKS.map((t, i) => (
                     <View key={i} style={[s.feeTick, { left: `${t}%`, opacity: 0.5 * revealT }]} />
                 ))}
                 <View style={[s.bead, { left: `${pct}%` }]} />
             </View>
+
+            {/* Offer ladder caption — what your live Offers unlock, and the next rung */}
+            {showLadder && hasLocked && (
+                <View style={s.ladderRow} pointerEvents="none">
+                    <Text style={s.ladderText}>
+                        🎣 {uFloor < 0 ? (
+                            <>
+                                <Text style={s.ladderStrong}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</Text> unlock −{Math.abs(uFloor)}{nextUnlock ? ` · post another → −${nextUnlock}` : ''}
+                            </>
+                        ) : (
+                            <>
+                                <Text style={s.ladderStrong}>Post an Offer</Text> to unlock your credit line (down to −{Math.abs(floor)})
+                            </>
+                        )}
+                    </Text>
+                </View>
+            )}
 
             {/* Fee ladder — the circulation-fee brackets above +feeFreeMax, revealed as you climb */}
             {showFees && (
@@ -157,6 +196,12 @@ const styles = (colors: any) => StyleSheet.create({
     track: { height: 15, borderRadius: 9, overflow: 'visible' },
     zero: { position: 'absolute', left: '50%', marginLeft: -1, top: -3, bottom: -3, width: 2, backgroundColor: '#fff' },
     feeTick: { position: 'absolute', top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff' },
+    lockedZone: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.42)' },
+    rung: { position: 'absolute', top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.4 },
+    usableMark: { position: 'absolute', top: -3, bottom: -3, width: 2, marginLeft: -1, backgroundColor: WARM_BG, zIndex: 1 },
+    ladderRow: { marginTop: 5 },
+    ladderText: { fontSize: 10, color: colors.text.muted },
+    ladderStrong: { color: WARM, fontWeight: '800' },
     feeRow: { position: 'relative', height: 12, marginTop: 4 },
     feeRate: { position: 'absolute', top: 0, width: 44, marginLeft: -22, textAlign: 'center', fontSize: 9, fontVariant: ['tabular-nums'] },
     feeCaption: { position: 'absolute', top: 1, left: 0, fontSize: 8, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.4 },

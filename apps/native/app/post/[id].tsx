@@ -8,7 +8,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { Picker } from '@react-native-picker/picker';
 import * as Crypto from 'expo-crypto';
 import { 
-    getPost, updatePost, deletePost, 
+    getPost, updatePost, deletePost, pausePost, resumePost,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, getUnreadCountForPost, getBalance
@@ -98,6 +98,8 @@ export default function PostDetailModal() {
         editPostBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800' },
         deletePostBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 2, borderColor: colors.feedback.danger.border },
         deletePostBtnText: { color: colors.feedback.danger.solid, fontSize: 14, fontWeight: '700' },
+        pauseOfferBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 2, borderColor: '#f59e0b' },
+        pauseOfferBtnText: { color: '#d97706', fontSize: 14, fontWeight: '700' },
 
         // Other's Post Actions
         otherPostActions: { paddingHorizontal: 20, gap: 10 },
@@ -293,6 +295,7 @@ export default function PostDetailModal() {
     const [editMode, setEditMode] = useState(false);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [toggling, setToggling] = useState(false);
 
     // Edit form state
     const [editType, setEditType] = useState<'offer' | 'need'>('offer');
@@ -595,6 +598,21 @@ export default function PostDetailModal() {
             Alert.alert('Error', 'Failed to save changes');
         }
         setSaving(false);
+    };
+
+    const handleToggleActive = async () => {
+        if (!post || toggling) return;
+        const willPause = post.status === 'active';
+        setToggling(true);
+        try {
+            if (willPause) await pausePost(post.id);
+            else await resumePost(post.id);
+            setPost({ ...post, status: willPause ? 'paused' : 'active' });
+        } catch (e: any) {
+            Alert.alert('Error', String(e?.message || 'Failed to update offer'));
+        } finally {
+            setToggling(false);
+        }
     };
 
     const handleDelete = () => {
@@ -1056,6 +1074,11 @@ export default function PostDetailModal() {
                         </View>
                     ) : (
                         <View style={styles.ownPostActions}>
+                            {post.type === 'offer' && (
+                                <Pressable accessibilityRole="button" accessibilityHint="Hides this Offer from the marketplace" style={styles.pauseOfferBtn} onPress={handleToggleActive} disabled={toggling}>
+                                    <Text style={styles.pauseOfferBtnText}>{toggling ? 'Pausing…' : '⏸️ Pause Offer'}</Text>
+                                </Pressable>
+                            )}
                             <Pressable accessibilityRole="button" style={styles.editPostBtn} onPress={startEdit}>
                                 <Text style={styles.editPostBtnText}>✏️ Edit Post</Text>
                             </Pressable>
@@ -1064,6 +1087,24 @@ export default function PostDetailModal() {
                             </Pressable>
                         </View>
                     )
+                )}
+
+                {/* 3b. Own Paused Offers — re-activate or delete (the active section above is gated on status==='active') */}
+                {isOwnPost && post.status === 'paused' && (
+                    <View style={styles.ownPostActions}>
+                        <View style={styles.confirmBox}>
+                            <Text style={[styles.confirmBoxTitle, { color: '#d97706' }]}>⏸️ Offer paused</Text>
+                            <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center' }}>
+                                This offer is hidden from the marketplace and isn't counting toward your credit line. Re-activate it to make it live again.
+                            </Text>
+                        </View>
+                        <Pressable accessibilityRole="button" style={[styles.editPostBtn, { backgroundColor: colors.brand.primary }]} onPress={handleToggleActive} disabled={toggling}>
+                            <Text style={styles.editPostBtnText}>{toggling ? 'Activating…' : '▶️ Activate Offer'}</Text>
+                        </Pressable>
+                        <Pressable accessibilityRole="button" accessibilityHint="Permanently deletes this post" style={styles.deletePostBtn} onPress={handleDelete} disabled={deleting}>
+                            <Text style={styles.deletePostBtnText}>{deleting ? 'Deleting...' : '🗑️ Delete Post'}</Text>
+                        </Pressable>
+                    </View>
                 )}
 
                 {/* 3. Unaccepted Posts Displayed to Browsers */}

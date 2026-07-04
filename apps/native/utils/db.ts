@@ -492,6 +492,31 @@ export async function getPosts(filter?: { type?: string; category?: string }) {
     });
 }
 
+/** The signed-in member's OWN posts, INCLUDING paused ones (which getPosts hides from the feed).
+ *  Used by "My Posts" so a member can see and re-activate a paused Offer. */
+export async function getMyPosts(pubkey: string) {
+    const database = await waitForInit();
+    const rows = await database.getAllAsync(`
+        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at
+        FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key
+        WHERE p.author_pubkey = ? AND p.status IN ('active', 'pending', 'completed', 'paused')
+        ORDER BY p.created_at DESC
+    `, [pubkey]) as any[];
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
+    return rows.map((r: any) => {
+        r.authorFoundingNeeded = r.author_founding_needed === 1;
+        r.author_energy_cycled = r.author_energy_cycled ?? 0;
+        if (typeof r.photos === 'string') {
+            try {
+                r.photos = JSON.parse(r.photos);
+                if (Array.isArray(r.photos)) r.photos = r.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
+            } catch (e) { r.photos = []; }
+        }
+        return r;
+    });
+}
+
 export async function getPost(id: string) {
     const database = await waitForInit();
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
@@ -1574,6 +1599,25 @@ export async function updatePost(id: string, updates: any) {
         `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?, photos = ? WHERE id = ?`,
         [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, updates.photos || null, id]
     );
+}
+
+/** Pause an Offer (owner-only): drops it from the live feed and stops it counting toward the
+ *  offer covenant / credit line (Trust Model v3). Reversible via resumePost. */
+export async function pausePost(id: string) {
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('Not logged in. Identity required.');
+    await _signedRequest('/api/marketplace/posts/pause', { postId: id, authorPublicKey: identity.publicKey });
+    const database = await getDb();
+    await database.runAsync(`UPDATE posts SET status = 'paused' WHERE id = ?`, [id]);
+}
+
+/** Re-activate a paused Offer (owner-only): back in the feed and counting toward the credit line. */
+export async function resumePost(id: string) {
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('Not logged in. Identity required.');
+    await _signedRequest('/api/marketplace/posts/resume', { postId: id, authorPublicKey: identity.publicKey });
+    const database = await getDb();
+    await database.runAsync(`UPDATE posts SET status = 'active' WHERE id = ?`, [id]);
 }
 
 export async function deletePost(id: string) {

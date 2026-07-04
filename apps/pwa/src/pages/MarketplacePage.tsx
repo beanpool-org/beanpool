@@ -239,16 +239,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
             if (categoryFilter !== 'all') filter.category = categoryFilter;
 
-            // Always fetch home node + global requests
-            const [homeData, myTxs] = await Promise.all([
+            // Always fetch home node + global requests. Also fetch the viewer's OWN posts — the server
+            // returns the author's paused posts only to the authenticated author, so this is how "My
+            // Posts" can surface & re-activate a paused Offer (the general feed omits paused).
+            const [homeData, myTxs, myOwnPosts] = await Promise.all([
                 getMarketplacePosts(filter),
-                identity ? getMyMarketplaceTransactions(identity.publicKey).catch(() => []) : Promise.resolve([])
+                identity ? getMyMarketplaceTransactions(identity.publicKey).catch(() => []) : Promise.resolve([]),
+                identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([])
             ]);
-            
+
             setMyTransactions(myTxs);
             setGlobalRequests(myTxs.filter(t => t.buyerPublicKey === identity?.publicKey && t.status === 'requested'));
 
-            let allPosts: MarketplacePost[] = [...homeData];
+            // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
+            const byId = new Map<string, MarketplacePost>();
+            for (const p of homeData) byId.set(p.id, p);
+            for (const p of (myOwnPosts as MarketplacePost[])) byId.set(p.id, p);
+            let allPosts: MarketplacePost[] = Array.from(byId.values());
 
             // Fetch from all enabled peer nodes in parallel
             if (enabledPeers.size > 0) {
@@ -486,6 +493,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     {/* Content */}
                     <div className="p-5">
                         <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight">
+                            {selectedPost.status === 'paused' && (
+                                <span className="inline-block align-middle mr-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">⏸ Paused</span>
+                            )}
                             {selectedPost.title}
                         </h2>
 
@@ -1149,7 +1159,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             try {
                                                 if (isPaused) await resumeMarketplacePost(selectedPost.id, identity.publicKey);
                                                 else await pauseMarketplacePost(selectedPost.id, identity.publicKey);
-                                                setSelectedPost(null);
+                                                // Keep the detail open and flip status locally so a just-paused
+                                                // Offer stays reachable to re-activate (it leaves the general feed).
+                                                setSelectedPost({ ...selectedPost, status: isPaused ? 'active' : 'paused' });
                                                 refresh();
                                             } catch (e: any) {
                                                 setError(e.message || 'Failed to update offer');

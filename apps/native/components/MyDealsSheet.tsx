@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
-import { getMarketplaceTransactions, getPosts } from '../utils/db';
+import { getMarketplaceTransactions, getPosts, getMyPosts } from '../utils/db';
 import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
@@ -220,6 +220,21 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             borderWidth: 1,
             borderColor: 'rgba(245, 158, 11, 0.2)',
         },
+        dealCardPaused: { opacity: 0.6 },
+        pausedBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+            borderWidth: 1,
+            borderColor: 'rgba(245, 158, 11, 0.35)',
+        },
+        pausedBadgeText: {
+            fontSize: 10,
+            fontWeight: '800',
+            color: '#b45309',
+            letterSpacing: 0.3,
+        },
         typeBadgeText: {
             fontSize: 10,
             fontWeight: '800',
@@ -304,7 +319,13 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         if (!identity) return;
         try {
             const allPosts = await getPosts();
-            setPosts(allPosts);
+            // Merge in the member's own posts (incl. paused, which getPosts hides from the feed) so
+            // "My Posts" can show + re-activate them. Dedupe by id — getMyPosts wins (fresher status).
+            const mine = identity ? await getMyPosts(identity.publicKey) : [];
+            const byId = new Map<string, any>();
+            for (const p of allPosts) byId.set(p.id, p);
+            for (const p of mine) byId.set(p.id, p);
+            setPosts(Array.from(byId.values()));
             const txs = await getMarketplaceTransactions(identity.publicKey);
             setTransactions(txs);
         } catch (e) {
@@ -336,7 +357,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
     const pendingCount = pendingDeals.length;
 
     const getData = () => {
-        if (dealsTab === 'active') return myPosts.filter(p => p.status === 'active' && p.author_pubkey === identity?.publicKey);
+        if (dealsTab === 'active') return myPosts.filter(p => (p.status === 'active' || p.status === 'paused') && p.author_pubkey === identity?.publicKey);
         if (dealsTab === 'pending') return pendingDeals;
         // History
         let txs = transactions.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');
@@ -461,7 +482,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
 
         return (
             <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push(`/post/${item.id}`); }}>
-                <View style={[styles.dealCard, highlightStyle]}>
+                <View style={[styles.dealCard, highlightStyle, item.status === 'paused' && styles.dealCardPaused]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
                         <ExpoImage source={{ uri: coverImage }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
@@ -471,8 +492,13 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                     )}
                     <View style={{ flex: 1, padding: 12, justifyContent: 'center', minHeight: 96 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <View style={[styles.typeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
-                                <Text style={styles.typeBadgeText}>{item.type?.toUpperCase()}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <View style={[styles.typeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
+                                    <Text style={styles.typeBadgeText}>{item.type?.toUpperCase()}</Text>
+                                </View>
+                                {item.status === 'paused' && (
+                                    <View style={styles.pausedBadge}><Text style={styles.pausedBadgeText}>⏸ PAUSED</Text></View>
+                                )}
                             </View>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={styles.creditAmount} numberOfLines={1}>

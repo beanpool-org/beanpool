@@ -1596,14 +1596,18 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     const senderFloor = isSystemFrom ? -Infinity
         : isEscrow ? usableFloor(from)   // v3: marketplace spends bounded by the offer-banded floor
         : 0;
-    const success = ledger.transfer(from, to, amount, senderFloor, isFeeExempt);
+    // Fee policy: the 1.5% community fee applies ONLY to marketplace/escrow settlements. Direct
+    // peer "send credits" gifts are fee-free — gifting a friend beans you hold shouldn't be taxed.
+    // System moves (escrow holds, refunds, admin) stay exempt via the caller's isFeeExempt.
+    const feeExempt = isFeeExempt || !isEscrow;
+    const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
     if (!success) return null;
 
     if (!from.startsWith('escrow_') && !from.startsWith('project_') && from !== 'COMMONS_POOL' && from !== 'genesis') {
         recordActivity(from);
     }
 
-    const taxFee = isFeeExempt ? 0 : amount * TRANSACTION_FEE_RATE;
+    const taxFee = feeExempt ? 0 : amount * TRANSACTION_FEE_RATE;
 
     const txn: Transaction = {
         id: crypto.randomUUID(),
@@ -1882,7 +1886,7 @@ export function createPost(
     return post;
 }
 
-export function getPosts(filter?: { id?: string; type?: string; category?: string; status?: string; offset?: number; limit?: number; updatedAfter?: string; query?: string; authorPubkey?: string }): MarketplacePost[] {
+export function getPosts(filter?: { id?: string; type?: string; category?: string; status?: string; offset?: number; limit?: number; updatedAfter?: string; query?: string; authorPubkey?: string; viewerPubkey?: string }): MarketplacePost[] {
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
                COALESCE((SELECT SUM(amount) FROM transactions WHERE from_pubkey = m.public_key), 0) as author_energy_cycled,
@@ -1905,8 +1909,13 @@ export function getPosts(filter?: { id?: string; type?: string; category?: strin
     const params: any[] = [];
 
     if (!filter?.id && !filter?.updatedAfter) {
-        // Regular client paginated fetch: only active/pending
-        query += " AND p.active = 1 AND p.status IN ('active', 'pending')";
+        // Regular client paginated fetch: only active/pending — PLUS the author's own paused posts
+        // when they're viewing themselves (so they can find & re-activate them). Viewer-aware: paused
+        // is included only when the signed requester IS the author, never leaked to profile viewers.
+        const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
+        query += selfView
+            ? " AND p.active = 1 AND p.status IN ('active', 'pending', 'paused')"
+            : " AND p.active = 1 AND p.status IN ('active', 'pending')";
         // Holiday mode: hide away members' posts from the general feed. NOT applied when viewing a
         // specific author's own listings (authorPubkey) or during sync (updatedAfter) — those carry
         // every state so each node can re-apply this read-time filter itself.

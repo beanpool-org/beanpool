@@ -113,6 +113,14 @@ function main() {
     assert(getBalance('frozen').usableFloor === -200, 'after pausing one offer → usable floor -200');
     assert(getBalance('frozen').frozen === true, 'debt -400 now below the -200 line → frozen');
 
+    // ── 4b. Viewer-aware paused visibility: author sees own paused Offer; others & the feed don't ──
+    seedMember('pauser');
+    const pausedId = 'test-post-paused-' + (seq++) + '-' + Math.random().toString(36).slice(2, 7);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, active, status) VALUES (?, 'offer', 'misc', 't', 't', 10, 'fixed', 'pauser', 1, 'paused')`).run(pausedId);
+    assert(getPosts({ authorPubkey: 'pauser', viewerPubkey: 'pauser' }).some(p => p.id === pausedId), 'author viewing their own listings sees their paused Offer');
+    assert(!getPosts({ authorPubkey: 'pauser', viewerPubkey: 'someone-else' }).some(p => p.id === pausedId), 'a different viewer does NOT see the author\'s paused Offer');
+    assert(!getPosts().some(p => p.id === pausedId), 'the general feed hides paused Offers');
+
     // ── 5. Vouch levels: the voucher picks -25 / -50 / -100 (a re-vouch can change it) ──
     seedMember('lvlUser');
     vouchMember('elderA', 'lvlUser', 1);

@@ -36,6 +36,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
     const isGrid = viewMode === 'grid';
 
+    // Paused Offers show only to their author (server viewer-aware) — mark them so they're
+    // distinguishable in "My Posts" from live listings.
+    const isPaused = post.status === 'paused';
+    const pausedPill = isPaused ? (
+        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300/50">⏸ Paused</span>
+    ) : null;
+
     const elderCard = isElder(authorEnergy);
     const elderStyleGrid = elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.15)]' : '';
     const elderStyleList = elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]' : '';
@@ -115,6 +122,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             }`}>
                                 {post.type}
                             </span>
+                            {pausedPill}
                             {categoryConfig && (
                                 <span className="text-[10px] font-black text-nature-500 dark:text-nature-450 flex items-center gap-1">
                                     <span>{categoryConfig.emoji}</span>
@@ -191,6 +199,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <span className={`font-bold text-nature-950 dark:text-white truncate text-xs mt-0.5`}>
                         {post.title}
                     </span>
+                    {pausedPill && <div className="mt-1">{pausedPill}</div>}
                 </div>
 
                 <div className={`flex items-center shrink-0 bg-oat-50 dark:bg-nature-900 rounded-lg gap-0.5 px-1.5 py-0.5`}>

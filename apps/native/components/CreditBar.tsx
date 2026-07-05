@@ -100,15 +100,6 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
     const s = styles(colors);
     return (
         <View style={s.cbar}>
-            {/* Lane 1 — your marker (the only thing above the track) */}
-            <View
-                style={[s.you, { backgroundColor: tagBg, left: `${pct}%`, marginLeft: -tagW / 2 }]}
-                onLayout={(e) => setTagW(e.nativeEvent.layout.width)}
-            >
-                <Text style={s.youText}>{tagLabel}</Text>
-                <View style={[s.pointer, { borderTopColor: tagBg }]} />
-            </View>
-
             {/* Lane 2 — the track */}
             <View style={s.track}>
                 <LinearGradient
@@ -133,6 +124,17 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                     <View key={i} style={[s.feeTick, { left: `${t}%`, opacity: 0.5 * revealT }]} />
                 ))}
                 <View style={[s.bead, { left: `${pct}%` }]} />
+            </View>
+
+            {/* Lane 1 — your marker (the only thing above the track) */}
+            <View
+                style={[s.you, { left: `${pct}%`, marginLeft: -tagW / 2 }]}
+                onLayout={(e) => setTagW(e.nativeEvent.layout.width)}
+            >
+                <View style={[s.bubble, { backgroundColor: tagBg }]}>
+                    <Text style={s.youText}>{tagLabel}</Text>
+                </View>
+                <View style={[s.pointer, { borderTopColor: tagBg }]} />
             </View>
 
             {/* Rung value labels — sit directly below each offer-band mark so the tick is self-labelled */}
@@ -195,11 +197,11 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                     <Text style={s.ladderText}>
                         🎣 {uFloor < 0 ? (
                             <>
-                                <Text style={s.ladderStrong}>{liveOffers} offer listing{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? ` · ${liveOffers + 1} listing${liveOffers + 1 === 1 ? '' : 's'}\u00A0→\u00A0−${nextUnlock}` : ''}
+                                <Text style={s.ladderStrong}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? ` · ${liveOffers + 1} offer${liveOffers + 1 === 1 ? '' : 's'}\u00A0→\u00A0−${nextUnlock}` : ''}
                             </>
                         ) : (
                             <>
-                                <Text style={s.ladderStrong}>Post an offer listing</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> listing{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.
+                                <Text style={s.ladderStrong}>Post an offer</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.
                             </>
                         )}
                     </Text>
@@ -211,10 +213,11 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
 
 const styles = (colors: any) => StyleSheet.create({
     cbar: { position: 'relative', paddingTop: 26 },
-    you: { position: 'absolute', top: 0, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7 },
+    you: { position: 'absolute', top: 0, alignItems: 'center', zIndex: 10 },
+    bubble: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7 },
     youText: { color: '#fff', fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
     pointer: {
-        position: 'absolute', left: '50%', marginLeft: -4, bottom: -4,
+        width: 0, height: 0,
         borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 5,
         borderLeftColor: 'transparent', borderRightColor: 'transparent',
     },

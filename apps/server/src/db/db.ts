@@ -86,6 +86,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN can_vouch INTEGER DEFAULT 0`).run(); } catch { }
     // Vouch level's credit floor (25/50/100). Also added before schema.sql for the trigger whitelist.
     try { db.prepare(`ALTER TABLE members ADD COLUMN vouch_credit REAL DEFAULT 0`).run(); } catch { }
+    // Hard credit freeze: forced 0 floor when set by admin. Also added before schema.sql for the trigger whitelist.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN credit_frozen INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run(); } catch { }
@@ -139,6 +141,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
     // Perf: Add index to conversation_participants
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_conversation_participants_pubkey ON conversation_participants(public_key)`).run(); } catch { }
+    // Perf: Add index to marketplace_transactions for status and completed_at (PR 26 review fix)
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at)`).run(); } catch { }
 
     // Phase 2 delta sync: add updated_at columns + indexes to mutable tables that
     // didn't previously track row-level mutation timestamps. Backfill from the

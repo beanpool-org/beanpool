@@ -60,7 +60,7 @@ import {
     addRating, getRatings, getAverageRating, getRatingsGiven,
     submitReport, getReports, dismissReport, actionReport, getReportCount,
     getFriends, addFriend, removeFriend, setGuardian,
-    adminSetUserStatus, adminSetElder, adminSetVoucher, adminSetTier, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
+    adminSetUserStatus, adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     getAdminPubkey, recordActivity,
     markConversationRead, getUnreadCounts,
@@ -1051,6 +1051,20 @@ export async function startHttpsServer(port: number): Promise<void> {
             adminSetUserStatus(ctx.params.pubkey, status);
         }
         ctx.body = { success: true };
+    });
+
+    router.post('/api/local/admin/users/:pubkey/freeze', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        const body = (ctx as any).requestBody || {};
+        const freeze = body.freeze === true;
+        try {
+            adminSetCreditFrozen(ctx.params.pubkey, freeze);
+            logger.info('ADMIN', `${freeze ? 'Froze' : 'Unfroze'} credit floor for ${ctx.params.pubkey.substring(0, 12)}`);
+            ctx.body = { success: true, frozen: freeze };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e?.message || 'Failed to update credit freeze status' };
+        }
     });
 
     // Promote a member to (or demote from) the Elder tier — grants Elder *standing* (a deep

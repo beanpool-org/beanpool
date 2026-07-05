@@ -1164,14 +1164,225 @@ export function getMemberTrustStats(publicKey: string): TrustStats {
 // A2-26: cap how much volume to a SINGLE counterparty counts toward earned credit /
 // governance credit, so a Sybil pair can't wash-trade between themselves to inflate
 // either (earned credit deepens the overdraft floor; governance credit buys votes).
-// Maxing the volume bonus (200, needs 20k counted volume) now requires ≥4 distinct
-// counterparties. Generous enough that ordinary trading is unaffected; set pre-launch.
-const PER_COUNTERPARTY_VOLUME_CAP = 5000;
+// Tuning (owner decision 2026-07-05): Lowered cap from 5000 to 500. One solid trade
+// banks a partner; repeat trades add nothing. Legitimate users need more distinct
+// counterparties to build deep credit.
+const PER_COUNTERPARTY_VOLUME_CAP = 500;
 
-/**
- * Sum of a member's outbound volume, counting at most PER_COUNTERPARTY_VOLUME_CAP
- * per distinct recipient (anti-Sybil-wash weighting — A2-26).
- */
+export interface WashAnalysis {
+    flaggedPairs: Set<string>;
+    flaggedClusters: Map<string, number>;
+    clusterDetails: {
+        members: string[];
+        internalVol: number;
+        totalVol: number;
+        insularity: number;
+        newRatio: number;
+        size: number;
+        newMembers: number;
+    }[];
+    pairDetails: {
+        a: string;
+        b: string;
+        gross: number;
+        r: number;
+    }[];
+}
+
+let cachedWashAnalysis: WashAnalysis | null = null;
+let lastWashAnalysisTime = 0;
+
+export function runWashTradingAnalysis(): WashAnalysis {
+    const flaggedPairs = new Set<string>();
+    const flaggedClusters = new Map<string, number>();
+    const clusterDetails: any[] = [];
+    const pairDetails: any[] = [];
+
+    // --- 1. Net-flow ratio (per counterparty pair) ---
+    try {
+        const rows = db.prepare(`
+            SELECT buyer_pubkey, seller_pubkey, SUM(credits) as vol
+            FROM marketplace_transactions
+            WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
+            GROUP BY buyer_pubkey, seller_pubkey
+        `).all() as { buyer_pubkey: string; seller_pubkey: string; vol: number }[];
+
+        const pairVolumes = new Map<string, { u: string; v: string; volUtoV: number; volVtoU: number }>();
+        for (const row of rows) {
+            const u = row.buyer_pubkey;
+            const v = row.seller_pubkey;
+            const key = u < v ? `${u}|${v}` : `${v}|${u}`;
+            let data = pairVolumes.get(key);
+            if (!data) {
+                data = { u: u < v ? u : v, v: u < v ? v : u, volUtoV: 0, volVtoU: 0 };
+                pairVolumes.set(key, data);
+            }
+            if (row.buyer_pubkey === data.u) {
+                data.volUtoV += row.vol;
+            } else {
+                data.volVtoU += row.vol;
+            }
+        }
+
+        for (const [key, data] of pairVolumes.entries()) {
+            const gross = data.volUtoV + data.volVtoU;
+            if (gross >= PER_COUNTERPARTY_VOLUME_CAP) {
+                const r = Math.abs(data.volUtoV - data.volVtoU) / gross;
+                pairDetails.push({ a: data.u, b: data.v, gross, r });
+                if (r < 0.15) {
+                    flaggedPairs.add(key);
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Wash analysis (pair net flow) failed:', e);
+    }
+
+    // --- 2. Cluster insularity (connected components over rolling 30 days) ---
+    try {
+        const txs30 = db.prepare(`
+            SELECT buyer_pubkey, seller_pubkey, credits
+            FROM marketplace_transactions
+            WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
+              AND completed_at > datetime('now', '-30 days')
+        `).all() as { buyer_pubkey: string; seller_pubkey: string; credits: number }[];
+
+        const adj = new Map<string, Set<string>>();
+        const edgeVol30 = new Map<string, number>();
+        const nodes30 = new Set<string>();
+
+        for (const tx of txs30) {
+            const u = tx.buyer_pubkey;
+            const v = tx.seller_pubkey;
+            nodes30.add(u);
+            nodes30.add(v);
+
+            if (!adj.has(u)) adj.set(u, new Set());
+            if (!adj.has(v)) adj.set(v, new Set());
+            adj.get(u)!.add(v);
+            adj.get(v)!.add(u);
+
+            const key = u < v ? `${u}|${v}` : `${v}|${u}`;
+            edgeVol30.set(key, (edgeVol30.get(key) || 0) + tx.credits);
+        }
+
+        const visited = new Set<string>();
+        const components: string[][] = [];
+
+        for (const node of nodes30) {
+            if (visited.has(node)) continue;
+            const comp: string[] = [];
+            const queue = [node];
+            visited.add(node);
+
+            while (queue.length > 0) {
+                const curr = queue.shift()!;
+                comp.push(curr);
+                const neighbors = adj.get(curr) || new Set();
+                for (const next of neighbors) {
+                    if (!visited.has(next)) {
+                        visited.add(next);
+                        queue.push(next);
+                    }
+                }
+            }
+            components.push(comp);
+        }
+
+        if (components.length > 0) {
+            const uniqueNodes = Array.from(nodes30);
+            const memberAges = new Map<string, number>();
+            
+            for (let i = 0; i < uniqueNodes.length; i += 999) {
+                const chunk = uniqueNodes.slice(i, i + 999);
+                const placeholders = chunk.map(() => '?').join(',');
+                const membersRows = db.prepare(`
+                    SELECT public_key, joined_at FROM members WHERE public_key IN (${placeholders})
+                `).all(...chunk) as { public_key: string; joined_at: string }[];
+
+                for (const m of membersRows) {
+                    const joined = m.joined_at ? new Date(m.joined_at) : new Date();
+                    const ageDays = (Date.now() - joined.getTime()) / (1000 * 60 * 60 * 24);
+                    memberAges.set(m.public_key, ageDays);
+                }
+            }
+
+            let compIdx = 0;
+            for (const comp of components) {
+                if (comp.length <= 12) {
+                    const compSet = new Set(comp);
+                    let internalVol = 0;
+                    for (const [key, vol] of edgeVol30.entries()) {
+                        const [u, v] = key.split('|');
+                        if (compSet.has(u) && compSet.has(v)) {
+                            internalVol += vol;
+                        }
+                    }
+
+                    const placeholders = comp.map(() => '?').join(',');
+                    let totalVol = 0;
+                    try {
+                        const allTimeRes = db.prepare(`
+                            SELECT COALESCE(SUM(credits), 0) as s FROM marketplace_transactions
+                            WHERE status = 'completed' AND (buyer_pubkey IN (${placeholders}) OR seller_pubkey IN (${placeholders}))
+                        `).get(...comp, ...comp) as any;
+                        totalVol = allTimeRes ? allTimeRes.s : 0;
+                    } catch (e) {
+                        console.error('Failed to query all-time volume for component:', e);
+                        totalVol = internalVol;
+                    }
+
+                    const insularity = totalVol > 0 ? (internalVol / totalVol) : 0;
+                    let newMembersCount = 0;
+                    for (const m of comp) {
+                        const age = memberAges.get(m) ?? 0;
+                        if (age < 14) {
+                            newMembersCount++;
+                        }
+                    }
+
+                    const newRatio = comp.length > 0 ? (newMembersCount / comp.length) : 0;
+
+                    clusterDetails.push({
+                        members: comp,
+                        internalVol,
+                        totalVol,
+                        insularity,
+                        newRatio,
+                        size: comp.length,
+                        newMembers: newMembersCount
+                    });
+
+                    if (insularity >= 0.8 && newMembersCount >= comp.length / 2) {
+                        for (const m of comp) {
+                            flaggedClusters.set(m, compIdx);
+                        }
+                    }
+                    compIdx++;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Wash analysis (cluster insularity) failed:', e);
+    }
+
+    return { flaggedPairs, flaggedClusters, clusterDetails, pairDetails };
+}
+
+export function getWashTradingEnforcement(): WashAnalysis {
+    if (cachedWashAnalysis && (Date.now() - lastWashAnalysisTime < 10000)) {
+        return cachedWashAnalysis;
+    }
+    cachedWashAnalysis = runWashTradingAnalysis();
+    lastWashAnalysisTime = Date.now();
+    return cachedWashAnalysis;
+}
+
+export function clearWashTradingCache() {
+    cachedWashAnalysis = null;
+    lastWashAnalysisTime = 0;
+}
+
 /**
  * F3 — value that counts toward EARNED TRUST: only COMPLETED marketplace (escrow) trades.
  *
@@ -1180,8 +1391,13 @@ const PER_COUNTERPARTY_VOLUME_CAP = 5000;
  * than repeat trade with one partner. BOTH sides of a completed trade earn the value (the seller
  * delivered, the buyer paid). Direct peer-to-peer "send credits" are gifts/helping-a-friend —
  * they are deliberately NOT trades and build NO trust (per product decision, 2026-07).
+ *
+ * Enforcement (soft haircut — Change 3): Excludes flagged wash-trading pairs and intra-cluster trades
+ * for flagged insular clusters from the trust sum.
  */
 function qualifiedTradeValue(publicKey: string): number {
+    const { flaggedPairs, flaggedClusters } = getWashTradingEnforcement();
+
     const rows = db.prepare(`
         SELECT counterparty, COALESCE(SUM(credits), 0) as v FROM (
             SELECT seller_pubkey AS counterparty, credits FROM marketplace_transactions
@@ -1191,7 +1407,22 @@ function qualifiedTradeValue(publicKey: string): number {
                 WHERE seller_pubkey = ? AND status = 'completed' AND buyer_pubkey != ?
         ) GROUP BY counterparty
     `).all(publicKey, publicKey, publicKey, publicKey) as { counterparty: string; v: number }[];
-    return rows.reduce((sum, r) => sum + Math.min(r.v, PER_COUNTERPARTY_VOLUME_CAP), 0);
+
+    return rows.reduce((sum, r) => {
+        const pairKey = publicKey < r.counterparty ? `${publicKey}|${r.counterparty}` : `${r.counterparty}|${publicKey}`;
+        // Haircut check:
+        // 1. Exclude if pair is flagged as wash trading
+        if (flaggedPairs.has(pairKey)) {
+            return sum;
+        }
+        // 2. Exclude if both members are in the same flagged cluster component
+        const clusterIdA = flaggedClusters.get(publicKey);
+        const clusterIdB = flaggedClusters.get(r.counterparty);
+        if (clusterIdA !== undefined && clusterIdA === clusterIdB) {
+            return sum;
+        }
+        return sum + Math.min(r.v, PER_COUNTERPARTY_VOLUME_CAP);
+    }, 0);
 }
 
 /**
@@ -1216,12 +1447,13 @@ export function getMemberTrustProfile(publicKey: string): {
     // Stored in members.earned_credit (legacy column name). It is a credit-*limit* input only —
     // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
     // the floor but never count as "earned" (governance votes use earned/value only, not grants).
-    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by, vouch_credit FROM members WHERE public_key = ?").get(publicKey) as any;
+    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by, vouch_credit, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(publicKey) as any;
     const grantedCredit = memberRow?.earned_credit || 0;
     const elderVouched = !!memberRow?.elder_vouched_by;
     // The vouch level's credit floor (25/50/100). A vouch recorded before the level system, or
     // with no stored amount, defaults to the light level.
     const vouchCredit = elderVouched ? (memberRow?.vouch_credit > 0 ? memberRow.vouch_credit : PROTOCOL_CONSTANTS.VOUCH_CREDIT_LIGHT) : 0;
+    const isCreditFrozen = memberRow?.credit_frozen === 1;
 
     const c = PROTOCOL_CONSTANTS;
 
@@ -1256,7 +1488,7 @@ export function getMemberTrustProfile(publicKey: string): {
     // vouch required. Restores the documented behaviour (docs/trust-model-shipped.md §1) that the
     // #15 vouch-gating pass dropped, which left earned-trust members showing "no credit line".
     const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0;
-    const allowance = activated
+    const allowance = (activated && !isCreditFrozen)
         ? Math.min(c.CREDIT_FLOOR_CAP, vouchCredit + earnedCredit + grantedCredit)
         : 0;
 
@@ -4857,7 +5089,7 @@ export function getPostCount(filter?: { type?: string; category?: string; status
 
 // ===================== COMMUNITY HEALTH =====================
 
-export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel'; severity: 'warning' | 'alert'; description: string; members: string[]; }
+export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
 export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; }
 
 export function getCommunityHealth(): CommunityHealth {
@@ -4922,38 +5154,37 @@ export function getCommunityHealth(): CommunityHealth {
         }
     } catch (e) { console.error('Health flag check (inactive) failed:', e); }
     
-    // 2. Wash Trading: reciprocal transactions between the same pair within time window
+    // 2. Wash Trading / Sybil Ring soft enforcement (Change 3)
     try {
-        const washRows = db.prepare(`
-            SELECT t1.from_pubkey as a, t1.to_pubkey as b, COUNT(*) as cnt
-            FROM transactions t1
-            WHERE t1.timestamp > datetime('now', '-${t.washTradingWindowHours} hours')
-            AND t1.from_pubkey NOT LIKE 'escrow_%' AND t1.to_pubkey NOT LIKE 'escrow_%'
-            AND t1.from_pubkey != 'commons' AND t1.to_pubkey != 'commons'
-            GROUP BY t1.from_pubkey, t1.to_pubkey
-            HAVING cnt >= ${t.washTradingMinTxns}
-        `).all() as any[];
-        
-        // Find reciprocal pairs (A→B AND B→A both above threshold)
-        const pairs = new Set<string>();
-        for (const row of washRows) {
-            const reverse = washRows.find(r => r.a === row.b && r.b === row.a);
-            if (reverse) {
-                const key = [row.a, row.b].sort().join('|');
-                if (!pairs.has(key)) {
-                    pairs.add(key);
-                    const callsignA = (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(row.a) as any)?.callsign || row.a.substring(0, 8);
-                    const callsignB = (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(row.b) as any)?.callsign || row.b.substring(0, 8);
-                    flags.push({
-                        type: 'wash_trading',
-                        severity: 'alert',
-                        description: `${row.cnt + reverse.cnt} reciprocal transactions between ${callsignA} ↔ ${callsignB} in ${t.washTradingWindowHours}h`,
-                        members: [row.a, row.b]
-                    });
-                }
+        const enforcement = getWashTradingEnforcement();
+        for (const pairKey of enforcement.flaggedPairs) {
+            const [a, b] = pairKey.split('|');
+            const callsignA = (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(a) as any)?.callsign || a.substring(0, 8);
+            const callsignB = (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(b) as any)?.callsign || b.substring(0, 8);
+            const details = enforcement.pairDetails.find(p => (p.a === a && p.b === b) || (p.a === b && p.b === a));
+            const gross = details ? details.gross : 0;
+            const r = details ? details.r : 0;
+            flags.push({
+                type: 'wash_trading',
+                severity: 'alert',
+                description: `Wash trading detected: reciprocal flow ratio ${r.toFixed(3)} < 0.15 for pair ${callsignA} ↔ ${callsignB} (gross: ${gross.toFixed(1)})`,
+                members: [a, b]
+            });
+        }
+        for (const detail of enforcement.clusterDetails) {
+            if (detail.insularity >= 0.8 && detail.newRatio >= 0.5) {
+                const names = detail.members.map((m: string) => {
+                    return (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(m) as any)?.callsign || m.substring(0, 8);
+                }).join(', ');
+                flags.push({
+                    type: 'sybil_ring',
+                    severity: 'critical',
+                    description: `Suspected Sybil ring: component of ${detail.size} members with ${detail.insularity.toFixed(2)} insularity and ${(detail.newRatio * 100).toFixed(0)}% new members (${names})`,
+                    members: detail.members
+                });
             }
         }
-    } catch (e) { console.error('Health flag check (wash trading) failed:', e); }
+    } catch (e) { console.error('Health flag check (wash trading / sybil ring) failed:', e); }
 
     // 3. Sybil Funnel: invitees purchasing from their inviter via marketplace
     try {
@@ -5082,6 +5313,11 @@ export function getAdminPubkey(): string {
 
 export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    broadcast({ type: 'profile_updated', publicKey });
+}
+
+export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
+    db.prepare("UPDATE members SET credit_frozen=? WHERE public_key=?").run(frozen ? 1 : 0, publicKey);
     broadcast({ type: 'profile_updated', publicKey });
 }
 

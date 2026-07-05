@@ -171,7 +171,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
                     <div key={r.b} style={{ position: 'absolute', left: `${r.pct}%`, top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.4 }} />
                 ))}
                 {/* Current usable-floor marker — how deep you can actually spend right now */}
-                {hasLocked && uFloor < 0 && (
+                {hasLocked && uFloor <= 0 && (
                     <div style={{ position: 'absolute', left: `${usablePct}%`, top: -10, bottom: -2, width: 4, marginLeft: -2, backgroundColor: MARK, boxShadow: '0 0 0 2px rgba(255,255,255,0.8), 0 0 8px 1px rgba(56,189,248,0.55)', zIndex: 1 }} />
                 )}
                 {/* bead */}
@@ -199,9 +199,9 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
                 <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: '#64748b', fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
                     <span>🎣</span>
                     {uFloor < 0 ? (
-                        <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM }}>{liveOffers + 1} offer{liveOffers + 1 === 1 ? '' : 's'}</b> → −{nextUnlock}</> : ''}</span>
+                        <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM }}>{liveOffers + 1} offer{liveOffers + 1 === 1 ? '' : 's'}</b>{"\u00A0"}→{"\u00A0"}−{nextUnlock}</> : ''}</span>
                     ) : (
-                        <span><b style={{ color: WARM }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your full −{Math.abs(floor)}.</span>
+                        <span><b style={{ color: WARM }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.</span>
                     )}
                 </div>
             )}

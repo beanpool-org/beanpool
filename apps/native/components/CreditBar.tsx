@@ -123,7 +123,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                 {/* Offer-band rungs (the "ladder") */}
                 {rungs.map((r) => (<View key={r.b} style={[s.rung, { left: `${r.pct}%` }]} />))}
                 {/* Current usable-floor marker — how deep you can actually spend right now */}
-                {hasLocked && uFloor < 0 && (
+                {hasLocked && uFloor <= 0 && (
                     <>
                         <View style={[s.usableMarkBg, { left: `${usablePct}%` }]} />
                         <View style={[s.usableMark, { left: `${usablePct}%` }]} />
@@ -195,11 +195,11 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                     <Text style={s.ladderText}>
                         🎣 {uFloor < 0 ? (
                             <>
-                                <Text style={s.ladderStrong}>{liveOffers} offer listing{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'} −{Math.abs(uFloor)}{nextUnlock ? ` · ${liveOffers + 1} listing${liveOffers + 1 === 1 ? '' : 's'} → −${nextUnlock}` : ''}
+                                <Text style={s.ladderStrong}>{liveOffers} offer listing{liveOffers === 1 ? '' : 's'}</Text> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? ` · ${liveOffers + 1} listing${liveOffers + 1 === 1 ? '' : 's'}\u00A0→\u00A0−${nextUnlock}` : ''}
                             </>
                         ) : (
                             <>
-                                <Text style={s.ladderStrong}>Post an offer listing</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> listing{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your full −{Math.abs(floor)}.
+                                <Text style={s.ladderStrong}>Post an offer listing</Text> to open your credit line — <Text style={s.ladderStrong}>{offersForFull}</Text> listing{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.
                             </>
                         )}
                     </Text>

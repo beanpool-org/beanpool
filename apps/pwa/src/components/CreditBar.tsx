@@ -209,11 +209,11 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
             {/* Fee ladder — circulation-fee brackets above +feeFreeMax, revealed as you climb */}
             {showFees && (
                 <div style={{ position: 'relative', height: 12, marginTop: 4, opacity: revealT }}>
-                    <span style={{ position: 'absolute', left: 0, top: 1, fontSize: 8, color: '#4a5550', textTransform: 'uppercase', letterSpacing: '0.4px' }}>fee/mo</span>
+                    <span style={{ position: 'absolute', left: 0, top: 1, fontSize: 8, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>fee/mo</span>
                     {FEE_ZONES.map((z) => {
                         const active = balance > z.lo && balance <= z.hi;
                         return (
-                            <span key={z.label} style={{ position: 'absolute', left: `${z.mid}%`, top: 0, transform: 'translateX(-50%)', fontSize: 9, fontVariantNumeric: 'tabular-nums', color: active ? WARM : '#4a5550', fontWeight: active ? 800 : 600 }}>{z.label}</span>
+                            <span key={z.label} style={{ position: 'absolute', left: `${z.mid}%`, top: 0, transform: 'translateX(-50%)', fontSize: 9, fontVariantNumeric: 'tabular-nums', color: active ? WARM : 'var(--text-muted)', fontWeight: active ? 800 : 600 }}>{z.label}</span>
                         );
                     })}
                 </div>
@@ -223,7 +223,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
                 <div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: RED, fontVariantNumeric: 'tabular-nums' }}>{floor}</div>
-                    <div style={{ fontSize: 9, color: '#4a5550', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>your limit</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>your limit</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: BEAN_DEEP }}>⚖️ 0</div>
@@ -231,14 +231,14 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
                 </div>
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: WARM }}>+{feeFreeMax}</div>
-                    <div style={{ fontSize: 9, color: '#4a5550', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>fee-free</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>fee-free</div>
                 </div>
             </div>
 
             {/* Lane 4 — directional hint */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                <span style={{ fontSize: 10, color: '#4a5550' }}>← carry credit</span>
-                <span style={{ fontSize: 10, color: '#4a5550' }}>hold credit →</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>← carry credit</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>hold credit →</span>
             </div>
         </div>
     );

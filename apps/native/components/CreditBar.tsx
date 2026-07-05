@@ -139,7 +139,6 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
             {rungs.length > 0 && (
                 <View style={s.rungLabelRow} pointerEvents="none">
                     {rungs.map((r) => {
-                        const isUsable = -r.b === uFloor;
                         return (
                             <Text
                                 key={r.b}

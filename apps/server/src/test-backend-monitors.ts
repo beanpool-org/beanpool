@@ -5,8 +5,8 @@
  */
 
 import {
-    initStateEngine, getMemberTrustProfile, adminSetTier,
-    runWashSybilMetricsAudit, getCommunityHealth, adminSetVoucher,
+    initStateEngine, adminSetTier,
+    runWashSybilMetricsAudit, getCommunityHealth,
     reconcileLedgerFromDb
 } from './state-engine.js';
 import { db } from './db/db.js';
@@ -22,16 +22,6 @@ function seedMember(pk: string, balance = 0, joinedAtDaysAgo = 0) {
     const joinedAt = new Date(Date.now() - joinedAtDaysAgo * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)`).run(pk, pk.slice(0, 8), joinedAt);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
-}
-
-function mtx(buyer: string, seller: string, credits: number, completedDaysAgo = 0) {
-    const pid = 'bmp-' + (seq++);
-    db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`)
-        .run(pid, credits, seller);
-
-    const completedAt = new Date(Date.now() - completedDaysAgo * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?,?,?,?,?, 'completed', ?)`)
-        .run('bmtx-' + (seq++), pid, buyer, seller, credits, completedAt);
 }
 
 // A direct peer-to-peer transfer (gift) to establish transaction timestamps
@@ -83,7 +73,6 @@ async function main() {
         // --- Test 3: Cohort Velocity Report ---
         // Let's seed a cohort of new accounts created on the same week.
         // We'll join them 2 days ago.
-        const weekStr = 'cohortW-' + Date.now();
         const cohortUsers = Array.from({ length: 4 }, (_, i) => `coh${i}-${Date.now()}`);
         for (const u of cohortUsers) {
             seedMember(u, 0, 2); // 2 days old (new member)
@@ -98,7 +87,7 @@ async function main() {
         // --- Test 4: getCommunityHealth Alerts ---
         // Verify that the health flags show the cohort anomaly and delinquency
         const health1 = getCommunityHealth();
-        const cohortFlag = health1.flags.find(f => f.type === 'sybil_funnel' && f.description.includes('Cohort Velocity Anomaly'));
+        const cohortFlag = health1.flags.find(f => f.type === 'cohort_velocity' && f.description.includes('Cohort Velocity Anomaly'));
         assert(!!cohortFlag, 'Cohort Velocity Anomaly flag was raised in community health report');
 
         // Let's test the Aggregate Credit Spike alert.
@@ -114,7 +103,7 @@ async function main() {
             .run('total_negative_balance', 1000);
 
         const health2 = getCommunityHealth();
-        const spikeFlag = health2.flags.find(f => f.type === 'wash_trading' && f.description.includes('Aggregate credit spike'));
+        const spikeFlag = health2.flags.find(f => f.type === 'aggregate_spike' && f.description.includes('Aggregate credit spike'));
         assert(!!spikeFlag, 'Aggregate credit spike alert was raised in community health report');
         assert(!!spikeFlag?.description.includes('increased by 900.0%'), `Description is correct (got: "${spikeFlag?.description}")`);
 

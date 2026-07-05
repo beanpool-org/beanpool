@@ -5097,7 +5097,7 @@ export function getPostCount(filter?: { type?: string; category?: string; status
 
 // ===================== COMMUNITY HEALTH =====================
 
-export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
+export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
 export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; }
 
 export function getCommunityHealth(): CommunityHealth {
@@ -5312,7 +5312,7 @@ export function getCommunityHealth(): CommunityHealth {
                 const absoluteGrowth = current - previous;
                 if (growthRatio > 0.20 && absoluteGrowth >= 500) {
                     flags.push({
-                        type: 'wash_trading',
+                        type: 'aggregate_spike',
                         severity: 'alert',
                         description: `Aggregate credit spike: total negative balance increased by ${(growthRatio * 100).toFixed(1)}% (+${absoluteGrowth.toFixed(1)}B) in 24h`,
                         members: []
@@ -5331,7 +5331,7 @@ export function getCommunityHealth(): CommunityHealth {
         `).get() as any;
         if (cohortAnomalyRow && cohortAnomalyRow.metric_value > 0) {
             flags.push({
-                type: 'sybil_funnel',
+                type: 'cohort_velocity',
                 severity: 'warning',
                 description: `Cohort Velocity Anomaly: ${cohortAnomalyRow.metric_value} cohort(s) reached deep floors within 14 days of creation`,
                 members: []
@@ -5348,7 +5348,7 @@ export function getCommunityHealth(): CommunityHealth {
         `).get() as any;
         if (delinquentRow && delinquentRow.metric_value > 0) {
             flags.push({
-                type: 'inactive_member',
+                type: 'delinquency',
                 severity: 'warning',
                 description: `Realized loss risk: ${delinquentRow.metric_value} credit-drawn account(s) are dormant for 7+ days`,
                 members: []

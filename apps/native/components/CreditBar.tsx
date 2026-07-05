@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
  * past the fee-free zone the marker carries the circulation rate. Strict lanes → nothing overlaps.
  */
 
-const RED = '#bb4b32', WARM = '#c07d2a', WARM_BG = '#e9a23e', BEAN = '#2f9e44', BEAN_DEEP = '#1c6e30';
+const RED = '#bb4b32', WARM = '#c07d2a', WARM_BG = '#e9a23e', BEAN = '#2f9e44', BEAN_DEEP = '#1c6e30', MARK = '#38bdf8';
 
 // Offer-covenant bands - a faithful copy of @beanpool/core's OFFER_BANDS, where the array INDEX is
 // the live-offer count (index 0 = 0 offers → 0 unlocked, index 3 = 3 offers → -1000).
@@ -123,7 +123,12 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                 {/* Offer-band rungs (the "ladder") */}
                 {rungs.map((r) => (<View key={r.b} style={[s.rung, { left: `${r.pct}%` }]} />))}
                 {/* Current usable-floor marker — how deep you can actually spend right now */}
-                {hasLocked && uFloor < 0 && <View style={[s.usableMark, { left: `${usablePct}%` }]} />}
+                {hasLocked && uFloor < 0 && (
+                    <>
+                        <View style={[s.usableMarkBg, { left: `${usablePct}%` }]} />
+                        <View style={[s.usableMark, { left: `${usablePct}%` }]} />
+                    </>
+                )}
                 {showFees && FEE_TICKS.map((t, i) => (
                     <View key={i} style={[s.feeTick, { left: `${t}%`, opacity: 0.5 * revealT }]} />
                 ))}
@@ -134,11 +139,10 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
             {rungs.length > 0 && (
                 <View style={s.rungLabelRow} pointerEvents="none">
                     {rungs.map((r) => {
-                        const isUsable = -r.b === uFloor;
                         return (
                             <Text
                                 key={r.b}
-                                style={[s.rungLabel, { left: `${r.pct}%`, color: isUsable ? WARM_BG : colors.text.muted }]}
+                                style={[s.rungLabel, { left: `${r.pct}%`, color: colors.text.body }]}
                             >
                                 −{r.b}
                             </Text>
@@ -219,7 +223,8 @@ const styles = (colors: any) => StyleSheet.create({
     feeTick: { position: 'absolute', top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff' },
     lockedZone: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.42)' },
     rung: { position: 'absolute', top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.4 },
-    usableMark: { position: 'absolute', top: -3, bottom: -3, width: 2, marginLeft: -1, backgroundColor: WARM_BG, zIndex: 1 },
+    usableMarkBg: { position: 'absolute', top: -11, bottom: -3, width: 8, marginLeft: -4, backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 0 },
+    usableMark: { position: 'absolute', top: -10, bottom: -2, width: 4, marginLeft: -2, backgroundColor: MARK, zIndex: 1 },
     rungLabelRow: { position: 'relative', height: 14, marginTop: 2 },
     rungLabel: { position: 'absolute', fontSize: 9, fontWeight: '700', textAlign: 'center', width: 32, marginLeft: -16, fontVariant: ['tabular-nums'] },
     ladderRow: { marginTop: 6 },
@@ -234,7 +239,7 @@ const styles = (colors: any) => StyleSheet.create({
     },
     anchors: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
     aVal: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
-    aSub: { fontSize: 9, color: colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 1 },
+    aSub: { fontSize: 9, color: colors.text.body, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 1 },
     hint: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 },
-    hintText: { fontSize: 10, color: colors.text.muted },
+    hintText: { fontSize: 10, color: colors.text.body },
 });

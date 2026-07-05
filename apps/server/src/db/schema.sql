@@ -376,3 +376,12 @@ WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE recovery_requests SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
+
+-- 19. System Metrics (Change 3 / Visibility monitors)
+CREATE TABLE IF NOT EXISTS system_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    metric_key TEXT NOT NULL,
+    metric_value REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_system_metrics_key_time ON system_metrics(metric_key, timestamp DESC);

@@ -141,6 +141,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
     // Perf: Add index to conversation_participants
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_conversation_participants_pubkey ON conversation_participants(public_key)`).run(); } catch { }
+    // Perf: Add index to marketplace_transactions for status and completed_at (PR 26 review fix)
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at)`).run(); } catch { }
 
     // Phase 2 delta sync: add updated_at columns + indexes to mutable tables that
     // didn't previously track row-level mutation timestamps. Backfill from the

@@ -1179,7 +1179,7 @@ const PER_COUNTERPARTY_VOLUME_CAP = 500;
 
 export interface WashAnalysis {
     flaggedPairs: Set<string>;
-    flaggedClusters: Set<string>;
+    flaggedClusters: Map<string, number>;
     clusterDetails: {
         members: string[];
         internalVol: number;
@@ -1202,7 +1202,7 @@ let lastWashAnalysisTime = 0;
 
 export function runWashTradingAnalysis(): WashAnalysis {
     const flaggedPairs = new Set<string>();
-    const flaggedClusters = new Set<string>();
+    const flaggedClusters = new Map<string, number>();
     const clusterDetails: any[] = [];
     const pairDetails: any[] = [];
 
@@ -1315,6 +1315,7 @@ export function runWashTradingAnalysis(): WashAnalysis {
                 }
             }
 
+            let compIdx = 0;
             for (const comp of components) {
                 if (comp.length <= 12) {
                     const compSet = new Set(comp);
@@ -1326,11 +1327,17 @@ export function runWashTradingAnalysis(): WashAnalysis {
                         }
                     }
 
+                    const placeholders = comp.map(() => '?').join(',');
                     let totalVol = 0;
-                    for (const tx of txs30) {
-                        if (compSet.has(tx.buyer_pubkey) || compSet.has(tx.seller_pubkey)) {
-                            totalVol += tx.credits;
-                        }
+                    try {
+                        const allTimeRes = db.prepare(`
+                            SELECT COALESCE(SUM(credits), 0) as s FROM marketplace_transactions
+                            WHERE status = 'completed' AND (buyer_pubkey IN (${placeholders}) OR seller_pubkey IN (${placeholders}))
+                        `).get(...comp, ...comp) as any;
+                        totalVol = allTimeRes ? allTimeRes.s : 0;
+                    } catch (e) {
+                        console.error('Failed to query all-time volume for component:', e);
+                        totalVol = internalVol;
                     }
 
                     const insularity = totalVol > 0 ? (internalVol / totalVol) : 0;
@@ -1356,9 +1363,10 @@ export function runWashTradingAnalysis(): WashAnalysis {
 
                     if (insularity >= 0.8 && newMembersCount >= comp.length / 2) {
                         for (const m of comp) {
-                            flaggedClusters.add(m);
+                            flaggedClusters.set(m, compIdx);
                         }
                     }
+                    compIdx++;
                 }
             }
         }
@@ -1415,8 +1423,10 @@ function qualifiedTradeValue(publicKey: string): number {
         if (flaggedPairs.has(pairKey)) {
             return sum;
         }
-        // 2. Exclude if both members are in the same flagged cluster
-        if (flaggedClusters.has(publicKey) && flaggedClusters.has(r.counterparty)) {
+        // 2. Exclude if both members are in the same flagged cluster component
+        const clusterIdA = flaggedClusters.get(publicKey);
+        const clusterIdB = flaggedClusters.get(r.counterparty);
+        if (clusterIdA !== undefined && clusterIdA === clusterIdB) {
             return sum;
         }
         return sum + Math.min(r.v, PER_COUNTERPARTY_VOLUME_CAP);

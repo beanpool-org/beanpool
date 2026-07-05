@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
+CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (

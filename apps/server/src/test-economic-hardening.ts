@@ -66,14 +66,14 @@ async function main() {
         const wash = 'wash-' + Date.now();
         seedMember(wash); seedMember('sybilPartner');
         for (let i = 0; i < 10; i++) mtx(wash, 'sybilPartner', 2000); // 20000 traded with ONE counterparty
-        assert(getGovernanceCredits(wash).totalCredits === 5000,
-            'A2-26: 20000 traded with one counterparty counts as only 5000 (per-counterparty cap)');
+        assert(getGovernanceCredits(wash).totalCredits === 500,
+            'A2-26: 20000 traded with one counterparty counts as only 500 (per-counterparty cap)');
 
         const diverse = 'diverse-' + Date.now();
         seedMember(diverse);
         for (let i = 0; i < 6; i++) { seedMember('partner' + i); mtx(diverse, 'partner' + i, 1000); } // 6 distinct counterparties
-        assert(getGovernanceCredits(diverse).totalCredits === 6000,
-            'A2-26: 6000 across 6 counterparties counts fully (diversity not penalized)');
+        assert(getGovernanceCredits(diverse).totalCredits === 3000,
+            'A2-26: 6000 across 6 counterparties counts capped at 500 each = 3000 (per-counterparty cap)');
 
         // A2-26 (F3 alignment) — direct gifts build NO governance credit, at any size.
         const gifter = 'gifter-' + Date.now();

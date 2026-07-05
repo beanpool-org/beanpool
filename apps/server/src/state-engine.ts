@@ -382,6 +382,14 @@ export function initStateEngine(): void {
         try { runLedgerAudit(); } catch (e) { console.warn('[LedgerAudit] failed:', e); }
     }, 24 * 60 * 60 * 1000);
 
+    // Daily Wash & Sybil metrics audit (once shortly after boot, then daily)
+    setTimeout(() => {
+        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
+    }, 2.5 * 60 * 1000);
+    setInterval(() => {
+        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
+    }, 24 * 60 * 60 * 1000);
+
     if (getNodeRole() === 'primary') {
         // One-time migration: move escrow funds from old post-keyed wallets to transaction-keyed wallets
         migrateEscrowWalletKeys();
@@ -5270,6 +5278,73 @@ export function getCommunityHealth(): CommunityHealth {
             });
         }
     } catch (e) { console.error('Health flag check (sybil funnel) failed:', e); }
+
+    // 4. Aggregate Credit Spike (Do Day-over-Day Growth check)
+    try {
+        const currentMetricRow = db.prepare(`
+            SELECT metric_value FROM system_metrics 
+            WHERE metric_key = 'total_negative_balance' 
+            ORDER BY timestamp DESC LIMIT 1
+        `).get() as any;
+
+        const previousMetricRow = db.prepare(`
+            SELECT metric_value FROM system_metrics 
+            WHERE metric_key = 'total_negative_balance' 
+              AND datetime(timestamp) < datetime('now', '-23 hours')
+            ORDER BY timestamp DESC LIMIT 1
+        `).get() as any;
+
+        if (currentMetricRow && previousMetricRow) {
+            const current = currentMetricRow.metric_value;
+            const previous = previousMetricRow.metric_value;
+            if (previous > 0) {
+                const growthRatio = (current - previous) / previous;
+                const absoluteGrowth = current - previous;
+                if (growthRatio > 0.20 && absoluteGrowth >= 500) {
+                    flags.push({
+                        type: 'wash_trading',
+                        severity: 'alert',
+                        description: `Aggregate credit spike: total negative balance increased by ${(growthRatio * 100).toFixed(1)}% (+${absoluteGrowth.toFixed(1)}B) in 24h`,
+                        members: []
+                    });
+                }
+            }
+        }
+    } catch (e) { console.error('Health flag check (aggregate credit spike) failed:', e); }
+
+    // 5. Cohort Velocity Anomaly
+    try {
+        const cohortAnomalyRow = db.prepare(`
+            SELECT metric_value FROM system_metrics 
+            WHERE metric_key = 'cohort_anomalies' 
+            ORDER BY timestamp DESC LIMIT 1
+        `).get() as any;
+        if (cohortAnomalyRow && cohortAnomalyRow.metric_value > 0) {
+            flags.push({
+                type: 'sybil_funnel',
+                severity: 'warning',
+                description: `Cohort Velocity Anomaly: ${cohortAnomalyRow.metric_value} cohort(s) reached deep floors within 14 days of creation`,
+                members: []
+            });
+        }
+    } catch (e) { console.error('Health flag check (cohort velocity) failed:', e); }
+
+    // 6. Delinquency (Realized Loss Risk)
+    try {
+        const delinquentRow = db.prepare(`
+            SELECT metric_value FROM system_metrics 
+            WHERE metric_key = 'delinquent_accounts' 
+            ORDER BY timestamp DESC LIMIT 1
+        `).get() as any;
+        if (delinquentRow && delinquentRow.metric_value > 0) {
+            flags.push({
+                type: 'inactive_member',
+                severity: 'warning',
+                description: `Realized loss risk: ${delinquentRow.metric_value} credit-drawn account(s) are dormant for 7+ days`,
+                members: []
+            });
+        }
+    } catch (e) { console.error('Health flag check (delinquency) failed:', e); }
     
     const config = getLocalConfig();
     const reportCount = getReportCount();
@@ -5852,6 +5927,98 @@ export function runLedgerAudit(): { sumBalances: number; baseline: number; drift
         console.log(`✅ [LedgerAudit] OK — sum(balances)=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)}`);
     }
     return { sumBalances, baseline, drift, strandedEscrows, ok };
+}
+
+export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
+    console.log('📊 [MetricsAudit] Running Wash Trading & Sybil metrics audit...');
+
+    // 1. Total negative balance
+    const totalNegativeRow = db.prepare(`SELECT ABS(SUM(balance)) as s FROM accounts WHERE balance < 0`).get() as any;
+    const totalNegative = totalNegativeRow ? (totalNegativeRow.s || 0) : 0;
+
+    // 2. Count of accounts near floor & Delinquent accounts
+    let accountsNearFloor = 0;
+    let delinquentCount = 0;
+    try {
+        const activeMembers = db.prepare("SELECT public_key FROM members WHERE status = 'active'").all() as { public_key: string }[];
+        for (const member of activeMembers) {
+            const { floor } = getMemberTrustProfile(member.public_key);
+            if (floor < 0) {
+                const bal = ledger.getAccount(member.public_key).balance;
+                if (bal < 0) {
+                    // Near floor: balance within 10 beans of floor
+                    if (bal - floor <= 10) {
+                        accountsNearFloor++;
+                    }
+                    // Delinquent: balance <= floor * 0.8 AND no transaction in 7 days
+                    if (bal <= floor * 0.8) {
+                        const txRow = db.prepare(`
+                            SELECT 1 FROM transactions 
+                            WHERE (from_pubkey = ? OR to_pubkey = ?) 
+                              AND timestamp > datetime('now', '-7 days')
+                            LIMIT 1
+                        `).get(member.public_key, member.public_key);
+                        if (!txRow) {
+                            delinquentCount++;
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[MetricsAudit] Failed to compute near-floor/delinquent stats:', e);
+    }
+
+    // 3. Cohort Velocity Report
+    let cohortAnomalies = 0;
+    try {
+        const cohorts = db.prepare(`
+            SELECT strftime('%Y-%W', joined_at) as cohort_week, GROUP_CONCAT(public_key) as keys
+            FROM members
+            WHERE joined_at IS NOT NULL AND status = 'active' AND invited_by IS NOT 'genesis'
+            GROUP BY cohort_week
+        `).all() as { cohort_week: string; keys: string }[];
+
+        for (const c of cohorts) {
+            const keys = c.keys.split(',');
+            if (keys.length === 0) continue;
+
+            let fastGrowingCount = 0;
+            for (const key of keys) {
+                const { floor } = getMemberTrustProfile(key);
+                if (floor <= -600) {
+                    const memberRow = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(key) as any;
+                    if (memberRow?.joined_at) {
+                        const joined = new Date(memberRow.joined_at);
+                        const ageDays = (Date.now() - joined.getTime()) / (1000 * 60 * 60 * 24);
+                        if (ageDays < 14) {
+                            fastGrowingCount++;
+                        }
+                    }
+                }
+            }
+
+            const ratio = fastGrowingCount / keys.length;
+            if (keys.length >= 2 && ratio >= 0.5) {
+                cohortAnomalies++;
+            }
+        }
+    } catch (e) {
+        console.error('[MetricsAudit] Failed to compute cohort velocity anomalies:', e);
+    }
+
+    // 4. Persist to database system_metrics
+    try {
+        db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('total_negative_balance', totalNegative);
+        db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('accounts_near_floor', accountsNearFloor);
+        db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('delinquent_accounts', delinquentCount);
+        db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('cohort_anomalies', cohortAnomalies);
+        console.log(`✅ [MetricsAudit] Metrics saved: negative_bal=${totalNegative.toFixed(2)}, near_floor=${accountsNearFloor}, delinquent=${delinquentCount}, cohort_anomalies=${cohortAnomalies}`);
+    } catch (e) {
+        console.error('[MetricsAudit] Failed to persist system metrics:', e);
+    }
+
+    return { totalNegative, accountsNearFloor, delinquentCount, cohortAnomalies };
 }
 
 export interface ReplicaConsistency {

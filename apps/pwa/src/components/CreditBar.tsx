@@ -104,39 +104,6 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
     return (
         <div className={`select-none ${className}`} style={{ paddingTop: 28, position: 'relative' }}>
 
-            {/* Lane 1 — your position tag (sits above the track) */}
-            <div
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: `${pct}%`,
-                    transform: 'translateX(-50%)',
-                    backgroundColor: tagBg,
-                    color: '#fff',
-                    padding: '3px 8px',
-                    borderRadius: 7,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    whiteSpace: 'nowrap',
-                    fontVariantNumeric: 'tabular-nums',
-                    zIndex: 2,
-                }}
-            >
-                {tagLabel}
-                {/* pointer */}
-                <span style={{
-                    position: 'absolute',
-                    left: '50%',
-                    bottom: -4,
-                    transform: 'translateX(-50%)',
-                    width: 0,
-                    height: 0,
-                    borderLeft: '4px solid transparent',
-                    borderRight: '4px solid transparent',
-                    borderTop: `5px solid ${tagBg}`,
-                }} />
-            </div>
-
             {/* Lane 2 — gradient track */}
             <div style={{
                 height: 15,
@@ -192,6 +159,39 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
                 {showFees && FEE_TICKS.map((t) => (
                     <div key={t} style={{ position: 'absolute', left: `${t}%`, top: -2, bottom: -2, width: 1, marginLeft: -0.5, backgroundColor: '#fff', opacity: 0.5 * revealT }} />
                 ))}
+            </div>
+
+            {/* Lane 1 — your position tag (sits above the track) */}
+            <div
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: `${pct}%`,
+                    transform: 'translateX(-50%)',
+                    backgroundColor: tagBg,
+                    color: '#fff',
+                    padding: '3px 8px',
+                    borderRadius: 7,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    fontVariantNumeric: 'tabular-nums',
+                    zIndex: 3,
+                }}
+            >
+                {tagLabel}
+                {/* pointer */}
+                <span style={{
+                    position: 'absolute',
+                    left: '50%',
+                    bottom: -4,
+                    transform: 'translateX(-50%)',
+                    width: 0,
+                    height: 0,
+                    borderLeft: '4px solid transparent',
+                    borderRight: '4px solid transparent',
+                    borderTop: `5px solid ${tagBg}`,
+                }} />
             </div>
 
             {/* Offer ladder caption — what your live Offers unlock, and how many reach your full line */}

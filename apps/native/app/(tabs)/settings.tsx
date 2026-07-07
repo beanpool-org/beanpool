@@ -399,11 +399,7 @@ export default function SettingsScreen() {
             const url = await AsyncStorage.getItem('beanpool_anchor_url');
             setAnchorUrl(url || 'Local discovery (or offline)');
             
-            let dbUrl = url;
-            if (dbUrl === 'https://review.beanpool.org:8443' || dbUrl === 'https://beanpool.org:8443') {
-                dbUrl = null;
-            }
-            const dbFilename = getDatabaseFilenameForNode(dbUrl);
+            const dbFilename = getDatabaseFilenameForNode(url);
             const dbPaths = getDatabaseFilePaths(dbFilename);
             console.log('[Diagnostics] Computed Database Paths:', dbPaths);
             

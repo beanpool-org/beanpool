@@ -37,11 +37,7 @@ let currentDbName: string | null = null;
 let getDbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
-    let url = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (url === 'https://review.beanpool.org:8443' || url === 'https://beanpool.org:8443') {
-        await AsyncStorage.removeItem('beanpool_anchor_url');
-        url = null;
-    }
+    const url = await AsyncStorage.getItem('beanpool_anchor_url');
     const expectedDbName = getDatabaseFilenameForNode(url);
 
     if (db && currentDbName === expectedDbName) {

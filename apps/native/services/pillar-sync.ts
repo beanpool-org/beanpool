@@ -50,41 +50,38 @@ async function discoverAnchor(): Promise<string | null> {
     
     // Explicit saved anchor takes absolute priority
     try {
-        let savedAnchor = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (savedAnchor === 'https://review.beanpool.org:8443' || savedAnchor === 'https://beanpool.org:8443') {
-            await AsyncStorage.removeItem('beanpool_anchor_url');
-            savedAnchor = null;
-        }
+        const savedAnchor = await AsyncStorage.getItem('beanpool_anchor_url');
         if (savedAnchor) {
             // NEVER fallback to a different community if an explicit anchor has been set via Invite.
             return savedAnchor;
         }
     } catch (e) {}
 
-    candidates.push(
+    if (__DEV__) {
+        candidates.push(
+            // Local development (Highest Priority)
+            'https://beanpool.local:8443',
+            'http://beanpool.local:8080',
+            'http://localhost:8080',
+            'http://127.0.0.1:8080',
+            'http://10.0.2.2:8080',
+            'https://localhost:8443',
+            'https://127.0.0.1:8443',
+            'https://10.0.2.2:8443',
+            'http://localhost:8080',
+            'http://127.0.0.1:8080',
+            'http://10.0.2.2:8080',
+        );
 
-        // Local development (Highest Priority)
-        'https://beanpool.local:8443',
-        'http://beanpool.local:8080',
-        'http://localhost:8080',
-        'http://127.0.0.1:8080',
-        'http://10.0.2.2:8080',
-        'https://localhost:8443',
-        'https://127.0.0.1:8443',
-        'https://10.0.2.2:8443',
-        'http://localhost:8080',
-        'http://127.0.0.1:8080',
-        'http://10.0.2.2:8080',
-    );
-
-    // Attempt to derive Expo LAN IP for physical dev devices
-    const hostUri = Constants.experienceUrl || Constants.expoConfig?.hostUri;
-    if (hostUri) {
-        // hostUri is usually something like "192.168.1.100:8081"
-        const match = hostUri.match(/([0-9.]+):/);
-        if (match && match[1]) {
-            candidates.push(`https://${match[1]}:8443`);
-            candidates.push(`http://${match[1]}:8080`);
+        // Attempt to derive Expo LAN IP for physical dev devices
+        const hostUri = Constants.experienceUrl || Constants.expoConfig?.hostUri;
+        if (hostUri) {
+            // hostUri is usually something like "192.168.1.100:8081"
+            const match = hostUri.match(/([0-9.]+):/);
+            if (match && match[1]) {
+                candidates.push(`https://${match[1]}:8443`);
+                candidates.push(`http://${match[1]}:8080`);
+            }
         }
     }
 

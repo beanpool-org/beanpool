@@ -52,6 +52,9 @@ export async function removeSavedNode(url: string) {
  */
 export function getDatabaseFilenameForNode(url: string | null): string {
     if (!url) return 'beanpool.db'; // Fallback
+    if (url === 'https://review.beanpool.org:8443' || url === 'https://beanpool.org:8443') {
+        return 'beanpool.db';
+    }
     const sanitized = url.replace(/[^a-zA-Z0-9]/g, '_');
     return `beanpool_${sanitized}.db`;
 }

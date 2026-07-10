@@ -211,13 +211,23 @@ function RootLayoutNav() {
         // Case 1: No active identity (New user onboarding or completely wiped DB)
         if (!identity) {
             if (isComponentMounted.current) {
-                router.replace({
-                    pathname: '/welcome',
-                    params: {
+                const rootSegment = (segments as string[])[0];
+                if (rootSegment === 'welcome') {
+                    router.setParams({
                         invite: parsedCode,
-                        server: extractedNodeOrigin || undefined
-                    }
-                });
+                        server: extractedNodeOrigin || undefined,
+                        t: Date.now().toString()
+                    });
+                } else {
+                    router.replace({
+                        pathname: '/welcome',
+                        params: {
+                            invite: parsedCode,
+                            server: extractedNodeOrigin || undefined,
+                            t: Date.now().toString()
+                        }
+                    });
+                }
             }
             return;
         }

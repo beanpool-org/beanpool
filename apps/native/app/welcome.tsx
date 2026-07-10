@@ -132,7 +132,7 @@ export default function WelcomeScreen() {
         checkAutoIntercept();
 
         return () => { mounted = false; };
-    }, [params?.invite, incomingUrl]);
+    }, [params?.invite, params?.t, incomingUrl]);
 
     async function handleCreate() {
         if (!inviteCode.trim()) {

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started — Join BeanPool</title>
+    <meta name="description" content="A step-by-step guide to joining a BeanPool community: using an invite code, securing your 12-word seed, and listing your first offer.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=1.3">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2.5rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1.1rem 0 1.9rem; font-size: 1rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: #34d399; font-weight: 700; font-family: var(--font-header); background: rgba(16,185,129,0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(16,185,129,0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.4rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 64px; height: 64px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">How It Works</a>
+                <a href="rules.html">The Rules</a>
+                <a href="index.html#features">Features</a>
+                <a href="getting-started.html" class="nav-cta">Get Started</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Getting Started with BeanPool</h1>
+        <p class="lede">BeanPool is an invite-only community network where everyone starts at zero. Here is a step-by-step guide to accepting an invitation, securing your decentralized identity, and unlocking your starting credit line to trade.</p>
+
+        <div class="callout amber">
+            <strong>Key Concept:</strong> BeanPool is entirely peer-to-peer. There are no central companies, passwords, or recovery emails. You control your own data and build reputation by trading with your neighbors.
+        </div>
+
+        <h2><span class="num">1.</span>Get an Invite Code</h2>
+        <p>Because BeanPool is built on mutual trust, you cannot sign up without an invitation. You must receive a single-use invite code from an active member of your local community.</p>
+        <ul>
+            <li>Invite codes are usually shared as a text string (e.g. <code>bean-xxxx-xxxx</code>) or via a QR code you can scan.</li>
+            <li>If you do not know anyone in the network, visit local community markets, workshops, or ask organizers where the local node is active.</li>
+        </ul>
+
+        <h2><span class="num">2.</span>Access the App</h2>
+        <p>Each local community runs its own independent server (node). You can access the app in two ways:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Web App (PWA):</strong> Open your community's unique web address (e.g., <code>mullum1.beanpool.org</code>) in your browser. On iOS (Safari) or Android (Chrome), open the browser menu and tap <strong style="color:var(--text-primary)">"Add to Home Screen"</strong> to install it as an app.</li>
+            <li><strong style="color:var(--text-primary)">Native App:</strong> Download the official iOS or Android app directly from the App Store or Google Play (links are available on the welcome page of your local community's node).</li>
+        </ul>
+
+        <h2><span class="num">3.</span>Create Your Secure Identity</h2>
+        <p>Launch the app on your device, select <strong style="color:var(--text-primary)">"I have an invite code"</strong>, and paste your code. Then, complete the setup steps:</p>
+        <ul>
+            <li><strong>Choose a Callsign:</strong> This is your public display name (e.g., <code>@BakerBob</code>) that other members will see on the ledger and marketplace.</li>
+            <li><strong>Secure Your 12-Word Recovery Phrase:</strong> The app will generate a 12-word seed phrase. This is the cryptographic key to your account.
+                <div class="callout" style="border-left-color: var(--accent-danger); background: rgba(239, 68, 68, 0.05); margin: 0.8rem 0;">
+                    <strong>⚠️ CRITICAL:</strong> There is no "forgot password" button. If you lose your 12-word recovery phrase or delete the app, your account and balance are lost forever. Write these 12 words down on paper and store them in a secure place. Never share them with anyone, and never take a screenshot.
+                </div>
+            </li>
+        </ul>
+
+        <h2><span class="num">4.</span>Post Your First Offer (Unlocks Your Credit)</h2>
+        <p>To keep the economy balanced, BeanPool uses the **Offer Covenant** (see <a href="rules.html#4" style="color: #34d399; text-decoration: underline;">Rules §4</a>). New accounts start with a credit line of zero, meaning they can only spend beans they already hold.</p>
+        <ul>
+            <li>To open your credit line, go to the marketplace and post at least one <strong style="color:var(--text-primary)">Offer</strong> (e.g., offering general labor, fresh produce, baking, tutoring, or tools for rent).</li>
+            <li>Listing your first active offer automatically unlocks a credit floor of <strong style="color:var(--text-primary)">−200 Beans</strong> (≈ 5 hours of community time).</li>
+            <li>This credit line allows you to immediately accept offers or post Needs to hire others, even though you start with 0 Beans!</li>
+        </ul>
+
+        <h2><span class="num">5.</span>Make Your First Trade</h2>
+        <p>Now that your credit line is open, you can begin participating in your local economy:</p>
+        <ul>
+            <li><strong>Browse and Connect:</strong> Check out the Marketplace or view the interactive **Community Map** to find offers in your neighborhood. Tap "Message" on any post to open an encrypted chat with the author.</li>
+            <li><strong>The Escrow Safe-Guard:</strong> When you buy a service or good, the Beans are held safely in **escrow** *(held in trust by the system)*. The seller only receives the Beans after you confirm the job is completed, keeping both parties secure.</li>
+            <li><strong>Build Reputation:</strong> Once your trade completes, both you and your partner can rate each other (1 to 5 beans) and leave reviews. Completing trades grows your trust score and automatically expands your credit line.</li>
+        </ul>
+
+        <div class="callout amber">
+            <strong>What's Next?</strong> As you complete trades with multiple unique partners, your credit line will dynamically deepen (down to −2000 Beans), and you'll advance from a Newcomer to a Resident, unlocking direct gifting and invitation privileges!
+        </div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 64px; height: 64px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Community exchange for local neighborhoods.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                    <a href="getting-started.html">Getting Started</a>
+                    <a href="rules.html">The Rules</a>
+                    <a href="safety.html">Child Safety</a>
+                    <a href="privacy.html">Privacy Policy</a>
+                    <a href="terms.html">Terms of Service</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Open source under MIT license. Made with <img src="bean.png" alt="love" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> by communities, for communities.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

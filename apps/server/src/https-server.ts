@@ -1174,7 +1174,9 @@ export async function startHttpsServer(port: number): Promise<void> {
     // ======================== DATABASE BACKUP ========================
 
     router.post('/api/local/admin/backup', async (ctx) => {
-        if (!(await checkAdminAuth(ctx as any))) return;
+        const token = ctx.request.header['x-replication-token'];
+        const isTokenValid = token && (await verifyReplicationToken(String(token)));
+        if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
         const { execFileSync } = await import('node:child_process');
         const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
         const tmpDir = path.join(DATA_DIR, '.backup-tmp');

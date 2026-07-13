@@ -1235,6 +1235,81 @@ export async function startHttpsServer(port: number): Promise<void> {
         }
     });
 
+    // ======================== IDENTITY BUNDLE ========================
+    // Returns a tar.gz of all critical identity files needed for a full
+    // node restore. These files are generated once on first boot and
+    // cannot be regenerated without losing the node's identity.
+    router.post('/api/local/admin/identity-bundle', async (ctx) => {
+        const token = ctx.request.header['x-replication-token'];
+        const isTokenValid = token && (await verifyReplicationToken(String(token)));
+        if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
+
+        const { execFileSync } = await import('node:child_process');
+        const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+        const tmpDir = path.join(DATA_DIR, '.identity-tmp');
+        const tarPath = path.join(DATA_DIR, '.identity-tmp.tar.gz');
+
+        try {
+            if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
+            if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
+            fs.mkdirSync(tmpDir, { recursive: true });
+
+            // Collect all critical identity files
+            const identityFiles = [
+                { src: 'genesis.json', required: true },
+                { src: 'community.key', required: true },
+                { src: 'libp2p_key', required: false },
+                { src: 'local-config.json', required: false },
+                { src: 'connectors.json', required: false },
+            ];
+
+            const collected: string[] = [];
+            for (const file of identityFiles) {
+                const srcPath = path.join(DATA_DIR, file.src);
+                if (fs.existsSync(srcPath)) {
+                    fs.copyFileSync(srcPath, path.join(tmpDir, file.src));
+                    collected.push(file.src);
+                } else if (file.required) {
+                    ctx.status = 503;
+                    ctx.body = { error: `Required identity file missing: ${file.src}` };
+                    fs.rmSync(tmpDir, { recursive: true });
+                    return;
+                }
+            }
+
+            // Also export local-config from memory if file doesn't exist on disk
+            if (!collected.includes('local-config.json')) {
+                const config = getLocalConfig();
+                fs.writeFileSync(path.join(tmpDir, 'local-config.json'), JSON.stringify(config, null, 2));
+                collected.push('local-config.json');
+            }
+
+            // Create tar.gz
+            execFileSync('tar', ['-czf', tarPath, '-C', tmpDir, '.']);
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            ctx.set('Content-Type', 'application/gzip');
+            ctx.set('Content-Disposition', `attachment; filename="identity-bundle-${timestamp}.tar.gz"`);
+            ctx.set('X-Identity-Files', collected.join(','));
+            ctx.body = fs.createReadStream(tarPath);
+
+            ctx.res.on('finish', () => {
+                try {
+                    if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
+                    if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
+                } catch { /* ignore cleanup errors */ }
+            });
+        } catch (e: any) {
+            console.error('Identity bundle failed:', e);
+            try {
+                if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
+                if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
+            } catch { /* ignore */ }
+            ctx.status = 500;
+            ctx.body = { error: 'Identity bundle failed: ' + e.message };
+        }
+    });
+
     // ======================== BACKUP TAB ========================
     // Read-only enrollment bundle for standing up a NEW backup server that joins
     // THIS node's community. The operator runs `scripts/setup-backup.mjs` on the

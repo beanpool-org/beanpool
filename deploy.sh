@@ -132,7 +132,7 @@ for NODE in "${TARGETS[@]}"; do
       sed -i 's/\"443:8443\"/\"8451:8443\"/g' docker-compose.yml
       sed -i 's/\"8080:8080\"/\"8084:8080\"/g' docker-compose.yml
       sed -i 's/\"8443:8443\"/\"8452:8443\"/g' docker-compose.yml
-      sed -i 's/\"4001:4001\"/\"4008:4001\"/g' docker-compose.yml
+      sed -i 's/\"4001:4001\"/\"4012:4001\"/g' docker-compose.yml
       sed -i 's/\"4002:4002\"/\"4009:4002\"/g' docker-compose.yml
     fi
     if [ "$NAME" = "mullum1" ]; then

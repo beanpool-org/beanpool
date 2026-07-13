@@ -78,7 +78,11 @@ for NODE in "${TARGETS[@]}"; do
   USER=$(echo "$NODE" | cut -d: -f5)
   DIR=$(echo "$NODE" | cut -d: -f6)
   if [ -z "$DIR" ]; then DIR="BeanPool"; fi
-  HOME_DIR="/home/$USER"
+  if [ "$USER" = "root" ]; then
+    HOME_DIR="/root"
+  else
+    HOME_DIR="/home/$USER"
+  fi
   PROJECT_DIR="$HOME_DIR/$DIR"
   PROJ_NAME=$(echo "beanpool-$DIR" | tr '[:upper:]' '[:lower:]')
 

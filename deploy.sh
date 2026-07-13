@@ -118,27 +118,13 @@ for NODE in "${TARGETS[@]}"; do
     export ADMIN_PASSWORD='${ADMIN_PASSWORD}'
     export CF_TUNNEL_TOKEN='${CF_TUNNEL_TOKEN}'
     if [ "$DIR" = "BeanPool-Review" ]; then
-      # Review node: tunnel-only, no federation ports needed
+      # Review node (VIC): tunnel-only
       sed -i 's/\"80:8080\"/\"8083:8080\"/g' docker-compose.yml
       sed -i '/\"443:8443\"/d' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
       sed -i '/\"4001:4001\"/d' docker-compose.yml
       sed -i '/\"4002:4002\"/d' docker-compose.yml
-    elif [ "$DIR" = "BeanPool-Mullum2" ]; then
-      sed -i 's/\"80:8080\"/\"8448:8080\"/g' docker-compose.yml
-      sed -i 's/\"443:8443\"/\"8447:8443\"/g' docker-compose.yml
-      sed -i 's/\"8080:8080\"/\"8449:8080\"/g' docker-compose.yml
-      sed -i 's/\"8443:8443\"/\"8450:8443\"/g' docker-compose.yml
-      sed -i 's/\"4001:4001\"/\"4006:4001\"/g' docker-compose.yml
-      sed -i 's/\"4002:4002\"/\"4007:4002\"/g' docker-compose.yml
-    elif [ "$DIR" = "BeanPool-TestMirror" ]; then
-      sed -i 's/\"80:8080\"/\"8083:8080\"/g' docker-compose.yml
-      sed -i 's/\"443:8443\"/\"8451:8443\"/g' docker-compose.yml
-      sed -i 's/\"8080:8080\"/\"8084:8080\"/g' docker-compose.yml
-      sed -i 's/\"8443:8443\"/\"8452:8443\"/g' docker-compose.yml
-      sed -i 's/\"4001:4001\"/\"4012:4001\"/g' docker-compose.yml
-      sed -i 's/\"4002:4002\"/\"4009:4002\"/g' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Castlemaine" ]; then
       sed -i 's/\"80:8080\"/\"8081:8080\"/g' docker-compose.yml
       sed -i 's/\"443:8443\"/\"8445:8443\"/g' docker-compose.yml
@@ -146,6 +132,29 @@ for NODE in "${TARGETS[@]}"; do
       sed -i 's/\"8443:8443\"/\"8446:8443\"/g' docker-compose.yml
       sed -i 's/\"4001:4001\"/\"4004:4001\"/g' docker-compose.yml
       sed -i 's/\"4002:4002\"/\"4005:4002\"/g' docker-compose.yml
+    elif [ "$DIR" = "BeanPool-Bris" ]; then
+      # Bris node (QLD): tunnel-only, default port 8080
+      sed -i '/\"443:8443\"/d' docker-compose.yml
+      sed -i '/\"8080:8080\"/d' docker-compose.yml
+      sed -i '/\"8443:8443\"/d' docker-compose.yml
+      sed -i '/\"4001:4001\"/d' docker-compose.yml
+      sed -i '/\"4002:4002\"/d' docker-compose.yml
+    elif [ "$DIR" = "BeanPool-Mullum" ]; then
+      # Mullum node (QLD): tunnel-only
+      sed -i 's/\"80:8080\"/\"8081:8080\"/g' docker-compose.yml
+      sed -i '/\"443:8443\"/d' docker-compose.yml
+      sed -i '/\"8080:8080\"/d' docker-compose.yml
+      sed -i '/\"8443:8443\"/d' docker-compose.yml
+      sed -i '/\"4001:4001\"/d' docker-compose.yml
+      sed -i '/\"4002:4002\"/d' docker-compose.yml
+    elif [ "$DIR" = "BeanPool-Test" ]; then
+      # Test node (QLD): tunnel-only
+      sed -i 's/\"80:8080\"/\"8082:8080\"/g' docker-compose.yml
+      sed -i '/\"443:8443\"/d' docker-compose.yml
+      sed -i '/\"8080:8080\"/d' docker-compose.yml
+      sed -i '/\"8443:8443\"/d' docker-compose.yml
+      sed -i '/\"4001:4001\"/d' docker-compose.yml
+      sed -i '/\"4002:4002\"/d' docker-compose.yml
     fi
     if [ "$NAME" = "mullum1" ]; then
       sed -i '/"80:8080"/d' docker-compose.yml
@@ -161,7 +170,7 @@ for NODE in "${TARGETS[@]}"; do
     if [ -n "\$CF_TUNNEL_TOKEN" ] && [ "\$NAME" = "mullum1" ]; then
       COMPOSE_FLAGS=(--profile tunnel)
     fi
-    if [ "$NAME" = "test" ] || [ "$NAME" = "test-mirror" ] || [ "$NAME" = "mullum2" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ]; then
+    if [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ]; then
       echo "🔨 Local build enabled for target: $NAME"
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build
     else

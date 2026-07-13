@@ -943,7 +943,9 @@ export async function startHttpsServer(port: number): Promise<void> {
     });
 
     router.post('/api/local/admin/logs', async (ctx) => {
-        if (!(await checkAdminAuth(ctx as any))) return;
+        const token = ctx.request.header['x-replication-token'] || (ctx as any).requestBody?.token;
+        const isTokenValid = token && (await verifyReplicationToken(String(token)));
+        if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
         const { level, category, searchQuery, limit = 100, offset = 0 } = (ctx as any).requestBody || {};
 
         let sql = 'SELECT * FROM system_logs WHERE 1=1';

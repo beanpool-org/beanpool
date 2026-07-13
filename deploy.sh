@@ -118,12 +118,13 @@ for NODE in "${TARGETS[@]}"; do
     export ADMIN_PASSWORD='${ADMIN_PASSWORD}'
     export CF_TUNNEL_TOKEN='${CF_TUNNEL_TOKEN}'
     if [ "$DIR" = "BeanPool-Review" ]; then
-      sed -i 's/\"80:8080\"/\"8081:8080\"/g' docker-compose.yml
-      sed -i 's/\"443:8443\"/\"8445:8443\"/g' docker-compose.yml
-      sed -i 's/\"8080:8080\"/\"8082:8080\"/g' docker-compose.yml
-      sed -i 's/\"8443:8443\"/\"8446:8443\"/g' docker-compose.yml
-      sed -i 's/\"4001:4001\"/\"4004:4001\"/g' docker-compose.yml
-      sed -i 's/\"4002:4002\"/\"4005:4002\"/g' docker-compose.yml
+      # Review node: tunnel-only, no federation ports needed
+      sed -i 's/\"80:8080\"/\"8083:8080\"/g' docker-compose.yml
+      sed -i '/\"443:8443\"/d' docker-compose.yml
+      sed -i '/\"8080:8080\"/d' docker-compose.yml
+      sed -i '/\"8443:8443\"/d' docker-compose.yml
+      sed -i '/\"4001:4001\"/d' docker-compose.yml
+      sed -i '/\"4002:4002\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Mullum2" ]; then
       sed -i 's/\"80:8080\"/\"8448:8080\"/g' docker-compose.yml
       sed -i 's/\"443:8443\"/\"8447:8443\"/g' docker-compose.yml

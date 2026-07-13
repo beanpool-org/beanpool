@@ -1377,7 +1377,9 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // ---------- Replication access log (primary side) ----------
     router.post('/api/local/admin/replication-access', async (ctx) => {
-        if (!(await checkAdminAuth(ctx as any))) return;
+        const token = ctx.request.header['x-replication-token'] || (ctx as any).requestBody?.token;
+        const isTokenValid = token && (await verifyReplicationToken(String(token)));
+        if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
         ctx.body = {
             ...getReplicationAccessLog(),
             tokenOnly: !!getLocalConfig().replicationTokenOnly,

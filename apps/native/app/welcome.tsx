@@ -1,10 +1,14 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
-import { createIdentity, createIdentityFromMnemonic, BeanPoolIdentity } from '../utils/identity';
+import { createIdentity, createIdentityFromMnemonic, loadIdentity, BeanPoolIdentity } from '../utils/identity';
 import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
+import { useNodeStatus } from './NodeStatusContext';
+import {
+    getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding,
+} from '../utils/onboarding-state';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useGlobalSearchParams, router } from 'expo-router';
@@ -18,12 +22,28 @@ import { buildSignedHeaders } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
-import { normalizeNodeUrl, looksLikeNodeAddress } from '../utils/node-url';
+import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
+
+// Friendly Step-1 rejection copy for a dud invite. Reasons come from
+// /api/invite/check; anything unrecognised falls back to the generic line.
+function inviteProblemMessage(reason?: string): string {
+    switch (reason) {
+        case 'used':
+            return 'This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).';
+        case 'expired':
+            return 'This invite has expired — invites last 7 days. Ask whoever invited you to send a fresh one (it only takes them a minute).';
+        case 'unknown_inviter':
+            return "This community doesn't know the person who made this invite. Double-check you're joining the right community, or ask for a fresh invite.";
+        default:
+            return "That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.";
+    }
+}
 
 export default function WelcomeScreen() {
     const params = useGlobalSearchParams();
     const incomingUrl = Linking.useURL();
     const { setIdentity } = useIdentity();
+    const { recheck: recheckNodeStatus } = useNodeStatus();
     const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide'>('home');
     const [callsign, setCallsign] = useState('');
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
@@ -41,6 +61,42 @@ export default function WelcomeScreen() {
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
+    const [inviterName, setInviterName] = useState<string | null>(null);
+    const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
+    const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
+
+    // The web trampoline copies the invite link to the clipboard before sending
+    // people to the app store, but nothing can read it for them automatically —
+    // so offer a one-tap check on the first screen. hasStringAsync only reports
+    // presence; the clipboard is READ solely on the user's tap (no iOS paste
+    // prompt until then).
+    React.useEffect(() => {
+        if (mode !== 'home') return;
+        Clipboard.hasStringAsync()
+            .then(has => setClipboardMayHaveInvite(!!has))
+            .catch(() => setClipboardMayHaveInvite(false));
+    }, [mode]);
+
+    async function handleCheckClipboardInvite() {
+        try {
+            const content = (await Clipboard.getStringAsync())?.trim() || '';
+            const looksLikeInvite = content.startsWith('BP-') || content.startsWith('INV-') ||
+                (content.startsWith('http') && content.includes('invite='));
+            if (looksLikeInvite) {
+                setProcessingMagicLink(true);
+                await processFullUrl(content);
+                setTimeout(() => setProcessingMagicLink(false), 1500);
+            } else {
+                Alert.alert(
+                    'No invite found',
+                    "Your clipboard doesn't have a BeanPool invite on it. No worries — you can paste or type the code on the next screen.",
+                    [{ text: 'OK', onPress: () => setMode('create') }]
+                );
+            }
+        } catch {
+            setMode('create');
+        }
+    }
 
     const processFullUrl = useCallback(async (fullUrl: string) => {
         if (fullUrl.startsWith('http')) {
@@ -127,12 +183,71 @@ export default function WelcomeScreen() {
                 return;
             }
 
+            // Priority 3 (Android, once ever): Play Install Referrer. An invite
+            // link tapped WITHOUT the app installed detours via the Play Store;
+            // the web trampoline packs invite+server into the store link's
+            // `referrer` param, which Google hands us here on first launch — so
+            // the invite survives the install with no clipboard or retyping.
+            if (Platform.OS === 'android') {
+                const alreadyChecked = await AsyncStorage.getItem('beanpool_install_referrer_checked');
+                if (!alreadyChecked) {
+                    try {
+                        const Application = await import('expo-application');
+                        const referrer = await Application.getInstallReferrerAsync();
+                        await AsyncStorage.setItem('beanpool_install_referrer_checked', 'true');
+                        const inviteMatch = referrer?.match(/(?:^|&)invite=([^&]+)/);
+                        if (inviteMatch && mounted) {
+                            setInviteCode(decodeURIComponent(inviteMatch[1]));
+                            const serverMatch = referrer.match(/(?:^|&)server=([^&]+)/);
+                            const server = serverMatch ? decodeURIComponent(serverMatch[1]) : '';
+                            // Same trust rule as deep links: never accept a
+                            // cleartext-public node origin from an outside source.
+                            if (server && !shouldBlockCleartextNodeUrl(server)) {
+                                setCreateAnchorUrl(server);
+                            }
+                            setMode('create');
+                        }
+                    } catch {
+                        // No Play Services (emulator, de-Googled device) — the
+                        // clipboard offer below is the fallback. Left unchecked
+                        // so a transient failure can retry on the next visit.
+                    }
+                }
+            }
         };
 
         checkAutoIntercept();
 
         return () => { mounted = false; };
     }, [params?.invite, params?.t, incomingUrl]);
+
+    // Resume a join wizard that was interrupted after the keypair was created
+    // (Step 1) but before the invite was redeemed (final step). Without this,
+    // the half-registered identity strands the user on node-mismatch at next
+    // launch. A fresh incoming invite link outranks a stale half-done wizard.
+    React.useEffect(() => {
+        let mounted = true;
+        (async () => {
+            if (params?.invite || (incomingUrl && incomingUrl.includes('invite='))) return;
+            const pending = await getPendingOnboarding();
+            if (!pending || !mounted) return;
+            const stored = await loadIdentity();
+            if (!stored) {
+                // Keypair never made it to storage — nothing to resume.
+                await clearPendingOnboarding();
+                return;
+            }
+            if (!mounted) return;
+            setCallsign(pending.callsign || stored.callsign);
+            setInviteCode(pending.inviteCode);
+            setPendingInviteCode(pending.inviteCode);
+            if (pending.anchorUrl) setCreateAnchorUrl(pending.anchorUrl);
+            if (pending.avatar) setPendingAvatar(pending.avatar);
+            if (pending.step !== 'create') setPendingIdentity(stored);
+            setMode(pending.step);
+        })();
+        return () => { mounted = false; };
+    }, []);
 
     async function handleCreate() {
         if (!inviteCode.trim()) {
@@ -157,16 +272,46 @@ export default function WelcomeScreen() {
             setError("That node address doesn't look right. Use something like node.yourcommunity.org");
             return;
         }
+        // Choke point for EVERY node-url source (pasted links, clipboard,
+        // manual entry): same cleartext-public rule as deep links — an http://
+        // public node would expose keys and messages to interception.
+        if (shouldBlockCleartextNodeUrl(nodeUrl)) {
+            setError('That node address is insecure (http on a public host). Ask your inviter for the https:// address.');
+            return;
+        }
 
         setLoading(true);
         setError(null);
         try {
+            const parsedCode = normaliseInviteCode(rawInvite);
+
+            // Pre-flight the invite BEFORE creating an identity — a dud code
+            // should fail here, not after the name/photo/seed ceremony. A null
+            // result (node unreachable / older node) fails open; redeemInvite
+            // at the final step stays the definitive check.
+            const { checkInvite } = await import('../utils/db');
+            const check = await checkInvite(parsedCode, nodeUrl);
+            if (check && !check.valid) {
+                setError(inviteProblemMessage(check.reason));
+                return;
+            }
+            setInviterName(check?.inviterCallsign || null);
+            setInviteCommunityName(check?.communityName || null);
+
             await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
 
-            const parsedCode = normaliseInviteCode(rawInvite);
             const identity = await createIdentity(callsign.trim());
             setPendingIdentity(identity);
             setPendingInviteCode(parsedCode);
+            // A keypair now exists on-device but the node doesn't know it yet —
+            // record the wizard so an interrupted join resumes instead of
+            // stranding the user (see utils/onboarding-state.ts).
+            await setPendingOnboarding({
+                step: 'profileSetup',
+                inviteCode: parsedCode,
+                anchorUrl: nodeUrl,
+                callsign: callsign.trim(),
+            });
             // Go to avatar selection (Step 2) instead of seed phrase
             setMode('profileSetup');
         } catch (err: any) {
@@ -220,6 +365,17 @@ export default function WelcomeScreen() {
                 }
             }
 
+            // Wizard complete: the member now exists on the node, so the
+            // half-registered-identity rescue record can go, and the seed
+            // backup the user confirmed at Step 3 counts as backed up (this
+            // also stops the Settings red-dot nag from firing 24h later).
+            await clearPendingOnboarding();
+            await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
+
+            // Refresh node recognition — on a resumed wizard it is still the
+            // stale pre-redeem 'stranger', which would pin us to this screen.
+            await recheckNodeStatus().catch(() => {});
+
             // Final step — enter the app
             setIdentity(pendingIdentity);
         } catch (err: any) {
@@ -256,6 +412,10 @@ export default function WelcomeScreen() {
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
 
             const identity = await createIdentityFromMnemonic(words, recoveryCallsign.trim());
+            // Recovering an existing account supersedes any half-finished join
+            // wizard on this device — drop the rescue record so the gatekeeper
+            // doesn't bounce a recovered member back into onboarding.
+            await clearPendingOnboarding();
             setIdentity(identity);
         } catch (err) {
             setError('Recovery failed. Check words and try again.');
@@ -317,6 +477,7 @@ export default function WelcomeScreen() {
                     setPendingAvatar(null);
                     setSeedConfirmed(false);
                     setSeedCopied(false);
+                    updatePendingOnboarding({ step: 'create', avatar: null }).catch(() => {});
                     setMode('create');
                     setError(null);
                 }},
@@ -355,6 +516,8 @@ export default function WelcomeScreen() {
             // member is registered (handleConfirmSeed), with the pillar-sync heal as a backstop.
             await AsyncStorage.setItem('pending_profile_sync', 'true');
 
+            await updatePendingOnboarding({ step: 'seedBackup', avatar: pendingAvatar });
+
             // 3. Profile done — go to seed phrase (Step 3) instead of entering app
             setMode('seedBackup');
         } catch (err: any) {
@@ -372,9 +535,17 @@ export default function WelcomeScreen() {
                 <ScrollView contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={2} />
                     <View style={styles.card}>
+                        {inviterName && (
+                            <View style={styles.inviteVerifiedBox}>
+                                <Text style={styles.inviteVerifiedText}>
+                                    🎟️ Your invite from <Text style={{ fontWeight: 'bold' }}>{inviterName}</Text> checks out
+                                    {inviteCommunityName ? <Text> — welcome to <Text style={{ fontWeight: 'bold' }}>{inviteCommunityName}</Text>!</Text> : <Text>!</Text>}
+                                </Text>
+                            </View>
+                        )}
                         <Text style={styles.title}>📸 Choose your look</Text>
                         <Text style={styles.subtitle}>
-                            Pick a profile picture so your community knows you.
+                            Add a photo, or pick a fun avatar — whatever feels like you.
                         </Text>
 
                         {/* Preview circle */}
@@ -405,7 +576,7 @@ export default function WelcomeScreen() {
                             accessibilityRole="button"
                         >
                             <Text style={styles.secondaryBtnText}>
-                                {pendingAvatar ? 'Change Photo' : 'Choose Photo'}
+                                {pendingAvatar ? 'Change Photo or Avatar' : 'Choose Photo or Avatar'}
                             </Text>
                         </Pressable>
 
@@ -433,7 +604,10 @@ export default function WelcomeScreen() {
 
                         <Pressable
                             style={styles.backBtn}
-                            onPress={() => { setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setShowAvatarPicker(false); setError(null); }}
+                            onPress={() => {
+                                updatePendingOnboarding({ step: 'create', avatar: null }).catch(() => {});
+                                setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setShowAvatarPicker(false); setError(null);
+                            }}
                             disabled={loading}
                             accessibilityRole="button"
                             accessibilityLabel="Back"
@@ -503,7 +677,10 @@ export default function WelcomeScreen() {
                         <Pressable
                             style={[styles.primaryBtn, !seedConfirmed && styles.disabledBtn]}
                             disabled={!seedConfirmed || loading}
-                            onPress={() => setMode('onboardingGuide')}
+                            onPress={() => {
+                                updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
+                                setMode('onboardingGuide');
+                            }}
                             accessibilityRole="button"
                         >
                             <Text style={styles.primaryBtnText}>Next →</Text>
@@ -550,7 +727,7 @@ export default function WelcomeScreen() {
                             </View>
                             <View style={[guideStyles.highlightBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.35)' }]}>
                                 <Text style={[guideStyles.highlightText, { color: palette.amber700 || '#b45309' }]}>
-                                    🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> To keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers. (Or ask an Elder to vouch for you.)
+                                    🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> To keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.
                                 </Text>
                             </View>
                         </View>
@@ -564,7 +741,7 @@ export default function WelcomeScreen() {
                                 <View style={guideStyles.bulletContent}>
                                     <Text style={guideStyles.bulletTitle}>Trust-Backed Credit</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        Every member starts with a 0 Bean limit. Perform at least one trade in a positive balance to unlock your first -80 Bean credit achievement. As you complete milestones and grow your community trust level, your negative credit limit expands further. No interest, no bank fees.
+                                        Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
                                     </Text>
                                 </View>
                             </View>
@@ -624,7 +801,11 @@ export default function WelcomeScreen() {
 
                         <Pressable
                             style={styles.backBtn}
-                            onPress={() => { setMode('seedBackup'); setError(null); }}
+                            onPress={() => {
+                                updatePendingOnboarding({ step: 'seedBackup' }).catch(() => {});
+                                setMode('seedBackup');
+                                setError(null);
+                            }}
                             disabled={loading}
                             accessibilityRole="button"
                         >
@@ -713,6 +894,13 @@ export default function WelcomeScreen() {
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back">
                             <Text style={styles.backBtnText}>← Back</Text>
                         </Pressable>
+
+                        <Text style={styles.tosText}>
+                            By joining you agree to our{' '}
+                            <Text style={styles.tosLink} onPress={() => Linking.openURL('https://beanpool.org/terms')}>Terms of Service</Text>
+                            {' '}and{' '}
+                            <Text style={styles.tosLink} onPress={() => Linking.openURL('https://beanpool.org/privacy')}>Privacy Policy</Text>.
+                        </Text>
                     </View>
                 </ScrollView>
                 </KeyboardAvoidingView>
@@ -831,7 +1019,7 @@ export default function WelcomeScreen() {
             <View style={{ flex: 1, justifyContent: 'center', padding: 24, alignItems: 'center' }}>
                 <Text style={styles.headerTitle}>Welcome to BeanPool</Text>
                 <Text style={styles.headerSubtitle}>
-                    Your identity is yours. It lives on this device, backed by hardware cryptography — no passwords, no central accounts.
+                    Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.
                 </Text>
 
                 <Pressable style={styles.memberBtn} onPress={() => setMode('member')} accessibilityRole="button">
@@ -841,6 +1029,12 @@ export default function WelcomeScreen() {
                 <Pressable style={styles.secondaryBtn} onPress={() => setMode('create')} accessibilityRole="button">
                     <Text style={styles.secondaryBtnText}>I'm New Here</Text>
                 </Pressable>
+
+                {clipboardMayHaveInvite && (
+                    <Pressable style={styles.clipboardHintBtn} onPress={handleCheckClipboardInvite} accessibilityRole="button">
+                        <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap to check your clipboard</Text>
+                    </Pressable>
+                )}
             </View>
         </SafeAreaView>
     );
@@ -852,6 +1046,12 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
     headerSubtitle: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', marginBottom: 32, lineHeight: 24 },
     card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+    inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
+    inviteVerifiedText: { color: palette.green700 || '#15803d', fontSize: 14, lineHeight: 20 },
+    clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
+    clipboardHintText: { color: palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
+    tosLink: { color: palette.blue600, textDecorationLine: 'underline' },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },

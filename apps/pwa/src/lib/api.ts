@@ -160,6 +160,19 @@ export async function generateInvite(publicKey: string, intendedFor?: string): P
     return request('POST', '/api/invite/generate', { publicKey, intendedFor });
 }
 
+export interface InviteCheck { valid: boolean; reason?: string; inviterCallsign?: string | null; communityName?: string | null }
+// Read-only pre-flight (never consumes). Returns null when unknown (older node,
+// network error) — callers fail open and let redeem give the definitive answer.
+export async function checkInvite(code: string): Promise<InviteCheck | null> {
+    try {
+        const payload = code.startsWith('BP-') && code.length > 20 ? code.slice(3) : code;
+        const data: any = await request('GET', `/api/invite/check?code=${encodeURIComponent(payload)}`);
+        return typeof data?.valid === 'boolean' ? (data as InviteCheck) : null;
+    } catch {
+        return null;
+    }
+}
+
 export async function redeemInvite(code: string, publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {
     return request('POST', '/api/invite/redeem', { code, publicKey, callsign });
 }

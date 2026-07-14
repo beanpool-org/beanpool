@@ -116,7 +116,13 @@ export async function wipeIdentity(): Promise<void> {
     } else {
         await SecureStore.deleteItemAsync(KEY_ID);
     }
-    
+
+    // A wiped device has no half-finished join wizard to resume.
+    try {
+        const { clearPendingOnboarding } = require('./onboarding-state');
+        await clearPendingOnboarding();
+    } catch {}
+
     try {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         const allKeys = await AsyncStorage.getAllKeys();

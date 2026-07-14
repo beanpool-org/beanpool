@@ -820,13 +820,10 @@ function generateShortCode(): string {
 export function generateInvite(inviterPubkey: string, intendedFor?: string): InviteCode | null {
     if (!getMember(inviterPubkey)) return null;
 
-    // Ghost invitation gate: only Resident+ can invite
-    const { tier } = getMemberTrustProfile(inviterPubkey);
-    if (!tier.canInvite) {
-        console.log(`🚫 Ghost invite blocked: ${inviterPubkey.substring(0, 12)} (${tier.name}) attempted to generate invite`);
-        return null;
-    }
-
+    // Every member can invite from day one (tiers are recognition badges and
+    // gate nothing). The old "Ghost gate" here was a no-op — getTier returns
+    // canInvite: true for every tier — and the offline BP- ticket path never
+    // had a tier check anyway; removed rather than half-enforced.
     recordActivity(inviterPubkey);
 
     const code = generateShortCode();
@@ -888,24 +885,47 @@ export function redeemInvite(code: string, publicKey: string, callsign: string):
     return { success: true, member };
 }
 
-export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string): { success: boolean; error?: string; member?: Member } {
+/**
+ * Parse + cryptographically verify an offline BP- ticket WITHOUT consuming it.
+ * Shared by redeemOfflineTicket (which additionally takes the replay lock and
+ * registers the member) and checkInvite (read-only pre-flight for onboarding).
+ */
+function verifyOfflineTicket(ticketB64: string):
+    | { ok: true; inviterPubkey: string; timestamp: number; intendedFor?: string; codeHash: string }
+    | { ok: false; reason: 'unknown_inviter' | 'expired' | 'invalid' | 'malformed'; error: string } {
     try {
         // Support both standard base64 and url-safe base64 by normalizing back to standard
         const normalizedB64 = ticketB64.replace(/-/g, '+').replace(/_/g, '/');
         const ticketStr = Buffer.from(normalizedB64, 'base64').toString('utf8');
         const ticketObj = JSON.parse(ticketStr);
         const { p: payloadStr, s: signatureBase64 } = ticketObj;
-        
-        const payloadObj = JSON.parse(payloadStr);
+
+        // Client format split: the PWA puts the raw JSON payload in `p`; the
+        // native app base64-encodes it. Signature verification must run over
+        // the exact bytes that were signed (the JSON), so decode base64 first.
+        let signedBytes = Buffer.from(payloadStr);
+        let payloadJson = payloadStr;
+        if (!payloadStr.trim().startsWith('{')) {
+            signedBytes = Buffer.from(payloadStr, 'base64');
+            payloadJson = signedBytes.toString('utf8');
+        }
+
+        const payloadObj = JSON.parse(payloadJson);
         const { i: inviterPubkey, t: timestamp, f: intendedFor } = payloadObj;
 
         // 1. Verify Inviter exists (Sybil Protection)
-        if (!getMember(inviterPubkey)) return { success: false, error: 'Inviter is not a formally recognized member of this decentralized mesh' };
+        if (!getMember(inviterPubkey)) return { ok: false, reason: 'unknown_inviter', error: 'Inviter is not a formally recognized member of this decentralized mesh' };
 
-        // 2. Strict Time-To-Live expiration (7 Days limit)
+        // 2. Strict Time-To-Live expiration (7 Days limit). Future-dated
+        // timestamps are rejected too — otherwise a ticket stamped years ahead
+        // would never age past the TTL.
         const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+        const FUTURE_SKEW_MS = 10 * 60 * 1000;
+        if (typeof timestamp !== 'number' || timestamp > Date.now() + FUTURE_SKEW_MS) {
+            return { ok: false, reason: 'invalid', error: 'Offline ticket timestamp is invalid' };
+        }
         if (Date.now() - timestamp > SEVEN_DAYS_MS) {
-            return { success: false, error: 'This offline ticket has expired (maximum 7 days issuance)' };
+            return { ok: false, reason: 'expired', error: 'This offline ticket has expired (maximum 7 days issuance)' };
         }
 
         // 3. Mathematical Cryptographic Validation
@@ -919,16 +939,29 @@ export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, 
 
         const isValid = crypto.verify(
             undefined,
-            Buffer.from(payloadStr),
+            signedBytes,
             publicKeyObject,
             Buffer.from(signatureBase64, 'base64')
         );
 
-        if (!isValid) return { success: false, error: 'Invalid cryptographic signature structure' };
+        if (!isValid) return { ok: false, reason: 'invalid', error: 'Invalid cryptographic signature structure' };
 
-        // 4. One-Time Replay Protection Database Matrix
+        // 4. One-Time Replay Protection key
         // We hash the signature to map it perfectly matching traditional shortcodes in length (16-char max)
         const codeHash = crypto.createHash('sha256').update(signatureBase64).digest('hex').substring(0, 16);
+        return { ok: true, inviterPubkey, timestamp, intendedFor, codeHash };
+    } catch (e) {
+        return { ok: false, reason: 'malformed', error: 'Malformed or broken offline ticket payload' };
+    }
+}
+
+export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string): { success: boolean; error?: string; member?: Member } {
+    try {
+        const verified = verifyOfflineTicket(ticketB64);
+        if (!verified.ok) return { success: false, error: verified.error };
+        const { inviterPubkey, timestamp, intendedFor, codeHash } = verified;
+
+        // One-Time Replay Protection Database Matrix
         const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
         if (existingInvite) {
             if (existingInvite.used_by) return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
@@ -955,7 +988,43 @@ export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, 
     }
 }
 
+export interface InviteCheckResult {
+    valid: boolean;
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed';
+    inviterCallsign?: string | null;
+}
 
+/**
+ * Read-only pre-flight validation of an invite — standard INV- code or offline
+ * BP- ticket payload (clients strip the BP- prefix, matching the redeem API).
+ * Lets onboarding reject a dud invite at Step 1, before the user has been
+ * through the name/photo/seed ceremony. Never consumes or records anything;
+ * the inviter's callsign is only revealed for a currently-valid invite.
+ */
+export function checkInvite(codeOrTicket: string): InviteCheckResult {
+    const raw = (codeOrTicket || '').trim();
+    if (!raw) return { valid: false, reason: 'invalid' };
+
+    // Offline tickets are long base64url payloads; everything short is a code.
+    if (raw.length > 20 && !/^INV-/i.test(raw)) {
+        const verified = verifyOfflineTicket(raw);
+        if (!verified.ok) return { valid: false, reason: verified.reason };
+        const existing = db.prepare("SELECT used_by FROM invite_codes WHERE code COLLATE NOCASE = ?").get(verified.codeHash) as any;
+        if (existing?.used_by) return { valid: false, reason: 'used' };
+        return { valid: true, inviterCallsign: getMember(verified.inviterPubkey)?.callsign ?? null };
+    }
+
+    const invite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(raw) as any;
+    if (!invite) return { valid: false, reason: 'invalid' };
+    if (invite.used_by) return { valid: false, reason: 'used' };
+
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    if (Date.now() - new Date(invite.created_at).getTime() > SEVEN_DAYS_MS) {
+        return { valid: false, reason: 'expired' };
+    }
+
+    return { valid: true, inviterCallsign: getMember(invite.created_by)?.callsign ?? null };
+}
 
 export function getInvitesByMember(pubkey: string): InviteCode[] {
     const rows = db.prepare("SELECT * FROM invite_codes WHERE created_by = ?").all(pubkey) as any[];

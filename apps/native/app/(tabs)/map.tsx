@@ -1037,7 +1037,7 @@ export default function MapScreen() {
                                 <View style={{ marginBottom: 14, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.35)', backgroundColor: 'rgba(245, 158, 11, 0.12)' }}>
                                     <Text style={{ fontWeight: '800', color: palette.amber700 || '#b45309', marginBottom: 4 }}>💡 Contributions First</Text>
                                     <Text style={{ fontSize: 13, lineHeight: 18, color: palette.amber700 || '#b45309' }}>
-                                        New members must list at least one Offer before posting Needs. Let the community know what you can give back — switch to 🟢 Offer above. (Or ask an Elder to vouch for you.)
+                                        New members must list at least one Offer before posting Needs. Let the community know what you can give back — switch to 🟢 Offer above.
                                     </Text>
                                 </View>
                             )}

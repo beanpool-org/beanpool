@@ -1438,7 +1438,7 @@ export default function PostDetailModal() {
                         <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
                             <Text style={[styles.modalTitle, { textAlign: 'center' }]}>🔒 Contribution Required</Text>
                             <Text style={[styles.modalSubtext, { textAlign: 'center' }]}>
-                                To accept Offers or post Needs, first list at least one Offer detailing what you can contribute to the community. (Or ask an Elder to vouch for you.)
+                                To accept Offers or post Needs, first list at least one Offer detailing what you can contribute to the community.
                             </Text>
                             <Pressable
                                 accessibilityRole="button"

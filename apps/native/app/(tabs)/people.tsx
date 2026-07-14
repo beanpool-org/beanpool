@@ -162,7 +162,6 @@ export default function PeopleScreen() {
     const [redeemNodeUrl, setRedeemNodeUrl] = useState('');
     const [redeeming, setRedeeming] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState('');
-    const [canInvite, setCanInvite] = useState(true);
     const [tierName, setTierName] = useState('');
     const [isGuest, setIsGuest] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
@@ -215,7 +214,6 @@ export default function PeopleScreen() {
             AsyncStorage.getItem(`bp_tier_${identity.publicKey}`).then(cached => {
                 if (cached) {
                     const parsed = JSON.parse(cached);
-                    setCanInvite(parsed.tier?.canInvite ?? true);
                     setTierName(parsed.tier?.name ?? '');
                 }
             }).catch(() => {});
@@ -869,31 +867,21 @@ export default function PeopleScreen() {
                             <Text style={styles.sectionHeader}>📤 Invite Someone</Text>
                             <Text style={styles.sectionDesc}>Invite links are single-use and valid for 7 days. If you are offline, a cryptographic voucher ticket will be generated instead.</Text>
 
-                            {!canInvite && (
-                                <View style={{ backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default }}>
-                                    <Text style={{ color: colors.text.secondary, fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
-                                        👻 Invite generation unlocks at <Text style={{ color: colors.accent.primary, fontWeight: '800' }}>Resident</Text> tier.
-                                        Trade on the Marketplace to build trust.
-                                    </Text>
-                                </View>
-                            )}
-
                             <TextInput
                                 placeholder="Who is this invite for? (Optional)"
                                 value={intendedFor}
                                 onChangeText={setIntendedFor}
                                 style={styles.input}
                                 placeholderTextColor={colors.text.muted}
-                                editable={canInvite}
                             />
 
                             <Pressable
                                 accessibilityRole="button"
-                                style={[styles.btnGenerate, (generating || !canInvite) && { opacity: 0.6 }]}
+                                style={[styles.btnGenerate, generating && { opacity: 0.6 }]}
                                 onPress={handleGenerate}
-                                disabled={generating || !canInvite}
+                                disabled={generating}
                             >
-                                <Text style={styles.btnGenerateText}>{!canInvite ? '🔒 Invites Locked' : generating ? 'Generating...' : isOnline ? '✨ Generate Ticket' : '✨ Generate Offline Ticket'}</Text>
+                                <Text style={styles.btnGenerateText}>{generating ? 'Generating...' : isOnline ? '✨ Generate Ticket' : '✨ Generate Offline Ticket'}</Text>
                             </Pressable>
 
                             {newCode ? (

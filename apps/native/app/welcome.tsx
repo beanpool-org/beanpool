@@ -887,6 +887,13 @@ export default function WelcomeScreen() {
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back">
                             <Text style={styles.backBtnText}>← Back</Text>
                         </Pressable>
+
+                        <Text style={styles.tosText}>
+                            By joining you agree to our{' '}
+                            <Text style={styles.tosLink} onPress={() => Linking.openURL('https://beanpool.org/terms')}>Terms of Service</Text>
+                            {' '}and{' '}
+                            <Text style={styles.tosLink} onPress={() => Linking.openURL('https://beanpool.org/privacy')}>Privacy Policy</Text>.
+                        </Text>
                     </View>
                 </ScrollView>
                 </KeyboardAvoidingView>
@@ -1036,6 +1043,8 @@ const styles = StyleSheet.create({
     inviteVerifiedText: { color: palette.green700 || '#15803d', fontSize: 14, lineHeight: 20 },
     clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
     clipboardHintText: { color: palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
+    tosLink: { color: palette.blue600, textDecorationLine: 'underline' },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },

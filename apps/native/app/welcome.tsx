@@ -24,6 +24,10 @@ import { colors, palette } from '../constants/colors';
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
 
+// Some devices (custom ROMs, emulators) have no https handler — swallow the
+// rejection rather than crash with an unhandled promise warning.
+const openLink = (url: string) => Linking.openURL(url).catch((err) => console.warn('Failed to open URL', err));
+
 // Friendly Step-1 rejection copy for a dud invite. Reasons come from
 // /api/invite/check; anything unrecognised falls back to the generic line.
 function inviteProblemMessage(reason?: string): string {
@@ -897,9 +901,9 @@ export default function WelcomeScreen() {
 
                         <Text style={styles.tosText}>
                             By joining you agree to our{' '}
-                            <Text style={styles.tosLink} onPress={() => Linking.openURL('https://beanpool.org/terms')}>Terms of Service</Text>
+                            <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>Terms of Service</Text>
                             {' '}and{' '}
-                            <Text style={styles.tosLink} onPress={() => Linking.openURL('https://beanpool.org/privacy')}>Privacy Policy</Text>.
+                            <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/privacy')}>Privacy Policy</Text>.
                         </Text>
                     </View>
                 </ScrollView>
@@ -1033,7 +1037,7 @@ export default function WelcomeScreen() {
                 <Text style={styles.inviteOnlyHint}>
                     BeanPool is invite-only — you join with an invite from a member.{'\n'}
                     No invite yet? Ask a friend on BeanPool, or find a community near you at{' '}
-                    <Text style={styles.tosLink} onPress={() => Linking.openURL('https://beanpool.org')}>beanpool.org</Text>.
+                    <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org')}>beanpool.org</Text>.
                 </Text>
 
                 {clipboardMayHaveInvite && (

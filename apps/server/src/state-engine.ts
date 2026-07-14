@@ -820,13 +820,10 @@ function generateShortCode(): string {
 export function generateInvite(inviterPubkey: string, intendedFor?: string): InviteCode | null {
     if (!getMember(inviterPubkey)) return null;
 
-    // Ghost invitation gate: only Resident+ can invite
-    const { tier } = getMemberTrustProfile(inviterPubkey);
-    if (!tier.canInvite) {
-        console.log(`🚫 Ghost invite blocked: ${inviterPubkey.substring(0, 12)} (${tier.name}) attempted to generate invite`);
-        return null;
-    }
-
+    // Every member can invite from day one (tiers are recognition badges and
+    // gate nothing). The old "Ghost gate" here was a no-op — getTier returns
+    // canInvite: true for every tier — and the offline BP- ticket path never
+    // had a tier check anyway; removed rather than half-enforced.
     recordActivity(inviterPubkey);
 
     const code = generateShortCode();

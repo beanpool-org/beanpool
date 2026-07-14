@@ -235,6 +235,21 @@ export function WelcomePage({ onComplete }: Props) {
         setError(null);
 
         try {
+            // Pre-flight the invite BEFORE creating an identity — a dud code
+            // should fail here, not after the seed ceremony. A null result
+            // (older node) fails open; redeem stays the definitive check.
+            const { checkInvite } = await import('../lib/api');
+            const check = await checkInvite(trimmedCode);
+            if (check && !check.valid) {
+                setError(check.reason === 'used'
+                    ? 'This invite has already been used — each one works exactly once. Ask whoever invited you for a fresh one.'
+                    : check.reason === 'expired'
+                        ? 'This invite has expired — invites last 7 days. Ask whoever invited you for a fresh one.'
+                        : "That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one.");
+                setLoading(false);
+                return;
+            }
+
             const identity = await createIdentity(trimmedCallsign);
             setPendingIdentity(identity);
             setPendingInviteCode(trimmedCode);

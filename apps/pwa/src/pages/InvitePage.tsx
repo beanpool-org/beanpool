@@ -93,6 +93,21 @@ export function InvitePage({ identity }: Props) {
         setGenerating(true);
         setCopied(false);
         try {
+            // Online first (parity with native): a server-minted INV- code is
+            // short, single-use enforced centrally, and lands in the node's
+            // invite tree. Only fall back to a self-signed offline ticket when
+            // the node can't be reached.
+            try {
+                const res = await generateInvite(identity.publicKey, intendedFor.trim() || undefined);
+                if (res?.invite?.code) {
+                    setNewCode(res.invite.code);
+                    setIntendedFor('');
+                    setShowQR(true);
+                    setInvites(prev => [res.invite, ...prev]);
+                    return;
+                }
+            } catch { /* node unreachable — offline fallback below */ }
+
             const payloadObj = {
                 i: identity.publicKey,
                 t: Date.now(),
@@ -162,46 +177,16 @@ export function InvitePage({ identity }: Props) {
     }
 
     async function handleCopyProxy(code: string) {
-        let shortHash = null;
-        try {
-            const res = await fetch('/api/links/shorten', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ payload: code })
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.hash) shortHash = data.hash;
-            }
-        } catch (e) {
-            console.log('Shortener unreachable, falling back to raw payload');
-        }
-        
-        const inviteUrl = shortHash ? `${window.location.origin}/i/${shortHash}` : `${window.location.origin}/?invite=${code}`;
-        await handleCopy(inviteUrl);
+        // The /api/links/shorten proxy was never implemented server-side; the
+        // full ?invite= URL is the real (and only) format links have ever used.
+        await handleCopy(`${window.location.origin}/?invite=${code}`);
     }
 
     async function handleShare(code: string) {
         const invite = invites.find(i => i.code === code);
         const namePhrase = invite?.intendedFor ? `Hey ${invite.intendedFor}, ` : '';
         
-        // Proxy massive offline payload through shortlink engine
-        let shortHash = null;
-        try {
-            const res = await fetch('/api/links/shorten', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ payload: code })
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.hash) shortHash = data.hash;
-            }
-        } catch (e) {
-            console.log('Shortener unreachable, falling back to raw payload');
-        }
-
-        const inviteUrl = shortHash ? `${window.location.origin}/i/${shortHash}` : `${window.location.origin}/?invite=${code}`;
+        const inviteUrl = `${window.location.origin}/?invite=${code}`;
         const messageText = `Join my BeanPool community node: ${inviteUrl}`;
         
         const shareData = {

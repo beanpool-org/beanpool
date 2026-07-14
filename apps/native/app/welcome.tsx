@@ -1005,7 +1005,7 @@ export default function WelcomeScreen() {
             <View style={{ flex: 1, justifyContent: 'center', padding: 24, alignItems: 'center' }}>
                 <Text style={styles.headerTitle}>Welcome to BeanPool</Text>
                 <Text style={styles.headerSubtitle}>
-                    Your identity is yours. It lives on this device, backed by hardware cryptography — no passwords, no central accounts.
+                    Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.
                 </Text>
 
                 <Pressable style={styles.memberBtn} onPress={() => setMode('member')} accessibilityRole="button">

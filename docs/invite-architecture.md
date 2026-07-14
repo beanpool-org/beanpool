@@ -24,7 +24,9 @@ When the user is connected to the internet or the local mesh network, the app co
 ### The Redemption Flow
 1. **Link Interception:** The invitee clicks the link or scans the QR code.
 2. **Routing (Native App):** If the app is installed, Apple/Android immediately intercepts the link. The app parses the `INV-` code AND extracts the community node URL (`my-node.org`), setting it as the active anchor.
-3. **Routing (Web Trampoline):** If the app is *not* installed, the browser opens the PWA. The PWA detects the `invite` parameter, renders the App Store buttons, and instantly injects the `INV-` code into the clipboard. When the user installs and opens the Native App, it automatically detects the code from the clipboard.
+3. **Routing (Web Trampoline):** If the app is *not* installed, the browser opens the PWA. The PWA detects the `invite` parameter and renders the App Store buttons. The invite survives the store detour by two mechanisms:
+   - **Android — Play Install Referrer:** the Play button's URL carries `referrer=invite=…&server=…`; on first launch the app reads it via the Install Referrer API and drops the user straight into the join wizard with the invite and node pre-filled. No user action needed.
+   - **Clipboard (iOS + fallback):** tapping either store button copies the invite link to the clipboard. On first launch the app's welcome screen offers a one-tap *"Been sent an invite? Tap to check your clipboard"* (the clipboard is only read on that tap), plus a manual **Paste** button on the join screen.
 4. **Registration:** The new user enters their callsign. The app submits the `INV-` code to the active node for validation, instantly registering them to the network.
 
 ---
@@ -45,7 +47,7 @@ When the user is entirely disconnected from the mesh, the app falls back to a se
 
 ### The Redemption Flow
 1. **Link Interception:** The invitee clicks the link or scans the QR code.
-2. **Routing:** Just like the online flow, the link either opens the Native App directly via Universal Links or opens the PWA Trampoline to inject the `BP-` token into the clipboard for a deferred deep link.
+2. **Routing:** Just like the online flow, the link either opens the Native App directly via Universal Links or opens the PWA Trampoline, where the `BP-` token rides the same install-gap mechanisms (Play Install Referrer on Android; clipboard copy + first-launch clipboard check elsewhere).
 3. **Cryptographic Verification:** When the invitee eventually connects to the network and hits "Create Self-Managed Identity", the app sends the raw `BP-` token to the node. The node mathematically verifies the 64-byte signature against the inviter's Public Key, ensuring it hasn't expired (max 7 days), and registers the new member—all without the original inviter ever having to go online!
 
 ---

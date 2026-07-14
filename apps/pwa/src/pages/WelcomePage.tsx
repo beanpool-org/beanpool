@@ -966,10 +966,15 @@ export function WelcomePage({ onComplete }: Props) {
                                     </span>
                                 </a>
 
-                                {/* Google Play Store */}
-                                <a 
+                                {/* Google Play Store — when there's an invite, pack invite+server into
+                                    the store link's `referrer` param: the Play Install Referrer API hands
+                                    it to the app on first launch, so the invite survives the install even
+                                    if the clipboard copy below gets lost along the way. */}
+                                <a
                                     onClick={async () => { try { if (inviteCode) await navigator.clipboard.writeText(`${window.location.origin}/?invite=${inviteCode}`); } catch (e) {} }}
-                                    href="https://play.google.com/store/apps/details?id=org.beanpool.pillar" 
+                                    href={inviteCode
+                                        ? `https://play.google.com/store/apps/details?id=org.beanpool.pillar&referrer=${encodeURIComponent(new URLSearchParams({ invite: inviteCode, server: window.location.origin }).toString())}`
+                                        : 'https://play.google.com/store/apps/details?id=org.beanpool.pillar'}
                                     target="_blank" rel="noopener noreferrer"
                                     style={{
                                         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',

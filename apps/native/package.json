@@ -22,6 +22,7 @@
     "@react-native-community/slider": "^5.1.2",
     "@react-native-picker/picker": "2.11.4",
     "expo": "~55.0.27",
+    "expo-application": "~55.0.16",
     "expo-background-fetch": "~55.0.17",
     "expo-blur": "^55.0.15",
     "expo-build-properties": "^55.0.15",

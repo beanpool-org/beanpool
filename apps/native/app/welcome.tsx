@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, createIdentityFromMnemonic, loadIdentity, BeanPoolIdentity } from '../utils/identity';
@@ -22,7 +22,7 @@ import { buildSignedHeaders } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
-import { normalizeNodeUrl, looksLikeNodeAddress } from '../utils/node-url';
+import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
 
 // Friendly Step-1 rejection copy for a dud invite. Reasons come from
 // /api/invite/check; anything unrecognised falls back to the generic line.
@@ -63,6 +63,40 @@ export default function WelcomeScreen() {
     const [seedCopied, setSeedCopied] = useState(false);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
+    const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
+
+    // The web trampoline copies the invite link to the clipboard before sending
+    // people to the app store, but nothing can read it for them automatically —
+    // so offer a one-tap check on the first screen. hasStringAsync only reports
+    // presence; the clipboard is READ solely on the user's tap (no iOS paste
+    // prompt until then).
+    React.useEffect(() => {
+        if (mode !== 'home') return;
+        Clipboard.hasStringAsync()
+            .then(has => setClipboardMayHaveInvite(!!has))
+            .catch(() => setClipboardMayHaveInvite(false));
+    }, [mode]);
+
+    async function handleCheckClipboardInvite() {
+        try {
+            const content = (await Clipboard.getStringAsync())?.trim() || '';
+            const looksLikeInvite = content.startsWith('BP-') || content.startsWith('INV-') ||
+                (content.startsWith('http') && content.includes('invite='));
+            if (looksLikeInvite) {
+                setProcessingMagicLink(true);
+                await processFullUrl(content);
+                setTimeout(() => setProcessingMagicLink(false), 1500);
+            } else {
+                Alert.alert(
+                    'No invite found',
+                    "Your clipboard doesn't have a BeanPool invite on it. No worries — you can paste or type the code on the next screen.",
+                    [{ text: 'OK', onPress: () => setMode('create') }]
+                );
+            }
+        } catch {
+            setMode('create');
+        }
+    }
 
     const processFullUrl = useCallback(async (fullUrl: string) => {
         if (fullUrl.startsWith('http')) {
@@ -149,6 +183,37 @@ export default function WelcomeScreen() {
                 return;
             }
 
+            // Priority 3 (Android, once ever): Play Install Referrer. An invite
+            // link tapped WITHOUT the app installed detours via the Play Store;
+            // the web trampoline packs invite+server into the store link's
+            // `referrer` param, which Google hands us here on first launch — so
+            // the invite survives the install with no clipboard or retyping.
+            if (Platform.OS === 'android') {
+                const alreadyChecked = await AsyncStorage.getItem('beanpool_install_referrer_checked');
+                if (!alreadyChecked) {
+                    try {
+                        const Application = await import('expo-application');
+                        const referrer = await Application.getInstallReferrerAsync();
+                        await AsyncStorage.setItem('beanpool_install_referrer_checked', 'true');
+                        const inviteMatch = referrer?.match(/(?:^|&)invite=([^&]+)/);
+                        if (inviteMatch && mounted) {
+                            setInviteCode(decodeURIComponent(inviteMatch[1]));
+                            const serverMatch = referrer.match(/(?:^|&)server=([^&]+)/);
+                            const server = serverMatch ? decodeURIComponent(serverMatch[1]) : '';
+                            // Same trust rule as deep links: never accept a
+                            // cleartext-public node origin from an outside source.
+                            if (server && !shouldBlockCleartextNodeUrl(server)) {
+                                setCreateAnchorUrl(server);
+                            }
+                            setMode('create');
+                        }
+                    } catch {
+                        // No Play Services (emulator, de-Googled device) — the
+                        // clipboard offer below is the fallback. Left unchecked
+                        // so a transient failure can retry on the next visit.
+                    }
+                }
+            }
         };
 
         checkAutoIntercept();
@@ -950,6 +1015,12 @@ export default function WelcomeScreen() {
                 <Pressable style={styles.secondaryBtn} onPress={() => setMode('create')} accessibilityRole="button">
                     <Text style={styles.secondaryBtnText}>I'm New Here</Text>
                 </Pressable>
+
+                {clipboardMayHaveInvite && (
+                    <Pressable style={styles.clipboardHintBtn} onPress={handleCheckClipboardInvite} accessibilityRole="button">
+                        <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap to check your clipboard</Text>
+                    </Pressable>
+                )}
             </View>
         </SafeAreaView>
     );
@@ -963,6 +1034,8 @@ const styles = StyleSheet.create({
     card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
     inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
     inviteVerifiedText: { color: palette.green700 || '#15803d', fontSize: 14, lineHeight: 20 },
+    clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
+    clipboardHintText: { color: palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },

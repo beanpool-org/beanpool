@@ -915,8 +915,8 @@ export default function WelcomeScreen() {
                 <StatusBar style="dark" />
                 <View style={{ flex: 1, justifyContent: 'center', padding: 24, alignItems: 'center' }}>
                     <View style={styles.card}>
-                        <Text style={styles.title}>Sign in to your account</Text>
-                        <Text style={styles.subtitle}>Choose how to restore your identity on this device:</Text>
+                        <Text style={styles.title}>🔑 Restore your account</Text>
+                        <Text style={styles.subtitle}>Your account isn't lost — bring it to this device with your 12 recovery words, or with help from your Guardians.</Text>
 
 
 
@@ -1022,19 +1022,29 @@ export default function WelcomeScreen() {
                     Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.
                 </Text>
 
-                <Pressable style={styles.memberBtn} onPress={() => setMode('member')} accessibilityRole="button">
-                    <Text style={styles.memberBtnText}>I'm Already a Member →</Text>
+                {/* Nearly every first launch is a new user (or someone who
+                    downloaded the app without realising it's invite-only), so
+                    joining is THE primary action; restoring an account on a
+                    new phone is the rare case and lives as a quiet link below. */}
+                <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button">
+                    <Text style={styles.memberBtnText}>🎟️ I'm New Here</Text>
                 </Pressable>
 
-                <Pressable style={styles.secondaryBtn} onPress={() => setMode('create')} accessibilityRole="button">
-                    <Text style={styles.secondaryBtnText}>I'm New Here</Text>
-                </Pressable>
+                <Text style={styles.inviteOnlyHint}>
+                    BeanPool is invite-only — you join with an invite from a member.{'\n'}
+                    No invite yet? Ask a friend on BeanPool, or find a community near you at{' '}
+                    <Text style={styles.tosLink} onPress={() => Linking.openURL('https://beanpool.org')}>beanpool.org</Text>.
+                </Text>
 
                 {clipboardMayHaveInvite && (
                     <Pressable style={styles.clipboardHintBtn} onPress={handleCheckClipboardInvite} accessibilityRole="button">
                         <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap to check your clipboard</Text>
                     </Pressable>
                 )}
+
+                <Pressable style={styles.restoreLink} onPress={() => setMode('member')} accessibilityRole="button">
+                    <Text style={styles.restoreLinkText}>New phone, or reinstalled the app? Restore my account →</Text>
+                </Pressable>
             </View>
         </SafeAreaView>
     );
@@ -1052,6 +1062,9 @@ const styles = StyleSheet.create({
     clipboardHintText: { color: palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
     tosLink: { color: palette.blue600, textDecorationLine: 'underline' },
+    inviteOnlyHint: { fontSize: 13, color: colors.text.secondary, textAlign: 'center', lineHeight: 19, marginTop: 4, paddingHorizontal: 8 },
+    restoreLink: { marginTop: 28, padding: 8 },
+    restoreLinkText: { color: palette.gray600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },

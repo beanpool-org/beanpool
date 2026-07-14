@@ -2033,8 +2033,24 @@ export async function startHttpsServer(port: number): Promise<void> {
     // Read-only pre-flight: lets onboarding reject a dud invite at Step 1 (before
     // the name/photo/seed ceremony) and greet the invitee with who invited them.
     // Never consumes the invite; inviter callsign only returned for valid codes.
+    // Own rate bucket: this is a public pre-membership endpoint, and behind a
+    // shared tunnel/proxy IP it must never drain the admin-auth limiter's pool.
+    const inviteCheckAttempts = new Map<string, { count: number; resetAt: number }>();
     router.get('/api/invite/check', async (ctx) => {
-        if (!rateLimit(ctx)) return;
+        const ip = ctx.ip || 'unknown';
+        const now = Date.now();
+        const entry = inviteCheckAttempts.get(ip);
+        if (entry && now < entry.resetAt) {
+            if (entry.count >= 30) {
+                ctx.status = 429;
+                ctx.body = { error: 'Too many attempts. Try again shortly.' };
+                return;
+            }
+            entry.count++;
+        } else {
+            if (inviteCheckAttempts.size > 10_000) inviteCheckAttempts.clear();
+            inviteCheckAttempts.set(ip, { count: 1, resetAt: now + 60_000 });
+        }
         const code = ((ctx.query.code as string) || '').trim();
         if (!code) {
             ctx.status = 400;

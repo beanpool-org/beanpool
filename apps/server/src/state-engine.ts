@@ -900,14 +900,30 @@ function verifyOfflineTicket(ticketB64: string):
         const ticketObj = JSON.parse(ticketStr);
         const { p: payloadStr, s: signatureBase64 } = ticketObj;
 
-        const payloadObj = JSON.parse(payloadStr);
+        // Client format split: the PWA puts the raw JSON payload in `p`; the
+        // native app base64-encodes it. Signature verification must run over
+        // the exact bytes that were signed (the JSON), so decode base64 first.
+        let signedBytes = Buffer.from(payloadStr);
+        let payloadJson = payloadStr;
+        if (!payloadStr.trim().startsWith('{')) {
+            signedBytes = Buffer.from(payloadStr, 'base64');
+            payloadJson = signedBytes.toString('utf8');
+        }
+
+        const payloadObj = JSON.parse(payloadJson);
         const { i: inviterPubkey, t: timestamp, f: intendedFor } = payloadObj;
 
         // 1. Verify Inviter exists (Sybil Protection)
         if (!getMember(inviterPubkey)) return { ok: false, reason: 'unknown_inviter', error: 'Inviter is not a formally recognized member of this decentralized mesh' };
 
-        // 2. Strict Time-To-Live expiration (7 Days limit)
+        // 2. Strict Time-To-Live expiration (7 Days limit). Future-dated
+        // timestamps are rejected too — otherwise a ticket stamped years ahead
+        // would never age past the TTL.
         const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+        const FUTURE_SKEW_MS = 10 * 60 * 1000;
+        if (typeof timestamp !== 'number' || timestamp > Date.now() + FUTURE_SKEW_MS) {
+            return { ok: false, reason: 'invalid', error: 'Offline ticket timestamp is invalid' };
+        }
         if (Date.now() - timestamp > SEVEN_DAYS_MS) {
             return { ok: false, reason: 'expired', error: 'This offline ticket has expired (maximum 7 days issuance)' };
         }
@@ -923,7 +939,7 @@ function verifyOfflineTicket(ticketB64: string):
 
         const isValid = crypto.verify(
             undefined,
-            Buffer.from(payloadStr),
+            signedBytes,
             publicKeyObject,
             Buffer.from(signatureBase64, 'base64')
         );

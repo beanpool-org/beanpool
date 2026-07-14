@@ -2735,16 +2735,19 @@ export async function checkInvite(code: string, nodeUrl: string): Promise<Invite
         const payload = isOfflineTicket ? code.slice(3) : code;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(`${nodeUrl}/api/invite/check?code=${encodeURIComponent(payload)}`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-            signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        if (!res.ok) return null;
-        const data = await res.json();
-        if (typeof data?.valid !== 'boolean') return null;
-        return data;
+        try {
+            const res = await fetch(`${nodeUrl}/api/invite/check?code=${encodeURIComponent(payload)}`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                signal: controller.signal,
+            });
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (typeof data?.valid !== 'boolean') return null;
+            return data;
+        } finally {
+            clearTimeout(timeoutId);
+        }
     } catch {
         return null;
     }

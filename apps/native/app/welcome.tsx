@@ -272,6 +272,13 @@ export default function WelcomeScreen() {
             setError("That node address doesn't look right. Use something like node.yourcommunity.org");
             return;
         }
+        // Choke point for EVERY node-url source (pasted links, clipboard,
+        // manual entry): same cleartext-public rule as deep links — an http://
+        // public node would expose keys and messages to interception.
+        if (shouldBlockCleartextNodeUrl(nodeUrl)) {
+            setError('That node address is insecure (http on a public host). Ask your inviter for the https:// address.');
+            return;
+        }
 
         setLoading(true);
         setError(null);

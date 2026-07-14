@@ -64,7 +64,13 @@ export default function RecoverIdentityScreen() {
         try {
             // 1. Generate new identity locally (which also saves it)
             const newId = await createIdentity(selectedProfile.callsign);
-            
+
+            // Guardian recovery supersedes any half-finished join wizard on this
+            // device — drop the rescue record so the gatekeeper doesn't bounce
+            // this user back into onboarding while they wait for approval.
+            const { clearPendingOnboarding } = await import('../utils/onboarding-state');
+            await clearPendingOnboarding();
+
             // Update global identity context immediately so node status and layouts align
             setIdentity(newId);
             

@@ -14,6 +14,7 @@ import { normaliseInviteCode, extractInviteToken, extractNodeOrigin } from '../u
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
+import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
@@ -90,6 +91,21 @@ function RootLayoutNav() {
 
     const [isLocked, setIsLocked] = useState(false);
     const [appLockChecked, setAppLockChecked] = useState(false);
+
+    // null = not yet loaded; true = a join wizard was interrupted after the
+    // keypair was created but before the invite was redeemed. While true, the
+    // identity is a stranger to every node BY DESIGN — route back into the
+    // wizard, never to node-mismatch (see utils/onboarding-state.ts).
+    const [pendingOnboarding, setPendingOnboardingFlag] = useState<boolean | null>(null);
+    useEffect(() => {
+        let mounted = true;
+        const refresh = () => {
+            getPendingOnboarding().then(p => { if (mounted) setPendingOnboardingFlag(!!p); });
+        };
+        refresh();
+        const unsubscribe = subscribePendingOnboarding(refresh);
+        return () => { mounted = false; unsubscribe(); };
+    }, []);
 
     const triggerUnlock = async () => {
         const success = await authenticateUser('Unlock BeanPool');
@@ -208,33 +224,45 @@ function RootLayoutNav() {
             extractedNodeOrigin = null;
         }
 
-        // Case 1: No active identity (New user onboarding or completely wiped DB)
-        if (!identity) {
-            if (isComponentMounted.current) {
-                const rootSegment = (segments as string[])[0];
-                if (rootSegment === 'welcome') {
-                    router.setParams({
+        const routeToWelcomeWithInvite = () => {
+            if (!isComponentMounted.current) return;
+            const rootSegment = (segments as string[])[0];
+            if (rootSegment === 'welcome') {
+                router.setParams({
+                    invite: parsedCode,
+                    server: extractedNodeOrigin || undefined,
+                    t: Date.now().toString()
+                });
+            } else {
+                router.replace({
+                    pathname: '/welcome',
+                    params: {
                         invite: parsedCode,
                         server: extractedNodeOrigin || undefined,
                         t: Date.now().toString()
-                    });
-                } else {
-                    router.replace({
-                        pathname: '/welcome',
-                        params: {
-                            invite: parsedCode,
-                            server: extractedNodeOrigin || undefined,
-                            t: Date.now().toString()
-                        }
-                    });
-                }
+                    }
+                });
             }
+        };
+
+        // Case 1: No active identity (New user onboarding or completely wiped DB)
+        if (!identity) {
+            routeToWelcomeWithInvite();
             return;
         }
 
         // Case 2: User has active identity (Logged in)
-        AsyncStorage.getItem('beanpool_anchor_url').then(current => {
+        AsyncStorage.getItem('beanpool_anchor_url').then(async current => {
             if (!isComponentMounted.current) return;
+
+            // Half-finished join wizard: the identity exists on-device but was
+            // never registered with any node, so a fresh invite should flow into
+            // the wizard like a new user's — not the member node-switch dialogs.
+            if (await getPendingOnboarding()) {
+                routeToWelcomeWithInvite();
+                return;
+            }
+
             const targetOrigin = extractedNodeOrigin || current;
             if (!targetOrigin) return;
 
@@ -380,6 +408,17 @@ function RootLayoutNav() {
             return;
         }
 
+        // Identity exists but the join wizard never finished (the invite is only
+        // redeemed at the final step), so no node recognises this key yet. Send
+        // the user back into the wizard to finish joining — a brand-new user on
+        // node-mismatch ("this community doesn't recognise you") reads it as
+        // "my account is gone". Don't route at all until the flag has loaded.
+        if (pendingOnboarding === null) return;
+        if (pendingOnboarding) {
+            if (root !== 'welcome') router.replace('/welcome');
+            return;
+        }
+
         // Reset the one-shot recovery prompt whenever we're no longer in a
         // 'recovering' state, so a future genuine recovery alert can prompt again.
         if (recognition !== 'recovering') recoveryNavPrompted.current = false;
@@ -426,7 +465,7 @@ function RootLayoutNav() {
         if ((segments as string[]).length === 0 || root === 'welcome') {
             router.replace('/(tabs)');
         }
-    }, [identity, isLoading, segments, recognition]);
+    }, [identity, isLoading, segments, recognition, pendingOnboarding]);
 
     // Register for push notifications when identity is available
     useEffect(() => {

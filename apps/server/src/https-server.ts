@@ -49,7 +49,7 @@ import {
     pausePost, resumePost, getMarketplaceTransactions,
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
     getCommunityInfo, addWsClient, removeWsClient,
-    generateInvite, redeemInvite, redeemOfflineTicket, getInviteTree, getInvitesByMember,
+    generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
     vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer,
     updateProfile, getProfile, getAllProfiles,
@@ -202,6 +202,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/commons/projects',         // community transparency
     '/api/commons/rounds',           // community transparency
     '/api/crowdfund/projects',       // public crowdfund list
+    '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -2027,6 +2028,24 @@ export async function startHttpsServer(port: number): Promise<void> {
             return;
         }
         ctx.body = { success: true, member: result.member };
+    });
+
+    // Read-only pre-flight: lets onboarding reject a dud invite at Step 1 (before
+    // the name/photo/seed ceremony) and greet the invitee with who invited them.
+    // Never consumes the invite; inviter callsign only returned for valid codes.
+    router.get('/api/invite/check', async (ctx) => {
+        if (!rateLimit(ctx)) return;
+        const code = ((ctx.query.code as string) || '').trim();
+        if (!code) {
+            ctx.status = 400;
+            ctx.body = { error: 'code is required' };
+            return;
+        }
+        const config = getLocalConfig();
+        ctx.body = {
+            ...checkInvite(code),
+            communityName: config.communityName || config.callsign || null,
+        };
     });
 
     router.get('/api/invite/tree', async (ctx) => {

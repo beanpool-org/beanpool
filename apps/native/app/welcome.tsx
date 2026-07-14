@@ -2,9 +2,13 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
-import { createIdentity, createIdentityFromMnemonic, BeanPoolIdentity } from '../utils/identity';
+import { createIdentity, createIdentityFromMnemonic, loadIdentity, BeanPoolIdentity } from '../utils/identity';
 import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
+import { useNodeStatus } from './NodeStatusContext';
+import {
+    getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding,
+} from '../utils/onboarding-state';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useGlobalSearchParams, router } from 'expo-router';
@@ -20,10 +24,26 @@ import { colors, palette } from '../constants/colors';
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { normalizeNodeUrl, looksLikeNodeAddress } from '../utils/node-url';
 
+// Friendly Step-1 rejection copy for a dud invite. Reasons come from
+// /api/invite/check; anything unrecognised falls back to the generic line.
+function inviteProblemMessage(reason?: string): string {
+    switch (reason) {
+        case 'used':
+            return 'This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).';
+        case 'expired':
+            return 'This invite has expired — invites last 7 days. Ask whoever invited you to send a fresh one (it only takes them a minute).';
+        case 'unknown_inviter':
+            return "This community doesn't know the person who made this invite. Double-check you're joining the right community, or ask for a fresh invite.";
+        default:
+            return "That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.";
+    }
+}
+
 export default function WelcomeScreen() {
     const params = useGlobalSearchParams();
     const incomingUrl = Linking.useURL();
     const { setIdentity } = useIdentity();
+    const { recheck: recheckNodeStatus } = useNodeStatus();
     const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide'>('home');
     const [callsign, setCallsign] = useState('');
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
@@ -41,6 +61,8 @@ export default function WelcomeScreen() {
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
+    const [inviterName, setInviterName] = useState<string | null>(null);
+    const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
 
     const processFullUrl = useCallback(async (fullUrl: string) => {
         if (fullUrl.startsWith('http')) {
@@ -134,6 +156,34 @@ export default function WelcomeScreen() {
         return () => { mounted = false; };
     }, [params?.invite, params?.t, incomingUrl]);
 
+    // Resume a join wizard that was interrupted after the keypair was created
+    // (Step 1) but before the invite was redeemed (final step). Without this,
+    // the half-registered identity strands the user on node-mismatch at next
+    // launch. A fresh incoming invite link outranks a stale half-done wizard.
+    React.useEffect(() => {
+        let mounted = true;
+        (async () => {
+            if (params?.invite || (incomingUrl && incomingUrl.includes('invite='))) return;
+            const pending = await getPendingOnboarding();
+            if (!pending || !mounted) return;
+            const stored = await loadIdentity();
+            if (!stored) {
+                // Keypair never made it to storage — nothing to resume.
+                await clearPendingOnboarding();
+                return;
+            }
+            if (!mounted) return;
+            setCallsign(pending.callsign || stored.callsign);
+            setInviteCode(pending.inviteCode);
+            setPendingInviteCode(pending.inviteCode);
+            if (pending.anchorUrl) setCreateAnchorUrl(pending.anchorUrl);
+            if (pending.avatar) setPendingAvatar(pending.avatar);
+            if (pending.step !== 'create') setPendingIdentity(stored);
+            setMode(pending.step);
+        })();
+        return () => { mounted = false; };
+    }, []);
+
     async function handleCreate() {
         if (!inviteCode.trim()) {
             setError('An invite code is required to join the network.');
@@ -161,12 +211,35 @@ export default function WelcomeScreen() {
         setLoading(true);
         setError(null);
         try {
+            const parsedCode = normaliseInviteCode(rawInvite);
+
+            // Pre-flight the invite BEFORE creating an identity — a dud code
+            // should fail here, not after the name/photo/seed ceremony. A null
+            // result (node unreachable / older node) fails open; redeemInvite
+            // at the final step stays the definitive check.
+            const { checkInvite } = await import('../utils/db');
+            const check = await checkInvite(parsedCode, nodeUrl);
+            if (check && !check.valid) {
+                setError(inviteProblemMessage(check.reason));
+                return;
+            }
+            setInviterName(check?.inviterCallsign || null);
+            setInviteCommunityName(check?.communityName || null);
+
             await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
 
-            const parsedCode = normaliseInviteCode(rawInvite);
             const identity = await createIdentity(callsign.trim());
             setPendingIdentity(identity);
             setPendingInviteCode(parsedCode);
+            // A keypair now exists on-device but the node doesn't know it yet —
+            // record the wizard so an interrupted join resumes instead of
+            // stranding the user (see utils/onboarding-state.ts).
+            await setPendingOnboarding({
+                step: 'profileSetup',
+                inviteCode: parsedCode,
+                anchorUrl: nodeUrl,
+                callsign: callsign.trim(),
+            });
             // Go to avatar selection (Step 2) instead of seed phrase
             setMode('profileSetup');
         } catch (err: any) {
@@ -220,6 +293,17 @@ export default function WelcomeScreen() {
                 }
             }
 
+            // Wizard complete: the member now exists on the node, so the
+            // half-registered-identity rescue record can go, and the seed
+            // backup the user confirmed at Step 3 counts as backed up (this
+            // also stops the Settings red-dot nag from firing 24h later).
+            await clearPendingOnboarding();
+            await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
+
+            // Refresh node recognition — on a resumed wizard it is still the
+            // stale pre-redeem 'stranger', which would pin us to this screen.
+            await recheckNodeStatus().catch(() => {});
+
             // Final step — enter the app
             setIdentity(pendingIdentity);
         } catch (err: any) {
@@ -256,6 +340,10 @@ export default function WelcomeScreen() {
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
 
             const identity = await createIdentityFromMnemonic(words, recoveryCallsign.trim());
+            // Recovering an existing account supersedes any half-finished join
+            // wizard on this device — drop the rescue record so the gatekeeper
+            // doesn't bounce a recovered member back into onboarding.
+            await clearPendingOnboarding();
             setIdentity(identity);
         } catch (err) {
             setError('Recovery failed. Check words and try again.');
@@ -317,6 +405,7 @@ export default function WelcomeScreen() {
                     setPendingAvatar(null);
                     setSeedConfirmed(false);
                     setSeedCopied(false);
+                    updatePendingOnboarding({ step: 'create', avatar: null }).catch(() => {});
                     setMode('create');
                     setError(null);
                 }},
@@ -355,6 +444,8 @@ export default function WelcomeScreen() {
             // member is registered (handleConfirmSeed), with the pillar-sync heal as a backstop.
             await AsyncStorage.setItem('pending_profile_sync', 'true');
 
+            await updatePendingOnboarding({ step: 'seedBackup', avatar: pendingAvatar });
+
             // 3. Profile done — go to seed phrase (Step 3) instead of entering app
             setMode('seedBackup');
         } catch (err: any) {
@@ -372,9 +463,17 @@ export default function WelcomeScreen() {
                 <ScrollView contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={2} />
                     <View style={styles.card}>
+                        {inviterName && (
+                            <View style={styles.inviteVerifiedBox}>
+                                <Text style={styles.inviteVerifiedText}>
+                                    🎟️ Your invite from <Text style={{ fontWeight: 'bold' }}>{inviterName}</Text> checks out
+                                    {inviteCommunityName ? <Text> — welcome to <Text style={{ fontWeight: 'bold' }}>{inviteCommunityName}</Text>!</Text> : <Text>!</Text>}
+                                </Text>
+                            </View>
+                        )}
                         <Text style={styles.title}>📸 Choose your look</Text>
                         <Text style={styles.subtitle}>
-                            Pick a profile picture so your community knows you.
+                            Add a photo, or pick a fun avatar — whatever feels like you.
                         </Text>
 
                         {/* Preview circle */}
@@ -405,7 +504,7 @@ export default function WelcomeScreen() {
                             accessibilityRole="button"
                         >
                             <Text style={styles.secondaryBtnText}>
-                                {pendingAvatar ? 'Change Photo' : 'Choose Photo'}
+                                {pendingAvatar ? 'Change Photo or Avatar' : 'Choose Photo or Avatar'}
                             </Text>
                         </Pressable>
 
@@ -433,7 +532,10 @@ export default function WelcomeScreen() {
 
                         <Pressable
                             style={styles.backBtn}
-                            onPress={() => { setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setShowAvatarPicker(false); setError(null); }}
+                            onPress={() => {
+                                updatePendingOnboarding({ step: 'create', avatar: null }).catch(() => {});
+                                setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setShowAvatarPicker(false); setError(null);
+                            }}
                             disabled={loading}
                             accessibilityRole="button"
                             accessibilityLabel="Back"
@@ -503,7 +605,10 @@ export default function WelcomeScreen() {
                         <Pressable
                             style={[styles.primaryBtn, !seedConfirmed && styles.disabledBtn]}
                             disabled={!seedConfirmed || loading}
-                            onPress={() => setMode('onboardingGuide')}
+                            onPress={() => {
+                                updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
+                                setMode('onboardingGuide');
+                            }}
                             accessibilityRole="button"
                         >
                             <Text style={styles.primaryBtnText}>Next →</Text>
@@ -624,7 +729,11 @@ export default function WelcomeScreen() {
 
                         <Pressable
                             style={styles.backBtn}
-                            onPress={() => { setMode('seedBackup'); setError(null); }}
+                            onPress={() => {
+                                updatePendingOnboarding({ step: 'seedBackup' }).catch(() => {});
+                                setMode('seedBackup');
+                                setError(null);
+                            }}
                             disabled={loading}
                             accessibilityRole="button"
                         >
@@ -852,6 +961,8 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
     headerSubtitle: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', marginBottom: 32, lineHeight: 24 },
     card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+    inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
+    inviteVerifiedText: { color: palette.green700 || '#15803d', fontSize: 14, lineHeight: 20 },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },

@@ -2718,6 +2718,38 @@ export async function createConversationApi(type: 'dm' | 'group', participants: 
     }
 }
 
+export interface InviteCheck {
+    valid: boolean;
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed';
+    inviterCallsign?: string | null;
+    communityName?: string | null;
+}
+
+// Pre-flight invite validation (Step 1 of onboarding), so a dud code fails
+// before the user has done the name/photo/seed ceremony. Returns null when the
+// answer is unknown (node unreachable, or an older node without the endpoint) —
+// callers must fail OPEN and let redeemInvite give the definitive answer later.
+export async function checkInvite(code: string, nodeUrl: string): Promise<InviteCheck | null> {
+    try {
+        const isOfflineTicket = code.startsWith('BP-') && code.length > 20;
+        const payload = isOfflineTicket ? code.slice(3) : code;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(`${nodeUrl}/api/invite/check?code=${encodeURIComponent(payload)}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (typeof data?.valid !== 'boolean') return null;
+        return data;
+    } catch {
+        return null;
+    }
+}
+
 export async function redeemInvite(code: string, callsign: string, identityToRegister?: any): Promise<boolean> {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || (__DEV__ ? 'https://127.0.0.1:8443' : '');

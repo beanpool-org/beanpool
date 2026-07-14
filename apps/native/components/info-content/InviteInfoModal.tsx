@@ -142,16 +142,16 @@ export function InviteInfoModal({ isOpen, onClose }: Props) {
                     </Text>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>HOW TO GET INVITES</Text>
+                        <Text style={styles.cardLabel}>WHO CAN INVITE</Text>
                         <Text style={styles.cardText}>
-                            You unlock the ability to invite new members once you reach the <Text style={styles.boldWhiteText}>Vine Tier</Text> (<Text style={styles.boldWhiteText}>2,000 total volume cycled</Text>). The more you trade, the more invite slots you earn over time.
+                            <Text style={styles.boldWhiteText}>Every member can invite, from day one.</Text> Each invite is a single-use code that lasts <Text style={styles.boldWhiteText}>7 days</Text> — generate as many as you need.
                         </Text>
                     </View>
 
                     <View style={styles.warningBox}>
                         <Text style={styles.warningIcon}>⚠️</Text>
                         <Text style={styles.warningText}>
-                            Your reputation is tied to the people you invite. If you invite someone who scams the community, your own floor limit and tier may be <Text style={styles.boldWhiteText}>penalized</Text>!
+                            You are permanently linked as the inviter of everyone you bring in — the community's invite tree is <Text style={styles.boldWhiteText}>public</Text>. Invite people you'd vouch for in real life.
                         </Text>
                     </View>
                 </View>

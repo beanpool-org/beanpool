@@ -663,7 +663,7 @@ export function WelcomePage({ onComplete }: Props) {
                                         🟢 <strong>The best place to be is zero (0 Beans).</strong> This means you have given as much value to your community as you have received from it.
                                     </div>
                                     <div className="mt-3 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs leading-normal">
-                                        🫘 <strong>Contributions First.</strong> To keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others. (Or ask an Elder to vouch for you.)
+                                        🫘 <strong>Contributions First.</strong> To keep the credit pool healthy, you must list at least one Offer of what you can give back before you can post Needs or accept Offers from others.
                                     </div>
                                 </div>
 
@@ -676,7 +676,7 @@ export function WelcomePage({ onComplete }: Props) {
                                         <div>
                                             <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Trust-Backed Credit</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                                                Every member starts with a 0 Bean limit. Perform at least one trade in a positive balance to unlock your first -80 Bean credit achievement. As you complete milestones and grow your community trust level, your negative credit limit expands further. No interest, no bank fees.
+                                                Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
                                             </p>
                                         </div>
                                     </div>

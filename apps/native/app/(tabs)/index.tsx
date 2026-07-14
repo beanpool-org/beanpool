@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { getPosts, getMarketplaceTransactions, reportAbuse } from '../../utils/db';
+import { getPosts, getMarketplaceTransactions, reportAbuse, getBalance } from '../../utils/db';
 import { getLastSyncTime, requestSync } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
@@ -94,6 +94,33 @@ function getDistanceInKm(lat1: number, lon1: number, lat2: number, lon2: number)
 export default function MarketScreen() {
     const { theme, colors } = useTheme();
     const { identity } = useIdentity();
+
+    // Contributions-First quest card: shown until the member has listed their
+    // first Offer (the gate that unlocks posting Needs / accepting Offers), so
+    // the rule reads as a friendly next step here instead of being discovered
+    // through a rejection modal mid-trade. Re-checked on every focus, so it
+    // disappears the moment their first Offer is posted.
+    const [showFirstOfferQuest, setShowFirstOfferQuest] = useState(false);
+    useFocusEffect(
+        React.useCallback(() => {
+            let cancelled = false;
+            (async () => {
+                if (!identity?.publicKey) return;
+                if (await AsyncStorage.getItem('beanpool_first_offer_quest_dismissed')) return;
+                try {
+                    const b: any = await getBalance(identity.publicKey);
+                    if (!cancelled) setShowFirstOfferQuest(!!b?.isBlockedFromTrading);
+                } catch {
+                    // Unknown (offline / old node) — don't show the card on a guess.
+                }
+            })();
+            return () => { cancelled = true; };
+        }, [identity?.publicKey])
+    );
+    const dismissFirstOfferQuest = () => {
+        setShowFirstOfferQuest(false);
+        AsyncStorage.setItem('beanpool_first_offer_quest_dismissed', 'true').catch(() => {});
+    };
     const [filter, setFilter] = useState<'all' | 'needs' | 'offers' | 'for-you'>('all');
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -1273,6 +1300,28 @@ export default function MarketScreen() {
             <View style={{ paddingTop: 8, paddingBottom: 0 }}>
                 {HeaderComponent}
             </View>
+            {showFirstOfferQuest && (
+                <View style={{ marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.4)', backgroundColor: 'rgba(245, 158, 11, 0.10)', padding: 14 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.heading, flex: 1 }}>
+                            🫘 Welcome{identity?.callsign ? `, ${identity.callsign}` : ''}! One step to unlock trading
+                        </Text>
+                        <Pressable onPress={dismissFirstOfferQuest} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
+                            <Text style={{ fontSize: 15, color: colors.text.secondary, fontWeight: '700', paddingLeft: 8 }}>✕</Text>
+                        </Pressable>
+                    </View>
+                    <Text style={{ fontSize: 13.5, color: colors.text.body, lineHeight: 19, marginTop: 4 }}>
+                        List one Offer — anything you can give: a skill, produce, tools, a lift. That unlocks accepting Offers and posting Needs.
+                    </Text>
+                    <Pressable
+                        style={{ marginTop: 10, backgroundColor: palette.amber500, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
+                        onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                        accessibilityRole="button"
+                    >
+                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>➕ Post your first Offer</Text>
+                    </Pressable>
+                </View>
+            )}
             <FlatList
                 key={viewMode}
                 numColumns={viewMode === 'grid' ? 2 : 1}

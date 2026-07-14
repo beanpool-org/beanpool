@@ -720,7 +720,7 @@ export default function WelcomeScreen() {
                             </View>
                             <View style={[guideStyles.highlightBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.35)' }]}>
                                 <Text style={[guideStyles.highlightText, { color: palette.amber700 || '#b45309' }]}>
-                                    🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> To keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers. (Or ask an Elder to vouch for you.)
+                                    🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> To keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.
                                 </Text>
                             </View>
                         </View>
@@ -734,7 +734,7 @@ export default function WelcomeScreen() {
                                 <View style={guideStyles.bulletContent}>
                                     <Text style={guideStyles.bulletTitle}>Trust-Backed Credit</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        Every member starts with a 0 Bean limit. Perform at least one trade in a positive balance to unlock your first -80 Bean credit achievement. As you complete milestones and grow your community trust level, your negative credit limit expands further. No interest, no bank fees.
+                                        Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
                                     </Text>
                                 </View>
                             </View>

@@ -462,32 +462,52 @@ export default function ChatScreen() {
         }
     }, [id, identity, triggerReview]);
 
+    // All deals with this peer, from local SQLite. Re-queried on focus, on the poll,
+    // and on sync events below so a deal written moments after navigation
+    // (e.g. accept-offer → chat) still surfaces without a remount.
+    const loadDeals = useCallback(async () => {
+        if (!identity?.publicKey || !peerPubkey) return;
+        try {
+            const next = await getDealsBetween(identity.publicKey, peerPubkey);
+            // Polled every few seconds — keep the previous reference when nothing
+            // changed so unchanged ticks don't re-render the thread.
+            setDeals(prev => JSON.stringify(prev) === JSON.stringify(next) ? prev : next);
+        } catch (e) {
+            console.warn('[Deals] load failed', e);
+        }
+    }, [identity?.publicKey, peerPubkey]);
+
+    React.useEffect(() => { loadDeals(); }, [loadDeals]);
+
     useFocusEffect(
         useCallback(() => {
             setReplyToMessage(null);
             setEditingMessage(null);
             let interval: ReturnType<typeof setInterval>;
             promptedRef.current = false;
-            
+
             let sub: any = null;
             let wsSub: any = null;
             if (id && identity?.publicKey) {
                 // Initial Load
                 loadConversationData();
                 loadRatedTransactions();
+                loadDeals();
                 loadMessages().then(() => {
                     syncMessages(identity!.publicKey).then(() => {
                         loadConversationData();
                         loadMessages(true);
                         loadRatedTransactions();
+                        loadDeals();
                     });
                 });
-                
+
                 // Background Poll
                 interval = setInterval(() => {
                     syncSingleConversation(id as string).then(() => {
                         loadConversationData();
                         loadMessages(true);
+                        loadDeals();
                     });
                 }, 3000);
 
@@ -496,6 +516,7 @@ export default function ChatScreen() {
                     loadConversationData();
                     loadMessages(true);
                     loadRatedTransactions();
+                    loadDeals();
                 });
 
                 // Fast path: the WebSocket doorbell nudges us to refresh THIS
@@ -506,6 +527,7 @@ export default function ChatScreen() {
                     syncSingleConversation(id as string).then(() => {
                         loadConversationData();
                         loadMessages(true);
+                        loadDeals();
                     });
                 });
             }
@@ -514,7 +536,7 @@ export default function ChatScreen() {
                 if (sub) sub.remove();
                 if (wsSub) wsSub.remove();
             };
-        }, [id, identity, loadConversationData])
+        }, [id, identity, loadConversationData, loadDeals])
     );
 
     const loadMessages = async (isBackgroundPoll = false) => {
@@ -682,17 +704,7 @@ export default function ChatScreen() {
         );
     };
 
-    // ---- Consolidated thread: all deals with this peer + per-deal action handlers ----
-    const loadDeals = React.useCallback(async () => {
-        if (!identity?.publicKey || !peerPubkey) return;
-        try {
-            setDeals(await getDealsBetween(identity.publicKey, peerPubkey));
-        } catch (e) {
-            console.warn('[Deals] load failed', e);
-        }
-    }, [identity?.publicKey, peerPubkey]);
-
-    React.useEffect(() => { loadDeals(); }, [loadDeals]);
+    // ---- Consolidated thread: per-deal action handlers (loadDeals lives above the focus effect) ----
 
     // Pinned-strip deals: live escrow, or a completed deal still awaiting my review.
     const activeDeals = React.useMemo(

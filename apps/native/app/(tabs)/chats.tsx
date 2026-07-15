@@ -198,21 +198,30 @@ export default function ChatsScreen() {
         React.useCallback(() => {
             let active = true;
 
+            // Sync events fire constantly; bail out with the previous reference when the
+            // data hasn't changed so unchanged ticks don't re-render the whole screen.
+            const keepIfSame = <T,>(prev: T, next: T): T =>
+                JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+
             const loadData = () => {
                 if (identity?.publicKey && active) {
                     getConversations(identity.publicKey)
                         .then(res => {
-                            if (active) setConversations(res);
+                            if (active) setConversations(prev => keepIfSame(prev, res));
                         })
                         .catch(console.error);
                     getActionableDeals(identity.publicKey)
                         .then(res => {
-                            if (active) setDeals(res);
+                            if (active) setDeals(prev => keepIfSame(prev, res));
                         })
                         .catch(console.error);
                     getFriendsLocal(identity.publicKey)
                         .then(res => {
-                            if (active) setFriendPubkeys(new Set(res.map((f: any) => f.publicKey)));
+                            if (active) setFriendPubkeys(prev => {
+                                const next = new Set<string>(res.map((f: any) => f.publicKey));
+                                if (prev.size === next.size && [...next].every(k => prev.has(k))) return prev;
+                                return next;
+                            });
                         })
                         .catch(console.error);
                 }
@@ -400,7 +409,11 @@ export default function ChatsScreen() {
         );
     };
 
-    const ListHeader = () => (
+    // Rendered as an ELEMENT (not a component type): defining an inline component and
+    // passing it to ListHeaderComponent gives React a new type every render, which
+    // unmounts/remounts the whole header — replaying avatar image transitions as a
+    // visible flicker on every sync tick. An element reconciles in place.
+    const listHeader = (
         <>
             {actionRequired.length > 0 && (
                 <View style={styles.actionSection}>
@@ -577,7 +590,7 @@ export default function ChatsScreen() {
                 data={regularConversations}
                 keyExtractor={item => item.id}
                 renderItem={renderItem}
-                ListHeaderComponent={ListHeader}
+                ListHeaderComponent={listHeader}
                 contentContainerStyle={styles.list}
                 showsVerticalScrollIndicator={false}
                 ListEmptyComponent={

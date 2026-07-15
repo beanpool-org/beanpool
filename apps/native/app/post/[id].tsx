@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
@@ -292,6 +292,11 @@ export default function PostDetailModal() {
     const { identity } = useIdentity();
     const [activeTx, setActiveTx] = useState<any>(null);
     const [post, setPost] = useState<any>(null);
+    // True only once the post is confirmed absent (local miss + the server-side
+    // check has had time to land). Until then a local miss renders as loading,
+    // not "Post not found".
+    const [postMissing, setPostMissing] = useState(false);
+    const notFoundTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const [editMode, setEditMode] = useState(false);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -347,7 +352,18 @@ export default function PostDetailModal() {
                 const singleId = Array.isArray(id) ? id[0] : id;
                 const singleTxId = Array.isArray(txId) ? txId[0] : txId;
                 const reload = async () => {
-                    getPost(singleId).then(setPost);
+                    getPost(singleId).then(p => {
+                        setPost(p);
+                        if (p) {
+                            if (notFoundTimer.current) { clearTimeout(notFoundTimer.current); notFoundTimer.current = null; }
+                            setPostMissing(false);
+                        } else if (!notFoundTimer.current) {
+                            // Local miss: getPost kicked off a server upsert that emits
+                            // sync_data_updated (→ reload) if the post exists. Declare
+                            // "not found" only after that check has had time to land.
+                            notFoundTimer.current = setTimeout(() => setPostMissing(true), 10000);
+                        }
+                    });
                     
                     let activeIdentity = identity;
                     if (!activeIdentity) {
@@ -442,7 +458,10 @@ export default function PostDetailModal() {
                 
                 const { DeviceEventEmitter } = require('react-native');
                 const sub = DeviceEventEmitter.addListener('sync_data_updated', reload);
-                return () => sub.remove();
+                return () => {
+                    sub.remove();
+                    if (notFoundTimer.current) { clearTimeout(notFoundTimer.current); notFoundTimer.current = null; }
+                };
             }
         }, [id, txId, identity])
     );
@@ -519,6 +538,13 @@ export default function PostDetailModal() {
     }, [identity?.publicKey]);
 
     if (!post) {
+        if (!postMissing) {
+            return (
+                <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
+                    <ActivityIndicator size="large" />
+                </View>
+            );
+        }
         return (
             <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
                 <Text style={styles.errorText}>Post not found. It may have been expired by the Network.</Text>

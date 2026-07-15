@@ -25,8 +25,15 @@ let dbInitPromise: Promise<void> | null = null;
 // Global JS Mutex to prevent expo-sqlite "database is locked" crashes
 // arising from concurrent loops across background Pillar polls and foreground Inbox rendering
 let dbSyncLock = false;
-async function acquireSyncLock() {
-    while (dbSyncLock) await new Promise(r => setTimeout(r, 50));
+async function acquireSyncLock(timeoutMs = 10000) {
+    const deadline = Date.now() + timeoutMs;
+    while (dbSyncLock) {
+        if (Date.now() >= deadline) {
+            console.warn('[DB] acquireSyncLock timed out after', timeoutMs, 'ms — proceeding without lock');
+            break;
+        }
+        await new Promise(r => setTimeout(r, 50));
+    }
     dbSyncLock = true;
 }
 function releaseSyncLock() {
@@ -544,15 +551,23 @@ export async function getPost(id: string) {
                     const { DeviceEventEmitter } = require('react-native');
                     DeviceEventEmitter.emit('sync_data_updated');
                 } else if (Array.isArray(posts) && posts.length === 0) {
-                    // Post was deleted on the server, delete it locally
-                    await acquireSyncLock();
-                    try {
-                        await database.runAsync("DELETE FROM posts WHERE id = ?", [id]);
-                    } finally {
-                        releaseSyncLock();
+                    // Server returned empty — only delete locally if the post has no
+                    // active transaction (pending/requested). Otherwise we'd flash
+                    // "Post not found" mid-deal while the server is still settling.
+                    const localPost = await database.getFirstAsync<{ status: string; pending_transaction_id: string | null }>(
+                        'SELECT status, pending_transaction_id FROM posts WHERE id = ?', [id]
+                    );
+                    const hasActiveDeal = localPost && (localPost.status === 'pending' || localPost.pending_transaction_id);
+                    if (!hasActiveDeal) {
+                        await acquireSyncLock();
+                        try {
+                            await database.runAsync("DELETE FROM posts WHERE id = ?", [id]);
+                        } finally {
+                            releaseSyncLock();
+                        }
+                        const { DeviceEventEmitter } = require('react-native');
+                        DeviceEventEmitter.emit('sync_data_updated');
                     }
-                    const { DeviceEventEmitter } = require('react-native');
-                    DeviceEventEmitter.emit('sync_data_updated');
                 }
             })
             .catch(() => null);
@@ -2969,125 +2984,151 @@ export async function toggleMessageReactionApi(messageId: string, authorPubkey: 
 
 export async function acceptMarketplacePost(postId: string, buyerPublicKey: string, hours?: number) {
     const res = await _signedRequest('/api/marketplace/posts/accept', { postId, buyerPublicKey, hours });
-    await acquireSyncLock();
-    try {
-        const database = await getDb();
-        // Store both accepted_by AND pending_transaction_id from server response
-        const txId = res?.transaction?.id || null;
-        console.log(`[Escrow] Offer accepted — txId=${txId}, postId=${postId}`);
-        const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE id = ?', [postId]);
-        if (postParam?.repeatable !== 1) {
-            await database.runAsync(
-                "UPDATE posts SET status = 'pending', accepted_by = ?, pending_transaction_id = ? WHERE id = ?",
-                [buyerPublicKey, txId, postId]
-            );
-        }
-        
-        // Also store the marketplace transaction locally so completion can find it
-        if (res?.transaction) {
-            const tx = res.transaction;
-            let postTitle: string | null = null;
-            const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
-            if (postRow) postTitle = postRow.title;
-            await database.runAsync(
-                'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
-            );
-        }
-        
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('sync_data_updated');
-    } catch(e) {
-        console.error('[Escrow] acceptMarketplacePost local update failed:', e);
-    } finally {
-        releaseSyncLock();
-    }
 
-    // Refresh buyer balance immediately (escrow just deducted from them) - OUTSIDE critical lock section
-    refreshBalanceFromServer(buyerPublicKey).catch(() => null);
-    
+    // Fire-and-forget: local DB updates run in the background so the caller's
+    // "Processing..." spinner clears as soon as the server confirms acceptance.
+    (async () => {
+        try {
+            await acquireSyncLock();
+            try {
+                const database = await getDb();
+                const txId = res?.transaction?.id || null;
+                console.log(`[Escrow] Offer accepted — txId=${txId}, postId=${postId}`);
+                const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE id = ?', [postId]);
+                if (postParam?.repeatable !== 1) {
+                    await database.runAsync(
+                        "UPDATE posts SET status = 'pending', accepted_by = ?, pending_transaction_id = ? WHERE id = ?",
+                        [buyerPublicKey, txId, postId]
+                    );
+                }
+                
+                if (res?.transaction) {
+                    const tx = res.transaction;
+                    let postTitle: string | null = null;
+                    const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
+                    if (postRow) postTitle = postRow.title;
+                    await database.runAsync(
+                        'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
+                    );
+                }
+                
+                const { DeviceEventEmitter } = require('react-native');
+                DeviceEventEmitter.emit('sync_data_updated');
+            } finally {
+                releaseSyncLock();
+            }
+        } catch(e) {
+            console.error('[Escrow] acceptMarketplacePost local update failed:', e);
+        }
+
+        refreshBalanceFromServer(buyerPublicKey).catch(() => null);
+    })();
+
     return res;
 }
 
 export async function completeMarketplaceTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number) {
     const res = await _signedRequest('/api/marketplace/transactions/complete', { transactionId, confirmerPublicKey, finalHours });
     console.log(`[Escrow] Server complete response: success=${res?.success}, txId=${res?.transaction?.id}`);
-    await acquireSyncLock();
-    try {
-        const database = await getDb();
-        const postParam = await database.getFirstAsync<{ repeatable: number, id: string }>('SELECT id, repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
-        if (postParam && postParam.repeatable !== 1) {
-            await database.runAsync("UPDATE posts SET status = 'completed' WHERE pending_transaction_id = ?", [transactionId]);
+
+    // Fire-and-forget: update local DB + refresh balances in the background.
+    // The server has already committed the transaction, so the caller should not
+    // block on the sync lock (which can be held by a concurrent Pillar Sync
+    // for several seconds, causing the "Processing..." spinner to hang).
+    (async () => {
+        try {
+            await acquireSyncLock();
+            try {
+                const database = await getDb();
+                const postParam = await database.getFirstAsync<{ repeatable: number, id: string }>('SELECT id, repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
+                if (postParam && postParam.repeatable !== 1) {
+                    await database.runAsync("UPDATE posts SET status = 'completed' WHERE pending_transaction_id = ?", [transactionId]);
+                }
+                await database.runAsync("UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?", [new Date().toISOString(), transactionId]);
+                
+                const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
+                const sellerPubkey = res?.transaction?.sellerPublicKey || null;
+                console.log(`[Escrow] Completing: buyer=${buyerPubkey?.slice(0,8)}, seller=${sellerPubkey?.slice(0,8)}, credits=${res?.transaction?.credits}`);
+                
+                // Emit events so Ledger screen refreshes immediately
+                const { DeviceEventEmitter } = require('react-native');
+                DeviceEventEmitter.emit('transaction_completed');
+                DeviceEventEmitter.emit('sync_data_updated');
+                console.log('[Escrow] Events emitted, UI should refresh');
+            } finally {
+                releaseSyncLock();
+            }
+        } catch(e) {
+            console.error('[Escrow] completeMarketplaceTransaction local update failed:', e);
         }
-        await database.runAsync("UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?", [new Date().toISOString(), transactionId]);
-        
-        // Get both pubkeys from the server response (reliable even if local DB hasn't synced)
+
+        // Refresh BOTH parties' balances from server *outside critical lock section*
         const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
         const sellerPubkey = res?.transaction?.sellerPublicKey || null;
-        console.log(`[Escrow] Completing: buyer=${buyerPubkey?.slice(0,8)}, seller=${sellerPubkey?.slice(0,8)}, credits=${res?.transaction?.credits}`);
-        
-        // Emit events so Ledger screen refreshes immediately
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('transaction_completed');
-        DeviceEventEmitter.emit('sync_data_updated');
-        console.log('[Escrow] Events emitted, UI should refresh');
-    } catch(e) {
-        console.error('[Escrow] completeMarketplaceTransaction local update failed:', e);
-    } finally {
-        releaseSyncLock();
-    }
-
-    // Immediately refresh BOTH parties' balances from server *outside critical lock section*
-    const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
-    const sellerPubkey = res?.transaction?.sellerPublicKey || null;
-    if (buyerPubkey) refreshBalanceFromServer(buyerPubkey).catch(() => null);
-    if (sellerPubkey) refreshBalanceFromServer(sellerPubkey).catch(() => null);
+        if (buyerPubkey) refreshBalanceFromServer(buyerPubkey).catch(() => null);
+        if (sellerPubkey) refreshBalanceFromServer(sellerPubkey).catch(() => null);
+    })();
 
     return res;
 }
 
 export async function cancelMarketplaceTransaction(transactionId: string, cancellerPublicKey: string) {
     const res = await _signedRequest('/api/marketplace/transactions/cancel', { transactionId, cancellerPublicKey });
-    await acquireSyncLock();
-    try {
-        const database = await getDb();
-        const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
-        if (postParam && postParam.repeatable !== 1) {
-            await database.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE pending_transaction_id = ?", [transactionId]);
+
+    // Fire-and-forget local DB updates
+    (async () => {
+        try {
+            await acquireSyncLock();
+            try {
+                const database = await getDb();
+                const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
+                if (postParam && postParam.repeatable !== 1) {
+                    await database.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE pending_transaction_id = ?", [transactionId]);
+                }
+                await database.runAsync("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?", [transactionId]);
+                
+                const { DeviceEventEmitter } = require('react-native');
+                DeviceEventEmitter.emit('sync_data_updated');
+            } finally {
+                releaseSyncLock();
+            }
+        } catch(e) {
+            console.error('[Escrow] cancelMarketplaceTransaction local update failed:', e);
         }
-        await database.runAsync("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = ?", [transactionId]);
-        
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('sync_data_updated');
-    } catch(e) {
-        console.error('[Escrow] cancelMarketplaceTransaction local update failed:', e);
-    } finally {
-        releaseSyncLock();
-    }
+    })();
+
     return res;
 }
 
 export async function requestMarketplacePost(postId: string, buyerPublicKey: string, hours?: number) {
     // Unlike 'accept', requesting does not lock the post. It just creates a requested transaction.
     const res = await _signedRequest('/api/marketplace/posts/request', { postId, buyerPublicKey, hours });
-    await acquireSyncLock();
-    try {
-        const database = await getDb();
-        if (res?.transaction) {
-            const tx = res.transaction;
-            let postTitle: string | null = null;
-            const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
-            if (postRow) postTitle = postRow.title;
-            await database.runAsync(
-                'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'requested', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
-            );
+
+    // Fire-and-forget local DB updates
+    (async () => {
+        try {
+            await acquireSyncLock();
+            try {
+                const database = await getDb();
+                if (res?.transaction) {
+                    const tx = res.transaction;
+                    let postTitle: string | null = null;
+                    const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
+                    if (postRow) postTitle = postRow.title;
+                    await database.runAsync(
+                        'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'requested', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
+                    );
+                }
+            } finally {
+                releaseSyncLock();
+            }
+        } catch(e) {
+            console.warn('[Escrow] Failed to save requested transaction locally:', e);
         }
-    } catch(e) {
-        console.warn('[Escrow] Failed to save requested transaction locally:', e);
-    } finally {
-        releaseSyncLock();
-    }
+    })();
+
     return res;
 }
 

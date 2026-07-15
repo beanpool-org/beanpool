@@ -118,9 +118,9 @@ for NODE in "${TARGETS[@]}"; do
     export ADMIN_PASSWORD='${ADMIN_PASSWORD}'
     export CF_TUNNEL_TOKEN='${CF_TUNNEL_TOKEN}'
     if [ "$DIR" = "BeanPool-Review" ]; then
-      # Review node (VIC): tunnel-only
+      # Review node (VIC): tunnel-only HTTPS on 8447
       sed -i 's/\"80:8080\"/\"8083:8080\"/g' docker-compose.yml
-      sed -i '/\"443:8443\"/d' docker-compose.yml
+      sed -i 's/\"443:8443\"/\"8447:8443\"/g' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
       sed -i '/\"4001:4001\"/d' docker-compose.yml
@@ -133,24 +133,24 @@ for NODE in "${TARGETS[@]}"; do
       sed -i 's/\"4001:4001\"/\"4004:4001\"/g' docker-compose.yml
       sed -i 's/\"4002:4002\"/\"4005:4002\"/g' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Bris" ]; then
-      # Bris node (QLD): tunnel-only, default port 8080
-      sed -i '/\"443:8443\"/d' docker-compose.yml
-      sed -i '/\"8080:8080\"/d' docker-compose.yml
+      # Bris node (QLD): tunnel-only HTTPS on 8443
       sed -i '/\"8443:8443\"/d' docker-compose.yml
+      sed -i 's/\"443:8443\"/\"8443:8443\"/g' docker-compose.yml
+      sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"4001:4001\"/d' docker-compose.yml
       sed -i '/\"4002:4002\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Mullum" ]; then
-      # Mullum node (QLD): tunnel-only
+      # Mullum node (QLD): tunnel-only HTTPS on 8445
       sed -i 's/\"80:8080\"/\"8081:8080\"/g' docker-compose.yml
-      sed -i '/\"443:8443\"/d' docker-compose.yml
+      sed -i 's/\"443:8443\"/\"8445:8443\"/g' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
       sed -i '/\"4001:4001\"/d' docker-compose.yml
       sed -i '/\"4002:4002\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Test" ]; then
-      # Test node (QLD): tunnel-only
+      # Test node (QLD): tunnel-only HTTPS on 8446
       sed -i 's/\"80:8080\"/\"8082:8080\"/g' docker-compose.yml
-      sed -i '/\"443:8443\"/d' docker-compose.yml
+      sed -i 's/\"443:8443\"/\"8446:8443\"/g' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
       sed -i '/\"4001:4001\"/d' docker-compose.yml

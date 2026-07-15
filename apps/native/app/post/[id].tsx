@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -315,6 +315,7 @@ export default function PostDetailModal() {
     // Transactions / Reporting state
     const [accepting, setAccepting] = useState(false);
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
+    const scrollViewRef = useRef<ScrollView>(null);
     // Contribution-first gate: accepting an Offer requires having listed one.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     const [showContributionRequired, setShowContributionRequired] = useState(false);
@@ -779,7 +780,7 @@ export default function PostDetailModal() {
             </View>
 
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={64}>
-            <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 60 }]} keyboardShouldPersistTaps="handled">
+            <ScrollView ref={scrollViewRef} contentContainerStyle={[styles.scroll, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 60 }]} keyboardShouldPersistTaps="handled">
                 {/* Type + Category Badge */}
                 <View style={styles.typeBadgeRow}>
                     <View style={styles.catBadge}>
@@ -1240,7 +1241,11 @@ export default function PostDetailModal() {
                         ) : (
                             <Pressable accessibilityRole="button" style={[styles.acceptBtn, isOffer ? styles.acceptBtnOffer : styles.acceptBtnNeed, (accepting || post.status === 'pending') && { opacity: 0.6 }]} disabled={accepting || post.status === 'pending'} onPress={() => {
                                 // Accepting an Offer extracts value → gated. Fulfilling a Need is a contribution → allowed.
-                                if (isOffer && blockedFromTrading) { setShowContributionRequired(true); } else { setShowAcceptConfirm(true); }
+                                if (isOffer && blockedFromTrading) { setShowContributionRequired(true); } else {
+                                    setShowAcceptConfirm(true);
+                                    // Scroll down so the confirmation box + Confirm button is visible
+                                    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 350);
+                                }
                             }}>
                                 <Text style={styles.acceptBtnText}>
                                     {accepting ? 'Processing...' : (post.status === 'pending' ? '⏳ Pending Confirmation' : (isOffer ? '🤝 Accept Offer' : '✋ Offer to Fulfill'))}

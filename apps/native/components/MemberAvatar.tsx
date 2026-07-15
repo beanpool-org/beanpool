@@ -44,7 +44,11 @@ interface MemberAvatarProps {
     borderRadius?: number;
 }
 
-export function MemberAvatar({
+// Memoized: all props are primitives, and avatars sit inside list rows/headers that
+// re-render on every sync tick — without memo each tick replays the image transition.
+export const MemberAvatar = React.memo(MemberAvatarBase);
+
+function MemberAvatarBase({
     avatarUrl,
     pubkey,
     callsign,

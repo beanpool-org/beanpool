@@ -24,28 +24,34 @@ let dbInitPromise: Promise<void> | null = null;
 
 // Global JS mutex to prevent expo-sqlite "database is locked" crashes
 // arising from concurrent loops across background Pillar polls and foreground Inbox rendering.
-// FIFO promise queue: each acquirer waits on the previous holder's release, so waiters
-// wake in order with no polling and mutual exclusion is never broken. Callers MUST pair
-// every acquire with releaseSyncLock() in a finally block, and MUST NOT re-acquire while
-// holding the lock (it is not reentrant). Never hold it across network I/O — only around
-// the local SQLite writes themselves, which keeps worst-case waits to one transaction.
-let syncLockTail: Promise<void> = Promise.resolve();
-let releaseCurrentSyncLock: (() => void) | null = null;
+// Two-lane queue: `urgent` acquirers (user-initiated writes — accept, release, rate)
+// are granted before any queued background sync, so a button press never waits behind
+// a backlog of poll-driven write bursts (observed 8–175s queues on-device, 2026-07-17).
+// FIFO within each lane. Callers MUST pair every acquire with releaseSyncLock() in a
+// finally block, and MUST NOT re-acquire while holding the lock (it is not reentrant).
+// Never hold it across network I/O — only around the local SQLite writes themselves.
+let syncLockHeld = false;
+const syncLockUrgentQueue: Array<() => void> = [];
+const syncLockNormalQueue: Array<() => void> = [];
 
-async function acquireSyncLock() {
-    const prev = syncLockTail;
-    let release!: () => void;
-    syncLockTail = new Promise<void>(r => { release = r; });
+async function acquireSyncLock(opts?: { urgent?: boolean }) {
+    if (!syncLockHeld) {
+        syncLockHeld = true;
+        return;
+    }
     const waitStart = Date.now();
-    await prev;
+    await new Promise<void>(resolve => {
+        (opts?.urgent ? syncLockUrgentQueue : syncLockNormalQueue).push(resolve);
+    });
     const waited = Date.now() - waitStart;
-    if (waited > 2000) console.warn(`[DB] acquireSyncLock waited ${waited}ms — a local transaction is holding the lock too long`);
-    releaseCurrentSyncLock = release;
+    if (waited > 2000) console.warn(`[DB] acquireSyncLock waited ${waited}ms (urgent=${!!opts?.urgent}, queued: ${syncLockUrgentQueue.length}u/${syncLockNormalQueue.length}n) — writers are outpacing the queue`);
 }
 function releaseSyncLock() {
-    const release = releaseCurrentSyncLock;
-    releaseCurrentSyncLock = null;
-    if (release) release();
+    // Hand off directly to the next waiter (urgent lane first) so the lock is never
+    // observed free by a late acquirer while earlier waiters are still queued.
+    const next = syncLockUrgentQueue.shift() ?? syncLockNormalQueue.shift();
+    if (next) next();
+    else syncLockHeld = false;
 }
 
 let currentDbName: string | null = null;
@@ -1461,7 +1467,7 @@ export async function createProject(project: {
     }
 
     // Save to SQLite
-    await acquireSyncLock();
+    await acquireSyncLock({ urgent: true }); // user pressed "create" — jump the sync queue
     try {
         const database = await getDb();
         await database.runAsync(
@@ -1972,6 +1978,44 @@ export async function applyDelta(delta: any) {
     }
 }
 
+// Returns only the fetched messages that would actually change a local row: new ids
+// (or rows consolidated into this conversation), changed metadata (reactions/read
+// flags), or a new edit. Runs WITHOUT the sync lock so the common poll outcome —
+// "nothing changed" — never joins the write queue at all.
+async function diffChangedMessages(database: SQLite.SQLiteDatabase, conversationId: string, messages: any[]): Promise<any[]> {
+    const localRows = await database.getAllAsync<{ id: string; metadata: string | null; edited_at: string | null }>(
+        'SELECT id, metadata, edited_at FROM messages WHERE conversation_id = ?',
+        [conversationId]
+    );
+    const localById = new Map(localRows.map(r => [r.id, r]));
+    return messages.filter((m: any) => {
+        const local = localById.get(m.id);
+        if (!local) return true;
+        if ((m.metadata || null) !== (local.metadata || null)) return true;
+        const editedAt = m.editedAt || m.edited_at || null;
+        if (editedAt && editedAt !== local.edited_at) return true;
+        return false;
+    });
+}
+
+// Single-message upsert shared by the batch and single-conversation sync paths.
+// metadata always refreshes (reactions/read-state). Content (ciphertext/nonce) only
+// changes when the server sends a strictly-newer edit — so a stale in-flight sync
+// carrying the pre-edit content can't revert a fresh edit.
+async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversationId: string, m: any) {
+    await database.runAsync(
+        `INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           conversation_id = excluded.conversation_id,
+           metadata = excluded.metadata,
+           ciphertext = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.ciphertext ELSE messages.ciphertext END,
+           nonce = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.nonce ELSE messages.nonce END,
+           edited_at = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.edited_at ELSE messages.edited_at END`,
+        [m.id, conversationId, m.author_pubkey || m.authorPubkey || '', m.ciphertext || '', m.nonce || '', m.type || 'text', m.systemType || m.system_type || null, m.metadata || null, m.timestamp || m.created_at || new Date().toISOString(), m.editedAt || m.edited_at || null]
+    );
+}
+
 export async function syncMessages(publicKey: string) {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -2132,27 +2176,17 @@ export async function syncMessages(publicKey: string) {
             const msgData = await msgRes.json();
             const messages = msgData.messages;
             if (!Array.isArray(messages)) continue;
-            
+
+            // Diff outside the lock — unchanged conversations skip the write queue.
+            const database = await getDb();
+            const changed = await diffChangedMessages(database, conv.id, messages);
+            if (changed.length === 0) continue;
+
             await acquireSyncLock();
             try {
-                const database = await getDb();
                 await database.withTransactionAsync(async () => {
-                    const txn = database;
-                    for (const m of messages) {
-                        await txn.runAsync(
-                            // metadata always refreshes (reactions/read-state). Content (ciphertext/nonce)
-                            // only changes when the server sends a strictly-newer edit — so a stale
-                            // in-flight sync carrying the pre-edit content can't revert a fresh edit.
-                            `INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                             ON CONFLICT(id) DO UPDATE SET
-                               conversation_id = excluded.conversation_id,
-                               metadata = excluded.metadata,
-                               ciphertext = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.ciphertext ELSE messages.ciphertext END,
-                               nonce = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.nonce ELSE messages.nonce END,
-                               edited_at = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.edited_at ELSE messages.edited_at END`,
-                            [m.id, conv.id, m.author_pubkey || m.authorPubkey || '', m.ciphertext || '', m.nonce || '', m.type || 'text', m.systemType || m.system_type || null, m.metadata || null, m.timestamp || m.created_at || new Date().toISOString(), m.editedAt || m.edited_at || null]
-                        );
+                    for (const m of changed) {
+                        await upsertFetchedMessage(database, conv.id, m);
                     }
                 });
             } finally {
@@ -2211,40 +2245,52 @@ export async function syncSingleConversation(conversationId: string) {
         const msgData = await msgRes.json();
         const messages = msgData.messages;
         if (!Array.isArray(messages)) return;
-        
+
+        const database = await getDb();
+
+        // This runs every 3s while a chat is open (plus on every WS nudge), so the
+        // no-change fast path matters: diff BEFORE taking the lock, and bail without
+        // locking or emitting when the server state matches local. Re-upserting the
+        // full history here on every tick is what built the 8–175s lock queues
+        // observed on-device (2026-07-17).
+        const changed = await diffChangedMessages(database, conversationId, messages);
+
+        // Read receipts: apply peers' read cursors (newer servers include them),
+        // so ticks flip to read while the chat is open. Monotonic — never regress.
+        const myIdentity = await loadIdentity();
+        const cursors = msgData.conversation?.readCursors;
+        let cursorAdvances: Array<{ publicKey: string; lastReadAt: string }> = [];
+        if (Array.isArray(cursors) && myIdentity?.publicKey) {
+            const localCursors = await database.getAllAsync<{ public_key: string; last_read_at: string | null }>(
+                'SELECT public_key, last_read_at FROM conversation_participants WHERE conversation_id = ?',
+                [conversationId]
+            );
+            const localReadAt = new Map(localCursors.map(r => [r.public_key, r.last_read_at]));
+            cursorAdvances = cursors.filter((cur: any) => {
+                if (!cur?.publicKey || cur.publicKey === myIdentity.publicKey || !cur.lastReadAt) return false;
+                if (!localReadAt.has(cur.publicKey)) return false; // no participant row to update
+                const current = localReadAt.get(cur.publicKey);
+                return current == null || current < cur.lastReadAt;
+            });
+        }
+
+        if (changed.length === 0 && cursorAdvances.length === 0) return;
+
         await acquireSyncLock();
         try {
-            const database = await getDb();
-            for (const m of messages) {
-                await database.runAsync(
-                    // See the batch-sync handler above: metadata always refreshes; content only
-                    // changes on a strictly-newer edit so a stale sync can't revert one.
-                    `INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                     ON CONFLICT(id) DO UPDATE SET
-                       conversation_id = excluded.conversation_id,
-                       metadata = excluded.metadata,
-                       ciphertext = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.ciphertext ELSE messages.ciphertext END,
-                       nonce = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.nonce ELSE messages.nonce END,
-                       edited_at = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.edited_at ELSE messages.edited_at END`,
-                    [m.id, conversationId, m.author_pubkey || m.authorPubkey || '', m.ciphertext || '', m.nonce || '', m.type || 'text', m.systemType || m.system_type || null, m.metadata || null, m.timestamp || m.created_at || new Date().toISOString(), m.editedAt || m.edited_at || null]
-                );
-            }
-
-            // Read receipts: apply peers' read cursors (newer servers include them),
-            // so ticks flip to read while the chat is open. Monotonic — never regress.
-            const myIdentity = await loadIdentity();
-            const cursors = msgData.conversation?.readCursors;
-            if (Array.isArray(cursors) && myIdentity?.publicKey) {
-                for (const cur of cursors) {
-                    if (cur?.publicKey && cur.publicKey !== myIdentity.publicKey && cur.lastReadAt) {
-                        await database.runAsync(
-                            'UPDATE conversation_participants SET last_read_at = ? WHERE conversation_id = ? AND public_key = ? AND (last_read_at IS NULL OR last_read_at < ?)',
-                            [cur.lastReadAt, conversationId, cur.publicKey, cur.lastReadAt]
-                        );
-                    }
+            // One transaction for the whole burst — a single commit instead of a
+            // disk flush per message.
+            await database.withTransactionAsync(async () => {
+                for (const m of changed) {
+                    await upsertFetchedMessage(database, conversationId, m);
                 }
-            }
+                for (const cur of cursorAdvances) {
+                    await database.runAsync(
+                        'UPDATE conversation_participants SET last_read_at = ? WHERE conversation_id = ? AND public_key = ? AND (last_read_at IS NULL OR last_read_at < ?)',
+                        [cur.lastReadAt, conversationId, cur.publicKey, cur.lastReadAt]
+                    );
+                }
+            });
         } finally {
             releaseSyncLock();
         }
@@ -3013,7 +3059,7 @@ export async function acceptMarketplacePost(postId: string, buyerPublicKey: stri
     // and the chat screen reads the pending tx from local SQLite. The write itself is
     // milliseconds; the FIFO sync lock guarantees it isn't starved by background syncs.
     try {
-        await acquireSyncLock();
+        await acquireSyncLock({ urgent: true }); // user is mid accept-and-navigate — jump the sync queue
         try {
             const database = await getDb();
             const txId = res?.transaction?.id || null;
@@ -3059,7 +3105,7 @@ export async function completeMarketplaceTransaction(transactionId: string, conf
     // Await the local write so callers (and any screen they navigate to) read a
     // consistent status. The FIFO sync lock keeps this to milliseconds.
     try {
-        await acquireSyncLock();
+        await acquireSyncLock({ urgent: true }); // user just released credits — jump the sync queue
         try {
             const database = await getDb();
             const postParam = await database.getFirstAsync<{ repeatable: number, id: string }>('SELECT id, repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
@@ -3096,7 +3142,7 @@ export async function cancelMarketplaceTransaction(transactionId: string, cancel
     const res = await _signedRequest('/api/marketplace/transactions/cancel', { transactionId, cancellerPublicKey });
 
     try {
-        await acquireSyncLock();
+        await acquireSyncLock({ urgent: true }); // user just cancelled the deal — jump the sync queue
         try {
             const database = await getDb();
             const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE pending_transaction_id = ?', [transactionId]);
@@ -3122,7 +3168,7 @@ export async function requestMarketplacePost(postId: string, buyerPublicKey: str
     const res = await _signedRequest('/api/marketplace/posts/request', { postId, buyerPublicKey, hours });
 
     try {
-        await acquireSyncLock();
+        await acquireSyncLock({ urgent: true }); // user just requested the post — jump the sync queue
         try {
             const database = await getDb();
             if (res?.transaction) {
@@ -3185,7 +3231,7 @@ export async function reportAbuse(reporterPublicKey: string, targetPublicKey: st
 export async function submitRating(raterPublicKey: string, targetPublicKey: string, rating: number, comment: string, transactionId?: string) {
     const res = await _signedRequest('/api/ratings', { raterPubkey: raterPublicKey, targetPubkey: targetPublicKey, stars: rating, comment, transactionId });
     if (res?.success && transactionId) {
-        await acquireSyncLock();
+        await acquireSyncLock({ urgent: true }); // user just submitted a review — jump the sync queue
         try {
             const database = await getDb();
             await database.withTransactionAsync(async () => {

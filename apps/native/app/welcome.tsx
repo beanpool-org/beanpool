@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, createIdentityFromMnemonic, loadIdentity, BeanPoolIdentity } from '../utils/identity';
@@ -61,7 +61,6 @@ export default function WelcomeScreen() {
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [inviteCode, setInviteCode] = useState('');
     const [pendingInviteCode, setPendingInviteCode] = useState('');
-    const [processingMagicLink, setProcessingMagicLink] = useState(false);
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
@@ -71,43 +70,73 @@ export default function WelcomeScreen() {
 
     // The web trampoline copies the invite link to the clipboard before sending
     // people to the app store, but nothing can read it for them automatically —
-    // so offer a one-tap check on the first screen. hasStringAsync only reports
-    // presence; the clipboard is READ solely on the user's tap (no iOS paste
-    // prompt until then).
+    // so offer a one-tap paste on the home and join screens. hasStringAsync only
+    // reports presence; the clipboard is READ solely on the user's tap, and on
+    // iOS 16+ that tap lands on the system paste button (UIPasteControl), which
+    // never shows the "Allow Paste" popup. Re-check on foreground so copying an
+    // invite in another app and switching back makes the offer appear.
     React.useEffect(() => {
-        if (mode !== 'home') return;
-        Clipboard.hasStringAsync()
-            .then(has => setClipboardMayHaveInvite(!!has))
-            .catch(() => setClipboardMayHaveInvite(false));
+        if (mode !== 'home' && mode !== 'create') return;
+        const check = () => {
+            Clipboard.hasStringAsync()
+                .then(has => setClipboardMayHaveInvite(!!has))
+                .catch(() => setClipboardMayHaveInvite(false));
+        };
+        check();
+        const sub = AppState.addEventListener('change', (state) => {
+            if (state === 'active') check();
+        });
+        return () => sub.remove();
     }, [mode]);
+
+    // Shared sink for pasted invite content however it arrives: the iOS system
+    // paste button hands us the text directly, the fallback buttons read the
+    // clipboard programmatically.
+    async function applyInviteContent(raw: string, source: 'home' | 'join') {
+        const content = raw?.trim() || '';
+        const looksLikeInvite = content.startsWith('BP-') || content.startsWith('INV-') ||
+            (content.includes('http') && content.includes('invite='));
+        if (looksLikeInvite) {
+            await processFullUrl(content);
+            return;
+        }
+        if (source === 'home') {
+            Alert.alert(
+                'No invite found',
+                "Your clipboard doesn't have a BeanPool invite on it. No worries — you can paste or type the code on the next screen.",
+                [{ text: 'OK', onPress: () => setMode('create') }]
+            );
+            return;
+        }
+        // Join screen: a short single-line paste may be a plain code in a format
+        // we don't recognise (e.g. legacy 6-char codes) — drop it in the field
+        // and let handleCreate normalise it. Anything bigger clearly isn't an
+        // invite, so say so instead of dumping it into the field.
+        if (content && content.length <= 100 && !content.includes('\n')) {
+            setInviteCode(content);
+        } else {
+            Alert.alert(
+                'No invite found',
+                'Your clipboard has something else on it. You can type or paste your invite code below instead.'
+            );
+        }
+    }
 
     async function handleCheckClipboardInvite() {
         try {
             const content = (await Clipboard.getStringAsync())?.trim() || '';
-            const looksLikeInvite = content.startsWith('BP-') || content.startsWith('INV-') ||
-                (content.startsWith('http') && content.includes('invite='));
-            if (looksLikeInvite) {
-                setProcessingMagicLink(true);
-                await processFullUrl(content);
-                setTimeout(() => setProcessingMagicLink(false), 1500);
-            } else {
-                Alert.alert(
-                    'No invite found',
-                    "Your clipboard doesn't have a BeanPool invite on it. No worries — you can paste or type the code on the next screen.",
-                    [{ text: 'OK', onPress: () => setMode('create') }]
-                );
-            }
+            await applyInviteContent(content, 'home');
         } catch {
             setMode('create');
         }
     }
 
     const processFullUrl = useCallback(async (fullUrl: string) => {
-        if (fullUrl.startsWith('http')) {
-            const originMatch = fullUrl.match(/^https?:\/\/[^\/?#]+/);
-            if (originMatch) {
-                setCreateAnchorUrl(originMatch[0]);
-            }
+        // extractNodeOrigin copes with the URL being buried in a shared message
+        // ("Join my BeanPool community node: https://…") — an anchored match doesn't.
+        const origin = extractNodeOrigin(fullUrl);
+        if (origin) {
+            setCreateAnchorUrl(origin);
         }
         const inviteMatch = fullUrl.match(/[?&]invite=([^&]+)/);
         if (inviteMatch) {
@@ -120,23 +149,12 @@ export default function WelcomeScreen() {
 
     const handlePasteInvite = async () => {
         try {
-            const content = await Clipboard.getStringAsync();
-            const cleanContent = content?.trim() || '';
-            if (!cleanContent) {
+            const content = (await Clipboard.getStringAsync())?.trim() || '';
+            if (!content) {
                 Alert.alert("Nothing to paste", "Your clipboard is empty.");
                 return;
             }
-
-            // Check if it's an invite token OR an invite URL to use processFullUrl
-            if (cleanContent.startsWith('BP-') || cleanContent.startsWith('INV-') ||
-                (cleanContent.startsWith('http') && cleanContent.includes('invite='))) {
-                setProcessingMagicLink(true);
-                await processFullUrl(cleanContent);
-                setTimeout(() => setProcessingMagicLink(false), 1500);
-            } else {
-                // Otherwise, just populate the input field text and don't auto-advance
-                setInviteCode(cleanContent);
-            }
+            await applyInviteContent(content, 'join');
         } catch (e) {
             Alert.alert("Failed to read clipboard", "Please try pasting the link manually.");
         }
@@ -835,6 +853,27 @@ export default function WelcomeScreen() {
                     <View style={styles.card}>
                         <Text style={styles.title}>🎟️ Join BeanPool</Text>
 
+                        {clipboardMayHaveInvite && !inviteCode && (
+                            <View style={styles.pasteCard}>
+                                <Text style={styles.pasteCardText}>Tap Paste to insert the code from your invite.</Text>
+                                {Clipboard.isPasteButtonAvailable ? (
+                                    <Clipboard.ClipboardPasteButton
+                                        onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'join'); }}
+                                        acceptedContentTypes={['plain-text', 'url']}
+                                        displayMode="iconAndLabel"
+                                        backgroundColor={palette.blue600}
+                                        foregroundColor={colors.text.inverse}
+                                        cornerStyle="capsule"
+                                        style={styles.pasteCardSystemBtn}
+                                    />
+                                ) : (
+                                    <Pressable style={styles.pasteCardBtn} onPress={handlePasteInvite} accessibilityRole="button">
+                                        <Text style={styles.pasteCardBtnText}>📋 Paste</Text>
+                                    </Pressable>
+                                )}
+                            </View>
+                        )}
+
                         <View style={styles.inputContainer}>
                             <TextInput
                                 style={styles.inputFlex}
@@ -846,9 +885,21 @@ export default function WelcomeScreen() {
                                 autoCorrect={false}
                                 accessibilityLabel="Invite link or code"
                             />
-                            <Pressable style={styles.pasteBtn} onPress={handlePasteInvite} accessibilityRole="button">
-                                <Text style={styles.pasteBtnText}>Paste</Text>
-                            </Pressable>
+                            {Clipboard.isPasteButtonAvailable ? (
+                                <Clipboard.ClipboardPasteButton
+                                    onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'join'); }}
+                                    acceptedContentTypes={['plain-text', 'url']}
+                                    displayMode="labelOnly"
+                                    backgroundColor={colors.surface.subtle}
+                                    foregroundColor={palette.blue600}
+                                    cornerStyle="medium"
+                                    style={styles.pasteBtnSystem}
+                                />
+                            ) : (
+                                <Pressable style={styles.pasteBtn} onPress={handlePasteInvite} accessibilityRole="button">
+                                    <Text style={styles.pasteBtnText}>Paste</Text>
+                                </Pressable>
+                            )}
                         </View>
 
                         {inviteCode && !inviteCode.startsWith('http') && (
@@ -1040,11 +1091,24 @@ export default function WelcomeScreen() {
                     <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org')}>beanpool.org</Text>.
                 </Text>
 
-                {clipboardMayHaveInvite && (
+                {clipboardMayHaveInvite && (Clipboard.isPasteButtonAvailable ? (
+                    <View style={styles.clipboardHintBox}>
+                        <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap Paste to open it</Text>
+                        <Clipboard.ClipboardPasteButton
+                            onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'home'); }}
+                            acceptedContentTypes={['plain-text', 'url']}
+                            displayMode="iconAndLabel"
+                            backgroundColor={palette.blue600}
+                            foregroundColor={colors.text.inverse}
+                            cornerStyle="capsule"
+                            style={styles.homePasteSystemBtn}
+                        />
+                    </View>
+                ) : (
                     <Pressable style={styles.clipboardHintBtn} onPress={handleCheckClipboardInvite} accessibilityRole="button">
                         <Text style={styles.clipboardHintText}>📋 Been sent an invite? Tap to check your clipboard</Text>
                     </Pressable>
-                )}
+                ))}
 
                 <Pressable style={styles.restoreLink} onPress={() => setMode('member')} accessibilityRole="button">
                     <Text style={styles.restoreLinkText}>New phone, or reinstalled the app? Restore my account →</Text>
@@ -1064,6 +1128,8 @@ const styles = StyleSheet.create({
     inviteVerifiedText: { color: palette.green700 || '#15803d', fontSize: 14, lineHeight: 20 },
     clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
     clipboardHintText: { color: palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    clipboardHintBox: { marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', alignItems: 'center', width: '100%' },
+    homePasteSystemBtn: { width: 170, height: 44, marginTop: 12 },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
     tosLink: { color: palette.blue600, textDecorationLine: 'underline' },
     inviteOnlyHint: { fontSize: 13, color: colors.text.secondary, textAlign: 'center', lineHeight: 19, marginTop: 4, paddingHorizontal: 8 },
@@ -1077,6 +1143,12 @@ const styles = StyleSheet.create({
     inputFlex: { flex: 1, padding: 16, color: colors.text.heading, fontSize: 16 },
     pasteBtn: { backgroundColor: colors.surface.subtle, paddingHorizontal: 16, paddingVertical: 12, borderLeftWidth: 1, borderColor: colors.border.strong, justifyContent: 'center' },
     pasteBtnText: { color: palette.gray600, fontSize: 14, fontWeight: '600' },
+    pasteBtnSystem: { width: 80, height: 36, alignSelf: 'center', marginHorizontal: 6 },
+    pasteCard: { backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', borderRadius: 12, padding: 14, marginBottom: 16, alignItems: 'center' },
+    pasteCardText: { color: colors.text.body, fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 12 },
+    pasteCardSystemBtn: { width: 170, height: 44 },
+    pasteCardBtn: { backgroundColor: palette.blue600, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 999, alignItems: 'center' },
+    pasteCardBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '700' },
 
     // Callsign (Step 1) — larger, labeled input
     callsignLabel: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8, marginTop: 8 },

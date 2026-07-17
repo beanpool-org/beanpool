@@ -25,6 +25,11 @@ const URL_TEST_REGEX = /^(?:https?:\/\/|www\.)[^\s]+$/i;
 // Authors may edit a text message for this long after sending (mirrors the server's window).
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 
+// History window (WhatsApp-style): open with the newest page, grow by a page each
+// time the user scrolls up to the oldest loaded message. Keeps open-a-chat cost
+// (SQLite read + per-message decrypt) flat no matter how long the thread is.
+const MESSAGE_PAGE_SIZE = 50;
+
 function renderTextWithLinks(text: string, linkStyle: any, onPressUrl: (url: string) => void) {
     if (!text) return text;
     const parts = text.split(URL_SPLIT_REGEX);
@@ -97,6 +102,11 @@ export default function ChatScreen() {
     const flatListRef = useRef<FlatList>(null);
     const insets = useSafeAreaInsets();
     const sendingRef = useRef(false);
+    // History-window paging. Refs (not state) because loadMessages is called from
+    // long-lived closures (poll interval, ws listener) that must see current values.
+    const msgLimitRef = useRef(MESSAGE_PAGE_SIZE);
+    const messagesLenRef = useRef(0);
+    const loadingOlderRef = useRef(false);
     // While the keyboard is up, KeyboardAvoidingView already lifts the input bar to sit
     // on the keyboard — adding the nav-bar inset on top of that shows as a dead gap.
     const keyboardVisible = useKeyboardState(s => s.isVisible);
@@ -506,6 +516,8 @@ export default function ChatScreen() {
         useCallback(() => {
             setReplyToMessage(null);
             setEditingMessage(null);
+            // Fresh window on each (re)open — a long thread starts at one page again.
+            msgLimitRef.current = MESSAGE_PAGE_SIZE;
             let interval: ReturnType<typeof setInterval>;
             promptedRef.current = false;
 
@@ -563,7 +575,8 @@ export default function ChatScreen() {
     );
 
     const loadMessages = async (isBackgroundPoll = false) => {
-        const data = await getMessages(id as string);
+        const data = await getMessages(id as string, { limit: msgLimitRef.current });
+        messagesLenRef.current = data.length;
         if (identity?.publicKey) {
             await markConversationRead(id as string, identity.publicKey).catch(() => {});
         }
@@ -1409,6 +1422,18 @@ export default function ChatScreen() {
                     inverted
                     initialNumToRender={15}
                     windowSize={9}
+                    // Inverted list: "end" = the oldest loaded message (visual top).
+                    // Reaching it grows the history window by one page, WhatsApp-style.
+                    // If the last load came back short of the window, there is no
+                    // older history to fetch and the grow is skipped.
+                    onEndReachedThreshold={0.8}
+                    onEndReached={() => {
+                        if (loadingOlderRef.current) return;
+                        if (messagesLenRef.current < msgLimitRef.current) return;
+                        loadingOlderRef.current = true;
+                        msgLimitRef.current += MESSAGE_PAGE_SIZE;
+                        loadMessages(true).finally(() => { loadingOlderRef.current = false; });
+                    }}
                     onScrollBeginDrag={() => {
                         setActiveMessageActionsId(null);
                         setActiveEmojiPickerId(null);

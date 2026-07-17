@@ -2396,12 +2396,25 @@ async function getDmKeyContext(conversationId: string): Promise<DMKeyContext | n
     return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId };
 }
 
-export async function getMessages(conversationId: string) {
+export async function getMessages(conversationId: string, opts?: { limit?: number }) {
     const database = await getDb();
-    const rows = await database.getAllAsync<any>(
-        'SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC',
-        [conversationId]
-    );
+    // With a limit, return only the NEWEST `limit` messages (WhatsApp-style history
+    // window — the chat screen grows the window as the user scrolls up). Selected
+    // newest-first then flipped back to chronological so the mapping below and all
+    // callers see the same ascending order as the unlimited path.
+    let rows: any[];
+    if (opts?.limit && opts.limit > 0) {
+        rows = await database.getAllAsync<any>(
+            'SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT ?',
+            [conversationId, opts.limit]
+        );
+        rows.reverse();
+    } else {
+        rows = await database.getAllAsync<any>(
+            'SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC',
+            [conversationId]
+        );
+    }
     // Load the DM key context once so v2-encrypted rows can be decrypted in the map below.
     let dmCtx: DMKeyContext | null = null;
     try { dmCtx = await getDmKeyContext(conversationId); } catch { dmCtx = null; }

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Platform, Linking, Modal } from 'react-native';
-import { KeyboardAvoidingView, KeyboardController, AndroidSoftInputModes, useKeyboardHandler } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, KeyboardController, AndroidSoftInputModes, useKeyboardHandler, useKeyboardState } from 'react-native-keyboard-controller';
 import { scheduleOnRN } from 'react-native-worklets';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack } from 'expo-router';
@@ -97,6 +97,25 @@ export default function ChatScreen() {
     const flatListRef = useRef<FlatList>(null);
     const insets = useSafeAreaInsets();
     const sendingRef = useRef(false);
+    // While the keyboard is up, KeyboardAvoidingView already lifts the input bar to sit
+    // on the keyboard — adding the nav-bar inset on top of that shows as a dead gap.
+    const keyboardVisible = useKeyboardState(s => s.isVisible);
+    // Modals get their own native window, and keyboard-controller only hears keyboard
+    // events on the main window. If a modal opens while the keyboard is up, the hide
+    // happens under the modal's window and the chat stays padded by a phantom keyboard
+    // (screen squeezed into the top half). So: fully dismiss the keyboard BEFORE any
+    // modal is allowed to mount.
+    const [reviewModalReady, setReviewModalReady] = useState(false);
+    useEffect(() => {
+        if (promptReviewForTx) {
+            KeyboardController.dismiss().then(() => setReviewModalReady(true));
+        } else {
+            setReviewModalReady(false);
+        }
+    }, [promptReviewForTx]);
+    const openImageViewer = useCallback((uri: string) => {
+        KeyboardController.dismiss().then(() => setViewerUri(uri));
+    }, []);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.card },
@@ -114,7 +133,7 @@ export default function ChatScreen() {
         statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
         statusBadgeText: { fontSize: 11, fontWeight: '800' },
         keyboardView: { flex: 1 },
-        listContent: { padding: 16, paddingBottom: 32, gap: 4 },
+        listContent: { padding: 16, paddingBottom: 8, gap: 4 },
         systemMessageContainer: { width: '100%', alignItems: 'center', marginVertical: 8 },
         systemMessageBubble: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
         systemMessageText: { fontSize: 13, color: theme === 'dark' ? colors.text.body : palette.gray600, fontWeight: '600' },
@@ -587,6 +606,9 @@ export default function ChatScreen() {
 
     const pickAndSendImage = async () => {
         if (!identity?.publicKey || sendingRef.current) return;
+        // Same phantom-keyboard hazard as the review modal: the source-picker Alert and
+        // the image-picker Activity are separate windows — hide the keyboard first.
+        await KeyboardController.dismiss();
         const sendUri = async (uri: string) => {
             sendingRef.current = true;
             try {
@@ -626,8 +648,9 @@ export default function ChatScreen() {
         ]);
     };
 
-    const handleReleaseCredits = () => {
+    const handleReleaseCredits = async () => {
         if (!pendingTx || !identity?.publicKey) return;
+        await KeyboardController.dismiss(); // Alert = separate window; see review-modal note
         Alert.alert(
             'Release Credits',
             `Release ${pendingTx.amount} Beans to the provider? This action cannot be undone.`,
@@ -671,8 +694,9 @@ export default function ChatScreen() {
         );
     };
 
-    const handleCancelEscrow = () => {
+    const handleCancelEscrow = async () => {
         if (!pendingTx || !identity?.publicKey) return;
+        await KeyboardController.dismiss();
         Alert.alert(
             'Cancel Escrow',
             'Are you sure you want to cancel this escrow? The credits will be refunded.',
@@ -759,8 +783,9 @@ export default function ChatScreen() {
         return map;
     }, [deals]);
 
-    const handleReleaseDeal = (txId: string, amount: number) => {
+    const handleReleaseDeal = async (txId: string, amount: number) => {
         if (!identity?.publicKey) return;
+        await KeyboardController.dismiss();
         Alert.alert('Release Credits', `Release ${amount} Beans to the provider? This action is final.`, [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Release', style: 'destructive', onPress: async () => {
@@ -780,8 +805,9 @@ export default function ChatScreen() {
         ]);
     };
 
-    const handleCancelDeal = (txId: string) => {
+    const handleCancelDeal = async (txId: string) => {
         if (!identity?.publicKey) return;
+        await KeyboardController.dismiss();
         Alert.alert('Cancel Deal', 'Cancel this deal? The escrow will be refunded.', [
             { text: 'Keep', style: 'cancel' },
             { text: 'Cancel Deal', style: 'destructive', onPress: async () => {
@@ -1101,7 +1127,7 @@ export default function ChatScreen() {
                         })()}
                         {item.type === 'image' ? (
                             <>
-                                <ChatImage conversationId={id as string} messageId={item.id} onOpen={setViewerUri} />
+                                <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} />
                                 {!!item.text && (
                                     <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther, { marginTop: 6 }]}>
                                         {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, openUrl)}
@@ -1375,7 +1401,7 @@ export default function ChatScreen() {
                 {/* Input Area */}
                 <View style={[
                     styles.inputContainer,
-                    { paddingBottom: Math.max(insets.bottom, 12) }
+                    { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 12) }
                 ]}>
                     <Pressable accessibilityRole="button" accessibilityLabel="Attach image" style={styles.attachBtn} onPress={pickAndSendImage}>
                         <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />
@@ -1388,9 +1414,7 @@ export default function ChatScreen() {
                         value={draft}
                         onChangeText={setDraft}
                         multiline
-                        blurOnSubmit={false}
-                        submitBehavior="submit"
-                        onSubmitEditing={handleSend}
+                        submitBehavior="newline"
                     />
                     <Pressable
                         accessibilityRole="button"
@@ -1403,8 +1427,8 @@ export default function ChatScreen() {
                 </View>
             </KeyboardAvoidingView>
 
-            {promptReviewForTx && (
-                <ReviewModal 
+            {promptReviewForTx && reviewModalReady && (
+                <ReviewModal
                     visible={!!promptReviewForTx}
                     txId={promptReviewForTx.txId}
                     targetPubkey={promptReviewForTx.targetPubkey}

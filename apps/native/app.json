@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "org.beanpool.pillar",
-      "buildNumber": "165",
+      "buildNumber": "166",
       "associatedDomains": [
         "applinks:beanpool.org",
         "applinks:*.beanpool.org"

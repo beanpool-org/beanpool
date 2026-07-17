@@ -151,6 +151,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<number | null>(null);
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
+    const draftRef = useRef<HTMLTextAreaElement>(null);
+
+    // Auto-grow the composer with the draft (up to ~4 lines), collapsing back
+    // to one line when the draft is cleared on send.
+    useEffect(() => {
+        const el = draftRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        // +2 accounts for the 1px top/bottom border under border-box sizing,
+        // otherwise the content sits 2px short and shows a scrollbar.
+        el.style.height = Math.min(el.scrollHeight + 2, 100) + 'px';
+    }, [draft]);
 
     useEffect(() => {
         loadConversations();
@@ -710,7 +722,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         }
                                         return null;
                                     })()}
-                                    <div style={{ display: 'inline' }}>
+                                    <div style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
                                         {msg.type === 'image' ? (() => {
                                             const ctx = dmCtxFor(activeConv);
                                             if (!ctx) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>🔒 Image</span>;
@@ -806,7 +818,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <div style={{
                     display: 'flex', gap: '0.5rem',
                     padding: '0.5rem 1rem',
-                    alignItems: 'center',
+                    alignItems: 'flex-end',
                     borderTop: '1px solid var(--border-primary)',
                     background: 'var(--bg-secondary)',
                 }}>
@@ -829,14 +841,30 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             />
                         </label>
                     )}
-                    <input
-                        type="text"
+                    <textarea
+                        ref={draftRef}
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                        onKeyDown={(e) => {
+                            // Enter sends; Shift+Enter inserts a newline.
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSend();
+                            }
+                        }}
                         placeholder="Message..."
                         disabled={sending}
-                        style={inputStyle}
+                        rows={1}
+                        style={{
+                            ...inputStyle,
+                            height: '40px',
+                            maxHeight: '100px',
+                            resize: 'none',
+                            overflowY: 'auto',
+                            lineHeight: 1.4,
+                            paddingTop: '0.55rem',
+                            paddingBottom: '0.55rem',
+                        }}
                     />
                     <button
                         onClick={handleSend}

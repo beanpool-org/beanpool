@@ -433,11 +433,32 @@ export async function performSync(): Promise<SyncResult> {
         clearTimeout(postsTimeout);
         clearTimeout(balanceTimeout);
 
-        // Apply physical updates to local Native device SQLite Matrix
-        await applyDelta(delta);
+        // Gate applyDelta per table: skip any table whose fetched payload is identical
+        // to what we last applied. applyDelta rewrites every row it's given inside one
+        // lock-held transaction, and re-applying unchanged data on every WS-triggered
+        // cycle was the main writer starving the sync lock (2026-07-18 on-device logs
+        // showed 24-minute queue waits). Cheap string hash — worst case on a collision
+        // is one skipped no-op apply.
+        const gatedDelta: any = {};
+        for (const [table, payload] of Object.entries(delta)) {
+            if (payload === undefined || table === 'membersComplete') continue;
+            const fp = _fingerprint(JSON.stringify(payload));
+            if (_lastAppliedFingerprints[`${anchorUrl}:${table}`] !== fp) {
+                gatedDelta[table] = payload;
+                _lastAppliedFingerprints[`${anchorUrl}:${table}`] = fp;
+            }
+        }
+        // The full-directory GC flag must travel with the members table it describes.
+        if (gatedDelta.members && delta.membersComplete) gatedDelta.membersComplete = true;
 
-        // Notify active screens to re-render if we received new posts, projects, members, friends, or balance changes
-        if (delta.posts?.length > 0 || delta.projects?.length > 0 || delta.accounts?.length > 0 || delta.transactions?.length > 0 || delta.marketplaceTransactions?.length > 0 || delta.members?.length > 0 || delta.friends?.length > 0) {
+        // Apply physical updates to local Native device SQLite Matrix
+        if (Object.keys(gatedDelta).length > 0) {
+            await applyDelta(gatedDelta);
+        }
+
+        // Notify active screens to re-render only when something actually changed —
+        // an unconditional emit here made every mounted screen reload every cycle.
+        if (gatedDelta.posts?.length > 0 || gatedDelta.projects?.length > 0 || gatedDelta.accounts?.length > 0 || gatedDelta.transactions?.length > 0 || gatedDelta.marketplaceTransactions?.length > 0 || gatedDelta.members?.length > 0 || gatedDelta.friends?.length > 0) {
             try {
                 const { DeviceEventEmitter } = require('react-native');
                 DeviceEventEmitter.emit('sync_data_updated');
@@ -487,6 +508,15 @@ export async function getCachedTransactions(): Promise<any[]> {
     const kTransactions = await getSyncCursorKey(StorageKeysConfig.TRANSACTIONS);
     const raw = await AsyncStorage.getItem(kTransactions);
     return raw ? JSON.parse(raw) : [];
+}
+
+// Per-node, per-table hash of the last payload handed to applyDelta (see the gate
+// in performSync). In-memory only — first sync after a cold start always applies.
+const _lastAppliedFingerprints: Record<string, number> = {};
+function _fingerprint(s: string): number {
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; // djb2
+    return h;
 }
 
 let syncPromise: Promise<SyncResult> | null = null;

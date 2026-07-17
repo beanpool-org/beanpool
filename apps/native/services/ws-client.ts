@@ -146,7 +146,11 @@ class WebSocketSyncClient {
                         // do an immediate targeted refresh. The full reconciliation
                         // below still runs as the correctness backstop.
                         DeviceEventEmitter.emit('ws_activity', data);
-                        requestSync();
+                        // new_message is chat-plane traffic — the open chat's targeted
+                        // sync and the unread-badge listener both react to ws_activity.
+                        // Running a full pillar sync per received message hammered the
+                        // node and kept applyDelta churning the sync lock.
+                        if (data.type !== 'new_message') requestSync();
                     }
                 } catch (err) {
                     console.warn('[WS Sync] Failed to parse WebSocket message', err);

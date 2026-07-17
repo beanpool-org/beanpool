@@ -1,8 +1,8 @@
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GlobalHeader } from '../../components/GlobalHeader';
-import { View, Image, StyleSheet, Text, Platform } from 'react-native';
-import { useState, useEffect } from 'react';
+import { View, Image, StyleSheet, Text, Platform, DeviceEventEmitter } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { getGlobalUnreadCount, syncMessages, getPosts, getMarketplaceTransactions } from '../../utils/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +15,7 @@ export default function TabLayout() {
     const [unread, setUnread] = useState(0);
     const [dealsCount, setDealsCount] = useState(0);
     const [needsBackup, setNeedsBackup] = useState(false);
+    const lastNetSyncAtRef = useRef(0);
 
     useEffect(() => {
         if (!identity?.publicKey) return;
@@ -37,10 +38,17 @@ export default function TabLayout() {
             } catch (e) {}
         };
         checkBackup();
-        const checkUnread = async () => {
+        // Badge math is all local reads and safe to run often. syncMessages is NOT:
+        // it hits the network and takes the DB write lock per changed conversation,
+        // and running it here every 5s (this layout stays mounted under pushed
+        // screens) was a main feeder of the sync-lock queue (2026-07-18 logs).
+        const checkUnread = async (withNetworkSync = false) => {
             try {
-                // Discover new messages across active threads globally
-                await syncMessages(identity.publicKey);
+                if (withNetworkSync) {
+                    lastNetSyncAtRef.current = Date.now();
+                    // Discover new messages across active threads globally
+                    await syncMessages(identity.publicKey);
+                }
                 // Calculate unread sum across the updated SQLite pool
                 const count = await getGlobalUnreadCount(identity.publicKey);
                 setUnread(count);
@@ -58,9 +66,20 @@ export default function TabLayout() {
                 setDealsCount(active);
             } catch (e) {}
         };
-        checkUnread();
-        const iv = setInterval(checkUnread, 5000);
-        return () => clearInterval(iv);
+        checkUnread(true);
+        // Local badge refresh every 5s; full network message-sync only as a 30s
+        // backstop — real-time arrival is covered by the ws_activity nudge below
+        // (throttled, so a chatty session doesn't turn into a sync-per-message).
+        const iv = setInterval(() => checkUnread(false), 5000);
+        const netIv = setInterval(() => checkUnread(true), 30000);
+        const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
+            if (Date.now() - lastNetSyncAtRef.current > 10000) checkUnread(true);
+        });
+        return () => {
+            clearInterval(iv);
+            clearInterval(netIv);
+            wsSub.remove();
+        };
     }, [identity]);
 
     return (

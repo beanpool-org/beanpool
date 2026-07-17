@@ -2097,15 +2097,56 @@ export async function syncMessages(publicKey: string) {
 
         // Identity, so we can attribute the peer's read cursor (read receipts).
         const myIdentity = await loadIdentity();
+        const database = await getDb();
 
         for (const conv of convData.conversations) {
+            // Decide WITHOUT the lock whether this conversation row actually needs
+            // writing. This loop runs on every full message-sync (badge backstop,
+            // inbox focus, WS nudges); unconditionally rewriting every conv row was
+            // one of the writers starving the sync lock (2026-07-18 on-device logs).
+            const postPhotoString = conv.postPhoto ? JSON.stringify([conv.postPhoto]) : null;
+            let needsConvWrite = false;
+            try {
+                const localConv = await database.getFirstAsync<any>(
+                    'SELECT id, post_title, post_status, post_photo, post_credits FROM conversations WHERE id = ?', [conv.id]);
+                if (!localConv) {
+                    needsConvWrite = true;
+                } else if (
+                    (localConv.post_title ?? null) !== (conv.postTitle ?? null) ||
+                    (localConv.post_status ?? null) !== (conv.postStatus ?? null) ||
+                    (localConv.post_photo ?? null) !== postPhotoString ||
+                    (localConv.post_credits ?? null) !== (conv.postCredits ?? null)
+                ) {
+                    needsConvWrite = true;
+                } else if (Array.isArray(conv.participants)) {
+                    const rows = await database.getAllAsync<any>(
+                        'SELECT public_key, last_read_at FROM conversation_participants WHERE conversation_id = ?', [conv.id]);
+                    const haveReadAt = new Map(rows.map((r: any) => [r.public_key, r.last_read_at]));
+                    for (const pub of conv.participants) {
+                        if (!haveReadAt.has(pub)) { needsConvWrite = true; break; }
+                    }
+                    if (!needsConvWrite && conv.peerLastReadAt && myIdentity?.publicKey) {
+                        const peer = conv.participants.find((p: string) => p && p !== myIdentity.publicKey);
+                        if (peer) {
+                            const cur = haveReadAt.get(peer);
+                            if (cur == null || cur < conv.peerLastReadAt) needsConvWrite = true;
+                        }
+                    }
+                    if (!needsConvWrite && conv.myLastReadAt && myIdentity?.publicKey) {
+                        const cur = haveReadAt.get(myIdentity.publicKey);
+                        if (cur == null || cur < conv.myLastReadAt) needsConvWrite = true;
+                    }
+                }
+            } catch {
+                needsConvWrite = true; // on any doubt, fall through to the write path
+            }
+
+            if (needsConvWrite) {
             await acquireSyncLock();
             try {
-                const database = await getDb();
                 await database.withTransactionAsync(async () => {
                     const txn = database;
                     const localConv = await txn.getFirstAsync<any>('SELECT id FROM conversations WHERE id = ?', [conv.id]);
-                    const postPhotoString = conv.postPhoto ? JSON.stringify([conv.postPhoto]) : null;
                     if (!localConv) {
                         await txn.runAsync(
                             'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -2160,7 +2201,8 @@ export async function syncMessages(publicKey: string) {
             } finally {
                 releaseSyncLock();
             }
-            
+            }
+
             const controller2 = new AbortController();
             const timeout2 = setTimeout(() => controller2.abort(), 5000);
             let msgRes;
@@ -2178,7 +2220,6 @@ export async function syncMessages(publicKey: string) {
             if (!Array.isArray(messages)) continue;
 
             // Diff outside the lock — unchanged conversations skip the write queue.
-            const database = await getDb();
             const changed = await diffChangedMessages(database, conv.id, messages);
             if (changed.length === 0) continue;
 
@@ -2197,7 +2238,6 @@ export async function syncMessages(publicKey: string) {
         // Local cleanup of conversations that were deleted/consolidated on the server
         try {
             const serverIds = convData.conversations.map((c: any) => c.id);
-            const database = await getDb();
             const localConvs = await database.getAllAsync<any>(
                 'SELECT conversation_id FROM conversation_participants WHERE public_key = ?',
                 [publicKey]

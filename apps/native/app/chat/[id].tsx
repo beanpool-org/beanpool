@@ -133,7 +133,10 @@ export default function ChatScreen() {
         statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
         statusBadgeText: { fontSize: 11, fontWeight: '800' },
         keyboardView: { flex: 1 },
-        listContent: { padding: 16, paddingBottom: 8, gap: 4 },
+        // Inverted list: the container's TOP edge renders at the visual bottom,
+        // so paddingTop is the gap above the input bar and paddingBottom the gap
+        // under the header.
+        listContent: { padding: 16, paddingTop: 8, gap: 4 },
         systemMessageContainer: { width: '100%', alignItems: 'center', marginVertical: 8 },
         systemMessageBubble: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
         systemMessageText: { fontSize: 13, color: theme === 'dark' ? colors.text.body : palette.gray600, fontWeight: '600' },
@@ -364,8 +367,9 @@ export default function ChatScreen() {
         Linking.openURL(url).catch(() => Alert.alert('Cannot open link', url));
     }, []);
 
+    // The list is inverted (newest message = index 0), so "bottom" is offset 0.
     const scrollToBottom = useCallback((animated: boolean) => {
-        flatListRef.current?.scrollToEnd({ animated });
+        flatListRef.current?.scrollToOffset({ offset: 0, animated });
     }, []);
 
     // On Android, tell the OS not to resize/pan the window when the keyboard
@@ -565,10 +569,15 @@ export default function ChatScreen() {
         }
         
         setMessages(prev => {
-            if (data.length > prev.length) {
-                setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-            } else if (!isBackgroundPoll && prev.length === 0) {
-                setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+            // Unchanged thread → keep the previous reference so 3s poll ticks don't
+            // re-render every bubble ("VirtualizedList slow to update" churn).
+            if (prev.length === data.length && JSON.stringify(prev) === JSON.stringify(data)) return prev;
+            // Inverted list: offset 0 IS the newest message, so the view is already
+            // pinned to the bottom on open and stays there as new rows arrive. Only
+            // a foreground action (own send, image, resend) snaps back explicitly —
+            // background polls must not yank someone who scrolled up to read history.
+            if (!isBackgroundPoll && data.length > prev.length) {
+                setTimeout(() => scrollToBottom(true), 100);
             }
             return data;
         });
@@ -870,7 +879,9 @@ export default function ChatScreen() {
             }
             items.push(m);
         }
-        return items;
+        // Reversed for the inverted FlatList: index 0 renders at the visual bottom,
+        // so the reversed-chronological array reads correctly top-to-bottom on screen.
+        return items.reverse();
     }, [messages]);
 
     const renderMessage = ({ item }: { item: any }) => {
@@ -1391,7 +1402,13 @@ export default function ChatScreen() {
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
-                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                    // Inverted = newest message (index 0) is on-screen from the first
+                    // frame. The old non-inverted list rendered the thread top-down in
+                    // batches while animating scrollToEnd after EVERY batch — the
+                    // jerky ride-to-the-bottom on opening a conversation.
+                    inverted
+                    initialNumToRender={15}
+                    windowSize={9}
                     onScrollBeginDrag={() => {
                         setActiveMessageActionsId(null);
                         setActiveEmojiPickerId(null);

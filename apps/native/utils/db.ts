@@ -2454,13 +2454,25 @@ export async function getMessages(conversationId: string) {
         const outgoing = !!myPubkey && row.author_pubkey === myPubkey;
         const readByPeer = outgoing && !!peerLastReadAt &&
             new Date(row.timestamp).getTime() <= new Date(peerLastReadAt).getTime();
+        let parsedMeta: any = undefined;
+        if (row.metadata) {
+            try { parsedMeta = JSON.parse(row.metadata); } catch {}
+        }
+        // If the app died mid-delivery the row would show a clock forever —
+        // downgrade stale in-flight sends to 'failed' so the bubble offers resend.
+        let sendState = parsedMeta?.__sendState;
+        if (sendState === 'sending' && Date.now() - new Date(row.timestamp).getTime() > 60_000) {
+            sendState = 'failed';
+        }
         return {
             id: row.id,
             senderId: row.author_pubkey,
             text: displayTxt,
             type: row.type || 'text',
             systemType: row.system_type,
-            metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+            metadata: parsedMeta,
+            // 'sending' | 'failed' | undefined — optimistic-send delivery state
+            sendState,
             outgoing,
             readByPeer,
             edited: !!row.edited_at,
@@ -2500,17 +2512,40 @@ export async function insertMessage(conversationId: string, authorPubkey: string
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
 
-    const body = {
-        conversationId,
-        authorPubkey,
-        ciphertext,
-        nonce,
-        metadata
-    };
-    const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/messages/send', bodyString, identity.privateKey, identity.publicKey);
+    // Optimistic send (WhatsApp-style): write the message locally first under a
+    // temporary id so the bubble renders immediately with a "sending" clock, then
+    // deliver to the node in the background. On ack the row adopts the server-vetted
+    // id/timestamp and the clock becomes a tick; on failure it's flagged so the
+    // bubble can offer resend. Callers therefore resolve in milliseconds — the
+    // previous shape blocked the UI on a full server round-trip (~2s on-device).
+    const tempId = `pending-${Crypto.randomUUID()}`;
+    let baseMeta: any = {};
+    if (metadata) {
+        try { baseMeta = JSON.parse(metadata) || {}; } catch {}
+    }
+    await database.runAsync(
+        'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [tempId, conversationId, authorPubkey, ciphertext, nonce, JSON.stringify({ ...baseMeta, __sendState: 'sending' }), new Date().toISOString()]
+    );
 
+    // Fire-and-forget: the returned promise is intentionally not awaited.
+    _deliverPendingMessage(anchorUrl, identity, tempId, { conversationId, authorPubkey, ciphertext, nonce, metadata });
+}
+
+/** Background half of the optimistic send: POST to the node, then either adopt the
+ *  server id/timestamp or mark the local row failed. Always emits sync_data_updated
+ *  so any mounted thread re-renders the tick state. */
+async function _deliverPendingMessage(
+    anchorUrl: string,
+    identity: { privateKey: string; publicKey: string },
+    tempId: string,
+    body: { conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; metadata?: string }
+) {
+    const database = await getDb();
+    const { DeviceEventEmitter } = require('react-native');
     try {
+        const bodyString = JSON.stringify(body);
+        const headers = await buildSignedHeaders('POST', '/api/messages/send', bodyString, identity.privateKey, identity.publicKey);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         const res = await fetch(`${anchorUrl}/api/messages/send`, {
@@ -2527,24 +2562,41 @@ export async function insertMessage(conversationId: string, authorPubkey: string
             try {
                 const json = JSON.parse(txt);
                 if (json.error) errMsg = json.error;
-            } catch (e) {
+            } catch {
                 if (txt) errMsg = txt;
             }
             throw new Error(errMsg);
         }
-        
+
         const data = await res.json();
         const serverMsg = data.message;
-        
-        // Safely write to physical storage since the node accepted it using the Server-vetted UUID
+
+        // Adopt the server-vetted id + timestamp and drop the sending flag.
+        // OR REPLACE: a 3s poll may have already synced the server's copy of this
+        // message — in that case the confirmed local row simply replaces it.
         await database.runAsync(
-            'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [serverMsg.id, conversationId, authorPubkey, ciphertext, nonce, metadata || null, serverMsg.timestamp]
+            'UPDATE OR REPLACE messages SET id=?, timestamp=?, metadata=? WHERE id=?',
+            [serverMsg.id, serverMsg.timestamp, body.metadata || null, tempId]
         );
-        
-    } catch (e: any) {
-        throw new Error(e.message || 'Network request failed. Message unable to be sent.');
+    } catch {
+        try {
+            const row = await database.getFirstAsync<any>('SELECT metadata FROM messages WHERE id=?', [tempId]);
+            let meta: any = {};
+            if (row?.metadata) {
+                try { meta = JSON.parse(row.metadata) || {}; } catch {}
+            }
+            meta.__sendState = 'failed';
+            await database.runAsync('UPDATE messages SET metadata=? WHERE id=?', [JSON.stringify(meta), tempId]);
+        } catch {}
+    } finally {
+        DeviceEventEmitter.emit('sync_data_updated');
     }
+}
+
+/** Remove a local-only message row (used to discard or resend a failed optimistic send). */
+export async function deleteLocalMessage(messageId: string) {
+    const database = await getDb();
+    await database.runAsync('DELETE FROM messages WHERE id = ?', [messageId]);
 }
 
 /**

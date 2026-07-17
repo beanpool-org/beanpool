@@ -9,7 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage } from '../../utils/db';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -604,6 +604,31 @@ export default function ChatScreen() {
         }
     };
 
+    // A failed optimistic send renders a red "!" — tapping the bubble lands here.
+    const handleFailedMessagePress = async (item: any) => {
+        await KeyboardController.dismiss(); // Alert = separate window; see phantom-keyboard note above
+        Alert.alert('Message not delivered', 'This message could not be sent.', [
+            { text: 'Discard', style: 'destructive', onPress: async () => {
+                await deleteLocalMessage(item.id).catch(() => {});
+                loadMessages(true);
+            }},
+            { text: 'Resend', onPress: async () => {
+                if (!identity?.publicKey) return;
+                const meta = { ...(item.metadata || {}) };
+                delete meta.__sendState;
+                const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : undefined;
+                await deleteLocalMessage(item.id).catch(() => {});
+                try {
+                    await insertMessage(id as string, identity.publicKey, item.text, metaStr);
+                } catch (e: any) {
+                    Alert.alert('Message Failed', e.message || 'Could not resend.');
+                }
+                loadMessages(true);
+            }},
+            { text: 'Cancel', style: 'cancel' },
+        ]);
+    };
+
     const pickAndSendImage = async () => {
         if (!identity?.publicKey || sendingRef.current) return;
         // Same phantom-keyboard hazard as the review modal: the source-picker Alert and
@@ -983,6 +1008,8 @@ export default function ChatScreen() {
         const toggleActions = (event: any) => {
             // A link tap also bubbles to here — swallow it so we don't open the actions menu.
             if (linkPressedRef.current) { linkPressedRef.current = false; return; }
+            // Failed sends get the resend/discard prompt instead of the actions menu.
+            if (item.sendState === 'failed') { handleFailedMessagePress(item); return; }
             const pageY = event?.nativeEvent?.pageY;
             // If the touch is within the top 230px of the viewport, position the picker below the bubble
             const isNearTop = pageY && pageY < 230;
@@ -1019,8 +1046,9 @@ export default function ChatScreen() {
             setActiveEmojiPickerId(null);
         };
 
-        // Only the author can edit, only text (not images/system), and only within the window.
-        const canEdit = isMe && item.type !== 'image' && !item.systemType && !!item.rawTimestamp &&
+        // Only the author can edit, only text (not images/system), only within the window,
+        // and never a message still in flight (its id is a local temp id the server doesn't know).
+        const canEdit = isMe && item.type !== 'image' && !item.systemType && !item.sendState && !!item.rawTimestamp &&
             (Date.now() - new Date(item.rawTimestamp).getTime() <= MESSAGE_EDIT_WINDOW_MS);
 
         const renderActionButtons = () => {
@@ -1151,9 +1179,15 @@ export default function ChatScreen() {
                                     {item.edited ? 'edited · ' : ''}{item.timestamp}
                                 </Text>
                                 {isMe && item.outgoing && (
-                                    <Text style={{ fontSize: 10, color: item.readByPeer ? palette.cyan200 : colors.chat.tickUnread }}>
-                                        {item.readByPeer ? ' ✓✓' : ' ✓'}
-                                    </Text>
+                                    item.sendState === 'sending' ? (
+                                        <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
+                                    ) : item.sendState === 'failed' ? (
+                                        <Text style={{ fontSize: 10, color: colors.feedback.danger.solid, fontWeight: '800' }}> ! not delivered</Text>
+                                    ) : (
+                                        <Text style={{ fontSize: 10, color: item.readByPeer ? palette.cyan200 : colors.chat.tickUnread }}>
+                                            {item.readByPeer ? ' ✓✓' : ' ✓'}
+                                        </Text>
+                                    )
                                 )}
                             </Text>
                         )}

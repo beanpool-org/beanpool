@@ -983,8 +983,8 @@ export async function refreshBalanceFromServer(pubkey: string) {
         }
         
         if (balData.tier || balData.floor !== undefined) {
-            let floor = -100;
-            let tier = { name: 'Ghost', emoji: '👻', canGift: false, canInvite: false };
+            const floor = -100;
+            const tier = { name: 'Ghost', emoji: '👻', canGift: false, canInvite: false };
             const newTierStr = JSON.stringify({
                 tier: balData.tier || tier,
                 floor: balData.floor ?? floor,
@@ -2553,6 +2553,9 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             outgoing,
             readByPeer,
             edited: !!row.edited_at,
+            // Raw edit timestamp: pins the text content for cheap change detection
+            // (chat screen compares (id, editedAt) instead of the decrypted text).
+            editedAt: row.edited_at ?? null,
             rawTimestamp: row.timestamp,
             timestamp: new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };

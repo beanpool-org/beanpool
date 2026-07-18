@@ -2009,6 +2009,7 @@ async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversatio
          ON CONFLICT(id) DO UPDATE SET
            conversation_id = excluded.conversation_id,
            metadata = excluded.metadata,
+           timestamp = excluded.timestamp,
            ciphertext = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.ciphertext ELSE messages.ciphertext END,
            nonce = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.nonce ELSE messages.nonce END,
            edited_at = CASE WHEN excluded.edited_at IS NOT NULL AND (messages.edited_at IS NULL OR excluded.edited_at >= messages.edited_at) THEN excluded.edited_at ELSE messages.edited_at END`,
@@ -2562,7 +2563,13 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     });
 }
 
-export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string) {
+// Resend path may pass the failed row's id so a retry of a send that actually
+// landed (POST timed out after the server committed) is idempotent server-side
+// instead of a real duplicate the peer sees twice. Non-UUID ids (old pending-
+// prefixed rows from before client-generated ids) fall back to a fresh id.
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string) {
     const database = await getDb();
 
     // E2E-encrypt direct messages (NAT-1). Falls back to legacy plaintext-v1 for
@@ -2598,7 +2605,13 @@ export async function insertMessage(conversationId: string, authorPubkey: string
     // id/timestamp and the clock becomes a tick; on failure it's flagged so the
     // bubble can offer resend. Callers therefore resolve in milliseconds — the
     // previous shape blocked the UI on a full server round-trip (~2s on-device).
-    const tempId = `pending-${Crypto.randomUUID()}`;
+    // Client-generated id (WhatsApp-style), sent to the node in the POST body.
+    // A new node keeps it, so the optimistic row below and the server's row are
+    // the same row by construction — the WS echo of an own-send upserts onto
+    // this row instead of materializing a second bubble that vanishes when the
+    // ack lands (the "duplicate then disappears" flicker). An old node ignores
+    // the field and returns its own id; the ack's rename below covers that.
+    const tempId = reuseId && UUID_V4_RE.test(reuseId) ? reuseId : Crypto.randomUUID();
     let baseMeta: any = {};
     if (metadata) {
         try { baseMeta = JSON.parse(metadata) || {}; } catch {}
@@ -2609,7 +2622,7 @@ export async function insertMessage(conversationId: string, authorPubkey: string
     );
 
     // Fire-and-forget: the returned promise is intentionally not awaited.
-    _deliverPendingMessage(anchorUrl, identity, tempId, { conversationId, authorPubkey, ciphertext, nonce, metadata });
+    _deliverPendingMessage(anchorUrl, identity, tempId, { id: tempId, conversationId, authorPubkey, ciphertext, nonce, metadata });
 }
 
 /** Background half of the optimistic send: POST to the node, then either adopt the
@@ -2619,7 +2632,7 @@ async function _deliverPendingMessage(
     anchorUrl: string,
     identity: { privateKey: string; publicKey: string },
     tempId: string,
-    body: { conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; metadata?: string }
+    body: { id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; metadata?: string }
 ) {
     const database = await getDb();
     const { DeviceEventEmitter } = require('react-native');

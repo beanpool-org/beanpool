@@ -2360,13 +2360,35 @@ export async function startHttpsServer(port: number): Promise<void> {
     });
 
     router.post('/api/messages/send', async (ctx) => {
-        const { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata } = (ctx as any).requestBody || {};
+        const { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id } = (ctx as any).requestBody || {};
         if (!conversationId || !authorPubkey || !ciphertext || !nonce) {
             ctx.status = 400;
             ctx.body = { error: 'conversationId, authorPubkey, ciphertext, and nonce are required' };
             return;
         }
-        const msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata);
+        // Optional client-generated message id (see sendMessage). Strict UUID v4
+        // only — anything else is rejected rather than silently ignored, so a
+        // malformed id can't slip through as a server-generated one.
+        let clientId: string | undefined;
+        if (id !== undefined && id !== null) {
+            if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+                ctx.status = 400;
+                ctx.body = { error: 'id must be a UUID v4' };
+                return;
+            }
+            clientId = id.toLowerCase();
+        }
+        let msg;
+        try {
+            msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId);
+        } catch (e: any) {
+            if (e?.code === 'ID_CONFLICT') {
+                ctx.status = 409;
+                ctx.body = { error: 'Message id already exists' };
+                return;
+            }
+            throw e;
+        }
         if (!msg) {
             ctx.status = 400;
             ctx.body = { error: 'Failed to send — conversation not found or not a participant' };

@@ -743,7 +743,10 @@ export default function ChatScreen() {
                 const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : undefined;
                 await deleteLocalMessage(item.id).catch(() => {});
                 try {
-                    await insertMessage(id as string, identity.publicKey, item.text, metaStr);
+                    // Reuse the failed row's id: if the original POST actually landed
+                    // (timeout after server commit), the retry is idempotent instead
+                    // of a duplicate the peer sees twice.
+                    await insertMessage(id as string, identity.publicKey, item.text, metaStr, item.id);
                 } catch (e: any) {
                     Alert.alert('Message Failed', e.message || 'Could not resend.');
                 }

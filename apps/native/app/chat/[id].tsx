@@ -30,6 +30,17 @@ const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 // (SQLite read + per-message decrypt) flat no matter how long the thread is.
 const MESSAGE_PAGE_SIZE = 50;
 
+// Bound an await so a hung step can never latch sendingRef forever — a hung
+// insertMessage left the send button silently dead until an app restart
+// (field report 2026-07-18). The underlying work isn't cancelled; the caller's
+// catch/finally run and the UI stays usable.
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} is taking too long — please try again.`)), ms)),
+    ]);
+}
+
 function renderTextWithLinks(text: string, linkStyle: any, onPressUrl: (url: string) => void) {
     if (!text) return text;
     const parts = text.split(URL_SPLIT_REGEX);
@@ -103,6 +114,18 @@ export default function ChatScreen() {
     const inputRef = useRef<TextInput>(null);
     const insets = useSafeAreaInsets();
     const sendingRef = useRef(false);
+    // Mirror of the native input's text for SEND LOGIC. `draft` state is only for
+    // styling the send button: handleSend receives state through a render closure,
+    // and renders commit late whenever the JS thread is busy — reading state at
+    // press time sent a stale prefix of the box ("Go test your core business" went
+    // out as "Go test your"; observed on two devices, 2026-07-18). The ref is
+    // written synchronously inside every change event, and input events precede
+    // the press in the event queue, so it holds the full text when the press runs.
+    const draftRef = useRef('');
+    const updateDraft = (text: string) => {
+        draftRef.current = text;
+        setDraft(text);
+    };
     // History-window paging. Refs (not state) because loadMessages is called from
     // long-lived closures (poll interval, ws listener) that must see current values.
     const msgLimitRef = useRef(MESSAGE_PAGE_SIZE);
@@ -575,6 +598,15 @@ export default function ChatScreen() {
         }, [id, identity, loadConversationData, loadDeals])
     );
 
+    // Change signature for the poll-tick compare in loadMessages: every field that
+    // can alter how a bubble renders, EXCEPT the message text — text is pinned by
+    // (id, editedAt), and stringifying the full decrypted thread twice every 3s is
+    // what made ticks expensive once the history window grew. Metadata stays in
+    // (it's tiny and carries reactions/reply refs/send state).
+    const messagesSignature = (rows: any[]) => rows.map(m =>
+        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : ''].join('\u0001')
+    ).join('\u0002');
+
     const loadMessages = async (isBackgroundPoll = false) => {
         const data = await getMessages(id as string, { limit: msgLimitRef.current });
         messagesLenRef.current = data.length;
@@ -585,7 +617,7 @@ export default function ChatScreen() {
         setMessages(prev => {
             // Unchanged thread → keep the previous reference so 3s poll ticks don't
             // re-render every bubble ("VirtualizedList slow to update" churn).
-            if (prev.length === data.length && JSON.stringify(prev) === JSON.stringify(data)) return prev;
+            if (prev.length === data.length && messagesSignature(prev) === messagesSignature(data)) return prev;
             // Inverted list: offset 0 IS the newest message, so the view is already
             // pinned to the bottom on open and stays there as new rows arrive. Only
             // a foreground action (own send, image, resend) snaps back explicitly —
@@ -598,17 +630,20 @@ export default function ChatScreen() {
     };
 
     const handleSend = async () => {
-        if (!draft.trim() || !identity?.publicKey) return;
+        // Guard and payload both come from draftRef, never `draft` state — see the
+        // draftRef note. Guarding on state made the button silently swallow presses
+        // whenever state lagged the box (the "chat locked up" report, 2026-07-18).
+        const currentDraft = draftRef.current.trim();
+        if (!currentDraft || !identity?.publicKey) return;
         if (sendingRef.current) return;
 
         sendingRef.current = true;
         const wasEditing = editingMessage;
         try {
-            const currentDraft = draft.trim();
-            setDraft('');
+            updateDraft('');
             inputRef.current?.clear(); // uncontrolled input: state no longer clears the box
             if (wasEditing) {
-                await editMessage(id as string, wasEditing.id, currentDraft);
+                await withTimeout(editMessage(id as string, wasEditing.id, currentDraft), 15_000, 'Editing');
                 setEditingMessage(null);
                 loadMessages(true);
             } else {
@@ -616,7 +651,7 @@ export default function ChatScreen() {
                 if (replyToMessage) {
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
-                await insertMessage(id as string, identity.publicKey, currentDraft, metadata);
+                await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata), 15_000, 'Sending');
                 setReplyToMessage(null);
                 loadMessages();
             }
@@ -661,17 +696,19 @@ export default function ChatScreen() {
         const sendUri = async (uri: string) => {
             sendingRef.current = true;
             try {
-                const manip = await ImageManipulator.manipulateAsync(
+                const manip = await withTimeout(ImageManipulator.manipulateAsync(
                     uri,
                     [{ resize: { width: 1000 } }],
                     { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                );
+                ), 30_000, 'Processing the image');
                 if (!manip.base64) throw new Error('Could not process image.');
                 let metadata: string | undefined = undefined;
                 if (replyToMessage) {
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
-                await sendImageMessage(id as string, `data:image/jpeg;base64,${manip.base64}`, '', metadata);
+                // Image sends still await the server round-trip (not optimistic) —
+                // the timeout keeps a dead network from latching sendingRef forever.
+                await withTimeout(sendImageMessage(id as string, `data:image/jpeg;base64,${manip.base64}`, '', metadata), 60_000, 'Sending the image');
                 setReplyToMessage(null);
                 hapticSuccess();
                 loadMessages();
@@ -1067,7 +1104,7 @@ export default function ChatScreen() {
         const handleEditPress = () => {
             setEditingMessage(item);
             setReplyToMessage(null);
-            setDraft(item.text || '');
+            updateDraft(item.text || '');
             // Uncontrolled input: push the text into the native field explicitly.
             inputRef.current?.setNativeProps({ text: item.text || '' });
             setActiveMessageActionsId(null);
@@ -1452,7 +1489,7 @@ export default function ChatScreen() {
                                 <Text style={[styles.replyPreviewAuthor, { color: colors.brand.primary }]}>Editing message</Text>
                                 <Text style={styles.replyPreviewText} numberOfLines={1}>{editingMessage.text}</Text>
                             </View>
-                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { setEditingMessage(null); setDraft(''); inputRef.current?.clear(); }} style={styles.replyPreviewClose}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { setEditingMessage(null); updateDraft(''); inputRef.current?.clear(); }} style={styles.replyPreviewClose}>
                                 <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
                             </Pressable>
                         </View>
@@ -1497,11 +1534,12 @@ export default function ChatScreen() {
                         // busy (sync payload parsing), React writes a STALE value back
                         // into the native field and typed characters are lost — messages
                         // arrived at the server with letters missing on slower devices.
-                        // The native field is the source of truth; `draft` mirrors it via
-                        // onChangeText for the send-button state and send payload (input
-                        // events are delivered in order, so by the time a send press runs,
-                        // every earlier keystroke's change event has already landed).
-                        onChangeText={setDraft}
+                        // The native field is the source of truth. updateDraft mirrors it
+                        // into draftRef (synchronously — handleSend's guard and payload)
+                        // and into `draft` state (async — send-button styling only; state
+                        // reaches handlers via render closures that lag under load, which
+                        // truncated sends to a stale prefix before draftRef existed).
+                        onChangeText={updateDraft}
                         multiline
                         submitBehavior="newline"
                     />

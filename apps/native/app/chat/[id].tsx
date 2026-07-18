@@ -1004,6 +1004,20 @@ export default function ChatScreen() {
         return items.reverse();
     }, [messages]);
 
+    // List cells are siblings, and a later-mounted cell paints over an earlier one —
+    // so the reaction picker (absolutely positioned at top: -45, overflowing into the
+    // row above) rendered BEHIND that row's bubble. zIndex inside the row can't win
+    // across cells; the whole cell has to be lifted while its picker is open. The
+    // `style` prop carries the inverted list's scaleY transform and must be kept.
+    const renderCell = useCallback(({ children, item, style, ...props }: any) => (
+        <View
+            {...props}
+            style={[style, item?.id === activeEmojiPickerId ? { zIndex: 100, elevation: 100 } : null]}
+        >
+            {children}
+        </View>
+    ), [activeEmojiPickerId]);
+
     const renderMessage = ({ item }: { item: any }) => {
         if (item.type === 'day-separator') {
             return (
@@ -1521,6 +1535,7 @@ export default function ChatScreen() {
                     data={listItems}
                     keyExtractor={item => item.id}
                     renderItem={renderMessage}
+                    CellRendererComponent={renderCell}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"

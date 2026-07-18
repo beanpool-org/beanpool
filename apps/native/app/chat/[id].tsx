@@ -126,6 +126,28 @@ export default function ChatScreen() {
         draftRef.current = text;
         setDraft(text);
     };
+    // inputRef.clear() can be silently DROPPED: the native command carries the
+    // count of text events JS has processed, and Android's ReactEditText skips
+    // stale-counted updates (protection against clobbering typing JS hasn't seen).
+    // Under JS-thread lag the IME emits one more event (autocorrect finalizing on
+    // the send tap) just before clear() dispatches → the box keeps the sent text
+    // while draftRef says '' → grey dead send button over a full box (field
+    // report 2026-07-18, v1.1.79, message visibly sent but "stuck in the box").
+    // That unseen event echoes the sent text back into draftRef when the queue
+    // drains — sweep it out and re-clear (twice: the queue may still be draining
+    // at the first check). Only text matching what we just sent is swept, so a
+    // user who starts typing the next message immediately is never wiped.
+    const clearSweepTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+    const scheduleClearSweep = (sentText: string) => {
+        clearSweepTimersRef.current.forEach(clearTimeout);
+        clearSweepTimersRef.current = [150, 600].map(ms => setTimeout(() => {
+            if (draftRef.current && draftRef.current.trim() === sentText) {
+                updateDraft('');
+                inputRef.current?.clear();
+            }
+        }, ms));
+    };
+    useEffect(() => () => clearSweepTimersRef.current.forEach(clearTimeout), []);
     // History-window paging. Refs (not state) because loadMessages is called from
     // long-lived closures (poll interval, ws listener) that must see current values.
     const msgLimitRef = useRef(MESSAGE_PAGE_SIZE);
@@ -642,6 +664,7 @@ export default function ChatScreen() {
         try {
             updateDraft('');
             inputRef.current?.clear(); // uncontrolled input: state no longer clears the box
+            scheduleClearSweep(currentDraft); // clear() may be dropped under load — see note at definition
             if (wasEditing) {
                 await withTimeout(editMessage(id as string, wasEditing.id, currentDraft), 15_000, 'Editing');
                 setEditingMessage(null);
@@ -1489,7 +1512,7 @@ export default function ChatScreen() {
                                 <Text style={[styles.replyPreviewAuthor, { color: colors.brand.primary }]}>Editing message</Text>
                                 <Text style={styles.replyPreviewText} numberOfLines={1}>{editingMessage.text}</Text>
                             </View>
-                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { setEditingMessage(null); updateDraft(''); inputRef.current?.clear(); }} style={styles.replyPreviewClose}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { const prior = draftRef.current.trim(); setEditingMessage(null); updateDraft(''); inputRef.current?.clear(); scheduleClearSweep(prior); }} style={styles.replyPreviewClose}>
                                 <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
                             </Pressable>
                         </View>

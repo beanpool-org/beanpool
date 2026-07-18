@@ -122,7 +122,12 @@ export default function ChatScreen() {
     // written synchronously inside every change event, and input events precede
     // the press in the event queue, so it holds the full text when the press runs.
     const draftRef = useRef('');
+    // Counts every draft write (change events + programmatic). The clear-sweep
+    // below uses it to tell a dropped-clear echo (exactly ONE queued IME event)
+    // from the user re-typing the same text (one event per keystroke).
+    const textEventsRef = useRef(0);
     const updateDraft = (text: string) => {
+        textEventsRef.current += 1;
         draftRef.current = text;
         setDraft(text);
     };
@@ -139,9 +144,19 @@ export default function ChatScreen() {
     // user who starts typing the next message immediately is never wiped.
     const clearSweepTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
     const scheduleClearSweep = (sentText: string) => {
+        // Baseline taken AFTER the caller's own updateDraft('') — the echo of a
+        // dropped clear() is exactly one more write. A content match alone would
+        // also wipe a user who re-typed or re-pasted the identical text within
+        // the sweep window (review finding, PR #44); re-typing produces one
+        // write per keystroke, so requiring exactly ONE write since the clear
+        // narrows the false-wipe to a single-event identical reproduction
+        // (~re-pasting the message just sent). More than one write → assume the
+        // user is typing and never wipe; a genuinely stuck box stays visible and
+        // consistent (draftRef mirrors it), recoverable by any keystroke.
+        const baseline = textEventsRef.current;
         clearSweepTimersRef.current.forEach(clearTimeout);
         clearSweepTimersRef.current = [150, 600].map(ms => setTimeout(() => {
-            if (draftRef.current && draftRef.current.trim() === sentText) {
+            if (textEventsRef.current - baseline === 1 && draftRef.current.trim() === sentText) {
                 updateDraft('');
                 inputRef.current?.clear();
             }

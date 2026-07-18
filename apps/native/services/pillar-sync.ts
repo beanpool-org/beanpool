@@ -255,7 +255,11 @@ export async function performSync(): Promise<SyncResult> {
         const postsTimeout = setTimeout(() => postsController.abort(), 30000); // Extended for heavy initial payloads
         const balanceTimeout = setTimeout(() => balanceController.abort(), 30000);
 
-        let postsData = [];
+        // Tables whose change-status was already decided from the RAW response text
+        // this cycle — the stringify gate before applyDelta must not re-hash them.
+        const rawGated = new Set<string>();
+
+        let postsData: any;
         try {
             const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${lastSyncParam}&_t=${Date.now()}`, {
                 method: 'GET',
@@ -269,8 +273,10 @@ export async function performSync(): Promise<SyncResult> {
                 result.errorMessage = `Posts fetch failed with status: ${postsRes.status}`;
                 return result;
             }
-            postsData = await postsRes.json();
-            console.log(`[Pillar Sync] Received ${Array.isArray(postsData) ? postsData.length : 'non-array'} posts from server`);
+            postsData = await parseIfChanged(postsRes, anchorUrl, 'posts', rawGated);
+            if (postsData !== undefined) {
+                console.log(`[Pillar Sync] Received ${Array.isArray(postsData) ? postsData.length : 'non-array'} posts from server`);
+            }
         } catch (e: any) {
             clearTimeout(postsTimeout);
             clearTimeout(balanceTimeout);
@@ -279,13 +285,13 @@ export async function performSync(): Promise<SyncResult> {
             return result;
         }
 
+        // Tables are added to the delta ONLY when their payload actually changed —
+        // applyDelta skips absent tables, so an unchanged fetch costs no parse, no
+        // lock and no re-apply.
         const delta: any = {
-            posts: Array.isArray(postsData) ? postsData : [],
-            accounts: [],
-            transactions: [],
-            members: [],
-            projects: []
+            accounts: []
         };
+        if (Array.isArray(postsData)) delta.posts = postsData;
 
         // Fetch balance
         if (pubKey) {
@@ -317,16 +323,17 @@ export async function performSync(): Promise<SyncResult> {
                     signal: postsController.signal
                 });
                 if (directoryRes && directoryRes.ok) {
-                    const dirData = await directoryRes.json();
-                    if (Array.isArray(dirData)) {
+                    const dirData = await parseIfChanged(directoryRes, anchorUrl, 'members', rawGated);
+                    if (dirData !== undefined && Array.isArray(dirData)) {
                         delta.members = dirData;
                         // This /api/members fetch returns the FULL directory (no cursor), so it's
                         // safe for applyDelta to garbage-collect local members absent from it.
                         // applyDelta only GCs when this flag is set — a partial member list never
                         // triggers deletion.
                         delta.membersComplete = true;
-                        await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
                     }
+                    // An unchanged directory still counts as a completed hourly check.
+                    await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
                 }
             } catch (e) {
                 console.warn('[Pillar Sync] Members fetch failed:', e);
@@ -344,8 +351,11 @@ export async function performSync(): Promise<SyncResult> {
                     signal: postsController.signal
                 });
                 if (deltaRes && deltaRes.ok) {
-                    const deltaData = await deltaRes.json();
-                    if (Array.isArray(deltaData) && deltaData.length > 0) {
+                    // Separate fingerprint key from the full directory (different payload
+                    // shape); usually returns [] which the raw gate skips outright. No
+                    // rawGated entry — small payloads go through the stringify gate.
+                    const deltaData = await parseIfChanged(deltaRes, anchorUrl, 'membersDelta');
+                    if (deltaData !== undefined && Array.isArray(deltaData) && deltaData.length > 0) {
                         delta.members = deltaData;
                         // membersComplete intentionally left unset (partial list → no GC).
                     }
@@ -386,8 +396,8 @@ export async function performSync(): Promise<SyncResult> {
                     signal: balanceController.signal
                 });
                 if (txRes && txRes.ok) {
-                    const txData = await txRes.json();
-                    if (Array.isArray(txData)) {
+                    const txData = await parseIfChanged(txRes, anchorUrl, 'transactions', rawGated);
+                    if (txData !== undefined && Array.isArray(txData)) {
                         delta.transactions = txData;
                     }
                 }
@@ -405,8 +415,13 @@ export async function performSync(): Promise<SyncResult> {
                     signal: postsController.signal
                 });
                 if (mkptxRes && mkptxRes.ok) {
-                    const mkptxData = await mkptxRes.json();
-                    console.log(`[Pillar Sync] Fetched ${mkptxData?.length} marketplaceTransactions from server`);
+                    // The heaviest payload of the sync (measured 9.8MB with embedded
+                    // cover images) — skipping the parse when unchanged is the
+                    // difference between a frozen UI and a no-op.
+                    const mkptxData = await parseIfChanged(mkptxRes, anchorUrl, 'marketplaceTransactions', rawGated);
+                    if (mkptxData !== undefined) {
+                        console.log(`[Pillar Sync] Fetched ${mkptxData?.length} marketplaceTransactions from server`);
+                    }
                     if (Array.isArray(mkptxData)) {
                         delta.marketplaceTransactions = mkptxData;
                     }
@@ -442,6 +457,12 @@ export async function performSync(): Promise<SyncResult> {
         const gatedDelta: any = {};
         for (const [table, payload] of Object.entries(delta)) {
             if (payload === undefined || table === 'membersComplete') continue;
+            // Raw-gated tables were already proven changed from the response text —
+            // re-serializing a multi-MB payload here would block the JS thread.
+            if (rawGated.has(table)) {
+                gatedDelta[table] = payload;
+                continue;
+            }
             const fp = _fingerprint(JSON.stringify(payload));
             if (_lastAppliedFingerprints[`${anchorUrl}:${table}`] !== fp) {
                 gatedDelta[table] = payload;
@@ -472,7 +493,7 @@ export async function performSync(): Promise<SyncResult> {
         await AsyncStorage.removeItem(kCheckpoint);
 
         result.success = true;
-        result.deltaCount = delta.posts.length + delta.accounts.length;
+        result.deltaCount = (delta.posts?.length || 0) + (delta.accounts?.length || 0);
         result.durationMs = Date.now() - startTime;
         return result;
 
@@ -517,6 +538,23 @@ function _fingerprint(s: string): number {
     let h = 5381;
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; // djb2
     return h;
+}
+
+// Parse a fetch response only when its RAW text differs from the last payload we
+// applied for this table. Hashing the raw string costs ~10ms/MB; JSON.parse of a
+// multi-MB payload freezes the phone's JS thread for seconds — which is what
+// delayed the send button and dropped typed characters in chat. Returns undefined
+// when unchanged (caller leaves the table out of the delta). Keys are namespaced
+// 'raw:' so they never collide with the stringify-gate keys; tables verified here
+// are added to `rawGated` so the stringify gate doesn't re-hash the same payload.
+async function parseIfChanged(res: { text(): Promise<string> }, anchorUrl: string, table: string, rawGated?: Set<string>): Promise<any | undefined> {
+    const raw = await res.text();
+    const key = `raw:${anchorUrl}:${table}`;
+    const fp = _fingerprint(raw);
+    if (_lastAppliedFingerprints[key] === fp) return undefined;
+    _lastAppliedFingerprints[key] = fp;
+    rawGated?.add(table);
+    return JSON.parse(raw);
 }
 
 let syncPromise: Promise<SyncResult> | null = null;

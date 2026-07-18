@@ -56,6 +56,9 @@ let lastConsistency: ReplicaConsistency | null = null;
 // A2-17: the highest snapshot generatedAt we've imported. A snapshot whose
 // generatedAt is older-or-equal is a replay (or a no-op) and is skipped.
 let lastGeneratedAtMs = 0;
+// Raw generatedAt string of the last imported snapshot — sent to the primary as
+// X-Snapshot-Cursor so unchanged pulls come back as a bodyless 304.
+let lastImportedGeneratedAt: string | null = null;
 
 /**
  * A2-9: only allow an HTTPS primary URL (loopback http permitted for dev). The
@@ -119,11 +122,25 @@ async function pullOnce(fresh = false): Promise<{ ok: boolean; error?: string }>
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
+        // Conditional pull: tell the primary what we last imported so it can answer
+        // 304 (no body) when nothing changed — instead of exporting, signing and
+        // streaming the entire ledger every interval. A force-resync (`fresh`)
+        // deliberately omits the cursor to always receive a full snapshot.
+        const headers: Record<string, string> = { ...authHeader };
+        if (!fresh && lastImportedGeneratedAt) headers['X-Snapshot-Cursor'] = lastImportedGeneratedAt;
         const res = await fetch(url, {
             method: 'GET',
-            headers: authHeader,
+            headers,
             signal: controller.signal,
         });
+        if (res.status === 304) {
+            lastSuccessAt = Date.now();
+            if (consecutiveFailures > 0) {
+                logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
+            }
+            consecutiveFailures = 0;
+            return { ok: true };
+        }
         if (!res.ok) {
             throw new Error(`primary returned HTTP ${res.status}`);
         }
@@ -154,6 +171,9 @@ async function pullOnce(fresh = false): Promise<{ ok: boolean; error?: string }>
         if (fresh) {
             clearReplicatedTables();
             lastGeneratedAtMs = 0;
+            // Tables are now empty: forget the cursor so a failed import can't leave
+            // the next pull 304-ing ("unchanged") against a cleared replica.
+            lastImportedGeneratedAt = null;
             logger.info('P2P', '[Backup] 🧹 Force-resync: replicated tables cleared, importing fresh snapshot…');
         }
 
@@ -165,6 +185,7 @@ async function pullOnce(fresh = false): Promise<{ ok: boolean; error?: string }>
         if (payload.generatedAt) {
             const genMs = Date.parse(payload.generatedAt);
             if (Number.isFinite(genMs)) lastGeneratedAtMs = genMs;
+            lastImportedGeneratedAt = payload.generatedAt; // conditional-pull cursor
         }
         lastSuccessAt = Date.now();
         if (consecutiveFailures > 0) {

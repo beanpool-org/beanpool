@@ -2932,12 +2932,31 @@ export function createConversation(type: 'dm' | 'group', participants: string[],
     return conv;
 }
 
-export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string): Message | null {
+export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string): Message | null {
     assertMemberActive(authorPubkey);
     const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conversationId) as any[];
     if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) return null;
 
-    const msg: Message = { id: crypto.randomUUID(), conversationId, authorPubkey, ciphertext, nonce, type, metadata, timestamp: new Date().toISOString() };
+    // Client-generated message id (WhatsApp-style): the sender names the message,
+    // so its optimistic local row and this server row are the same row by
+    // construction — the WS echo of an own-send can no longer materialize as a
+    // duplicate bubble on the sender. Also makes retries of the same send
+    // idempotent: an id that already exists from the same author in the same
+    // conversation returns the existing message without re-inserting,
+    // re-broadcasting, or re-pushing. Any other id collision is rejected — an
+    // existing row is NEVER updated through this path, so ids can't be reused
+    // to overwrite other messages. The endpoint enforces UUID v4 format.
+    if (clientId) {
+        const existing = db.prepare("SELECT * FROM messages WHERE id=?").get(clientId) as any;
+        if (existing) {
+            if (existing.author_pubkey === authorPubkey && existing.conversation_id === conversationId) {
+                return { id: existing.id, conversationId: existing.conversation_id, authorPubkey: existing.author_pubkey, ciphertext: existing.ciphertext, nonce: existing.nonce, type: existing.type, metadata: existing.metadata, timestamp: existing.timestamp };
+            }
+            throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
+        }
+    }
+
+    const msg: Message = { id: clientId || crypto.randomUUID(), conversationId, authorPubkey, ciphertext, nonce, type, metadata, timestamp: new Date().toISOString() };
     db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce, msg.type, msg.metadata, msg.timestamp);
     // Store the encrypted image blob separately so it lazy-loads (kept out of the message feed).
     if (attachment?.data && attachment?.nonce) {

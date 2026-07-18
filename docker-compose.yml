@@ -9,8 +9,6 @@ services:
       - "443:8443" # Standard HTTPS (clean URLs)
       - "8080:8080" # Legacy HTTP (fallback while Azure NSG is updated)
       - "8443:8443" # Legacy HTTPS (fallback while Azure NSG is updated)
-      - "4001:4001"
-      - "4002:4002"
     environment:
       - PUBLIC_IP=${PUBLIC_IP}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}

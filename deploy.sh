@@ -123,52 +123,38 @@ for NODE in "${TARGETS[@]}"; do
       sed -i 's/\"443:8443\"/\"8447:8443\"/g' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
-      sed -i '/\"4001:4001\"/d' docker-compose.yml
-      sed -i '/\"4002:4002\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Castlemaine" ]; then
       sed -i 's/\"80:8080\"/\"8081:8080\"/g' docker-compose.yml
       sed -i 's/\"443:8443\"/\"8445:8443\"/g' docker-compose.yml
       sed -i 's/\"8080:8080\"/\"8082:8080\"/g' docker-compose.yml
       sed -i 's/\"8443:8443\"/\"8446:8443\"/g' docker-compose.yml
-      sed -i 's/\"4001:4001\"/\"4004:4001\"/g' docker-compose.yml
-      sed -i 's/\"4002:4002\"/\"4005:4002\"/g' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Bris" ]; then
       # Bris node (QLD): tunnel-only HTTPS on 8443
       sed -i '/\"8443:8443\"/d' docker-compose.yml
       sed -i 's/\"443:8443\"/\"8443:8443\"/g' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
-      sed -i '/\"4001:4001\"/d' docker-compose.yml
-      sed -i '/\"4002:4002\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Mullum" ]; then
       # Mullum node (QLD): tunnel-only HTTPS on 8445
       sed -i 's/\"80:8080\"/\"8081:8080\"/g' docker-compose.yml
       sed -i 's/\"443:8443\"/\"8445:8443\"/g' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
-      sed -i '/\"4001:4001\"/d' docker-compose.yml
-      sed -i '/\"4002:4002\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Test" ]; then
       # Test node (QLD): tunnel-only HTTPS on 8446
       sed -i 's/\"80:8080\"/\"8082:8080\"/g' docker-compose.yml
       sed -i 's/\"443:8443\"/\"8446:8443\"/g' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
-      sed -i '/\"4001:4001\"/d' docker-compose.yml
-      sed -i '/\"4002:4002\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Gippsland" ]; then
       sed -i 's/\"80:8080\"/\"8084:8080\"/g' docker-compose.yml
       sed -i 's/\"443:8443\"/\"8448:8443\"/g' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
-      sed -i 's/\"4001:4001\"/\"4006:4001\"/g' docker-compose.yml
-      sed -i 's/\"4002:4002\"/\"4007:4002\"/g' docker-compose.yml
     elif [ "$DIR" = "BeanPool-EastGippy" ]; then
       sed -i 's/\"80:8080\"/\"8085:8080\"/g' docker-compose.yml
       sed -i 's/\"443:8443\"/\"8450:8443\"/g' docker-compose.yml
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
-      sed -i 's/\"4001:4001\"/\"4008:4001\"/g' docker-compose.yml
-      sed -i 's/\"4002:4002\"/\"4009:4002\"/g' docker-compose.yml
     fi
     if [ "$NAME" = "mullum1" ]; then
       sed -i '/"80:8080"/d' docker-compose.yml

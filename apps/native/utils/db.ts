@@ -2270,18 +2270,39 @@ export async function syncMessages(publicKey: string) {
     }
 }
 
+// Conversations with a fetch already in flight. The chat screen fires this every
+// 3s AND on every WS nudge; when the node is slow (observed 5-10s responses on the
+// 1cpu test VM under load), stacking overlapping requests onto it makes it slower —
+// each tick must skip, not pile on.
+const _conversationSyncsInFlight = new Set<string>();
+
 export async function syncSingleConversation(conversationId: string) {
+    if (_conversationSyncsInFlight.has(conversationId)) return;
+    _conversationSyncsInFlight.add(conversationId);
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return;
-        
+
+        // 12s (not 5s) to ride out a slow node: an abort throws the whole response
+        // away and the incoming message waits for the NEXT tick to try again — that
+        // retry loop is how a "message took 20 seconds to arrive" report happens.
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        const msgRes = await fetch(`${anchorUrl}/api/messages/${conversationId}`, { headers: { 'Accept': 'application/json' }, signal: controller.signal });
-        clearTimeout(timeout);
-        
-        if (!msgRes.ok) return;
-        
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        let msgRes;
+        try {
+            msgRes = await fetch(`${anchorUrl}/api/messages/${conversationId}`, { headers: { 'Accept': 'application/json' }, signal: controller.signal });
+        } catch (e: any) {
+            console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} fetch failed/timed out: ${e?.message || e}`);
+            return;
+        } finally {
+            clearTimeout(timeout);
+        }
+
+        if (!msgRes.ok) {
+            console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} fetch returned ${msgRes.status}`);
+            return;
+        }
+
         const msgData = await msgRes.json();
         const messages = msgData.messages;
         if (!Array.isArray(messages)) return;
@@ -2337,8 +2358,11 @@ export async function syncSingleConversation(conversationId: string) {
 
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
-    } catch (err) {
-        // Silent catch for background polling
+    } catch (err: any) {
+        // Background polling — don't alert, but DO leave a trace for USB debugging.
+        console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} sync failed: ${err?.message || err}`);
+    } finally {
+        _conversationSyncsInFlight.delete(conversationId);
     }
 }
 

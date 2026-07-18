@@ -35,6 +35,17 @@ export function setBalanceMutationHook(fn: (() => void) | null): void {
 // Enable WAL mode for better concurrency and performance
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
+
+// Cheap "has the ledger changed?" probe for the backup snapshot endpoint.
+// PRAGMA data_version only increments for changes made by OTHER connections, and
+// every server write goes through the main `db` handle above — so a separate
+// read-only connection sees exactly the writes we care about. Lazy so tests and
+// tooling that never serve snapshots don't open a second handle.
+let changeProbe: Database.Database | null = null;
+export function getDbDataVersion(): number {
+    if (!changeProbe) changeProbe = new Database(DB_PATH, { readonly: true });
+    return changeProbe.pragma('data_version', { simple: true }) as number;
+}
 // A2-31 / SRV-7 — ACCEPTED RISK (documented, intentional): FK enforcement is OFF so
 // out-of-order P2P/backup sync can insert rows whose referenced parent hasn't
 // arrived yet (e.g. a transaction before its account, a message before its

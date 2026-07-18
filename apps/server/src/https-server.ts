@@ -75,7 +75,7 @@ import {
     getMemberStats,
     getGuardiansOf, createRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery
 } from './state-engine.js';
-import { getCrowdfundProjects, getCrowdfundProject, createCrowdfundProject, updateCrowdfundProject, pledgeToProject, deleteCrowdfundProject, db } from './db/db.js';
+import { getCrowdfundProjects, getCrowdfundProject, createCrowdfundProject, updateCrowdfundProject, pledgeToProject, deleteCrowdfundProject, db, getDbDataVersion } from './db/db.js';
 import { initDirectoryPublisher, pushDirectoryNow } from './directory-publisher.js';
 import { getBackupStatus, requestResync } from './backup-puller.js';
 import {
@@ -1557,6 +1557,11 @@ export async function startHttpsServer(port: number): Promise<void> {
     // /api/local/* bypass the member-signature middleware. The backup verifies
     // the signature against its single configured `mirror` connector (the
     // primary) inside importRemoteState, so a forged snapshot is rejected there.
+    // The last full snapshot this primary exported: its signed generatedAt stamp and
+    // the DB data_version at build time. Lets the handler below answer "unchanged"
+    // (304) to the mirror's every-60s pull without rebuilding the whole ledger.
+    let lastSnapshotExport: { generatedAt: string; dataVersion: number } | null = null;
+
     router.get('/api/local/admin/sync-snapshot', async (ctx) => {
         // This endpoint emits the ENTIRE ledger (incl. DMs + recovery data). It is
         // authenticated with a dedicated, scoped replication TOKEN (least privilege,
@@ -1596,14 +1601,37 @@ export async function startHttpsServer(port: number): Promise<void> {
         }
 
         try {
+            // Conditional pull: the mirror sends the generatedAt of its last successful
+            // import. If the DB hasn't changed since we built that exact snapshot,
+            // answer 304 with no body. Without this, every 60s pull exported, signed
+            // and streamed the ENTIRE ledger (~19MB observed = ~27GB/day of transfer)
+            // and stalled the event loop for every API client while doing it.
+            const cursor = String(ctx.request.header['x-snapshot-cursor'] || '');
+            const dataVersionNow = getDbDataVersion();
+            if (cursor && lastSnapshotExport &&
+                cursor === lastSnapshotExport.generatedAt &&
+                dataVersionNow === lastSnapshotExport.dataVersion) {
+                ctx.set('Cache-Control', 'no-store');
+                ctx.set('X-Node-Role', getNodeRole());
+                ctx.status = 304;
+                recordReplicationAccess({ at: Date.now(), ip, auth: authMode, reason: 'not modified (304)' });
+                return;
+            }
+
             const node = getP2PNode();
             const nodeId = node?.peerId?.toString() ?? 'unknown';
+            // data_version is read BEFORE the export: a write that lands mid-export
+            // bumps it, so the next conditional check conservatively rebuilds rather
+            // than ever serving a stale 304.
             const payload = await exportSyncState(nodeId);
             if (!payload.signature || !payload.publicKey) {
                 // No libp2p identity loaded → the backup couldn't verify authorship.
                 ctx.status = 503;
                 ctx.body = { error: 'Snapshot unavailable: node signing identity not ready' };
                 return;
+            }
+            if (payload.generatedAt) {
+                lastSnapshotExport = { generatedAt: payload.generatedAt, dataVersion: dataVersionNow };
             }
             ctx.set('Cache-Control', 'no-store');
             // Advertise our role so a puller can warn if it is replicating from

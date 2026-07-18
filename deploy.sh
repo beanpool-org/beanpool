@@ -183,6 +183,30 @@ EOF
   echo ""
 done
 
+# Clean up build caches and drop caches on each unique host deployed to
+echo "🧹 Running post-deployment memory and build cache cleanup..."
+UNIQUE_HOSTS=$(for NODE in "${TARGETS[@]}"; do
+  IP=$(echo "$NODE" | cut -d: -f3)
+  USER=$(echo "$NODE" | cut -d: -f5)
+  echo "$USER@$IP"
+done | sort -u)
+
+for HOST in $UNIQUE_HOSTS; do
+  USER=$(echo "$HOST" | cut -d@ -f1)
+  IP=$(echo "$HOST" | cut -d@ -f2)
+  if [ "$USER" = "azureuser" ]; then
+    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes -i ~/.ssh/id_azure_lattice"
+  else
+    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes"
+  fi
+  echo "   Cleaning up caches on $HOST..."
+  ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF
+    sudo docker builder prune -a -f 2>/dev/null || true
+    sudo docker system prune -f 2>/dev/null || true
+    sync && echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null || true
+EOF
+done
+
 rm -f /tmp/beanpool-deploy.tar.gz
 echo "🎉 All ${#TARGETS[@]} node(s) deployed!"
 

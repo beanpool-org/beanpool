@@ -156,43 +156,35 @@ export default function ChatScreen() {
     // stale-counted updates (protection against clobbering typing JS hasn't seen).
     // Under JS-thread lag the IME emits one more event (autocorrect finalizing on
     // the send tap) just before clear() dispatches -> the box keeps the sent text
-    // while draftRef says '' -> grey dead send button over a full box (observed
-    // 2026-07-18 on v1.1.79 AND v1.1.80 — the v1.1.80 echo-counting sweep never
-    // fired because the pending event can drain late or not at all; do not gate
-    // the sweep on observing it).
+    // while draftRef says '' -> grey dead send button over a full box.
     //
-    // So: RETRY the clear on a timer ladder, guarded only by "has the user typed
-    // something new". The retry is safe by construction — it carries the current
-    // event count, so if the user's unseen typing is in flight, native rejects
-    // the retry exactly like it rejected the original clear:
-    //   draftRef === ''       -> no event since our clear: box is empty (retry is
-    //                            a no-op) or holds the dropped-clear residue
-    //                            (retry fixes it once the count is current)
-    //   draftRef === sentText
-    //     AND exactly one write since the clear
-    //                         -> the dropped clear's event drained back; re-clear.
-    //                            The single-write gate keeps a user who re-TYPES
-    //                            the same short message ("Ok") inside the 4s
-    //                            ladder from being wiped — typing is one write
-    //                            per keystroke (review finding, PR #45); only a
-    //                            single-write identical reproduction (re-pasting
-    //                            or gliding the exact sent text) remains
-    //                            indistinguishable from the echo.
-    //   anything else         -> user is typing; never touch the box
-    // Residue beyond the ladder degrades to a visible, consistent box (draftRef
-    // mirrors it, button live) rather than a dead one.
+    // Field history (2026-07-18, keep for context — three designs failed before this):
+    //  v1.1.79  no sweep: stuck box + dead button.
+    //  v1.1.80  sweep gated on OBSERVING the pending event drain back within 600ms:
+    //           never fired — the drain can take seconds under JS-thread blocks.
+    //  v1.1.81  added unconditional rungs (clear + height reset whenever draftRef
+    //           was still ''): rescued the stuck box but acted BLINDLY while the
+    //           user typed the next message before their keystrokes drained —
+    //           squishing the growing box and racing real typing ("glitching").
+    //
+    // Current design: act only on POSITIVE EVIDENCE, never blindly. A dropped
+    // clear always leaves its rejected-count event in flight, and in-flight
+    // events always drain eventually — so wait for the drain: when the residue
+    // equals the just-sent text and it arrived as EXACTLY ONE write (the echo
+    // signature; human re-typing is one write per keystroke), re-clear — that
+    // retry now carries a current event count and sticks. Rungs spread to 6s to
+    // outlast multi-second JS blocks (2.4s observed). No action on any other
+    // state: an undrained box is untouchable (a stale-counted retry would be
+    // rejected anyway) and new typing is sacred. Only a single-write identical
+    // reproduction (re-pasting the exact sent text mid-ladder) is
+    // indistinguishable from the echo — accepted residual.
     const clearSweepTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
     const scheduleClearSweep = (sentText: string) => {
+        if (!sentText) return;
         const writesBaseline = draftWritesRef.current;
         clearSweepTimersRef.current.forEach(clearTimeout);
-        clearSweepTimersRef.current = [150, 600, 1600, 4000].map(ms => setTimeout(() => {
-            const residue = draftRef.current;
-            if (residue === '') {
-                // No updateDraft here: mirrors are already '', and writing would
-                // pollute the write counter the content-match branch relies on.
-                inputRef.current?.clear();
-                setInputHeight(CHAT_INPUT_MIN_HEIGHT);
-            } else if (draftWritesRef.current - writesBaseline === 1 && residue.trim() === sentText) {
+        clearSweepTimersRef.current = [400, 1200, 3000, 6000].map(ms => setTimeout(() => {
+            if (draftWritesRef.current - writesBaseline === 1 && draftRef.current.trim() === sentText) {
                 console.log(`[Chat] clear sweep: re-clearing dropped-clear residue at ${ms}ms`);
                 resetInputBox();
             }

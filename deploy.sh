@@ -155,6 +155,20 @@ for NODE in "${TARGETS[@]}"; do
       sed -i '/\"8443:8443\"/d' docker-compose.yml
       sed -i '/\"4001:4001\"/d' docker-compose.yml
       sed -i '/\"4002:4002\"/d' docker-compose.yml
+    elif [ "$DIR" = "BeanPool-Gippsland" ]; then
+      sed -i 's/\"80:8080\"/\"8084:8080\"/g' docker-compose.yml
+      sed -i 's/\"443:8443\"/\"8448:8443\"/g' docker-compose.yml
+      sed -i '/\"8080:8080\"/d' docker-compose.yml
+      sed -i '/\"8443:8443\"/d' docker-compose.yml
+      sed -i 's/\"4001:4001\"/\"4006:4001\"/g' docker-compose.yml
+      sed -i 's/\"4002:4002\"/\"4007:4002\"/g' docker-compose.yml
+    elif [ "$DIR" = "BeanPool-EastGippy" ]; then
+      sed -i 's/\"80:8080\"/\"8085:8080\"/g' docker-compose.yml
+      sed -i 's/\"443:8443\"/\"8450:8443\"/g' docker-compose.yml
+      sed -i '/\"8080:8080\"/d' docker-compose.yml
+      sed -i '/\"8443:8443\"/d' docker-compose.yml
+      sed -i 's/\"4001:4001\"/\"4008:4001\"/g' docker-compose.yml
+      sed -i 's/\"4002:4002\"/\"4009:4002\"/g' docker-compose.yml
     fi
     if [ "$NAME" = "mullum1" ]; then
       sed -i '/"80:8080"/d' docker-compose.yml
@@ -170,7 +184,7 @@ for NODE in "${TARGETS[@]}"; do
     if [ -n "\$CF_TUNNEL_TOKEN" ] && [ "\$NAME" = "mullum1" ]; then
       COMPOSE_FLAGS=(--profile tunnel)
     fi
-    if [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ]; then
+    if [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ]; then
       echo "🔨 Local build enabled for target: $NAME"
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build
     else

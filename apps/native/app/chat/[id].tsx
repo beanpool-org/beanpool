@@ -130,7 +130,12 @@ export default function ChatScreen() {
     // written synchronously inside every change event, and input events precede
     // the press in the event queue, so it holds the full text when the press runs.
     const draftRef = useRef('');
+    // Counts draft writes so the clear sweep can tell a dropped-clear echo
+    // (one write carrying the full sent text) from the user re-typing the same
+    // text (one write per keystroke) — see scheduleClearSweep.
+    const draftWritesRef = useRef(0);
     const updateDraft = (text: string) => {
+        draftWritesRef.current += 1;
         draftRef.current = text;
         setDraft(text);
     };
@@ -163,17 +168,32 @@ export default function ChatScreen() {
     //   draftRef === ''       -> no event since our clear: box is empty (retry is
     //                            a no-op) or holds the dropped-clear residue
     //                            (retry fixes it once the count is current)
-    //   draftRef === sentText -> the dropped clear's event drained back; re-clear
+    //   draftRef === sentText
+    //     AND exactly one write since the clear
+    //                         -> the dropped clear's event drained back; re-clear.
+    //                            The single-write gate keeps a user who re-TYPES
+    //                            the same short message ("Ok") inside the 4s
+    //                            ladder from being wiped — typing is one write
+    //                            per keystroke (review finding, PR #45); only a
+    //                            single-write identical reproduction (re-pasting
+    //                            or gliding the exact sent text) remains
+    //                            indistinguishable from the echo.
     //   anything else         -> user is typing; never touch the box
     // Residue beyond the ladder degrades to a visible, consistent box (draftRef
     // mirrors it, button live) rather than a dead one.
     const clearSweepTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
     const scheduleClearSweep = (sentText: string) => {
+        const writesBaseline = draftWritesRef.current;
         clearSweepTimersRef.current.forEach(clearTimeout);
         clearSweepTimersRef.current = [150, 600, 1600, 4000].map(ms => setTimeout(() => {
             const residue = draftRef.current;
-            if (residue === '' || residue.trim() === sentText) {
-                if (residue !== '') console.log(`[Chat] clear sweep: re-clearing dropped-clear residue at ${ms}ms`);
+            if (residue === '') {
+                // No updateDraft here: mirrors are already '', and writing would
+                // pollute the write counter the content-match branch relies on.
+                inputRef.current?.clear();
+                setInputHeight(CHAT_INPUT_MIN_HEIGHT);
+            } else if (draftWritesRef.current - writesBaseline === 1 && residue.trim() === sentText) {
+                console.log(`[Chat] clear sweep: re-clearing dropped-clear residue at ${ms}ms`);
                 resetInputBox();
             }
         }, ms));

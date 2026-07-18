@@ -2811,9 +2811,15 @@ export function getMarketplaceTransaction(transactionId: string): MarketplaceTra
     `).get(transactionId) as any;
     if (!r) return null;
 
-    const postPhotos = db.prepare(`SELECT * FROM post_photos WHERE post_id = ?`).all(r.post_id) as any[];
-    const coverImageRow = postPhotos.find(p => p.order_num === 0) || postPhotos[0];
-    const coverImage = coverImageRow ? coverImageRow.photo_data : null;
+    // Cover image as a versioned photo URL — never the base64 bytes. Same pattern as
+    // getPosts: the bytes download lazily via /photos/:orderNum (immutable-cached), so
+    // a transaction row costs a short string instead of ~200KB. Embedding the bytes
+    // here made /api/marketplace/transactions?limit=50 a 9.8MB response that phones
+    // re-downloaded and JSON-parsed every sync cycle (measured 2026-07-18).
+    const coverImageRow = db.prepare(`SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC LIMIT 1`).get(r.post_id) as any;
+    const coverImage = coverImageRow
+        ? `/api/marketplace/posts/${r.post_id}/photos/${coverImageRow.order_num}?v=${coverImageRow.updated_at ? new Date(coverImageRow.updated_at).getTime() : 0}`
+        : null;
     // Mirror the exact shape getMarketplaceTransactions() returns (incl. the rating/cover
     // extras). Returned via a variable so it isn't treated as a fresh literal under excess-
     // property checks — same reason the sibling getter builds these inside a .map().
@@ -2841,7 +2847,9 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
 
     const rows = db.prepare(query).all(...params) as any[];
     const postIds = Array.from(new Set(rows.map(r => r.post_id)));
-    const photos = selectInChunks(postIds, ph => `SELECT * FROM post_photos WHERE post_id IN (${ph})`);
+    // Only the metadata needed to build versioned photo URLs — never photo_data.
+    // Loading the bytes here put ~10MB of base64 into every 50-row response.
+    const photos = selectInChunks(postIds, ph => `SELECT post_id, order_num, updated_at FROM post_photos WHERE post_id IN (${ph})`);
 
     // ⚡ Bolt: Group photos by post_id to avoid O(N²) nested searching
     const photosByPost = new Map<string, any[]>();
@@ -2855,7 +2863,11 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
     return rows.map(r => {
         const postPhotos = photosByPost.get(r.post_id) || [];
         const coverImageRow = postPhotos.find(p => p.order_num === 0) || postPhotos[0];
-        const coverImage = coverImageRow ? coverImageRow.photo_data : null;
+        // Versioned URL, not bytes — see getMarketplaceTransaction above. Existing
+        // clients already resolve relative cover paths against their anchor URL.
+        const coverImage = coverImageRow
+            ? `/api/marketplace/posts/${r.post_id}/photos/${coverImageRow.order_num}?v=${coverImageRow.updated_at ? new Date(coverImageRow.updated_at).getTime() : 0}`
+            : null;
         return {
             id: r.id, postId: r.post_id, postTitle: r.postTitle, buyerPublicKey: r.buyer_pubkey, buyerCallsign: r.buyerCallsign, sellerPublicKey: r.seller_pubkey, sellerCallsign: r.sellerCallsign, credits: r.credits, status: r.status, createdAt: r.created_at, completedAt: r.completed_at, ratedByBuyer: !!r.ratedByBuyer, ratedBySeller: !!r.ratedBySeller, coverImage
         };

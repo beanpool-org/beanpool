@@ -30,6 +30,14 @@ const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 // (SQLite read + per-message decrypt) flat no matter how long the thread is.
 const MESSAGE_PAGE_SIZE = 50;
 
+// Composer height bounds (dp). JS owns the input height — see the inputHeight
+// note in the component — so these live here for both the style and the clamp.
+const CHAT_INPUT_MIN_HEIGHT = 40;
+const CHAT_INPUT_MAX_HEIGHT = 100;
+// Vertical padding inside the composer (paddingTop + paddingBottom in styles.input);
+// onContentSizeChange reports the text height only, so the clamp adds this back.
+const CHAT_INPUT_V_PADDING = 16;
+
 // Bound an await so a hung step can never latch sendingRef forever — a hung
 // insertMessage left the send button silently dead until an app restart
 // (field report 2026-07-18). The underlying work isn't cancelled; the caller's
@@ -122,43 +130,51 @@ export default function ChatScreen() {
     // written synchronously inside every change event, and input events precede
     // the press in the event queue, so it holds the full text when the press runs.
     const draftRef = useRef('');
-    // Counts every draft write (change events + programmatic). The clear-sweep
-    // below uses it to tell a dropped-clear echo (exactly ONE queued IME event)
-    // from the user re-typing the same text (one event per keystroke).
-    const textEventsRef = useRef(0);
     const updateDraft = (text: string) => {
-        textEventsRef.current += 1;
         draftRef.current = text;
         setDraft(text);
+    };
+    // Android's multiline TextInput auto-GROWS on keystrokes but never shrinks
+    // after a programmatic clear until the next real keystroke (field report
+    // 2026-07-18: box stays tall after send). So JS owns the height: measured
+    // via onContentSizeChange, clamped, and reset by resetInputBox below.
+    const [inputHeight, setInputHeight] = useState(CHAT_INPUT_MIN_HEIGHT);
+    // Empty the box and both mirrors, and collapse the height — the one true
+    // "reset the composer" path (send, edit-cancel, and the clear sweep).
+    const resetInputBox = () => {
+        updateDraft('');
+        inputRef.current?.clear();
+        setInputHeight(CHAT_INPUT_MIN_HEIGHT);
     };
     // inputRef.clear() can be silently DROPPED: the native command carries the
     // count of text events JS has processed, and Android's ReactEditText skips
     // stale-counted updates (protection against clobbering typing JS hasn't seen).
     // Under JS-thread lag the IME emits one more event (autocorrect finalizing on
-    // the send tap) just before clear() dispatches → the box keeps the sent text
-    // while draftRef says '' → grey dead send button over a full box (field
-    // report 2026-07-18, v1.1.79, message visibly sent but "stuck in the box").
-    // That unseen event echoes the sent text back into draftRef when the queue
-    // drains — sweep it out and re-clear (twice: the queue may still be draining
-    // at the first check). Only text matching what we just sent is swept, so a
-    // user who starts typing the next message immediately is never wiped.
+    // the send tap) just before clear() dispatches -> the box keeps the sent text
+    // while draftRef says '' -> grey dead send button over a full box (observed
+    // 2026-07-18 on v1.1.79 AND v1.1.80 — the v1.1.80 echo-counting sweep never
+    // fired because the pending event can drain late or not at all; do not gate
+    // the sweep on observing it).
+    //
+    // So: RETRY the clear on a timer ladder, guarded only by "has the user typed
+    // something new". The retry is safe by construction — it carries the current
+    // event count, so if the user's unseen typing is in flight, native rejects
+    // the retry exactly like it rejected the original clear:
+    //   draftRef === ''       -> no event since our clear: box is empty (retry is
+    //                            a no-op) or holds the dropped-clear residue
+    //                            (retry fixes it once the count is current)
+    //   draftRef === sentText -> the dropped clear's event drained back; re-clear
+    //   anything else         -> user is typing; never touch the box
+    // Residue beyond the ladder degrades to a visible, consistent box (draftRef
+    // mirrors it, button live) rather than a dead one.
     const clearSweepTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
     const scheduleClearSweep = (sentText: string) => {
-        // Baseline taken AFTER the caller's own updateDraft('') — the echo of a
-        // dropped clear() is exactly one more write. A content match alone would
-        // also wipe a user who re-typed or re-pasted the identical text within
-        // the sweep window (review finding, PR #44); re-typing produces one
-        // write per keystroke, so requiring exactly ONE write since the clear
-        // narrows the false-wipe to a single-event identical reproduction
-        // (~re-pasting the message just sent). More than one write → assume the
-        // user is typing and never wipe; a genuinely stuck box stays visible and
-        // consistent (draftRef mirrors it), recoverable by any keystroke.
-        const baseline = textEventsRef.current;
         clearSweepTimersRef.current.forEach(clearTimeout);
-        clearSweepTimersRef.current = [150, 600].map(ms => setTimeout(() => {
-            if (textEventsRef.current - baseline === 1 && draftRef.current.trim() === sentText) {
-                updateDraft('');
-                inputRef.current?.clear();
+        clearSweepTimersRef.current = [150, 600, 1600, 4000].map(ms => setTimeout(() => {
+            const residue = draftRef.current;
+            if (residue === '' || residue.trim() === sentText) {
+                if (residue !== '') console.log(`[Chat] clear sweep: re-clearing dropped-clear residue at ${ms}ms`);
+                resetInputBox();
             }
         }, ms));
     };
@@ -244,7 +260,7 @@ export default function ChatScreen() {
         messageTimeOther: { color: colors.text.muted },
         inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.surface.subtle, backgroundColor: colors.surface.card },
         attachBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-        input: { flex: 1, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.slate300, borderRadius: 20, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, fontSize: 16, maxHeight: 100, minHeight: 40, color: colors.text.body },
+        input: { flex: 1, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.slate300, borderRadius: 20, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, fontSize: 16, maxHeight: CHAT_INPUT_MAX_HEIGHT, minHeight: CHAT_INPUT_MIN_HEIGHT, color: colors.text.body },
         sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
         sendBtnActive: { backgroundColor: colors.accent.primary },
         sendBtnInactive: { backgroundColor: colors.surface.subtle },
@@ -677,8 +693,7 @@ export default function ChatScreen() {
         sendingRef.current = true;
         const wasEditing = editingMessage;
         try {
-            updateDraft('');
-            inputRef.current?.clear(); // uncontrolled input: state no longer clears the box
+            resetInputBox(); // uncontrolled input: state alone doesn't clear the box
             scheduleClearSweep(currentDraft); // clear() may be dropped under load — see note at definition
             if (wasEditing) {
                 await withTimeout(editMessage(id as string, wasEditing.id, currentDraft), 15_000, 'Editing');
@@ -1527,7 +1542,7 @@ export default function ChatScreen() {
                                 <Text style={[styles.replyPreviewAuthor, { color: colors.brand.primary }]}>Editing message</Text>
                                 <Text style={styles.replyPreviewText} numberOfLines={1}>{editingMessage.text}</Text>
                             </View>
-                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { const prior = draftRef.current.trim(); setEditingMessage(null); updateDraft(''); inputRef.current?.clear(); scheduleClearSweep(prior); }} style={styles.replyPreviewClose}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { const prior = draftRef.current.trim(); setEditingMessage(null); resetInputBox(); scheduleClearSweep(prior); }} style={styles.replyPreviewClose}>
                                 <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
                             </Pressable>
                         </View>
@@ -1564,7 +1579,12 @@ export default function ChatScreen() {
                     <TextInput
                         ref={inputRef}
                         accessibilityLabel="Message"
-                        style={styles.input}
+                        style={[styles.input, { height: inputHeight }]}
+                        // JS-owned height: Android's native autosize only ever grows —
+                        // after a programmatic clear the box stays multi-line until the
+                        // next keystroke. Measure, clamp, and let resetInputBox collapse it.
+                        onContentSizeChange={e => setInputHeight(Math.min(CHAT_INPUT_MAX_HEIGHT,
+                            Math.max(CHAT_INPUT_MIN_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height) + CHAT_INPUT_V_PADDING)))}
                         placeholder="Message..."
                         placeholderTextColor={colors.text.muted}
                         // UNCONTROLLED on purpose — no `value` prop. A controlled input

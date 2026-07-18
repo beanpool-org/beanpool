@@ -100,6 +100,7 @@ export default function ChatScreen() {
     const [deals, setDeals] = useState<any[]>([]);
     const [viewerUri, setViewerUri] = useState<string | null>(null);
     const flatListRef = useRef<FlatList>(null);
+    const inputRef = useRef<TextInput>(null);
     const insets = useSafeAreaInsets();
     const sendingRef = useRef(false);
     // History-window paging. Refs (not state) because loadMessages is called from
@@ -605,6 +606,7 @@ export default function ChatScreen() {
         try {
             const currentDraft = draft.trim();
             setDraft('');
+            inputRef.current?.clear(); // uncontrolled input: state no longer clears the box
             if (wasEditing) {
                 await editMessage(id as string, wasEditing.id, currentDraft);
                 setEditingMessage(null);
@@ -1066,6 +1068,8 @@ export default function ChatScreen() {
             setEditingMessage(item);
             setReplyToMessage(null);
             setDraft(item.text || '');
+            // Uncontrolled input: push the text into the native field explicitly.
+            inputRef.current?.setNativeProps({ text: item.text || '' });
             setActiveMessageActionsId(null);
             setActiveEmojiPickerId(null);
         };
@@ -1448,7 +1452,7 @@ export default function ChatScreen() {
                                 <Text style={[styles.replyPreviewAuthor, { color: colors.brand.primary }]}>Editing message</Text>
                                 <Text style={styles.replyPreviewText} numberOfLines={1}>{editingMessage.text}</Text>
                             </View>
-                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { setEditingMessage(null); setDraft(''); }} style={styles.replyPreviewClose}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Cancel edit" onPress={() => { setEditingMessage(null); setDraft(''); inputRef.current?.clear(); }} style={styles.replyPreviewClose}>
                                 <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />
                             </Pressable>
                         </View>
@@ -1483,11 +1487,20 @@ export default function ChatScreen() {
                         <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />
                     </Pressable>
                     <TextInput
+                        ref={inputRef}
                         accessibilityLabel="Message"
                         style={styles.input}
                         placeholder="Message..."
                         placeholderTextColor={colors.text.muted}
-                        value={draft}
+                        // UNCONTROLLED on purpose — no `value` prop. A controlled input
+                        // round-trips every keystroke through the JS thread; when JS is
+                        // busy (sync payload parsing), React writes a STALE value back
+                        // into the native field and typed characters are lost — messages
+                        // arrived at the server with letters missing on slower devices.
+                        // The native field is the source of truth; `draft` mirrors it via
+                        // onChangeText for the send-button state and send payload (input
+                        // events are delivered in order, so by the time a send press runs,
+                        // every earlier keystroke's change event has already landed).
                         onChangeText={setDraft}
                         multiline
                         submitBehavior="newline"

@@ -306,8 +306,14 @@ export async function requestResync(): Promise<{ ok: boolean; error?: string }> 
  */
 function nextMode(reconcileEveryMs: number): PullMode {
     if (!lastImportedCursor) return 'full'; // seed
-    const reconcileDue = pendingReconcile || (Date.now() - lastFullReconcileAt >= reconcileEveryMs);
-    if (reconcileDue && !reconcileDisabledForSize) return 'full';
+    // A drift-triggered reconcile ALWAYS wins, even for a large DB — correctness beats
+    // bandwidth when the stateHash canary says the copy has actually diverged, and it
+    // only fires on a real mismatch. The SIZE cutoff only suppresses the *routine*
+    // timer-based full re-read (belt-and-suspenders), which the reliable deltas make
+    // optional at scale. So at GB size: tiny deltas every tick, no periodic full,
+    // and a full re-read only if drift is genuinely detected.
+    if (pendingReconcile) return 'full';
+    if (!reconcileDisabledForSize && Date.now() - lastFullReconcileAt >= reconcileEveryMs) return 'full';
     return 'delta';
 }
 

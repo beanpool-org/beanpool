@@ -5727,6 +5727,15 @@ export function adminPruneBranch(rootPublicKey: string) {
 
 export function adminBroadcastAnnouncement(title: string, body: string, severity: 'info'|'warning'|'critical') {
     broadcast({ type: 'system_announcement', title, body, severity });
+
+    // Also dispatch as a native push notification to all active members
+    try {
+        const activeMembers = db.prepare("SELECT public_key FROM members WHERE status != 'disabled' AND status != 'pruned'").all() as { public_key: string }[];
+        const targetPubkeys = activeMembers.map(m => m.public_key);
+        dispatchPushNotification(targetPubkeys, 'SYSTEM', title, body, { type: 'system_announcement' }, 'marketplace');
+    } catch (e: any) {
+        console.error('[Push Announcement] Failed to send push notification broadcast:', e.message);
+    }
 }
 
 export function adminSendMessage(targetPubkey: string, body: string) {

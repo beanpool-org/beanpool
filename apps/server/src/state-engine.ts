@@ -3727,7 +3727,17 @@ export async function exportSyncState(nodeId: string, since?: string | null): Pr
     }));
 
     // Disaster Recovery table exports:
-    const accountRows = sel('accounts', 'last_updated_at');
+    // accounts is deliberately NOT delta-filtered — always ship the full ledger.
+    // The backup's conservation guard (importRemoteState) sums the payload's account
+    // balance changes and requires ~0 (a value-creating forgery shifts it). A partial
+    // account set breaks that: a cursor landing between the two legs of one movement
+    // (transfer's two writes, or a COMMONS op whose counterpart and COMMONS_POOL are
+    // stamped at different times via persistCommonsBalance) would ship an unbalanced
+    // subset and the guard would reject the whole delta. With the FULL account set,
+    // sum(new) − sum(existing) == 0 because the ledger total is invariant over time,
+    // so the guard always passes however far behind the backup is. accounts ≈ member
+    // count (tiny text rows); the GB growth is messages/photos, which ARE delta'd.
+    const accountRows = db.prepare("SELECT * FROM accounts").all() as any[];
     const accounts: SyncAccount[] = accountRows.map(row => ({
         publicKey: row.public_key,
         balance: row.balance,

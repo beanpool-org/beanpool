@@ -38,27 +38,50 @@
  * CA pem (Node honors it for fetch); public Let's Encrypt nodes need nothing.
  */
 
-import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedTables, type ImportResult, type SyncPayload, type ReplicaConsistency } from './state-engine.js';
+import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedTables, getStateHash, getSyncCursor, setSyncCursor, type ImportResult, type SyncPayload, type ReplicaConsistency } from './state-engine.js';
 import { logger } from './logger.js';
 import { getLocalConfig } from './local-config.js';
 
 const SNAPSHOT_PATH = '/api/local/admin/sync-snapshot';
+const DELTA_PATH = '/api/local/admin/sync-delta';
 const DEFAULT_INTERVAL_MS = 60_000;
 const FETCH_TIMEOUT_MS = 30_000;
+// How often to fall back to a FULL reconcile instead of a delta. A full pull re-reads
+// every row, so it catches the rare mutations that don't advance a per-row watermark
+// (chiefly the social-recovery mass pubkey rewrite across immutable-timestamp tables)
+// and lets getReplicaConsistency verify exact row-count/balance parity. Deltas carry
+// the whole-state stateHash as a cheap per-cycle canary in between.
+const DEFAULT_RECONCILE_EVERY_MS = 15 * 60_000;
+// Above this full-payload size a reconcile is skipped and we rely on complete deltas:
+// re-shipping the whole ledger as one signed JSON blob stalls the primary's event loop
+// and approaches the import cap. The seed path warns separately. Deltas are unbounded-safe.
+const DEFAULT_RECONCILE_MAX_BYTES = 8 * 1024 * 1024;
+// sync_cursors sentinel under which we persist the delta cursor, so a backup restart
+// resumes deltas instead of re-pulling a full snapshot. clearReplicatedTables() does
+// NOT touch sync_cursors, so a force-resync resets it explicitly (below).
+const BACKUP_CURSOR_PEER = 'backup:primary';
 
 let pullTimer: ReturnType<typeof setInterval> | null = null;
 let inFlight = false;
 let lastSuccessAt: number | null = null;
 let consecutiveFailures = 0;
-// Replica-fidelity of the most recent successful pull: does our local DB hold the
-// same row counts / balances / commons the primary sent? Surfaced on the dashboard.
+// Replica-fidelity of the most recent FULL pull (delta pulls carry only changed rows,
+// so a row-count compare is meaningless for them — the stateHash canary covers deltas).
 let lastConsistency: ReplicaConsistency | null = null;
 // A2-17: the highest snapshot generatedAt we've imported. A snapshot whose
 // generatedAt is older-or-equal is a replay (or a no-op) and is skipped.
 let lastGeneratedAtMs = 0;
 // Raw generatedAt string of the last imported snapshot — sent to the primary as
-// X-Snapshot-Cursor so unchanged pulls come back as a bodyless 304.
+// X-Snapshot-Cursor so unchanged full pulls come back as a bodyless 304.
 let lastImportedGeneratedAt: string | null = null;
+// Delta watermark: the payload.cursor of the last successful import. Sent as
+// X-Since-Cursor so the primary ships only rows changed since. Persisted across
+// restarts in sync_cursors. Null → no cursor yet → next pull is a full seed.
+let lastImportedCursor: string | null = null;
+// Full-reconcile bookkeeping.
+let lastFullReconcileAt = 0;
+let reconcileDisabledForSize = false;
+let pendingReconcile = false; // set when a delta's stateHash canary detects drift
 
 /**
  * A2-9: only allow an HTTPS primary URL (loopback http permitted for dev). The
@@ -90,10 +113,16 @@ function summarize(r: ImportResult): string {
     return parts.length === 0 ? 'no changes' : parts.join(', ');
 }
 
-/** Pull one snapshot from the primary and import it. Never throws.
- *  fresh=true performs a force-resync: clears the replicated tables before import
- *  and bypasses the stale-snapshot skip so the replica is rebuilt 1:1. */
-async function pullOnce(fresh = false): Promise<{ ok: boolean; error?: string }> {
+type PullMode = 'delta' | 'full' | 'resync';
+
+/** Pull once from the primary and import it. Never throws.
+ *  - 'delta'  : incremental — X-Since-Cursor, only rows changed since. Falls back to a
+ *               full seed automatically if we have no cursor yet.
+ *  - 'full'   : full snapshot (initial seed or periodic reconcile), with a conditional
+ *               304 when unchanged.
+ *  - 'resync' : force a full rebuild — clear the replicated tables first, bypass the
+ *               stale-skip, and reset every cursor so the replica is rebuilt 1:1. */
+async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?: string }> {
     if (inFlight) return { ok: false, error: 'A pull is already in progress.' };
 
     const config = getLocalConfig();
@@ -117,28 +146,32 @@ async function pullOnce(fresh = false): Promise<{ ok: boolean; error?: string }>
         ? { 'X-Replication-Token': replicationToken }
         : { 'X-Admin-Password': adminPassword as string };
 
+    const fresh = mode === 'resync';
+    // Delta only when explicitly asked AND we already have a cursor to delta-from;
+    // otherwise this is a full pull (seed / reconcile / resync).
+    const isDelta = mode === 'delta' && !!lastImportedCursor;
+
     inFlight = true;
-    const url = primaryUrl.replace(/\/$/, '') + SNAPSHOT_PATH;
+    const url = primaryUrl.replace(/\/$/, '') + (isDelta ? DELTA_PATH : SNAPSHOT_PATH);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-        // Conditional pull: tell the primary what we last imported so it can answer
-        // 304 (no body) when nothing changed — instead of exporting, signing and
-        // streaming the entire ledger every interval. A force-resync (`fresh`)
-        // deliberately omits the cursor to always receive a full snapshot.
         const headers: Record<string, string> = { ...authHeader };
-        if (!fresh && lastImportedGeneratedAt) headers['X-Snapshot-Cursor'] = lastImportedGeneratedAt;
-        const res = await fetch(url, {
-            method: 'GET',
-            headers,
-            signal: controller.signal,
-        });
+        if (isDelta) {
+            // Ship only rows with watermark >= this cursor (plus tombstones since).
+            headers['X-Since-Cursor'] = lastImportedCursor as string;
+        } else if (!fresh && lastImportedGeneratedAt) {
+            // Full conditional pull: 304 (no body) when the ledger is unchanged since
+            // the exact snapshot we last imported, instead of re-streaming everything.
+            headers['X-Snapshot-Cursor'] = lastImportedGeneratedAt;
+        }
+        const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
         if (res.status === 304) {
+            // Only the full path 304s. Nothing changed → treat as a clean success.
             lastSuccessAt = Date.now();
-            if (consecutiveFailures > 0) {
-                logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
-            }
+            if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
             consecutiveFailures = 0;
+            if (!isDelta) lastFullReconcileAt = Date.now();
             return { ok: true };
         }
         if (!res.ok) {
@@ -151,68 +184,103 @@ async function pullOnce(fresh = false): Promise<{ ok: boolean; error?: string }>
             logger.warn('P2P', `[Backup] ⚠️ Snapshot source advertises role '${remoteRole}', expected 'primary' — chained replication?`);
         }
 
-        const payload = (await res.json()) as SyncPayload;
+        const rawBody = await res.text();
+        const payload = JSON.parse(rawBody) as SyncPayload;
 
-        // A2-17: reject a replayed/stale snapshot before importing. The signed
-        // base payload carries `generatedAt`; a value older-or-equal to the last
-        // one we imported is a replay (or a no-op) and is skipped. (Tampering with
-        // generatedAt invalidates the signature, which importRemoteState rejects.)
+        // A2-17: reject a replayed/stale payload before importing. Older-or-equal
+        // generatedAt is a replay or no-op. Harmless for deltas (LWW dedupes) but kept
+        // uniform. (Tampering with generatedAt invalidates the signature, rejected below.)
         if (!fresh && payload.generatedAt) {
             const genMs = Date.parse(payload.generatedAt);
             if (Number.isFinite(genMs) && genMs <= lastGeneratedAtMs) {
-                logger.sync('P2P', `[Backup] ↩︎ Skipped stale/replayed snapshot (generatedAt ${payload.generatedAt} ≤ last imported)`);
+                logger.sync('P2P', `[Backup] ↩︎ Skipped stale/replayed ${isDelta ? 'delta' : 'snapshot'} (generatedAt ${payload.generatedAt} ≤ last imported)`);
                 return { ok: true };
             }
         }
 
         // Force-resync: wipe the replicated tables so the upsert importer rebuilds an
-        // exact copy with no orphan rows. Done only after a successful fetch+parse, so
-        // the empty window is milliseconds.
+        // exact copy with no orphan rows. Only after a successful fetch+parse, so the
+        // empty window is milliseconds.
         if (fresh) {
             clearReplicatedTables();
             lastGeneratedAtMs = 0;
-            // Tables are now empty: forget the cursor so a failed import can't leave
-            // the next pull 304-ing ("unchanged") against a cleared replica.
+            // Forget all cursors so a failed import can't leave the next pull 304-ing
+            // ("unchanged") or delta-ing against a cleared replica — it re-seeds fully.
             lastImportedGeneratedAt = null;
+            lastImportedCursor = null;
+            try { setSyncCursor(BACKUP_CURSOR_PEER, ''); } catch { /* best-effort */ }
             logger.info('P2P', '[Backup] 🧹 Force-resync: replicated tables cleared, importing fresh snapshot…');
         }
 
         // The import path enforces: valid signature → signer maps to a trusted
         // `mirror` connector (the primary) → conservation guard (runs on a backup
-        // unconditionally, A2-8). A forged/tampered snapshot is rejected there.
+        // unconditionally, A2-8). A forged/tampered payload is rejected there. It
+        // applies partial (delta) or full payloads identically, LWW per row.
         const result = await importRemoteState(payload);
 
         if (payload.generatedAt) {
             const genMs = Date.parse(payload.generatedAt);
             if (Number.isFinite(genMs)) lastGeneratedAtMs = genMs;
-            lastImportedGeneratedAt = payload.generatedAt; // conditional-pull cursor
+            lastImportedGeneratedAt = payload.generatedAt; // full conditional-pull cursor
+        }
+        // Advance the delta watermark and persist it so a restart resumes deltas.
+        if (payload.cursor) {
+            lastImportedCursor = payload.cursor;
+            try { setSyncCursor(BACKUP_CURSOR_PEER, payload.cursor); } catch { /* best-effort */ }
         }
         lastSuccessAt = Date.now();
-        if (consecutiveFailures > 0) {
-            logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
-        }
+        if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
         consecutiveFailures = 0;
-        // Verify the replica actually matches what the primary just sent. Never let a
-        // consistency-check error mask an otherwise-successful pull.
-        try {
-            lastConsistency = getReplicaConsistency(payload);
-            if (!lastConsistency.ok) {
-                const bad = lastConsistency.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);
-                logger.warn('P2P', `[Backup] ⚠️ Replica differs from primary snapshot: ${bad.join(', ') || 'balances/commons drift'}`);
+
+        if (isDelta) {
+            // Deltas carry only changed rows, so a row-count compare is meaningless.
+            // Use the whole-state stateHash as a cheap per-cycle canary; on mismatch,
+            // schedule a full reconcile to re-establish exact parity (catches the rare
+            // watermark-less mutation, e.g. a social-recovery pubkey rewrite).
+            if (payload.stateHash) {
+                const localHash = getStateHash();
+                if (localHash !== payload.stateHash) {
+                    pendingReconcile = true;
+                    logger.warn('P2P', `[Backup] ⚠️ Delta stateHash canary drift (local ${localHash} ≠ primary ${payload.stateHash}) — scheduling full reconcile`);
+                }
             }
-        } catch (e: any) {
-            logger.warn('P2P', `[Backup] Consistency check failed to run: ${e?.message || e}`);
+            logger.sync('P2P', `[Backup] ⬇️ Delta applied: ${summarize(result)}`);
+        } else {
+            lastFullReconcileAt = Date.now();
+            pendingReconcile = false;
+            // Gate future reconciles on payload size — a giant full JSON stalls the
+            // primary's event loop; past the threshold we rely on complete deltas.
+            const bytes = rawBody.length;
+            if (bytes > (Number(process.env.BACKUP_RECONCILE_MAX_BYTES) || DEFAULT_RECONCILE_MAX_BYTES)) {
+                if (!reconcileDisabledForSize) {
+                    logger.warn('P2P', `[Backup] Full snapshot is ${(bytes / 1048576).toFixed(1)} MB — disabling periodic full reconcile; relying on deltas. Re-seed via force-resync if ever needed.`);
+                }
+                reconcileDisabledForSize = true;
+            } else {
+                reconcileDisabledForSize = false;
+            }
+            // Verify the replica matches what the primary sent. Never let a
+            // consistency-check error mask an otherwise-successful pull.
+            try {
+                lastConsistency = getReplicaConsistency(payload);
+                if (!lastConsistency.ok) {
+                    const bad = lastConsistency.tables.filter(t => !t.match).map(t => `${t.name} ${t.backup}/${t.primary}`);
+                    logger.warn('P2P', `[Backup] ⚠️ Replica differs from primary snapshot: ${bad.join(', ') || 'balances/commons drift'}`);
+                }
+            } catch (e: any) {
+                logger.warn('P2P', `[Backup] Consistency check failed to run: ${e?.message || e}`);
+            }
+            logger.sync('P2P', `[Backup] ⬇️ ${fresh ? 'Re-seeded' : 'Full pull'} from primary: ${summarize(result)}`);
         }
-        logger.sync('P2P', `[Backup] ⬇️ Pulled snapshot from primary: ${summarize(result)}`);
         return { ok: true };
     } catch (e: any) {
         consecutiveFailures++;
         const msg = e?.name === 'AbortError' ? `timeout after ${FETCH_TIMEOUT_MS}ms` : (e?.message || String(e));
         // Conservation/trust rejections are security-relevant — surface loudly.
         if (/conservation|untrusted|mirror|signature/i.test(msg)) {
-            logger.security('P2P', `[Backup] ❌ Snapshot REJECTED by import guard: ${msg}`);
+            logger.security('P2P', `[Backup] ❌ ${isDelta ? 'Delta' : 'Snapshot'} REJECTED by import guard: ${msg}`);
         } else {
-            logger.warn('P2P', `[Backup] Pull #${consecutiveFailures} failed: ${msg} (will retry in interval)`);
+            logger.warn('P2P', `[Backup] Pull #${consecutiveFailures} (${isDelta ? 'delta' : 'full'}) failed: ${msg} (will retry in interval)`);
         }
         return { ok: false, error: msg };
     } finally {
@@ -228,7 +296,19 @@ async function pullOnce(fresh = false): Promise<{ ok: boolean; error?: string }>
 export async function requestResync(): Promise<{ ok: boolean; error?: string }> {
     if (getNodeRole() !== 'backup') return { ok: false, error: 'This node is not a backup.' };
     logger.info('P2P', '[Backup] 🔄 Force-resync requested by operator.');
-    return pullOnce(true);
+    return pullOnce('resync');
+}
+
+/**
+ * Decide the next pull mode: a periodic (or drift-triggered) FULL reconcile when due
+ * and not size-disabled, otherwise an incremental DELTA. A backup with no cursor yet
+ * always resolves to a full seed inside pullOnce.
+ */
+function nextMode(reconcileEveryMs: number): PullMode {
+    if (!lastImportedCursor) return 'full'; // seed
+    const reconcileDue = pendingReconcile || (Date.now() - lastFullReconcileAt >= reconcileEveryMs);
+    if (reconcileDue && !reconcileDisabledForSize) return 'full';
+    return 'delta';
 }
 
 /**
@@ -242,11 +322,21 @@ export function initBackupPuller(): void {
     }
 
     const interval = Number(process.env.BACKUP_PULL_INTERVAL_MS) || DEFAULT_INTERVAL_MS;
-    logger.info('P2P', `[Backup] 🔁 One-directional backup active — checking config and pulling every ${Math.round(interval / 1000)}s`);
+    const reconcileEveryMs = Number(process.env.BACKUP_RECONCILE_EVERY_MS) || DEFAULT_RECONCILE_EVERY_MS;
+
+    // Resume from the persisted delta cursor so a restart continues incrementally
+    // instead of re-pulling the whole ledger. Empty/absent → next pull is a full seed.
+    try {
+        const saved = getSyncCursor(BACKUP_CURSOR_PEER);
+        if (saved) { lastImportedCursor = saved; logger.info('P2P', `[Backup] Resuming from saved delta cursor ${saved}`); }
+    } catch { /* first boot / no cursor table row yet */ }
+
+    logger.info('P2P', `[Backup] 🔁 One-directional backup active — pulling every ${Math.round(interval / 1000)}s (full reconcile every ${Math.round(reconcileEveryMs / 60000)}m)`);
 
     // First pull shortly after boot so the replica converges quickly; then on interval.
-    setTimeout(() => { pullOnce().catch(() => {}); }, 5_000);
-    pullTimer = setInterval(() => { pullOnce().catch(() => {}); }, interval);
+    const tick = () => { pullOnce(nextMode(reconcileEveryMs)).catch(() => {}); };
+    setTimeout(tick, 5_000);
+    pullTimer = setInterval(tick, interval);
 }
 
 /** Stop the puller (used on promotion / shutdown). */
@@ -260,6 +350,14 @@ export function stopBackupPuller(): void {
 
 /** Observability: when the last successful pull landed, failure streak, and the
  * replica-fidelity result of the most recent successful pull. */
-export function getBackupStatus(): { lastSuccessAt: number | null; consecutiveFailures: number; running: boolean; consistency: ReplicaConsistency | null } {
-    return { lastSuccessAt, consecutiveFailures, running: pullTimer !== null, consistency: lastConsistency };
+export function getBackupStatus(): { lastSuccessAt: number | null; consecutiveFailures: number; running: boolean; consistency: ReplicaConsistency | null; cursor: string | null; lastFullReconcileAt: number; reconcileDisabledForSize: boolean } {
+    return {
+        lastSuccessAt,
+        consecutiveFailures,
+        running: pullTimer !== null,
+        consistency: lastConsistency,
+        cursor: lastImportedCursor,
+        lastFullReconcileAt,
+        reconcileDisabledForSize,
+    };
 }

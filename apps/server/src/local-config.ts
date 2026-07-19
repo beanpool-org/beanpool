@@ -357,10 +357,12 @@ export function updateThresholds(updates: Partial<Thresholds>): Thresholds {
 export function updateBackupCadence(updates: { pullSeconds?: number | null; reconcileMinutes?: number | null }): { backupPullSeconds: number | null; backupReconcileMinutes: number | null } {
     const config = getLocalConfig();
     if (updates.pullSeconds !== undefined) {
-        config.backupPullSeconds = updates.pullSeconds === null ? null : Math.max(5, Math.round(updates.pullSeconds));
+        const val = updates.pullSeconds === null ? null : Math.round(updates.pullSeconds);
+        config.backupPullSeconds = (val !== null && Number.isFinite(val)) ? Math.max(5, val) : null;
     }
     if (updates.reconcileMinutes !== undefined) {
-        config.backupReconcileMinutes = updates.reconcileMinutes === null ? null : Math.max(0, Math.round(updates.reconcileMinutes));
+        const val = updates.reconcileMinutes === null ? null : Math.round(updates.reconcileMinutes);
+        config.backupReconcileMinutes = (val !== null && Number.isFinite(val)) ? Math.max(0, val) : null;
     }
     saveLocalConfig(config);
     console.log('⚙️ Backup cadence updated:', { backupPullSeconds: config.backupPullSeconds, backupReconcileMinutes: config.backupReconcileMinutes });

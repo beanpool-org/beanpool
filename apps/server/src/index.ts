@@ -109,8 +109,11 @@ async function main() {
     // Step 9: Start cert renewal scheduler (checks every 24h)
     startRenewalScheduler();
 
-    // Step 10: Start directory publisher
-    initDirectoryPublisher();
+    // Step 10: Start directory publisher (primary only — a backup replica has no
+    // public listing of its own; it mirrors the primary, it isn't a joinable node).
+    if (getNodeRole() === 'primary') {
+        initDirectoryPublisher();
+    }
 
     const hostname = process.env.CF_RECORD_NAME ?? 'beanpool.local';
     const isLE = !!process.env.CF_RECORD_NAME;

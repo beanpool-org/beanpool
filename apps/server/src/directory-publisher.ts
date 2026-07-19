@@ -1,4 +1,4 @@
-import { getDirectoryInfo, getNodeConfig, updateNodeConfig } from './state-engine.js';
+import { getDirectoryInfo, getNodeConfig, updateNodeConfig, getNodeRole } from './state-engine.js';
 import { getLocalConfig } from './local-config.js';
 import { getP2PNode, getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
@@ -8,7 +8,14 @@ const DIRECTORY_REGISTRY_URL = process.env.DIRECTORY_REGISTRY_URL || 'https://dp
 
 let pushTimer: ReturnType<typeof setInterval> | null = null;
 
+// Guarded here, not just at the index.ts boot call site — /api/local/admin/node/config
+// and /api/local/admin/directory/push can also reach these, and a backup replica must
+// never advertise itself in the public directory regardless of caller.
 export function initDirectoryPublisher() {
+    if (getNodeRole() !== 'primary') {
+        console.log('[Directory] 🔒 Skipping — backup replicas do not publish to the directory.');
+        return;
+    }
     const config = getNodeConfig();
     const intervalHours = config.directoryPushIntervalHours !== undefined ? config.directoryPushIntervalHours : 12;
     
@@ -33,6 +40,9 @@ export function initDirectoryPublisher() {
 }
 
 export async function pushDirectoryNow() {
+    if (getNodeRole() !== 'primary') {
+        return { success: false, error: 'Directory push is only allowed on primary nodes' };
+    }
     try {
         const directoryInfo = getDirectoryInfo();
         const localConfig = getLocalConfig();

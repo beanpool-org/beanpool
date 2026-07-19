@@ -411,13 +411,17 @@ export function initStateEngine(): void {
     // Sweep zero-balance escrow accounts from settled/cancelled transactions
     sweepSettledEscrowAccounts();
 
-    // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at boot)
-    setTimeout(() => {
-        try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-    }, 60 * 1000);
-    setInterval(() => {
-        try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-    }, 60 * 60 * 1000);
+    // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
+    // boot). Primary only — it dispatches real push notifications to members, which a
+    // passive backup replica must never do independently of the primary it mirrors.
+    if (getNodeRole() === 'primary') {
+        setTimeout(() => {
+            try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
+        }, 60 * 1000);
+        setInterval(() => {
+            try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
+        }, 60 * 60 * 1000);
+    }
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;

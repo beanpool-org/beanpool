@@ -61,7 +61,8 @@ const DEFAULT_RECONCILE_MAX_BYTES = 8 * 1024 * 1024;
 // NOT touch sync_cursors, so a force-resync resets it explicitly (below).
 const BACKUP_CURSOR_PEER = 'backup:primary';
 
-let pullTimer: ReturnType<typeof setInterval> | null = null;
+let pullTimer: ReturnType<typeof setTimeout> | null = null;
+let stopped = false;
 let inFlight = false;
 let lastSuccessAt: number | null = null;
 let consecutiveFailures = 0;
@@ -304,16 +305,31 @@ export async function requestResync(): Promise<{ ok: boolean; error?: string }> 
  * and not size-disabled, otherwise an incremental DELTA. A backup with no cursor yet
  * always resolves to a full seed inside pullOnce.
  */
-function nextMode(reconcileEveryMs: number): PullMode {
+// Cadence is operator-tunable (fleet manager → local-config) and read LIVE here, so a
+// change takes effect on the next tick without restarting the node. Config wins; else
+// env; else the built-in default.
+function getPullMs(): number {
+    const s = getLocalConfig().backupPullSeconds;
+    if (typeof s === 'number' && s > 0) return Math.max(5, s) * 1000;
+    return Number(process.env.BACKUP_PULL_INTERVAL_MS) || DEFAULT_INTERVAL_MS;
+}
+function getReconcileMs(): number {
+    const m = getLocalConfig().backupReconcileMinutes;
+    if (typeof m === 'number') return Math.max(0, m) * 60_000; // 0 → routine reconcile off
+    return Number(process.env.BACKUP_RECONCILE_EVERY_MS) || DEFAULT_RECONCILE_EVERY_MS;
+}
+
+function nextMode(): PullMode {
     if (!lastImportedCursor) return 'full'; // seed
     // A drift-triggered reconcile ALWAYS wins, even for a large DB — correctness beats
     // bandwidth when the stateHash canary says the copy has actually diverged, and it
-    // only fires on a real mismatch. The SIZE cutoff only suppresses the *routine*
-    // timer-based full re-read (belt-and-suspenders), which the reliable deltas make
-    // optional at scale. So at GB size: tiny deltas every tick, no periodic full,
-    // and a full re-read only if drift is genuinely detected.
+    // only fires on a real mismatch. The SIZE cutoff and the operator "off" setting
+    // only suppress the *routine* timer-based full re-read (belt-and-suspenders), which
+    // the reliable deltas make optional at scale. So at GB size / reconcile-off: tiny
+    // deltas every tick, no periodic full, and a full only if drift is truly detected.
     if (pendingReconcile) return 'full';
-    if (!reconcileDisabledForSize && Date.now() - lastFullReconcileAt >= reconcileEveryMs) return 'full';
+    const reconcileMs = getReconcileMs();
+    if (reconcileMs > 0 && !reconcileDisabledForSize && Date.now() - lastFullReconcileAt >= reconcileMs) return 'full';
     return 'delta';
 }
 
@@ -327,9 +343,6 @@ export function initBackupPuller(): void {
         return; // primary: imports from nobody, runs no puller
     }
 
-    const interval = Number(process.env.BACKUP_PULL_INTERVAL_MS) || DEFAULT_INTERVAL_MS;
-    const reconcileEveryMs = Number(process.env.BACKUP_RECONCILE_EVERY_MS) || DEFAULT_RECONCILE_EVERY_MS;
-
     // Resume from the persisted delta cursor so a restart continues incrementally
     // instead of re-pulling the whole ledger. Empty/absent → next pull is a full seed.
     try {
@@ -337,18 +350,28 @@ export function initBackupPuller(): void {
         if (saved) { lastImportedCursor = saved; logger.info('P2P', `[Backup] Resuming from saved delta cursor ${saved}`); }
     } catch { /* first boot / no cursor table row yet */ }
 
-    logger.info('P2P', `[Backup] 🔁 One-directional backup active — pulling every ${Math.round(interval / 1000)}s (full reconcile every ${Math.round(reconcileEveryMs / 60000)}m)`);
+    const rm = getReconcileMs();
+    logger.info('P2P', `[Backup] 🔁 One-directional backup active — pulling every ${Math.round(getPullMs() / 1000)}s (full reconcile ${rm > 0 ? `every ${Math.round(rm / 60000)}m` : 'off — deltas + drift canary'})`);
 
-    // First pull shortly after boot so the replica converges quickly; then on interval.
-    const tick = () => { pullOnce(nextMode(reconcileEveryMs)).catch(() => {}); };
-    setTimeout(tick, 5_000);
-    pullTimer = setInterval(tick, interval);
+    // Self-scheduling loop so a live cadence change (fleet manager → local-config)
+    // takes effect on the next tick without restarting the node. The pull interval is
+    // re-read each time from getPullMs().
+    stopped = false;
+    const loop = async () => {
+        if (stopped) return;
+        await pullOnce(nextMode()).catch(() => {});
+        if (stopped) return;
+        pullTimer = setTimeout(loop, getPullMs());
+    };
+    // First pull shortly after boot so the replica converges quickly.
+    pullTimer = setTimeout(loop, 5_000);
 }
 
 /** Stop the puller (used on promotion / shutdown). */
 export function stopBackupPuller(): void {
+    stopped = true;
     if (pullTimer) {
-        clearInterval(pullTimer);
+        clearTimeout(pullTimer);
         pullTimer = null;
         logger.info('P2P', '[Backup] Puller stopped.');
     }
@@ -356,7 +379,7 @@ export function stopBackupPuller(): void {
 
 /** Observability: when the last successful pull landed, failure streak, and the
  * replica-fidelity result of the most recent successful pull. */
-export function getBackupStatus(): { lastSuccessAt: number | null; consecutiveFailures: number; running: boolean; consistency: ReplicaConsistency | null; cursor: string | null; lastFullReconcileAt: number; reconcileDisabledForSize: boolean } {
+export function getBackupStatus(): { lastSuccessAt: number | null; consecutiveFailures: number; running: boolean; consistency: ReplicaConsistency | null; cursor: string | null; lastFullReconcileAt: number; reconcileDisabledForSize: boolean; pullSeconds: number; reconcileMinutes: number } {
     return {
         lastSuccessAt,
         consecutiveFailures,
@@ -365,5 +388,9 @@ export function getBackupStatus(): { lastSuccessAt: number | null; consecutiveFa
         cursor: lastImportedCursor,
         lastFullReconcileAt,
         reconcileDisabledForSize,
+        // Effective cadence in effect right now (config → env → default), so the fleet
+        // manager can show what each backup is actually doing.
+        pullSeconds: Math.round(getPullMs() / 1000),
+        reconcileMinutes: Math.round(getReconcileMs() / 60000),
     };
 }

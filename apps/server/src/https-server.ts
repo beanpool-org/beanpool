@@ -26,6 +26,7 @@ import { getCaCertPem, getServerCertPem, getServerKeyPem, isUsingLetsEncrypt } f
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword, verifyPasswordAsync,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
+    updateBackupCadence,
     validatePasswordStrength,
     generateReplicationToken, setReplicationToken, clearReplicationToken, hasReplicationToken, verifyReplicationToken,
 } from './local-config.js';
@@ -1542,6 +1543,20 @@ export async function startHttpsServer(port: number): Promise<void> {
             ? updateAutoSnapshotConfig({ enabled: body.enabled, intervalHours: body.intervalHours, keep: body.keep })
             : getAutoSnapshotConfig();
         ctx.body = { success: true, config };
+    });
+
+    // Backup pull cadence — operator-tunable from the fleet manager. GET returns the
+    // effective values (config → env → default) + live puller status; POST overrides
+    // them in local-config, read live by the backup puller on its next tick (no restart).
+    // pullSeconds = how often to ask "what changed?" (cheap delta). reconcileMinutes =
+    // how often to do a full re-read (0 = off; drift-triggered fulls still run).
+    router.post('/api/local/admin/backup-config', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        const body = (ctx as any).requestBody || {};
+        if (body.pullSeconds !== undefined || body.reconcileMinutes !== undefined) {
+            updateBackupCadence({ pullSeconds: body.pullSeconds, reconcileMinutes: body.reconcileMinutes });
+        }
+        ctx.body = { success: true, status: getBackupStatus() };
     });
 
     // Phase 1 (one-directional live backup): the read-only snapshot the BACKUP

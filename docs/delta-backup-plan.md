@@ -1,7 +1,61 @@
 # Delta backup restoration — implementation plan
 
-Status: **planned, not built** (2026-07-20). Supersedes the full-DB backup pull for
-scale. Owner decision pending on staging order.
+Status: **mechanism BUILT + unit-validated (2026-07-19); live shadow-run + cutover
+remain (operational)**. Supersedes the full-DB backup pull for scale.
+
+## Built so far (branch `feat/delta-backup`, each committed + validated)
+
+1. **Watermark migration** (`db/schema.sql` + `db/db.ts`) — every mutable table now has
+   an indexed, ISO-8601, monotonic `updated_at` (or equivalent) that advances on insert
+   and update. New columns + AFTER INSERT (stamp-when-NULL, required because ALTER can't
+   add a non-constant DEFAULT on live DBs) + AFTER UPDATE touch triggers on messages,
+   friends, abuse_reports, conversation_participants; index/trigger on posts; indexes on
+   accounts/ratings/conversations/recovery_approvals. Ledger fix: the 6 escrow account
+   writes normalised off `CURRENT_TIMESTAMP` to ISO so the watermark stays lexically
+   comparable to the cursor. Validated by running the real `initSchema()` against copies
+   of all 6 populated node DBs + a fresh DB — **52/52**, zero data loss, idempotent.
+2. **Delta export + endpoint** (`state-engine.ts`, `https-server.ts`) —
+   `exportSyncState(nodeId, since?)`: full (unchanged) now also carries `cursor` +
+   `tombstones`; delta ships only rows with watermark `>= since` (>= + LWW closes the
+   same-ms hole) plus tombstones deleted since. Payload enriched so the backup converges
+   faithfully (messages carry `updatedAt`; abuse carries `status` + `updatedAt`). New
+   `GET /api/local/admin/sync-delta` mirrors sync-snapshot's replication auth, reads
+   `X-Since-Cursor`. Signature verify unaffected (strips only sig/pubkey). **19/19**.
+3. **Backup importer LWW** (`state-engine.ts`, backup-only via nodeRole guard) — messages
+   converge on `updated_at` (fixes reactions/metadata never reaching the backup); abuse
+   converges `status` (was INSERT-OR-IGNORE). **7/7**.
+4. **Delta puller** (`backup-puller.ts`) — persists the cursor in `sync_cursors`
+   (resumes deltas across restart), `pullOnce('delta'|'full'|'resync')`, periodic full
+   reconcile (default 15m, size-gated) + per-delta stateHash canary.
+
+### Conservation-guard decision (important)
+The backup's zero-sum conservation guard sums the payload's account balance changes and
+requires ~0. A *partial* account set can be unbalanced (a cursor between a transfer's two
+legs, or a COMMONS op whose counterpart and `COMMONS_POOL` are persisted non-atomically by
+`persistCommonsBalance`). Fix: **the delta always ships the FULL accounts table** (all other
+tables delta-filtered). Then sum(new)−sum(existing)==0 because the ledger total is
+invariant, so the guard passes however far behind the backup is — **no guard weakening**.
+The one residual (the microsecond window before `persistCommonsBalance` commits) **self-heals
+on the next 60s pull** (cursor didn't advance; COMMONS is persisted by then). accounts ≈
+member count (tiny); the GB drivers (messages/photos/posts) are delta'd. Conservation
+net-zero verified in the export test.
+
+### Scale note (seeding at GB)
+Current DBs are 1–6 MB, so a full-snapshot seed via `importRemoteState` is fine. When a DB
+grows past the point where a one-shot full seed is impractical, seed the replica once from
+the efficient binary DB-tar (`/api/local/admin/backup`) and bootstrap the cursor, then run
+deltas on top. Not needed at current scale; noted for later.
+
+## Remaining (operational — needs a live backup node + deploy)
+- **Shadow-run** on the test pair: stand up a `NODE_ROLE=backup` replica for a community,
+  point it at the primary (BACKUP_PRIMARY_URL + replication token + a passive `mirror`
+  connector), let it seed then delta-pull, and hash-compare (getStateHash / getReplica
+  consistency) against the primary across a stretch before trusting it.
+- **Cut over** the fleet-manager backup from the full DB-tar copy to the delta replica;
+  keep the tar pull as break-glass.
+
+---
+_Original plan below (for reference)._
 
 ## Why
 

@@ -4640,20 +4640,32 @@ export async function importRemoteState(remote: SyncPayload): Promise<ImportResu
             }
         }
 
-        // 12. Import Immutable Chat Messages
+        // 12. Import / LWW-upsert Chat Messages.
+        // Converge on the updated_at watermark, which the messages touch trigger bumps
+        // for EVERY mutation — edits (ciphertext/edited_at), reactions (metadata), and
+        // moves (conversation_id) alike. The previous edited_at-only guard silently
+        // dropped reactions (metadata changes don't touch edited_at) and never synced
+        // metadata at all, so a reaction on the primary never reached the backup.
+        // Setting updated_at explicitly means the touch trigger's WHEN-NEW-IS-OLD guard
+        // is false, so the source's watermark is preserved (backup stays a faithful
+        // mirror, not re-stamped with local time). LWW WHERE prevents an older payload
+        // from clobbering a newer local row.
         if (remote.messages) {
             for (const msg of remote.messages) {
-                // Insert new messages; for ones we already have, only accept a strictly newer
-                // edit (edited_at). This lets edits propagate across nodes while leaving
-                // un-edited messages immutable and never clobbering a newer edit with an older one.
-                const res = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                const res = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ON CONFLICT(id) DO UPDATE SET
+                                conversation_id = excluded.conversation_id,
+                                author_pubkey = excluded.author_pubkey,
                                 ciphertext = excluded.ciphertext,
                                 nonce = excluded.nonce,
-                                edited_at = excluded.edited_at
-                            WHERE excluded.edited_at IS NOT NULL
-                              AND (messages.edited_at IS NULL OR excluded.edited_at > messages.edited_at)`).run(
+                                type = excluded.type,
+                                system_type = excluded.system_type,
+                                metadata = excluded.metadata,
+                                edited_at = excluded.edited_at,
+                                updated_at = excluded.updated_at
+                            WHERE excluded.updated_at IS NOT NULL
+                              AND (messages.updated_at IS NULL OR excluded.updated_at > messages.updated_at)`).run(
                     msg.id,
                     msg.conversationId,
                     msg.authorPubkey,
@@ -4663,23 +4675,36 @@ export async function importRemoteState(remote: SyncPayload): Promise<ImportResu
                     msg.systemType || null,
                     msg.metadata || null,
                     msg.timestamp,
-                    msg.editedAt || null
+                    msg.editedAt || null,
+                    // Older payloads predate the message watermark — fall back so the
+                    // row still carries a monotonic updated_at (edited_at, then timestamp).
+                    msg.updatedAt || msg.editedAt || msg.timestamp
                 );
                 if (res.changes > 0) newMessages++;
             }
         }
 
-        // 13. Import Immutable Abuse Reports
+        // 13. Import / LWW-upsert Abuse Reports. Previously INSERT-OR-IGNORE, so a
+        // moderation status change (pending → dismissed) on the primary never reached
+        // the backup. Now converge status on the updated_at watermark, guarded so an
+        // older payload (updatedAt falls back to createdAt) can't regress a newer status.
         if (remote.abuseReports) {
             for (const ar of remote.abuseReports) {
-                db.prepare(`INSERT OR IGNORE INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?)`).run(
+                db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at, status, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(id) DO UPDATE SET
+                                status = excluded.status,
+                                updated_at = excluded.updated_at
+                            WHERE excluded.updated_at IS NOT NULL
+                              AND (abuse_reports.updated_at IS NULL OR excluded.updated_at > abuse_reports.updated_at)`).run(
                     ar.id,
                     ar.reporterPubkey,
                     ar.targetPubkey,
                     ar.targetPostId || null,
                     ar.reason,
-                    ar.createdAt
+                    ar.createdAt,
+                    ar.status || 'pending',
+                    ar.updatedAt || ar.createdAt
                 );
             }
         }

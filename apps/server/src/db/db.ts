@@ -103,6 +103,16 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE recovery_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // Phase 2 delta backup — the remaining mutable tables gain their watermark
+    // column here, BEFORE schema.sql exec, so the messages/friends/abuse_reports/
+    // conversation_participants touch triggers below can reference updated_at at
+    // compile time on already-live DBs. SQLite forbids a non-constant DEFAULT on
+    // ALTER ADD COLUMN, so these come in NULL on existing rows (backfilled after
+    // schema.sql) and NULL on new inserts (stamped by the AFTER INSERT triggers).
+    try { db.prepare(`ALTER TABLE messages ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE friends ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
 
     // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
     // column-whitelist form that excludes last_active_at heartbeats from cursor sync.
@@ -187,6 +197,18 @@ export function initSchema() {
         db.prepare(`UPDATE recovery_requests SET updated_at = COALESCE(executed_at, cooldown_until, created_at) WHERE updated_at IS NULL`).run();
     } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_recovery_requests_updated_at ON recovery_requests(updated_at)`).run(); } catch { }
+
+    // Phase 2 delta backup — backfill the four newly-watermarked mutable tables.
+    // Seed each row's updated_at from the best existing timestamp so a first delta
+    // pull after this migration doesn't have to full-reconcile them. COALESCE falls
+    // back to now() only if every source column is NULL (shouldn't happen, but keeps
+    // the watermark non-NULL so the row stays visible to `WHERE updated_at > :since`).
+    // Idempotent: WHERE updated_at IS NULL means re-running is a no-op. The indexes +
+    // touch triggers themselves come from schema.sql (already exec'd above).
+    try { db.prepare(`UPDATE messages SET updated_at = COALESCE(edited_at, timestamp, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
+    try { db.prepare(`UPDATE friends SET updated_at = COALESCE(added_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
+    try { db.prepare(`UPDATE abuse_reports SET updated_at = COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
+    try { db.prepare(`UPDATE conversation_participants SET updated_at = COALESCE(last_read_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
 }
 
 // Function to migrate from legacy JSON state
@@ -525,13 +547,18 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
 
     const executePledge = db.transaction(() => {
         // Ensure synthetic escrow account exists natively
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(escrowPubkey);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES (?, 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(escrowPubkey);
 
+        // These escrow legs write last_updated_at in ISO-8601 form (not
+        // CURRENT_TIMESTAMP's space-separated shape) so the ledger watermark stays
+        // lexically ordered against the ISO delta cursor — a CURRENT_TIMESTAMP value
+        // sorts BEFORE any same-day ISO cursor (' ' < 'T'), which would make the
+        // `WHERE last_updated_at > :since` delta scan silently miss the mutated row.
         // Debit backer
-        db.prepare(`UPDATE accounts SET balance = balance - ?, last_updated_at = CURRENT_TIMESTAMP WHERE public_key = ?`).run(amount, fromPubkey);
+        db.prepare(`UPDATE accounts SET balance = balance - ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(amount, fromPubkey);
 
         // Credit Escrow instead of Creator
-        db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = CURRENT_TIMESTAMP WHERE public_key = ?`).run(amount, escrowPubkey);
+        db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(amount, escrowPubkey);
 
         // Record tx — SRV-20: this is the member-authored leg (backer → escrow),
         // so persist the caller's request signature for re-verification on import.
@@ -556,9 +583,9 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
 
             if (escrowBalance > 0) {
                 // Drain Escrow
-                db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = CURRENT_TIMESTAMP WHERE public_key = ?`).run(escrowPubkey);
+                db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
                 // Credit actual Creator
-                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = CURRENT_TIMESTAMP WHERE public_key = ?`).run(escrowBalance, project.creator_pubkey);
+                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, project.creator_pubkey);
 
                 // Record atomic Sweep Transaction
                 db.prepare(`
@@ -593,7 +620,7 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
             let totalRefunded = 0;
             for (const pledge of pledges) {
                 // Return Beans to Backer
-                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = CURRENT_TIMESTAMP WHERE public_key = ?`).run(pledge.amount, pledge.from_pubkey);
+                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(pledge.amount, pledge.from_pubkey);
 
                 // Record the localized Refund Transaction
                 db.prepare(`
@@ -605,7 +632,7 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
             }
 
             // Drain the escrow account to reconcile the economy symmetrically
-            db.prepare(`UPDATE accounts SET balance = balance - ?, last_updated_at = CURRENT_TIMESTAMP WHERE public_key = ?`).run(totalRefunded, escrowPubkey);
+            db.prepare(`UPDATE accounts SET balance = balance - ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(totalRefunded, escrowPubkey);
         }
 
         // Shred the Project — and tombstone it so mirrors propagate the delete.

@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS accounts (
     last_updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     last_demurrage_epoch INTEGER DEFAULT 0
 );
+-- Phase 2 delta backup: index the ledger mutation watermark so `WHERE
+-- last_updated_at > :since` delta scans are covered. All write paths write ISO-8601
+-- ('%Y-%m-%dT%H:%M:%fZ') form — the db.ts escrow paths were normalised off
+-- CURRENT_TIMESTAMP so lexical `>` ordering against an ISO cursor stays correct.
+CREATE INDEX IF NOT EXISTS idx_accounts_last_updated_at ON accounts(last_updated_at);
 
 CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
@@ -98,6 +103,7 @@ CREATE TABLE IF NOT EXISTS posts (
 
 CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
+CREATE INDEX IF NOT EXISTS idx_posts_updated_at ON posts(updated_at);
 
 CREATE TABLE IF NOT EXISTS post_photos (
     post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -148,9 +154,12 @@ CREATE TABLE IF NOT EXISTS conversation_participants (
     conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
     public_key TEXT REFERENCES members(public_key),
     last_read_at DATETIME,
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (conversation_id, public_key)
 );
 CREATE INDEX IF NOT EXISTS idx_conversation_participants_pubkey ON conversation_participants(public_key);
+CREATE INDEX IF NOT EXISTS idx_conversation_participants_updated_at ON conversation_participants(updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at);
 
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
@@ -162,9 +171,14 @@ CREATE TABLE IF NOT EXISTS messages (
     system_type TEXT,
     metadata TEXT,
     timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    edited_at DATETIME
+    edited_at DATETIME,
+    -- Phase 2 delta backup: row mutation watermark. Bumped by the messages touch
+    -- trigger on any edit/reaction/move so cursor-based delta sync picks up the
+    -- change (messages are mutable: metadata reactions, edited_at edits, moves).
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
+CREATE INDEX IF NOT EXISTS idx_messages_updated_at ON messages(updated_at);
 
 -- 7. Relations (Friends, Ratings, Abuse)
 CREATE TABLE IF NOT EXISTS friends (
@@ -172,8 +186,10 @@ CREATE TABLE IF NOT EXISTS friends (
     friend_pubkey TEXT REFERENCES members(public_key),
     added_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     is_guardian INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (owner_pubkey, friend_pubkey)
 );
+CREATE INDEX IF NOT EXISTS idx_friends_updated_at ON friends(updated_at);
 
 CREATE TABLE IF NOT EXISTS ratings (
     id TEXT PRIMARY KEY,
@@ -193,8 +209,11 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     target_pubkey TEXT NOT NULL REFERENCES members(public_key),
     target_post_id TEXT,
     reason TEXT NOT NULL,
-    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated_at);
 
 -- 8. Config
 CREATE TABLE IF NOT EXISTS node_config (
@@ -288,6 +307,7 @@ CREATE TABLE IF NOT EXISTS recovery_approvals (
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (request_id, guardian_pubkey)
 );
+CREATE INDEX IF NOT EXISTS idx_recovery_approvals_created_at ON recovery_approvals(created_at);
 
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
@@ -375,6 +395,102 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE recovery_requests SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+-- ============================================================================
+-- Phase 2 delta backup — watermark triggers for the remaining mutable tables.
+--
+-- These tables gained their `updated_at` column via ALTER TABLE on already-live
+-- DBs (see db.ts), where SQLite forbids a non-constant DEFAULT. So new rows on an
+-- existing node would be inserted with a NULL watermark and be invisible to the
+-- `WHERE updated_at > :since` delta filter. Each table therefore gets BOTH:
+--   * an AFTER INSERT trigger that stamps updated_at when it came in NULL, and
+--   * an AFTER UPDATE touch trigger that bumps it on any mutation.
+-- Fresh nodes get the column WITH a DEFAULT from CREATE TABLE above, so the INSERT
+-- trigger's `WHEN NEW.updated_at IS NULL` guard is simply never taken there.
+--
+-- Unlike the members trigger, these are NOT column-whitelisted: they fire on any
+-- UPDATE (guarded by NEW.updated_at IS OLD.updated_at so an importer applying a
+-- remote row's own timestamp is preserved, and so an explicit updated_at write
+-- isn't double-stamped). Firing broadly also means the social-recovery pubkey
+-- rewrite (which touches author_pubkey / is_guardian owner keys / reporter keys /
+-- participant keys without setting updated_at) is picked up by delta rather than
+-- only by the periodic full reconcile.
+-- ============================================================================
+
+-- posts already sets updated_at explicitly in every app write path and has a
+-- DEFAULT, so it needs no INSERT trigger — but a touch trigger closes the gap for
+-- the recovery pubkey rewrite and any future write path that forgets to bump it.
+CREATE TRIGGER IF NOT EXISTS posts_touch_updated_at
+AFTER UPDATE ON posts
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE posts SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS messages_set_updated_at_on_insert
+AFTER INSERT ON messages
+FOR EACH ROW
+WHEN NEW.updated_at IS NULL
+BEGIN
+    UPDATE messages SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER IF NOT EXISTS messages_touch_updated_at
+AFTER UPDATE ON messages
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE messages SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS friends_set_updated_at_on_insert
+AFTER INSERT ON friends
+FOR EACH ROW
+WHEN NEW.updated_at IS NULL
+BEGIN
+    UPDATE friends SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE owner_pubkey = NEW.owner_pubkey AND friend_pubkey = NEW.friend_pubkey;
+END;
+CREATE TRIGGER IF NOT EXISTS friends_touch_updated_at
+AFTER UPDATE ON friends
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE friends SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE owner_pubkey = NEW.owner_pubkey AND friend_pubkey = NEW.friend_pubkey;
+END;
+
+CREATE TRIGGER IF NOT EXISTS abuse_reports_set_updated_at_on_insert
+AFTER INSERT ON abuse_reports
+FOR EACH ROW
+WHEN NEW.updated_at IS NULL
+BEGIN
+    UPDATE abuse_reports SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+CREATE TRIGGER IF NOT EXISTS abuse_reports_touch_updated_at
+AFTER UPDATE ON abuse_reports
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE abuse_reports SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS conversation_participants_set_updated_at_on_insert
+AFTER INSERT ON conversation_participants
+FOR EACH ROW
+WHEN NEW.updated_at IS NULL
+BEGIN
+    UPDATE conversation_participants SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE conversation_id = NEW.conversation_id AND public_key = NEW.public_key;
+END;
+CREATE TRIGGER IF NOT EXISTS conversation_participants_touch_updated_at
+AFTER UPDATE ON conversation_participants
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE conversation_participants SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE conversation_id = NEW.conversation_id AND public_key = NEW.public_key;
 END;
 
 -- 19. System Metrics (Change 3 / Visibility monitors)

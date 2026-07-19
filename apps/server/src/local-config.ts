@@ -48,6 +48,16 @@ export interface LocalConfig {
     replicationTokenOnly?: boolean;
     // Backup side: the plaintext token this backup presents to its primary.
     backupReplicationToken?: string | null;
+    // --- Backup pull cadence (operator-tunable, e.g. from the fleet manager) ---
+    // How often the backup asks the primary "what changed?" (the cheap delta pull).
+    // Small; fine to run every minute or less. Null → env BACKUP_PULL_INTERVAL_MS → 60s.
+    backupPullSeconds?: number | null;
+    // How often the backup does a FULL re-read as a belt-and-suspenders verification.
+    // This one moves the whole DB, so it's spaced out and can be turned off entirely
+    // (0) at scale — the per-minute deltas + the stateHash drift canary keep the copy
+    // correct, and a drift is corrected on demand. Null → env BACKUP_RECONCILE_EVERY_MS
+    // → 15m. 0 → routine full reconcile disabled (drift-triggered fulls still run).
+    backupReconcileMinutes?: number | null;
 }
 
 export interface Thresholds {
@@ -335,4 +345,26 @@ export function updateThresholds(updates: Partial<Thresholds>): Thresholds {
     saveLocalConfig(config);
     console.log('⚙️ Thresholds updated:', merged);
     return merged;
+}
+
+/**
+ * Update the backup pull cadence (delta poll seconds and/or full-reconcile minutes).
+ * Read live by the backup puller on its next tick, so a change takes effect without a
+ * restart. `null` clears an override (falls back to env/default); a number sets it;
+ * reconcileMinutes = 0 disables the routine full reconcile. Values are clamped to sane
+ * bounds so an operator can't set a 0-second busy loop or a negative interval.
+ */
+export function updateBackupCadence(updates: { pullSeconds?: number | null; reconcileMinutes?: number | null }): { backupPullSeconds: number | null; backupReconcileMinutes: number | null } {
+    const config = getLocalConfig();
+    if (updates.pullSeconds !== undefined) {
+        const val = updates.pullSeconds === null ? null : Math.round(updates.pullSeconds);
+        config.backupPullSeconds = (val !== null && Number.isFinite(val)) ? Math.max(5, val) : null;
+    }
+    if (updates.reconcileMinutes !== undefined) {
+        const val = updates.reconcileMinutes === null ? null : Math.round(updates.reconcileMinutes);
+        config.backupReconcileMinutes = (val !== null && Number.isFinite(val)) ? Math.max(0, val) : null;
+    }
+    saveLocalConfig(config);
+    console.log('⚙️ Backup cadence updated:', { backupPullSeconds: config.backupPullSeconds, backupReconcileMinutes: config.backupReconcileMinutes });
+    return { backupPullSeconds: config.backupPullSeconds ?? null, backupReconcileMinutes: config.backupReconcileMinutes ?? null };
 }

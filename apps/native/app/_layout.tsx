@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Stack, useRouter, useSegments, useGlobalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, LogBox, AppState, AppStateStatus, View, Text, TextInput, Pressable, Platform, StyleSheet } from 'react-native';
+import { Alert, LogBox, AppState, AppStateStatus, View, Text, TextInput, Pressable, Platform, StyleSheet, DeviceEventEmitter } from 'react-native';
 import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { requestSync } from '../services/pillar-sync';
@@ -588,6 +588,15 @@ export default function RootLayout() {
         // Start the real-time WebSocket connection manager
         startWebSocketSync();
 
+        // Listen for system announcements from the WebSocket connection
+        const wsSub = DeviceEventEmitter.addListener('ws_activity', (data) => {
+            if (data?.type === 'system_announcement') {
+                const title = data.title || 'System Announcement';
+                const body = data.body || '';
+                Alert.alert(title, body, [{ text: 'Acknowledge', style: 'cancel' }]);
+            }
+        });
+
         initDB()
             .then(() => registerPillarSync())
             // Trigger Immediate foreground sync
@@ -622,6 +631,7 @@ export default function RootLayout() {
         return () => {
             clearInterval(intervalId);
             subscription.remove();
+            wsSub.remove();
             // Stop and clean up the WebSocket connection
             stopWebSocketSync();
         };

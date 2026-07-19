@@ -225,6 +225,9 @@ export interface Message {
     metadata?: string;
     timestamp: string;
     editedAt?: string | null;
+    /** Mutation watermark for delta sync LWW — bumped on edits AND reactions/metadata
+     * (which don't touch editedAt), so the backup importer can converge on it. */
+    updatedAt?: string | null;
 }
 
 export enum SystemMessageType {
@@ -3460,12 +3463,16 @@ export interface SyncFriend {
     friendPubkey: string;
     addedAt: string;
     isGuardian: boolean;
+    /** Mutation watermark for delta sync (bumped on is_guardian toggle). */
+    updatedAt?: string | null;
 }
 
 export interface SyncConversationParticipant {
     conversationId: string;
     publicKey: string;
     lastReadAt: string | null;
+    /** Mutation watermark for delta sync (bumped on last_read_at changes). */
+    updatedAt?: string | null;
 }
 
 export interface SyncConversation {
@@ -3484,6 +3491,11 @@ export interface SyncAbuseReport {
     targetPostId: string | null;
     reason: string;
     createdAt: string;
+    /** Moderation status (pending/dismissed/…). Carried so status changes reach the
+     * backup — previously abuse rows imported INSERT-OR-IGNORE and status never synced. */
+    status?: string;
+    /** Mutation watermark for delta sync (bumped on status change). */
+    updatedAt?: string | null;
 }
 
 export interface SyncRecoveryRequest {
@@ -3647,12 +3659,30 @@ export function getCurrentImportOrigin(): string | null {
     return currentImportOrigin;
 }
 
-export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
-    // Select all members
-    const members = getAllMembers();
-    
+export async function exportSyncState(nodeId: string, since?: string | null): Promise<SyncPayload> {
+    // Delta vs full. In delta mode each table ships only rows whose watermark is
+    // >= `since` (and tombstones deleted since then). The `cursor` handed back to the
+    // caller is captured HERE, before any read — so a row written mid-export is
+    // re-shipped on the next pull instead of being skipped. The `>=` (not `>`) plus
+    // last-writer-wins import make that boundary re-send idempotent, and close the
+    // sub-millisecond hole where a write landing in the same ms as the cursor would
+    // otherwise never satisfy a strict `>` again. See docs/delta-backup-plan.md.
+    const delta = typeof since === 'string' && since.length > 0;
+    const cursor = new Date().toISOString();
+    const sel = (table: string, watermark: string): any[] =>
+        delta
+            ? db.prepare(`SELECT * FROM ${table} WHERE ${watermark} >= ?`).all(since) as any[]
+            : db.prepare(`SELECT * FROM ${table}`).all() as any[];
+
+    // Members: full uses getAllMembers() (includes pruned so prunes propagate); delta
+    // filters the same set by the updated_at watermark (status→pruned bumps it).
+    const members = (delta
+        ? db.prepare("SELECT * FROM members WHERE updated_at >= ?").all(since) as any[]
+        : db.prepare("SELECT * FROM members").all() as any[]
+    ).map(rowToMember);
+
     // Select all posts, active or inactive
-    const postRows = db.prepare("SELECT * FROM posts").all() as any[];
+    const postRows = sel('posts', 'updated_at');
     const posts: MarketplacePost[] = postRows.map(row => ({
         id: row.id,
         type: row.type,
@@ -3678,13 +3708,13 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
     }));
 
     // Select all photos
-    const photos = db.prepare("SELECT * FROM post_photos").all() as PostPhoto[];
+    const photos = sel('post_photos', 'updated_at') as PostPhoto[];
 
     // Select all projects
-    const projects = db.prepare("SELECT * FROM projects").all() as Project[];
+    const projects = sel('projects', 'updated_at') as Project[];
 
     // Select all ratings
-    const ratingRows = db.prepare("SELECT * FROM ratings").all() as any[];
+    const ratingRows = sel('ratings', 'created_at');
     const ratings: Rating[] = ratingRows.map(r => ({
         id: r.id,
         targetPubkey: r.target_pubkey,
@@ -3697,6 +3727,16 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
     }));
 
     // Disaster Recovery table exports:
+    // accounts is deliberately NOT delta-filtered — always ship the full ledger.
+    // The backup's conservation guard (importRemoteState) sums the payload's account
+    // balance changes and requires ~0 (a value-creating forgery shifts it). A partial
+    // account set breaks that: a cursor landing between the two legs of one movement
+    // (transfer's two writes, or a COMMONS op whose counterpart and COMMONS_POOL are
+    // stamped at different times via persistCommonsBalance) would ship an unbalanced
+    // subset and the guard would reject the whole delta. With the FULL account set,
+    // sum(new) − sum(existing) == 0 because the ledger total is invariant over time,
+    // so the guard always passes however far behind the backup is. accounts ≈ member
+    // count (tiny text rows); the GB growth is messages/photos, which ARE delta'd.
     const accountRows = db.prepare("SELECT * FROM accounts").all() as any[];
     const accounts: SyncAccount[] = accountRows.map(row => ({
         publicKey: row.public_key,
@@ -3705,7 +3745,7 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         lastDemurrageEpoch: row.last_demurrage_epoch,
     }));
 
-    const transactionRows = db.prepare("SELECT * FROM transactions").all() as any[];
+    const transactionRows = sel('transactions', 'timestamp');
     const transactions: Transaction[] = transactionRows.map(row => ({
         id: row.id,
         from: row.from_pubkey,
@@ -3718,9 +3758,14 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         authPayload: row.auth_payload ?? null,
     }));
 
-    const ratingTxKeys = new Set(ratingRows.map(r => `${r.transaction_id}|${r.rater_pubkey}`));
+    // ratedBy* are derived (not persisted) flags — compute the key set from the FULL
+    // ratings table so they stay correct even when ratingRows is a delta subset.
+    const ratingTxKeys = new Set(
+        (db.prepare("SELECT transaction_id, rater_pubkey FROM ratings").all() as any[])
+            .map(r => `${r.transaction_id}|${r.rater_pubkey}`)
+    );
 
-    const marketplaceTxRows = db.prepare("SELECT * FROM marketplace_transactions").all() as any[];
+    const marketplaceTxRows = sel('marketplace_transactions', 'updated_at');
     const marketplaceTransactions: SyncMarketplaceTransaction[] = marketplaceTxRows.map(row => ({
         id: row.id,
         postId: row.post_id,
@@ -3740,15 +3785,16 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         ratedBySeller: ratingTxKeys.has(`${row.id}|${row.seller_pubkey}`),
     }));
 
-    const friendRows = db.prepare("SELECT * FROM friends").all() as any[];
+    const friendRows = sel('friends', 'updated_at');
     const friends: SyncFriend[] = friendRows.map(row => ({
         ownerPubkey: row.owner_pubkey,
         friendPubkey: row.friend_pubkey,
         addedAt: row.added_at,
         isGuardian: Boolean(row.is_guardian),
+        updatedAt: row.updated_at || row.added_at,
     }));
 
-    const conversationRows = db.prepare("SELECT * FROM conversations").all() as any[];
+    const conversationRows = sel('conversations', 'created_at');
     const conversations: SyncConversation[] = conversationRows.map(row => ({
         id: row.id,
         type: row.type,
@@ -3758,14 +3804,15 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         createdAt: row.created_at,
     }));
 
-    const participantRows = db.prepare("SELECT * FROM conversation_participants").all() as any[];
+    const participantRows = sel('conversation_participants', 'updated_at');
     const conversationParticipants: SyncConversationParticipant[] = participantRows.map(row => ({
         conversationId: row.conversation_id,
         publicKey: row.public_key,
         lastReadAt: row.last_read_at,
+        updatedAt: row.updated_at || row.last_read_at,
     }));
 
-    const messageRows = db.prepare("SELECT * FROM messages").all() as any[];
+    const messageRows = sel('messages', 'updated_at');
     const messages: Message[] = messageRows.map(row => ({
         id: row.id,
         conversationId: row.conversation_id,
@@ -3777,9 +3824,10 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         metadata: row.metadata || undefined,
         timestamp: row.timestamp,
         editedAt: row.edited_at,
+        updatedAt: row.updated_at || row.edited_at || row.timestamp,
     }));
 
-    const abuseRows = db.prepare("SELECT * FROM abuse_reports").all() as any[];
+    const abuseRows = sel('abuse_reports', 'updated_at');
     const abuseReports: SyncAbuseReport[] = abuseRows.map(row => ({
         id: row.id,
         reporterPubkey: row.reporter_pubkey,
@@ -3787,9 +3835,11 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         targetPostId: row.target_post_id,
         reason: row.reason,
         createdAt: row.created_at,
+        status: row.status || 'pending',
+        updatedAt: row.updated_at || row.created_at,
     }));
 
-    const recoveryReqRows = db.prepare("SELECT * FROM recovery_requests").all() as any[];
+    const recoveryReqRows = sel('recovery_requests', 'updated_at');
     const recoveryRequests: SyncRecoveryRequest[] = recoveryReqRows.map(row => ({
         id: row.id,
         oldPubkey: row.old_pubkey,
@@ -3803,7 +3853,7 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         updatedAt: row.updated_at || row.executed_at || row.cooldown_until || row.created_at,
     }));
 
-    const recoveryAppRows = db.prepare("SELECT * FROM recovery_approvals").all() as any[];
+    const recoveryAppRows = sel('recovery_approvals', 'created_at');
     const recoveryApprovals: SyncRecoveryApproval[] = recoveryAppRows.map(row => ({
         requestId: row.request_id,
         guardianPubkey: row.guardian_pubkey,
@@ -3811,8 +3861,19 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         createdAt: row.created_at,
     }));
 
+    // Tombstones propagate hard-deletes (friends removed, projects/photos deleted).
+    // Delta ships only those deleted since `since`; full ships all so a backup that
+    // missed a delete still converges. Applied idempotently by importRemoteState.
+    const tombstoneRows = delta
+        ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
+        : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
+    const tombstones = tombstoneRows.map(t => ({ tableName: t.table_name, rowKey: t.row_key, deletedAt: t.deleted_at }));
+
     const payload: SyncPayload = {
         stateHash: getStateHash(),
+        // Watermark the caller advances to after applying. Captured before any read
+        // above so a concurrent write is re-shipped next pull, never skipped.
+        cursor,
         nodeId,
         generatedAt: new Date().toISOString(), // A2-17: signed freshness marker for replay rejection
         members,
@@ -3831,6 +3892,7 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         abuseReports,
         recoveryRequests,
         recoveryApprovals,
+        tombstones,
     };
 
     const privateKey = getPrivateKey();
@@ -4588,20 +4650,32 @@ export async function importRemoteState(remote: SyncPayload): Promise<ImportResu
             }
         }
 
-        // 12. Import Immutable Chat Messages
+        // 12. Import / LWW-upsert Chat Messages.
+        // Converge on the updated_at watermark, which the messages touch trigger bumps
+        // for EVERY mutation — edits (ciphertext/edited_at), reactions (metadata), and
+        // moves (conversation_id) alike. The previous edited_at-only guard silently
+        // dropped reactions (metadata changes don't touch edited_at) and never synced
+        // metadata at all, so a reaction on the primary never reached the backup.
+        // Setting updated_at explicitly means the touch trigger's WHEN-NEW-IS-OLD guard
+        // is false, so the source's watermark is preserved (backup stays a faithful
+        // mirror, not re-stamped with local time). LWW WHERE prevents an older payload
+        // from clobbering a newer local row.
         if (remote.messages) {
             for (const msg of remote.messages) {
-                // Insert new messages; for ones we already have, only accept a strictly newer
-                // edit (edited_at). This lets edits propagate across nodes while leaving
-                // un-edited messages immutable and never clobbering a newer edit with an older one.
-                const res = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                const res = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ON CONFLICT(id) DO UPDATE SET
+                                conversation_id = excluded.conversation_id,
+                                author_pubkey = excluded.author_pubkey,
                                 ciphertext = excluded.ciphertext,
                                 nonce = excluded.nonce,
-                                edited_at = excluded.edited_at
-                            WHERE excluded.edited_at IS NOT NULL
-                              AND (messages.edited_at IS NULL OR excluded.edited_at > messages.edited_at)`).run(
+                                type = excluded.type,
+                                system_type = excluded.system_type,
+                                metadata = excluded.metadata,
+                                edited_at = excluded.edited_at,
+                                updated_at = excluded.updated_at
+                            WHERE excluded.updated_at IS NOT NULL
+                              AND (messages.updated_at IS NULL OR excluded.updated_at > messages.updated_at)`).run(
                     msg.id,
                     msg.conversationId,
                     msg.authorPubkey,
@@ -4611,23 +4685,36 @@ export async function importRemoteState(remote: SyncPayload): Promise<ImportResu
                     msg.systemType || null,
                     msg.metadata || null,
                     msg.timestamp,
-                    msg.editedAt || null
+                    msg.editedAt || null,
+                    // Older payloads predate the message watermark — fall back so the
+                    // row still carries a monotonic updated_at (edited_at, then timestamp).
+                    msg.updatedAt || msg.editedAt || msg.timestamp
                 );
                 if (res.changes > 0) newMessages++;
             }
         }
 
-        // 13. Import Immutable Abuse Reports
+        // 13. Import / LWW-upsert Abuse Reports. Previously INSERT-OR-IGNORE, so a
+        // moderation status change (pending → dismissed) on the primary never reached
+        // the backup. Now converge status on the updated_at watermark, guarded so an
+        // older payload (updatedAt falls back to createdAt) can't regress a newer status.
         if (remote.abuseReports) {
             for (const ar of remote.abuseReports) {
-                db.prepare(`INSERT OR IGNORE INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?)`).run(
+                db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at, status, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(id) DO UPDATE SET
+                                status = excluded.status,
+                                updated_at = excluded.updated_at
+                            WHERE excluded.updated_at IS NOT NULL
+                              AND (abuse_reports.updated_at IS NULL OR excluded.updated_at > abuse_reports.updated_at)`).run(
                     ar.id,
                     ar.reporterPubkey,
                     ar.targetPubkey,
                     ar.targetPostId || null,
                     ar.reason,
-                    ar.createdAt
+                    ar.createdAt,
+                    ar.status || 'pending',
+                    ar.updatedAt || ar.createdAt
                 );
             }
         }
@@ -5640,6 +5727,15 @@ export function adminPruneBranch(rootPublicKey: string) {
 
 export function adminBroadcastAnnouncement(title: string, body: string, severity: 'info'|'warning'|'critical') {
     broadcast({ type: 'system_announcement', title, body, severity });
+
+    // Also dispatch as a native push notification to all active members
+    try {
+        const activeMembers = db.prepare("SELECT public_key FROM members WHERE status != 'disabled' AND status != 'pruned'").all() as { public_key: string }[];
+        const targetPubkeys = activeMembers.map(m => m.public_key);
+        dispatchPushNotification(targetPubkeys, 'SYSTEM', title, body, { type: 'system_announcement' }, 'marketplace');
+    } catch (e: any) {
+        console.error('[Push Announcement] Failed to send push notification broadcast:', e.message);
+    }
 }
 
 export function adminSendMessage(targetPubkey: string, body: string) {

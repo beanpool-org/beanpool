@@ -1,0 +1,19 @@
+[Unit]
+Description=BeanPool node watchdog (auto-recover hung nodes, capture diag reports)
+Documentation=https://github.com/beanpool-org/beanpool/tree/main/ops/watchdog
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/beanpool-watchdog.sh
+Restart=always
+RestartSec=10
+# The watchdog must never be the thing that starves a 1-vCPU host.
+Nice=10
+# Optional overrides (defaults live in the script):
+# Environment=BEANPOOL_WATCH_CONTAINERS=beanpool-beanpool-test-beanpool-node-1
+# Environment=BEANPOOL_WATCH_INTERVAL=20
+
+[Install]
+WantedBy=multi-user.target

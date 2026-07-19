@@ -28,6 +28,12 @@ services:
       - ENFORCE_READ_AUTH=${ENFORCE_READ_AUTH:-}
       - ENFORCE_WS_AUTH=${ENFORCE_WS_AUTH:-}
       - ENFORCE_LEDGER_AUTH=${ENFORCE_LEDGER_AUTH:-}
+      # Diagnostics: on SIGUSR2 (sent by the host watchdog when a node's event
+      # loop hangs) Node writes a diagnostic report — including the blocked JS
+      # stack — to /data (persisted), so a freeze like 2026-07-18 is diagnosable
+      # instead of erased by the restart. Also dumps a report on any uncaught
+      # exception. No effect on normal operation. See ops/watchdog/.
+      - NODE_OPTIONS=--report-on-signal --report-directory=/data --report-uncaught-exception
     volumes:
       - ./data:/data
     networks:

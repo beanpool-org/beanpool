@@ -3,7 +3,7 @@ import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, earnedCreditFromValu
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName } from '@beanpool/core';
 import { getThresholds, getLocalConfig } from './local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
@@ -5197,8 +5197,35 @@ export function getPostCount(filter?: { type?: string; category?: string; status
 
 // ===================== COMMUNITY HEALTH =====================
 
-export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
-export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; }
+export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
+export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
+export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
+
+// Reads the host watchdog's status file (dropped into the data dir by
+// ops/watchdog). Absent file = no watchdog on this host (not an error). A file
+// whose heartbeat is older than WATCHDOG_STALE_MS means a watchdog was running
+// and has since died — worth surfacing so the fleet knows a node lost its guard.
+const WATCHDOG_STALE_MS = 5 * 60 * 1000;
+function readWatchdogStatus(): WatchdogStatus {
+    const empty: WatchdogStatus = { present: false, lastSeenAt: null, status: null, recoveries: 0, lastRecoveryAt: null, healthy: false };
+    try {
+        const dataDir = process.env.BEANPOOL_DATA_DIR || join(process.cwd(), 'data');
+        const file = join(dataDir, 'watchdog-status.json');
+        if (!existsSync(file)) return empty;
+        const s = JSON.parse(readFileSync(file, 'utf-8'));
+        const lastSeenAt = typeof s.lastSeenAt === 'string' ? s.lastSeenAt : null;
+        const seenMs = lastSeenAt ? Date.parse(lastSeenAt) : NaN;
+        const healthy = Number.isFinite(seenMs) && (Date.now() - seenMs) < WATCHDOG_STALE_MS;
+        return {
+            present: true,
+            lastSeenAt,
+            status: typeof s.status === 'string' ? s.status : null,
+            recoveries: Number.isFinite(s.recoveries) ? s.recoveries : 0,
+            lastRecoveryAt: typeof s.lastRecoveryAt === 'string' ? s.lastRecoveryAt : null,
+            healthy,
+        };
+    } catch { return empty; }
+}
 
 export function getCommunityHealth(): CommunityHealth {
     const now = Date.now();
@@ -5455,7 +5482,30 @@ export function getCommunityHealth(): CommunityHealth {
             });
         }
     } catch (e) { console.error('Health flag check (delinquency) failed:', e); }
-    
+
+    // 7. Watchdog: surface auto-recoveries from event-loop freezes (see the
+    // 2026-07-18 incident) and a watchdog that has gone silent. The fleet
+    // manager turns these flags into alerts automatically.
+    const watchdog = readWatchdogStatus();
+    try {
+        if (watchdog.recoveries > 0) {
+            flags.push({
+                type: 'watchdog_recovery',
+                severity: 'critical',
+                description: `Node auto-recovered from ${watchdog.recoveries} event-loop freeze${watchdog.recoveries > 1 ? 's' : ''}${watchdog.lastRecoveryAt ? ` (last: ${watchdog.lastRecoveryAt})` : ''} — a hang recurred and the host watchdog restarted the node`,
+                members: []
+            });
+        }
+        if (watchdog.present && !watchdog.healthy) {
+            flags.push({
+                type: 'watchdog_down',
+                severity: 'alert',
+                description: `Host watchdog heartbeat is stale${watchdog.lastSeenAt ? ` (last seen ${watchdog.lastSeenAt})` : ''} — this node is currently running without freeze auto-recovery`,
+                members: []
+            });
+        }
+    } catch (e) { console.error('Health flag check (watchdog) failed:', e); }
+
     const config = getLocalConfig();
     const reportCount = getReportCount();
     
@@ -5475,7 +5525,8 @@ export function getCommunityHealth(): CommunityHealth {
             commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100
         },
         flags,
-        reportCount
+        reportCount,
+        watchdog
     };
 }
 

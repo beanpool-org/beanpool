@@ -1646,6 +1646,66 @@ export async function startHttpsServer(port: number): Promise<void> {
         }
     });
 
+    // Cursor-based delta pull. Same scoped replication auth as sync-snapshot, but the
+    // caller passes X-Since-Cursor (the `cursor` it last imported) and gets back only
+    // rows mutated since — plus tombstones deleted since — instead of the whole ledger.
+    // An empty/absent cursor seeds the replica with a full export (its `cursor` is then
+    // used for subsequent delta pulls). This is the path that scales past the 10 MB
+    // full-snapshot import cap as DBs grow toward GB. See docs/delta-backup-plan.md.
+    router.get('/api/local/admin/sync-delta', async (ctx) => {
+        const ip = replicationClientIp(ctx);
+        const token = ctx.request.header['x-replication-token'];
+        const headerPassword = ctx.request.header['x-admin-password'];
+        const cfg = getLocalConfig();
+        let authMode: 'token' | 'admin-pw' | null = null;
+
+        if (token) {
+            if (await verifyReplicationToken(String(token))) {
+                authMode = 'token';
+            } else {
+                recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid replication token' });
+                ctx.status = 401;
+                ctx.body = { error: 'Invalid replication token' };
+                return;
+            }
+        } else if (headerPassword && !cfg.replicationTokenOnly) {
+            (ctx as any).requestBody = { password: headerPassword };
+            if (await checkAdminAuth(ctx as any)) {
+                authMode = 'admin-pw';
+            } else {
+                recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });
+                return;
+            }
+        } else {
+            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: cfg.replicationTokenOnly ? 'replication token required' : 'no credentials' });
+            ctx.status = 401;
+            ctx.body = { error: cfg.replicationTokenOnly ? 'Replication token required' : 'Authentication required' };
+            return;
+        }
+
+        try {
+            const since = String(ctx.request.header['x-since-cursor'] || '');
+            const node = getP2PNode();
+            const nodeId = node?.peerId?.toString() ?? 'unknown';
+            // Empty since → no cursor yet → full seed export (its payload.cursor drives
+            // subsequent deltas). Otherwise ship only rows with watermark >= since.
+            const payload = await exportSyncState(nodeId, since || null);
+            if (!payload.signature || !payload.publicKey) {
+                ctx.status = 503;
+                ctx.body = { error: 'Delta unavailable: node signing identity not ready' };
+                return;
+            }
+            ctx.set('Cache-Control', 'no-store');
+            ctx.set('X-Node-Role', getNodeRole());
+            ctx.body = payload;
+            recordReplicationAccess({ at: Date.now(), ip, auth: authMode, reason: since ? 'delta' : 'delta (full seed)' });
+        } catch (e: any) {
+            console.error('[Backup] Delta export failed:', e);
+            ctx.status = 500;
+            ctx.body = { error: 'Delta export failed' };
+        }
+    });
+
     router.post('/api/local/admin/restore', async (ctx) => {
         // Handle auth via custom header for binary uploads to prevent password exposure in query string
         const headerPassword = ctx.request.header['x-admin-password'];

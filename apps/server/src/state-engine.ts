@@ -225,6 +225,9 @@ export interface Message {
     metadata?: string;
     timestamp: string;
     editedAt?: string | null;
+    /** Mutation watermark for delta sync LWW — bumped on edits AND reactions/metadata
+     * (which don't touch editedAt), so the backup importer can converge on it. */
+    updatedAt?: string | null;
 }
 
 export enum SystemMessageType {
@@ -3460,12 +3463,16 @@ export interface SyncFriend {
     friendPubkey: string;
     addedAt: string;
     isGuardian: boolean;
+    /** Mutation watermark for delta sync (bumped on is_guardian toggle). */
+    updatedAt?: string | null;
 }
 
 export interface SyncConversationParticipant {
     conversationId: string;
     publicKey: string;
     lastReadAt: string | null;
+    /** Mutation watermark for delta sync (bumped on last_read_at changes). */
+    updatedAt?: string | null;
 }
 
 export interface SyncConversation {
@@ -3484,6 +3491,11 @@ export interface SyncAbuseReport {
     targetPostId: string | null;
     reason: string;
     createdAt: string;
+    /** Moderation status (pending/dismissed/…). Carried so status changes reach the
+     * backup — previously abuse rows imported INSERT-OR-IGNORE and status never synced. */
+    status?: string;
+    /** Mutation watermark for delta sync (bumped on status change). */
+    updatedAt?: string | null;
 }
 
 export interface SyncRecoveryRequest {
@@ -3647,12 +3659,30 @@ export function getCurrentImportOrigin(): string | null {
     return currentImportOrigin;
 }
 
-export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
-    // Select all members
-    const members = getAllMembers();
-    
+export async function exportSyncState(nodeId: string, since?: string | null): Promise<SyncPayload> {
+    // Delta vs full. In delta mode each table ships only rows whose watermark is
+    // >= `since` (and tombstones deleted since then). The `cursor` handed back to the
+    // caller is captured HERE, before any read — so a row written mid-export is
+    // re-shipped on the next pull instead of being skipped. The `>=` (not `>`) plus
+    // last-writer-wins import make that boundary re-send idempotent, and close the
+    // sub-millisecond hole where a write landing in the same ms as the cursor would
+    // otherwise never satisfy a strict `>` again. See docs/delta-backup-plan.md.
+    const delta = typeof since === 'string' && since.length > 0;
+    const cursor = new Date().toISOString();
+    const sel = (table: string, watermark: string): any[] =>
+        delta
+            ? db.prepare(`SELECT * FROM ${table} WHERE ${watermark} >= ?`).all(since) as any[]
+            : db.prepare(`SELECT * FROM ${table}`).all() as any[];
+
+    // Members: full uses getAllMembers() (includes pruned so prunes propagate); delta
+    // filters the same set by the updated_at watermark (status→pruned bumps it).
+    const members = (delta
+        ? db.prepare("SELECT * FROM members WHERE updated_at >= ?").all(since) as any[]
+        : db.prepare("SELECT * FROM members").all() as any[]
+    ).map(rowToMember);
+
     // Select all posts, active or inactive
-    const postRows = db.prepare("SELECT * FROM posts").all() as any[];
+    const postRows = sel('posts', 'updated_at');
     const posts: MarketplacePost[] = postRows.map(row => ({
         id: row.id,
         type: row.type,
@@ -3678,13 +3708,13 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
     }));
 
     // Select all photos
-    const photos = db.prepare("SELECT * FROM post_photos").all() as PostPhoto[];
+    const photos = sel('post_photos', 'updated_at') as PostPhoto[];
 
     // Select all projects
-    const projects = db.prepare("SELECT * FROM projects").all() as Project[];
+    const projects = sel('projects', 'updated_at') as Project[];
 
     // Select all ratings
-    const ratingRows = db.prepare("SELECT * FROM ratings").all() as any[];
+    const ratingRows = sel('ratings', 'created_at');
     const ratings: Rating[] = ratingRows.map(r => ({
         id: r.id,
         targetPubkey: r.target_pubkey,
@@ -3697,7 +3727,7 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
     }));
 
     // Disaster Recovery table exports:
-    const accountRows = db.prepare("SELECT * FROM accounts").all() as any[];
+    const accountRows = sel('accounts', 'last_updated_at');
     const accounts: SyncAccount[] = accountRows.map(row => ({
         publicKey: row.public_key,
         balance: row.balance,
@@ -3705,7 +3735,7 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         lastDemurrageEpoch: row.last_demurrage_epoch,
     }));
 
-    const transactionRows = db.prepare("SELECT * FROM transactions").all() as any[];
+    const transactionRows = sel('transactions', 'timestamp');
     const transactions: Transaction[] = transactionRows.map(row => ({
         id: row.id,
         from: row.from_pubkey,
@@ -3718,9 +3748,14 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         authPayload: row.auth_payload ?? null,
     }));
 
-    const ratingTxKeys = new Set(ratingRows.map(r => `${r.transaction_id}|${r.rater_pubkey}`));
+    // ratedBy* are derived (not persisted) flags — compute the key set from the FULL
+    // ratings table so they stay correct even when ratingRows is a delta subset.
+    const ratingTxKeys = new Set(
+        (db.prepare("SELECT transaction_id, rater_pubkey FROM ratings").all() as any[])
+            .map(r => `${r.transaction_id}|${r.rater_pubkey}`)
+    );
 
-    const marketplaceTxRows = db.prepare("SELECT * FROM marketplace_transactions").all() as any[];
+    const marketplaceTxRows = sel('marketplace_transactions', 'updated_at');
     const marketplaceTransactions: SyncMarketplaceTransaction[] = marketplaceTxRows.map(row => ({
         id: row.id,
         postId: row.post_id,
@@ -3740,15 +3775,16 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         ratedBySeller: ratingTxKeys.has(`${row.id}|${row.seller_pubkey}`),
     }));
 
-    const friendRows = db.prepare("SELECT * FROM friends").all() as any[];
+    const friendRows = sel('friends', 'updated_at');
     const friends: SyncFriend[] = friendRows.map(row => ({
         ownerPubkey: row.owner_pubkey,
         friendPubkey: row.friend_pubkey,
         addedAt: row.added_at,
         isGuardian: Boolean(row.is_guardian),
+        updatedAt: row.updated_at || row.added_at,
     }));
 
-    const conversationRows = db.prepare("SELECT * FROM conversations").all() as any[];
+    const conversationRows = sel('conversations', 'created_at');
     const conversations: SyncConversation[] = conversationRows.map(row => ({
         id: row.id,
         type: row.type,
@@ -3758,14 +3794,15 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         createdAt: row.created_at,
     }));
 
-    const participantRows = db.prepare("SELECT * FROM conversation_participants").all() as any[];
+    const participantRows = sel('conversation_participants', 'updated_at');
     const conversationParticipants: SyncConversationParticipant[] = participantRows.map(row => ({
         conversationId: row.conversation_id,
         publicKey: row.public_key,
         lastReadAt: row.last_read_at,
+        updatedAt: row.updated_at || row.last_read_at,
     }));
 
-    const messageRows = db.prepare("SELECT * FROM messages").all() as any[];
+    const messageRows = sel('messages', 'updated_at');
     const messages: Message[] = messageRows.map(row => ({
         id: row.id,
         conversationId: row.conversation_id,
@@ -3777,9 +3814,10 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         metadata: row.metadata || undefined,
         timestamp: row.timestamp,
         editedAt: row.edited_at,
+        updatedAt: row.updated_at || row.edited_at || row.timestamp,
     }));
 
-    const abuseRows = db.prepare("SELECT * FROM abuse_reports").all() as any[];
+    const abuseRows = sel('abuse_reports', 'updated_at');
     const abuseReports: SyncAbuseReport[] = abuseRows.map(row => ({
         id: row.id,
         reporterPubkey: row.reporter_pubkey,
@@ -3787,9 +3825,11 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         targetPostId: row.target_post_id,
         reason: row.reason,
         createdAt: row.created_at,
+        status: row.status || 'pending',
+        updatedAt: row.updated_at || row.created_at,
     }));
 
-    const recoveryReqRows = db.prepare("SELECT * FROM recovery_requests").all() as any[];
+    const recoveryReqRows = sel('recovery_requests', 'updated_at');
     const recoveryRequests: SyncRecoveryRequest[] = recoveryReqRows.map(row => ({
         id: row.id,
         oldPubkey: row.old_pubkey,
@@ -3803,7 +3843,7 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         updatedAt: row.updated_at || row.executed_at || row.cooldown_until || row.created_at,
     }));
 
-    const recoveryAppRows = db.prepare("SELECT * FROM recovery_approvals").all() as any[];
+    const recoveryAppRows = sel('recovery_approvals', 'created_at');
     const recoveryApprovals: SyncRecoveryApproval[] = recoveryAppRows.map(row => ({
         requestId: row.request_id,
         guardianPubkey: row.guardian_pubkey,
@@ -3811,8 +3851,19 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         createdAt: row.created_at,
     }));
 
+    // Tombstones propagate hard-deletes (friends removed, projects/photos deleted).
+    // Delta ships only those deleted since `since`; full ships all so a backup that
+    // missed a delete still converges. Applied idempotently by importRemoteState.
+    const tombstoneRows = delta
+        ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
+        : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
+    const tombstones = tombstoneRows.map(t => ({ tableName: t.table_name, rowKey: t.row_key, deletedAt: t.deleted_at }));
+
     const payload: SyncPayload = {
         stateHash: getStateHash(),
+        // Watermark the caller advances to after applying. Captured before any read
+        // above so a concurrent write is re-shipped next pull, never skipped.
+        cursor,
         nodeId,
         generatedAt: new Date().toISOString(), // A2-17: signed freshness marker for replay rejection
         members,
@@ -3831,6 +3882,7 @@ export async function exportSyncState(nodeId: string): Promise<SyncPayload> {
         abuseReports,
         recoveryRequests,
         recoveryApprovals,
+        tombstones,
     };
 
     const privateKey = getPrivateKey();

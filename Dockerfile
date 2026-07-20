@@ -1,7 +1,10 @@
 # =============================================================================
 # Stage 1: Builder — install deps, build core → PWA → server
 # =============================================================================
-FROM node:22-alpine AS builder
+# Pinned to alpine3.21 for reproducibility — the floating node:22-alpine tag
+# rolls its Alpine/node/node-gyp out from under us (that roll is what surfaced
+# the better-sqlite3 rebuild break; see the runtime stage).
+FROM node:22-alpine3.21 AS builder
 
 WORKDIR /app
 
@@ -39,7 +42,7 @@ RUN pnpm prune --prod --no-optional
 # =============================================================================
 # Stage 2: Runtime — clean Alpine with only what's needed to run
 # =============================================================================
-FROM node:22-alpine AS runtime
+FROM node:22-alpine3.21 AS runtime
 
 # Accept version from CI build args (from git tag)
 ARG APP_VERSION=""
@@ -74,8 +77,12 @@ RUN if [ -n "$APP_VERSION" ]; then echo "$APP_VERSION" > /app/.version; fi
 
 WORKDIR /app/apps/server
 
-# Force build better-sqlite3 native bindings for Alpine
-RUN npm rebuild better-sqlite3 --build-from-source
+# Rebuild better-sqlite3's native binding (the builder's `pnpm install
+# --ignore-scripts` skipped it). better-sqlite3 12.8.0 ships a musl prebuilt, so
+# prebuild-install fetches it — do NOT force --build-from-source: the current
+# node-gyp crashes on a post-compile step (ENOENT node_gyp_bins), and a source
+# build is unnecessary now that a musl prebuilt exists.
+RUN npm rebuild better-sqlite3
 
 # Install su-exec for dropping privileges
 RUN apk add --no-cache su-exec

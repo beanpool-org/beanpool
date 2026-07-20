@@ -8,7 +8,7 @@ a *third* option instead of picking between those two.
 
 ## Why
 
-Two separate problems converged into one plan:
+Three separate problems converged into one plan:
 
 1. **Backup infrastructure.** [delta-backup-plan.md](./delta-backup-plan.md) built
    option (B) — a full `NODE_ROLE=backup` node instance as the replica. It works
@@ -40,12 +40,26 @@ Two separate problems converged into one plan:
      the manager, with the `-600` beans / `14-day` thresholds hardcoded
      separately in both places.
 
-Both problems share a root cause: the logic that should be one trusted
-"ledger/sync engine" is buried inside one 6,700-line node-only file
+3. **Admin surface fragmentation.** The node ships its own full admin/settings
+   UI — prune a user, resolve an abuse report, moderate a post, broadcast an
+   announcement — served directly from the node's own HTTP server. The
+   manager increasingly needs to trigger the same actions for a coherent
+   fleet experience (it already does some of this: `announcePanel` in
+   `node.js` calls `/api/action/announce`). Today that means two separate,
+   overlapping admin surfaces — one per node, one central — with no single
+   answer to "where do I go to manage this community," and AI-assisted
+   moderation/response has nowhere natural to live since it'd have to be
+   wired into both.
+
+The first two problems share a root cause: the logic that should be one
+trusted "ledger/sync engine" is buried inside one 6,700-line node-only file
 (`state-engine.ts`). Anything that wants to reuse it — a lean backup receiver,
 or the manager's own fraud rules — either re-derives it from scratch (drift
 risk, as above) or has to run a full node just to get access to it (infra
-cost).
+cost). The third is a product-surface decision layered on top: once the
+manager is the trusted place for backup and monitoring, it should also be the
+trusted place for day-to-day administration — see
+[Admin surface](#admin-surface-what-moves-what-stays) below.
 
 ## Target architecture
 
@@ -62,16 +76,51 @@ beanpool/  (pnpm workspace)
 │         sync engine (importRemoteState / exportSyncState / LWW merge)
 │
 ├── apps/
-│   ├── server/                existing — the node, unchanged in capability
+│   ├── server/                existing — the node, admin UI shrinks to a
+│   │                                       minimum (see below); ledger/
+│   │                                       protocol capability unchanged
 │   ├── pwa/, native/           existing — unchanged
 │   └── manager/                MOVED from beanpool-manager repo, converted to TS
-│         fleet registry, credentials, AI synthesis, alerting, dashboard UI
+│         fleet registry, credentials, AI synthesis (optional), alerting,
+│           dashboard UI
+│         NEW: primary admin surface — user/message/report management,
+│           moderation, for one node or many; calls the node's existing
+│           admin API underneath, does not reimplement the mutations
 │         Sentinel's fleet-only rules (wash-trading graph, Sybil rings,
 │           funnels, dormant-reactivation, watchlist, trend spikes) — no node
 │           equivalent, stay exactly as they are
 │         NEW: lean backup receiver — N polling loops + N SQLite files, no
 │           P2P/TLS/HTTP-server, built on beanpool-ledger's sync engine
 ```
+
+## Admin surface: what moves, what stays
+
+The split is **read/analysis vs. write**, not "everything moves":
+
+- **Moves to the manager (interface + orchestration only):** the UI and
+  workflow for user management, message moderation, and abuse-report
+  handling — one place to click "prune this user" or "resolve this report,"
+  for one node or eight, with AI-assisted triage layered on top for whoever
+  wants it.
+- **Stays on the node (the actual mutation):** the code that executes those
+  actions — `adminPruneUser`, abuse-report resolution, etc. — keeps running
+  on the node, because the node is the only thing that can safely serialize
+  a write against its own live, authoritative ledger. The manager's UI calls
+  the node's existing admin API to trigger it, the same pattern already used
+  today (e.g. `announcePanel` → `/api/action/announce`); the logic doesn't
+  relocate, only the interface consolidates.
+- **Why not move the mutation logic too:** doing so would mean the manager
+  either computes a ledger-affecting mutation and pushes it into the node
+  (a new inbound-write channel to the primary — precisely what this year's
+  one-directional backup redesign, "primary imports from nobody," was built
+  to close) or mutates its own replica and somehow reconciles that back —
+  neither is acceptable. Ledger-affecting writes have exactly one legitimate
+  writer: the node itself.
+- **What "minimum" means on the node:** enough to bootstrap and survive with
+  zero dependency on the manager — initial admin-password setup, basic
+  settings, and emergency actions (e.g. freezing an account) — not the full
+  rich admin experience. Exact scope is an open decision below, not decided
+  here.
 
 ## What's already built (foundation — don't redo)
 
@@ -86,10 +135,10 @@ code, not a rewrite of it.
 
 ## What does NOT change
 
-- The node's standalone capability — identity, ledger, P2P, HTTP/admin server,
-  local snapshot-to-file (`snapshot-scheduler.ts`, already exists, untouched),
-  and the existing `NODE_ROLE=backup` full-node-replica mode. A single
-  operator can still run one node and do everything — including real
+- The node's standalone **ledger/protocol** capability — identity, ledger,
+  P2P, local snapshot-to-file (`snapshot-scheduler.ts`, already exists,
+  untouched), and the existing `NODE_ROLE=backup` full-node-replica mode. A
+  single operator can still run one node and do everything — including real
   off-node redundancy — without ever installing the manager.
 - No AI in the node, ever. Stays a manager-exclusive product surface by
   deliberate choice, not merely because a single node lacks fleet context.
@@ -97,6 +146,10 @@ code, not a rewrite of it.
   funnels, dormant-reactivation, watchlist, trend analysis) — no node
   equivalent exists or is planned. These are additive capabilities, not
   duplicated ones, and are untouched by this plan.
+- **Revises earlier framing:** the node's admin *UI* is not staying as-is —
+  see [Admin surface](#admin-surface-what-moves-what-stays) above. What
+  doesn't change is the node's ability to run *standalone*, not the shape of
+  its admin interface.
 
 ## Staged migration (each step lands + is verified before the next)
 
@@ -158,6 +211,25 @@ code, not a rewrite of it.
    delta-backup plan. The standalone `NODE_ROLE=backup` full-node path stays
    available regardless, for anyone not running a manager at all.
 
+9. **Scope the node's minimum admin surface.** Inventory the node's current
+   admin/settings UI and sort each action into "bootstrap/emergency — stays
+   on the node" vs. "day-to-day — moves to the manager." Concrete starting
+   point, not a final answer: admin-password setup, basic settings, and
+   emergency freeze/report actions stay; routine user management, message
+   moderation, and abuse-report triage move.
+
+10. **Build the manager's admin-action surface.** For each action moved in
+    step 9, the manager's UI calls the node's *existing* admin API endpoints
+    (the same pattern already used by `announcePanel` → `/api/action/announce`)
+    — no new mutation logic, no new inbound-write channel to the node. This
+    is UI/orchestration work, not ledger-engine work, and can proceed in
+    parallel with steps 4–8 rather than waiting on them.
+
+11. **Shrink the node's own admin UI** to the step-9 minimum once the
+    manager's equivalent is live and proven — remove the now-redundant
+    routine-management screens from the node's HTTP server, keep the
+    bootstrap/emergency subset.
+
 ## Risks
 
 - **De-globalizing `db`/`ledger` state** (step 1) touches the most
@@ -178,6 +250,13 @@ code, not a rewrite of it.
 - **Package boundary bikeshedding** — whether this becomes a new
   `beanpool-ledger` package or extends `beanpool-core` is a naming/scoping
   call, not an architectural one; doesn't block starting the extraction.
+- **Over-centralizing admin power in the manager.** The manager already
+  holds every node's admin credentials for backup purposes; making it the
+  *primary* admin surface too means compromising the manager is now
+  compromising day-to-day control of the whole fleet, not just its backups.
+  Mitigate: the node keeps an independent, minimum admin capability (step 9)
+  specifically so there is no single point of total failure — this is the
+  main reason that minimum surface must not shrink to zero.
 
 ## Open decisions (flag, don't block on)
 
@@ -186,3 +265,6 @@ code, not a rewrite of it.
 - Whether the node should eventually retain its own rolling history (to
   support trend-based self-checks, like `negativeSumSpike`, without a
   manager at all) — genuinely optional, not required for anything above.
+- **Exact contents of the node's minimum admin surface** (step 9) — needs a
+  real inventory of the current admin UI's actions, sorted deliberately,
+  not assumed from this doc's starting-point examples.

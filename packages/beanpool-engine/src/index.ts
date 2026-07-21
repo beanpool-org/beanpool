@@ -10,5 +10,7 @@
 export * from './trust.js';
 export * from './audit.js';
 export * from './members.js';
+export * from './social.js';
+
 
 

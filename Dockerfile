@@ -79,10 +79,11 @@ WORKDIR /app/apps/server
 
 # Rebuild better-sqlite3's native binding (the builder's `pnpm install
 # --ignore-scripts` skipped it). better-sqlite3 12.8.0 ships a musl prebuilt, so
-# prebuild-install fetches it — do NOT force --build-from-source: the current
-# node-gyp crashes on a post-compile step (ENOENT node_gyp_bins), and a source
-# build is unnecessary now that a musl prebuilt exists.
-RUN npm rebuild better-sqlite3
+# prebuild-install fetches it — do NOT force --build-from-source by default as
+# node-gyp can crash on post-compile steps. Fall back to source compile if prebuilt
+# is missing, and verify the binary loads post-rebuild.
+RUN (npm rebuild better-sqlite3 || npm rebuild better-sqlite3 --build-from-source) && \
+    node -e "require('better-sqlite3')"
 
 # Install su-exec for dropping privileges
 RUN apk add --no-cache su-exec

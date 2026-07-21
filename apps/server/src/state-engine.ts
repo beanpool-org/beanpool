@@ -2528,7 +2528,7 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
 
 export function getCommunityInfo(): { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string } } {
     const memberCount = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
-    const postCount = (db.prepare("SELECT COUNT(*) as c FROM posts WHERE active=1").get() as any).c;
+    const postCount = getActivePostCount();
     const txCount = (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c;
     const config = getLocalConfig();
     return { memberCount, postCount, transactionCount: txCount, commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100, currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' } };

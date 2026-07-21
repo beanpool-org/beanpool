@@ -1548,8 +1548,7 @@ export default function SettingsScreen() {
                                           const hasIntegrityError = dbStats && dbStats.integrity !== 'ok';
                                           const isSynced = !remoteStats || (dbStats && 
                                               dbStats.members === remoteStats.members &&
-                                              dbStats.posts === remoteStats.posts &&
-                                              dbStats.transactions === remoteStats.transactions);
+                                              dbStats.posts === remoteStats.posts);
 
                                           let pillBg: string = palette.emerald100;
                                           let pillBorder: string = palette.emerald400;
@@ -1610,10 +1609,10 @@ export default function SettingsScreen() {
                                 <View style={{ width: '48%', backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 14, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 24, marginBottom: 2 }}>💸</Text>
                                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{dbStats?.transactions ?? 0}</Text>
-                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>Ledger Transactions</Text>
+                                    <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>Your Ledger Deals</Text>
                                     {remoteStats && (
-                                        <Text style={{ fontSize: 10, color: dbStats?.transactions === remoteStats.transactions ? colors.brand.primary : palette.amber600, fontWeight: 'bold', marginTop: 4 }}>
-                                            {dbStats?.transactions === remoteStats.transactions ? '🟢 Node In Sync' : `⚠️ Node has ${remoteStats.transactions}`}
+                                        <Text style={{ fontSize: 10, color: colors.brand.primary, fontWeight: 'bold', marginTop: 4 }}>
+                                            🟢 Node History ({remoteStats.transactions})
                                         </Text>
                                     )}
                                 </View>

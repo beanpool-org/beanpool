@@ -72,7 +72,16 @@ import {
     type PostFilter,
     getMarketplaceTransaction as getMarketplaceTransactionEngine,
     getMarketplaceTransactions as getMarketplaceTransactionsEngine,
-    type MarketplaceTransaction
+    type MarketplaceTransaction,
+    SystemMessageType,
+    type SystemMessageTypeVal,
+    type TypedMessagePayload,
+    type Message,
+    type Conversation,
+    getConversationsByMember as getConversationsByMemberEngine,
+    getConversationMessages as getConversationMessagesEngine,
+    getConversation as getConversationEngine,
+    getUnreadCounts as getUnreadCountsEngine
 } from '@beanpool/engine';
 import {
     addRating,
@@ -98,6 +107,18 @@ import {
     completePostTransaction as completePostTransactionEngine,
     cancelPostTransaction as cancelPostTransactionEngine
 } from './engine/escrow.js';
+import {
+    createConversation as createConversationEngine,
+    sendMessage as sendMessageEngine,
+    toggleMessageReaction as toggleMessageReactionEngine,
+    editMessage as editMessageEngine,
+    MESSAGE_EDIT_WINDOW_MS,
+    injectSystemMessage as injectSystemMessageEngine,
+    markConversationRead as markConversationReadEngine,
+    ensureTransactionConversation as ensureTransactionConversationEngine,
+    migrateConsolidateConversations as migrateConsolidateConversationsEngine,
+    repairConsolidatedMessagesMetadata as repairConsolidatedMessagesMetadataEngine
+} from './engine/messaging.js';
 
 
 
@@ -171,56 +192,9 @@ export interface Transaction {
 
 export type { MemberProfile };
 
-export interface Conversation {
-    id: string;
-    type: 'dm' | 'group';
-    postId?: string;
-    postTitle?: string;
-    postStatus?: string;
-    postPhoto?: string | null;
-    lastMsgType?: string;
-    lastSysType?: string;
-    name: string | null;
-    participants: string[];
-    peerCallsign?: string;
-    peerAvatar?: string | null;
-    createdBy: string;
-    createdAt: string;
-}
-
-export interface Message {
-    id: string;
-    conversationId: string;
-    authorPubkey: string;
-    ciphertext: string;
-    nonce: string;
-    type?: 'text' | 'system' | 'image';
-    systemType?: SystemMessageType;
-    metadata?: string;
-    timestamp: string;
-    editedAt?: string | null;
-    /** Mutation watermark for delta sync LWW — bumped on edits AND reactions/metadata
-     * (which don't touch editedAt), so the backup importer can converge on it. */
-    updatedAt?: string | null;
-}
-
-export enum SystemMessageType {
-    ESCROW_CREATED = 'ESCROW_CREATED',
-    ESCROW_FUNDED = 'ESCROW_FUNDED',
-    ESCROW_RELEASED = 'ESCROW_RELEASED',
-    ESCROW_CANCELLED = 'ESCROW_CANCELLED',
-    DISPUTE_OPENED = 'DISPUTE_OPENED',
-    REVIEW_LEFT = 'REVIEW_LEFT'
-}
-
-export interface SystemMessageMetadata {
-    amount?: number;        // The Beans involved
-    postId: string;         // Link back to the original post
-    actorPubkey: string;    // Who triggered the event (Buyer/Seller)
-    txHash?: string;        // The ledger transaction ID for verification
-    buyerPubkey?: string;
-    sellerPubkey?: string;
-}
+type SystemMessageMetadata = TypedMessagePayload;
+export { SystemMessageType };
+export type { Conversation, Message, SystemMessageMetadata };
 
 export type { Rating };
 
@@ -1402,533 +1376,66 @@ export function getActivePostCount(): number {
 
 // ===================== MESSAGING =====================
 
+function getMessagingCb() {
+    return {
+        broadcast,
+        dispatchPushNotification,
+        registerVisitor
+    };
+}
+
 export function createConversation(type: 'dm' | 'group', participants: string[], createdBy: string, name?: string, postId?: string): Conversation | null {
-    assertMemberActive(createdBy);
-    for (const p of participants) if (!getMember(p)) registerVisitor(p);
-
-    // Consolidated model: DMs are always post-agnostic (post_id IS NULL) to maintain a single per-pair thread.
-    const effectivePostId = type === 'dm' ? undefined : postId;
-
-    if (type === 'dm' && participants.length === 2) {
-        // Find existing DM (always post_id IS NULL)
-        const existingQuery = `
-            SELECT c.* FROM conversations c
-            JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
-            JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
-            WHERE c.type = 'dm' AND c.post_id IS NULL
-        `;
-        const existingParams = [participants[0], participants[1]];
-
-        const existing = db.prepare(existingQuery).get(...existingParams) as any;
-
-        if (existing) {
-            const parts = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(existing.id) as any[];
-            return { id: existing.id, type: existing.type, postId: existing.post_id, name: existing.name, createdBy: existing.created_by, createdAt: existing.created_at, participants: parts.map(p => p.public_key) };
-        }
-    }
-
-    const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    db.transaction(() => {
-        db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, type, effectivePostId || null, name || null, createdBy, createdAt);
-        const insertPart = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);
-        for (const p of participants) insertPart.run(id, p);
-    })();
-
-    const conv: Conversation = { id, type, postId, name: name || null, createdBy, createdAt, participants };
-    broadcast({ type: 'conversation_created', conversation: conv });
-    return conv;
+    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, postId);
 }
 
 export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string): Message | null {
-    assertMemberActive(authorPubkey);
-    const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conversationId) as any[];
-    if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) return null;
-
-    // Client-generated message id (WhatsApp-style): the sender names the message,
-    // so its optimistic local row and this server row are the same row by
-    // construction — the WS echo of an own-send can no longer materialize as a
-    // duplicate bubble on the sender. Also makes retries of the same send
-    // idempotent: an id that already exists from the same author in the same
-    // conversation returns the existing message without re-inserting,
-    // re-broadcasting, or re-pushing. Any other id collision is rejected — an
-    // existing row is NEVER updated through this path, so ids can't be reused
-    // to overwrite other messages. The endpoint enforces UUID v4 format.
-    if (clientId) {
-        const existing = db.prepare("SELECT * FROM messages WHERE id=?").get(clientId) as any;
-        if (existing) {
-            if (existing.author_pubkey === authorPubkey && existing.conversation_id === conversationId) {
-                return { id: existing.id, conversationId: existing.conversation_id, authorPubkey: existing.author_pubkey, ciphertext: existing.ciphertext, nonce: existing.nonce, type: existing.type, metadata: existing.metadata, timestamp: existing.timestamp };
-            }
-            throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
-        }
-    }
-
-    const msg: Message = { id: clientId || crypto.randomUUID(), conversationId, authorPubkey, ciphertext, nonce, type, metadata, timestamp: new Date().toISOString() };
-    db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce, msg.type, msg.metadata, msg.timestamp);
-    // Store the encrypted image blob separately so it lazy-loads (kept out of the message feed).
-    if (attachment?.data && attachment?.nonce) {
-        db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime) VALUES (?, ?, ?, ?)`).run(msg.id, attachment.data, attachment.nonce, attachment.mime || 'image/jpeg');
-    }
-
-    broadcast({ type: 'new_message', conversationId, message: msg, participants: participants.map(p => p.public_key) });
-
-    // Push notification for DMs (encrypted — body cannot include message content)
-    const senderMember = getMember(authorPubkey) as any;
-    const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
-    dispatchPushNotification(
-        participants.map(p => p.public_key),
-        authorPubkey,
-        '💬 New Message',
-        `${senderName} sent you a message`,
-        { screen: 'chat', conversationId },
-        'chat'
-    );
-
-    return msg;
+    return sendMessageEngine(getMessagingCb(), conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, clientId);
 }
 
 export function toggleMessageReaction(messageId: string, authorPubkey: string, emoji: string): any {
-    const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
-    if (!row) return null;
-
-    let metadata: any = {};
-    if (row.metadata) {
-        try {
-            metadata = JSON.parse(row.metadata);
-        } catch {
-            metadata = {};
-        }
-    }
-
-    if (!metadata.reactions) {
-        metadata.reactions = [];
-    }
-
-    const existingIndex = metadata.reactions.findIndex((r: any) => r.author === authorPubkey);
-    if (existingIndex > -1) {
-        const existingReaction = metadata.reactions[existingIndex];
-        if (existingReaction.emoji === emoji) {
-            // Remove the reaction if same emoji
-            metadata.reactions.splice(existingIndex, 1);
-        } else {
-            // Update the reaction to new emoji
-            metadata.reactions[existingIndex].emoji = emoji;
-        }
-    } else {
-        // Add new reaction
-        metadata.reactions.push({ emoji, author: authorPubkey });
-    }
-
-    const metadataStr = JSON.stringify(metadata);
-    db.prepare("UPDATE messages SET metadata=? WHERE id=?").run(metadataStr, messageId);
-
-    // Broadcast the update to all active WS clients
-    const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
-    broadcast({
-        type: 'message_reaction',
-        conversationId: row.conversation_id,
-        messageId,
-        metadata: metadataStr,
-        participants: participants.map(p => p.public_key)
-    });
-
-    return { success: true, metadata: metadataStr };
+    return toggleMessageReactionEngine(getMessagingCb(), messageId, authorPubkey, emoji);
 }
 
-/** How long after sending a message the author may still edit it. */
-export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
-
-/**
- * Edit a message's content within MESSAGE_EDIT_WINDOW_MS of sending. Author-only, text-only.
- * The window is enforced against the SERVER clock (the authoritative timestamp), so a client
- * cannot extend it. Throws with a user-facing reason on rejection. On success the new
- * ciphertext/nonce replace the old and edited_at is stamped, then broadcast for re-sync.
- */
 export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string): Message {
-    assertMemberActive(authorPubkey);
-    const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
-    if (!row) throw new Error('Message not found');
-    if (row.author_pubkey !== authorPubkey) throw new Error('You can only edit your own messages');
-    if (row.type === 'image' || row.system_type) throw new Error('Only text messages can be edited');
-    if (Date.now() - new Date(row.timestamp).getTime() > MESSAGE_EDIT_WINDOW_MS) {
-        throw new Error('The 15-minute edit window for this message has passed');
-    }
-
-    const editedAt = new Date().toISOString();
-    db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(ciphertext, nonce, editedAt, messageId);
-
-    const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
-    broadcast({
-        type: 'message_edited',
-        conversationId: row.conversation_id,
-        messageId,
-        ciphertext,
-        nonce,
-        editedAt,
-        participants: participants.map(p => p.public_key)
-    });
-
-    return { id: messageId, conversationId: row.conversation_id, authorPubkey, ciphertext, nonce, type: row.type, metadata: row.metadata, timestamp: row.timestamp, editedAt };
+    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce);
 }
 
-/**
- * Ensures a conversation thread exists between buyer and seller for a given post.
- * Called atomically with escrow creation so injectSystemMessage() always has a target.
- * Returns the conversation ID (existing or newly created).
- */
-export function ensureTransactionConversation(_postId: string, buyerPubkey: string, sellerPubkey: string): string {
-    // Consolidated model: all trades AND general DMs between two people share ONE per-pair
-    // conversation. The postId is no longer part of the thread's identity — it lives in each
-    // escrow system message's metadata so the client can still render it as a per-deal event.
-    // createConversation's dm dedup (post_id IS NULL) finds the existing pair thread or makes it.
-    const conv = createConversation('dm', [buyerPubkey, sellerPubkey], buyerPubkey);
-    if (!conv) throw new Error('Failed to create transaction conversation');
-    return conv.id;
-}
+export { MESSAGE_EDIT_WINDOW_MS };
 
-/**
- * One-time chat-consolidation migration: collapse every per-post conversation into the single
- * per-pair DM. For each post-keyed thread we ensure the pair's DM exists, then drop the
- * post-keyed thread (and its messages/participants). New escrow events already target the
- * per-pair DM, and the deals themselves live in marketplace_transactions, so a pending deal's
- * card still appears in the pair thread afterwards. Pre-launch reset — historical per-post chat
- * threads are intentionally discarded. Idempotent: a no-op once no post-keyed threads remain.
- */
-export function migrateConsolidateConversations(): void {
-    const postKeyed = db.prepare("SELECT id FROM conversations WHERE post_id IS NOT NULL").all() as any[];
-    if (postKeyed.length === 0) return;
-    console.log(`[Migration] Consolidating ${postKeyed.length} per-post conversation(s) into per-pair DMs...`);
-
-    // Ensure a per-pair DM exists and move messages to it
-    db.transaction(() => {
-        for (const conv of postKeyed) {
-            const parts = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conv.id) as any[];
-            if (parts.length === 2) {
-                try {
-                    const targetConv = createConversation('dm', [parts[0].public_key, parts[1].public_key], parts[0].public_key);
-                    if (targetConv) {
-                        // Move all messages to the target consolidated conversation and record the original conversation ID
-                        const msgs = db.prepare("SELECT id, metadata FROM messages WHERE conversation_id=?").all(conv.id) as any[];
-                        for (const msg of msgs) {
-                            let meta: any = {};
-                            if (msg.metadata) {
-                                try {
-                                    meta = JSON.parse(msg.metadata);
-                                } catch (e) {}
-                            }
-                            meta.originalConversationId = conv.id;
-                            db.prepare("UPDATE messages SET conversation_id=?, metadata=? WHERE id=?").run(targetConv.id, JSON.stringify(meta), msg.id);
-                        }
-                    }
-                } catch (e) {
-                    console.warn('[Migration] Could not ensure per-pair DM or move messages:', (e as any)?.message);
-                }
-            }
-            db.prepare("DELETE FROM conversation_participants WHERE conversation_id=?").run(conv.id);
-            writeTombstone('conversations', conv.id);
-            for (const p of parts) {
-                writeTombstone('conversation_participants', `${conv.id}|${p.public_key}`);
-            }
-            db.prepare("DELETE FROM conversations WHERE id=?").run(conv.id);
-        }
-    })();
-
-    console.log(`[Migration] Chat consolidation complete — ${postKeyed.length} per-post thread(s) collapsed.`);
-}
-
-export function repairConsolidatedMessagesMetadata(): void {
-    try {
-        const dms = db.prepare("SELECT id FROM conversations WHERE type = 'dm' AND post_id IS NULL").all() as any[];
-        let repairCount = 0;
-        for (const dm of dms) {
-            const parts = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id = ?").all(dm.id) as any[];
-            if (parts.length !== 2) continue;
-            
-            // Find all legacy/deleted conversation IDs between these two participants
-            const legacyRows = db.prepare(`
-                SELECT DISTINCT substr(tp1.row_key, 1, instr(tp1.row_key, '|') - 1) AS legacy_conv_id
-                FROM tombstones tp1
-                JOIN tombstones tp2 ON substr(tp1.row_key, 1, instr(tp1.row_key, '|') - 1) = substr(tp2.row_key, 1, instr(tp2.row_key, '|') - 1)
-                WHERE tp1.table_name = 'conversation_participants'
-                  AND tp2.table_name = 'conversation_participants'
-                  AND tp1.row_key LIKE ?
-                  AND tp2.row_key LIKE ?
-                  AND tp1.row_key != tp2.row_key
-            `).all(`%|${parts[0].public_key}`, `%|${parts[1].public_key}`) as any[];
-            
-            const legacyIds = legacyRows.map(r => r.legacy_conv_id);
-            if (legacyIds.length === 0) continue;
-            
-            // Fetch messages in this consolidated conversation
-            const msgs = db.prepare("SELECT id, metadata FROM messages WHERE conversation_id = ?").all(dm.id) as any[];
-            for (const msg of msgs) {
-                let meta: any = {};
-                if (msg.metadata) {
-                    try {
-                        meta = JSON.parse(msg.metadata);
-                    } catch (e) {}
-                }
-                
-                // If it already has originalConversationId or originalConversationIds, skip it
-                if (meta.originalConversationId || meta.originalConversationIds) continue;
-                
-                // If there's exactly 1 legacy ID, set originalConversationId
-                if (legacyIds.length === 1) {
-                    meta.originalConversationId = legacyIds[0];
-                } else {
-                    // Set all candidate original conversation IDs as an array
-                    meta.originalConversationIds = legacyIds;
-                }
-                
-                db.prepare("UPDATE messages SET metadata = ? WHERE id = ?").run(JSON.stringify(meta), msg.id);
-                repairCount++;
-            }
-        }
-        if (repairCount > 0) {
-            console.log(`[Repair] Added legacy conversation IDs to ${repairCount} consolidated message(s) metadata.`);
-        }
-    } catch (err) {
-        console.warn('[Repair] Failed to repair consolidated messages metadata:', err);
-    }
-}
-
-export function injectSystemMessage(postId: string, type: SystemMessageType, meta: SystemMessageMetadata, buyerPubkey?: string, sellerPubkey?: string) {
-    let convRows: any[];
-    
-    // Consolidated model: deliver into the single per-pair DM (post-agnostic). postId stays in
-    // `meta` so the client renders this as a per-deal event in the shared thread. The legacy
-    // post_id lookup is kept only as a fallback for callers that don't pass both parties.
-    if (buyerPubkey && sellerPubkey) {
-        convRows = db.prepare(`
-            SELECT c.id FROM conversations c
-            JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
-            JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
-            WHERE c.type = 'dm' AND c.post_id IS NULL
-        `).all(buyerPubkey, sellerPubkey) as any[];
-    } else {
-        convRows = db.prepare("SELECT id FROM conversations WHERE post_id = ?").all(postId) as any[];
-    }
-    
-    if (convRows.length === 0) {
-        console.warn(`[Comms] WARNING: No conversations found for post ${postId}. System event ${type} was NOT delivered to any inbox.`);
-    }
-
-    const contentMap: Record<SystemMessageType, string> = {
-        [SystemMessageType.ESCROW_CREATED]: `Escrow initialized.`,
-        [SystemMessageType.ESCROW_FUNDED]: `${meta.amount} Beans placed in escrow.`,
-        [SystemMessageType.ESCROW_RELEASED]: `Payment of ${meta.amount} Beans released to the provider.`,
-        [SystemMessageType.ESCROW_CANCELLED]: `Escrow cancelled and funds refunded.`,
-        [SystemMessageType.DISPUTE_OPENED]: `A dispute has been opened.`,
-        [SystemMessageType.REVIEW_LEFT]: `A review has been left.`
-    };
-    
-    for (const row of convRows) {
-        const conversationId = row.id;
-        const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conversationId) as any[];
-        
-        const metadataString = JSON.stringify(meta);
-        const msg: Message = { 
-            id: crypto.randomUUID(), 
-            conversationId, 
-            authorPubkey: 'SYSTEM', 
-            ciphertext: contentMap[type] || 'System Event occurring.', 
-            nonce: '00000', 
-            type: 'system',
-            systemType: type,
-            metadata: metadataString,
-            timestamp: new Date().toISOString() 
-        };
-        db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce, msg.type, msg.systemType, msg.metadata, msg.timestamp);
-
-        broadcast({ type: 'new_message', conversationId, message: msg, participants: participants.map(p => p.public_key) });
-        
-        // Dispatch push notification to all participants (except the actor)
-        sendPushNotification(postId, type, meta, participants.map(p => p.public_key));
-    }
+export function injectSystemMessage(postId: string, type: SystemMessageTypeVal | string, meta: TypedMessagePayload, buyerPubkey?: string, sellerPubkey?: string): void {
+    return injectSystemMessageEngine(getMessagingCb(), postId, type, meta, buyerPubkey, sellerPubkey);
 }
 
 export function getConversationsByMember(pubkey: string): Conversation[] {
-    const rows = db.prepare(`
-        SELECT c.*,
-        CASE WHEN c.post_id IS NOT NULL AND p.id IS NULL THEN '(deleted post)' ELSE p.title END as post_title,
-        COALESCE(
-            (SELECT mt2.status FROM marketplace_transactions mt2
-             WHERE mt2.post_id = c.post_id
-               AND mt2.buyer_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id)
-               AND mt2.seller_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id)
-             ORDER BY mt2.created_at DESC LIMIT 1),
-            p.status,
-            CASE WHEN c.post_id IS NOT NULL THEN 'cancelled' ELSE 'active' END
-        ) as post_status,
-        m.type as last_msg_type, m.system_type as last_sys_type, m.timestamp as last_msg_time
-        FROM conversations c
-        JOIN conversation_participants cp ON c.id = cp.conversation_id
-        LEFT JOIN posts p ON c.post_id = p.id
-        LEFT JOIN messages m ON m.rowid = (
-            SELECT MAX(rowid) FROM messages WHERE conversation_id = c.id
-        )
-        WHERE cp.public_key = ?
-        ORDER BY (m.rowid IS NULL) ASC, m.rowid DESC, c.created_at DESC
-    `).all(pubkey) as any[];
-    // Ordering uses message rowid (server insertion order) rather than client-supplied
-    // timestamps — a device with a skewed clock can no longer sink or float a thread.
-    // Message-less conversations sort below messaged ones, newest first.
-
-    // ⚡ Bolt: Batch fetch participants to avoid N+1 queries
-    const conversationIds = rows.map(r => r.id);
-    const participantsByConv = new Map<string, string[]>();
-    const peerLastReadByConv = new Map<string, string | null>();
-    const myLastReadByConv = new Map<string, string | null>();
-    const allPeerPubkeys = new Set<string>();
-
-    if (conversationIds.length > 0) {
-        const allParts = selectInChunks(conversationIds, ph => `SELECT conversation_id, public_key, last_read_at FROM conversation_participants WHERE conversation_id IN (${ph})`);
-
-        for (const part of allParts) {
-            if (!participantsByConv.has(part.conversation_id)) {
-                participantsByConv.set(part.conversation_id, []);
-            }
-            participantsByConv.get(part.conversation_id)!.push(part.public_key);
-            if (part.public_key !== pubkey) {
-                allPeerPubkeys.add(part.public_key);
-                // Track the peer's read cursor for read receipts (DM = the one peer).
-                peerLastReadByConv.set(part.conversation_id, part.last_read_at || null);
-            } else {
-                myLastReadByConv.set(part.conversation_id, part.last_read_at || null);
-            }
-        }
-    }
-
-    // ⚡ Bolt: Batch fetch peer member data to avoid N+1 queries
-    const membersByPubkey = new Map<string, any>();
-    if (allPeerPubkeys.size > 0) {
-        const pubkeysArray = Array.from(allPeerPubkeys);
-        const allMembers = selectInChunks(pubkeysArray, ph => `SELECT public_key, callsign, avatar_url FROM members WHERE public_key IN (${ph})`);
-
-        for (const member of allMembers) {
-            membersByPubkey.set(member.public_key, member);
-        }
-    }
-
-    // ⚡ Bolt: Batch fetch post photos to avoid N+1 queries
-    const postIds = Array.from(new Set(rows.map(r => r.post_id).filter(id => id != null)));
-    const postPhotosById = new Map<string, string | null>();
-    if (postIds.length > 0) {
-        const allPosts = selectInChunks(postIds, ph => `SELECT id, photos FROM posts WHERE id IN (${ph})`);
-
-        for (const post of allPosts) {
-            let postPhoto: string | null = null;
-            if (post.photos) {
-                try {
-                    const arr = JSON.parse(post.photos);
-                    if (Array.isArray(arr) && arr.length > 0) postPhoto = arr[0];
-                } catch {}
-            }
-            postPhotosById.set(post.id, postPhoto);
-        }
-    }
-
-    return rows.map(r => {
-        const parts = participantsByConv.get(r.id) || [];
-        
-        // Look up peer member data (avatar + callsign) for the other participant
-        const peerPubkey = parts.find(p => p !== pubkey);
-        let peerCallsign: string | undefined;
-        let peerAvatar: string | null = null;
-        if (peerPubkey) {
-            const peerMember = membersByPubkey.get(peerPubkey);
-            if (peerMember) {
-                peerCallsign = peerMember.callsign;
-                peerAvatar = peerMember.avatar_url || null;
-            }
-        }
-
-        // Extract first photo from post
-        const postPhoto = r.post_id ? (postPhotosById.get(r.post_id) || null) : null;
-
-        return { 
-            id: r.id, 
-            type: r.type, 
-            postId: r.post_id, 
-            postTitle: r.post_title,
-            postStatus: r.post_status,
-            postPhoto,
-            lastMsgType: r.last_msg_type,
-            lastSysType: r.last_sys_type,
-            name: r.name, 
-            createdBy: r.created_by, 
-            createdAt: r.created_at, 
-            participants: parts,
-            peerCallsign,
-            peerAvatar,
-            peerLastReadAt: peerLastReadByConv.get(r.id) || null,
-            myLastReadAt: myLastReadByConv.get(r.id) || null,
-        };
-    });
+    return getConversationsByMemberEngine(db, pubkey);
 }
 
 export function getConversationMessages(conversationId: string, limit = 50, offset = 0): Message[] {
-    // rowid (insertion order) instead of client timestamps — stable pagination under clock skew
-    const rows = db.prepare(`SELECT * FROM messages WHERE conversation_id=? ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(conversationId, limit, offset) as any[];
-    return rows.reverse().map(r => ({ id: r.id, conversationId: r.conversation_id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, systemType: r.system_type, metadata: r.metadata, timestamp: r.timestamp, editedAt: r.edited_at }));
+    return getConversationMessagesEngine(db, conversationId, limit, offset);
 }
 
 export function getConversation(id: string): Conversation | undefined {
-    const c = db.prepare(`
-        SELECT c.*, p.title as post_title,
-        COALESCE(
-            (SELECT mt2.status FROM marketplace_transactions mt2
-             WHERE mt2.post_id = c.post_id
-               AND mt2.buyer_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id)
-               AND mt2.seller_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id)
-             ORDER BY mt2.created_at DESC LIMIT 1),
-            p.status,
-            'active'
-        ) as post_status
-        FROM conversations c 
-        LEFT JOIN posts p ON c.post_id = p.id 
-        WHERE c.id=?
-    `).get(id) as any;
-    if (!c) return undefined;
-    const parts = db.prepare("SELECT public_key, last_read_at FROM conversation_participants WHERE conversation_id=?").all(id) as any[];
-    return {
-        id: c.id,
-        type: c.type,
-        postId: c.post_id,
-        postTitle: c.post_title,
-        postStatus: c.post_status,
-        name: c.name,
-        createdBy: c.created_by,
-        createdAt: c.created_at,
-        participants: parts.map(p => p.public_key),
-        // Read receipts: per-participant read cursors so an open chat polling this
-        // endpoint can flip sent ticks to read without waiting for a full sync.
-        readCursors: parts.map(p => ({ publicKey: p.public_key, lastReadAt: p.last_read_at || null }))
-    } as any;
+    return getConversationEngine(db, id);
 }
 
-// ===================== UNREAD TRACKING =====================
-
 export function markConversationRead(pubkey: string, conversationId: string): void {
-    db.prepare(`UPDATE conversation_participants SET last_read_at=? WHERE conversation_id=? AND public_key=?`).run(new Date().toISOString(), conversationId, pubkey);
+    return markConversationReadEngine(pubkey, conversationId);
 }
 
 export function getUnreadCounts(pubkey: string): Record<string, number> {
-    const rows = db.prepare(`
-        SELECT cp.conversation_id, 
-               (SELECT COUNT(*) FROM messages m 
-                WHERE m.conversation_id = cp.conversation_id 
-                  AND m.author_pubkey != ? 
-                  AND (cp.last_read_at IS NULL OR m.timestamp > cp.last_read_at)
-               ) as unread_count
-        FROM conversation_participants cp
-        WHERE cp.public_key = ?
-    `).all(pubkey, pubkey) as any[];
+    return getUnreadCountsEngine(db, pubkey);
+}
 
-    const counts: Record<string, number> = {};
-    for (const r of rows) if (r.unread_count > 0) counts[r.conversation_id] = r.unread_count;
-    return counts;
+export function ensureTransactionConversation(postId: string, buyerPubkey: string, sellerPubkey: string): string {
+    return ensureTransactionConversationEngine(getMessagingCb(), postId, buyerPubkey, sellerPubkey);
+}
+
+export function migrateConsolidateConversations(): void {
+    return migrateConsolidateConversationsEngine(getMessagingCb());
+}
+
+export function repairConsolidatedMessagesMetadata(): void {
+    return repairConsolidatedMessagesMetadataEngine();
 }
 
 // ===================== STATE SYNC =====================
@@ -4821,7 +4328,7 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
     const actorMember = meta.actorPubkey ? (getMember(meta.actorPubkey) as any) : null;
     const actorName = actorMember?.callsign || meta.actorPubkey?.slice(0, 8) || 'Someone';
 
-    const notificationMap: Record<SystemMessageType, { title: string; body: string; data: any }> = {
+    const notificationMap: Partial<Record<SystemMessageType, { title: string; body: string; data: any }>> = {
         [SystemMessageType.ESCROW_CREATED]: {
             title: '🔒 Escrow Initialized',
             body: `An escrow has been created for "${postTitle}"`,
@@ -4859,7 +4366,7 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
 
     dispatchPushNotification(
         participantPubkeys,
-        meta.actorPubkey,
+        meta.actorPubkey || 'SYSTEM',
         notification.title,
         notification.body,
         notification.data,

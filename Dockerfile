@@ -14,6 +14,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Copy package files and lockfile first (for layer caching)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/beanpool-core/package.json ./packages/beanpool-core/
+COPY packages/beanpool-engine/package.json ./packages/beanpool-engine/
 COPY apps/pwa/package.json ./apps/pwa/
 COPY apps/server/package.json ./apps/server/
 
@@ -28,9 +29,11 @@ COPY . .
 
 # Build in dependency order:
 #   1. Core protocol library (shared by both PWA and server)
-#   2. PWA (Vite → outputs to apps/server/public/)
-#   3. Server (tsc → outputs to apps/server/dist/)
+#   2. Engine (db-backed shared node logic; depends on core, used by server)
+#   3. PWA (Vite → outputs to apps/server/public/)
+#   4. Server (tsc → outputs to apps/server/dist/)
 RUN cd packages/beanpool-core && pnpm run build
+RUN cd packages/beanpool-engine && pnpm run build
 RUN cd apps/pwa && pnpm run build
 # PWA build clears apps/server/public/ (emptyOutDir), so copy settings files from static/
 COPY apps/server/static/* /app/apps/server/public/
@@ -67,6 +70,11 @@ COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=builder /app/packages/beanpool-core/dist ./packages/beanpool-core/dist
 COPY --from=builder /app/packages/beanpool-core/package.json ./packages/beanpool-core/package.json
 COPY --from=builder /app/packages/beanpool-core/node_modules ./packages/beanpool-core/node_modules
+
+# Copy compiled engine library (db-backed shared node logic)
+COPY --from=builder /app/packages/beanpool-engine/dist ./packages/beanpool-engine/dist
+COPY --from=builder /app/packages/beanpool-engine/package.json ./packages/beanpool-engine/package.json
+COPY --from=builder /app/packages/beanpool-engine/node_modules ./packages/beanpool-engine/node_modules
 
 # Copy root workspace config for pnpm resolution
 COPY --from=builder /app/package.json ./package.json

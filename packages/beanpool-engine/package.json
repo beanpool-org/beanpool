@@ -1,0 +1,24 @@
+{
+  "name": "@beanpool/engine",
+  "version": "1.1.35",
+  "description": "BeanPool shared node engine — db-backed trust/ledger/audit/sync logic, single source of truth for node and manager",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@beanpool/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "better-sqlite3": "*"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  }
+}

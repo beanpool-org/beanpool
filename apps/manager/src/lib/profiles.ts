@@ -26,7 +26,7 @@ export function loadNodeProfiles(): NodeProfile[] {
     const defaultProfile: NodeProfile = {
         id: 'local-node',
         name: 'Local Sovereign Node',
-        url: window.location.origin.includes('http') ? window.location.origin : 'https://localhost:8443',
+        url: window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin,
         isPrimary: true,
     };
     saveNodeProfiles([defaultProfile]);

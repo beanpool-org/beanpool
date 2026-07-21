@@ -390,7 +390,7 @@ export async function performSync(): Promise<SyncResult> {
         // Fetch transactions
         if (pubKey) {
             try {
-                const txRes = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubKey}&limit=200&_t=${Date.now()}`, {
+                const txRes = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubKey}&limit=1000&_t=${Date.now()}`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: balanceController.signal

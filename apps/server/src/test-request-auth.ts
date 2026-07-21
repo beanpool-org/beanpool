@@ -103,9 +103,9 @@ async function main() {
     const r6 = await signedFetch(ENDPOINT, body, { tamperBody: true });
     assert(r6.status === 403 && /invalid/i.test(r6.error ?? ''), `tampered body rejected (got ${r6.status} ${r6.error ?? ''})`);
 
-    // 6. Legacy body-only signature still accepted (dual-accept).
+    // 6. Legacy body-only signature must be rejected (security hardening).
     const r7 = await signedFetch(ENDPOINT, body, { legacy: true });
-    assert(r7.status === 200, `legacy body-only signature accepted (got ${r7.status} ${r7.error ?? ''})`);
+    assert(r7.status === 401 && /missing/i.test(r7.error ?? ''), `legacy body-only signature rejected (got ${r7.status} ${r7.error ?? ''})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

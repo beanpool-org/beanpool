@@ -57,7 +57,19 @@ import {
     getAverageRating as getAverageRatingEngine,
     getFriends as getFriendsEngine,
     type Rating,
-    type FriendEntry
+    type FriendEntry,
+    getPosts as getPostsEngine,
+    getPostCount as getPostCountEngine,
+    getActivePostCount as getActivePostCountEngine,
+    hasListedOffer as hasListedOfferEngine,
+    hasLiveOffer as hasLiveOfferEngine,
+    liveOfferCount as liveOfferCountEngine,
+    usableFloor as usableFloorEngine,
+    generateSearchKeywords as generateSearchKeywordsEngine,
+    CONTRIBUTION_REQUIRED_ERROR,
+    COVENANT_REQUIRED_ERROR,
+    type MarketplacePost,
+    type PostFilter
 } from '@beanpool/engine';
 import {
     addRating,
@@ -65,6 +77,15 @@ import {
     removeFriend,
     setGuardian
 } from './engine/social.js';
+import {
+    createPost as createPostEngine,
+    removePost as removePostEngine,
+    updatePost as updatePostEngine,
+    pausePost as pausePostEngine,
+    resumePost as resumePostEngine,
+    adminDeletePost as adminDeletePostEngine,
+    adminBulkDeletePosts as adminBulkDeletePostsEngine
+} from './engine/posts.js';
 
 
 
@@ -110,77 +131,14 @@ function selectInChunks<T = any>(
  * e.g. title "Fresh Lemons" → keywords "fruit citrus produce food tree"
  */
 export function generateSearchKeywords(title: string, description: string, category: string): string {
-    const text = `${title} ${description}`.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-    const words = text.split(/\s+/).filter(w => w.length > 2);
-    const expanded = new Set<string>();
-    expanded.add(category);
-
-    // Try exact match first, then strip common suffixes (lemons→lemon, mowing→mow)
-    const lookup = (word: string): string[] | undefined => {
-        if (synonymMap[word]) return synonymMap[word];
-        if (word.endsWith('ies')) { const stem = word.slice(0, -3) + 'y'; if (synonymMap[stem]) return synonymMap[stem]; }
-        if (word.endsWith('es')) { const stem = word.slice(0, -2); if (synonymMap[stem]) return synonymMap[stem]; }
-        if (word.endsWith('s')) { const stem = word.slice(0, -1); if (synonymMap[stem]) return synonymMap[stem]; }
-        if (word.endsWith('ing')) { const stem = word.slice(0, -3); if (synonymMap[stem]) return synonymMap[stem]; }
-        if (word.endsWith('ed')) { const stem = word.slice(0, -2); if (synonymMap[stem]) return synonymMap[stem]; }
-        return undefined;
-    };
-
-    for (const word of words) {
-        const syns = lookup(word);
-        if (syns) {
-            for (const syn of syns) expanded.add(syn);
-        }
-    }
-    // Also check multi-word phrases (up to 3 words)
-    const allWords = text.split(/\s+/);
-    for (let i = 0; i < allWords.length - 1; i++) {
-        const two = `${allWords[i]} ${allWords[i+1]}`;
-        if (synonymMap[two]) {
-            for (const syn of synonymMap[two]) expanded.add(syn);
-        }
-        if (i < allWords.length - 2) {
-            const three = `${allWords[i]} ${allWords[i+1]} ${allWords[i+2]}`;
-            if (synonymMap[three]) {
-                for (const syn of synonymMap[three]) expanded.add(syn);
-            }
-        }
-    }
-    return [...expanded].join(' ');
+    return generateSearchKeywordsEngine(title, description, category, synonymMap);
 }
 
 // ===================== TYPES =====================
 
 export type { Member, InviteCode };
 
-export interface MarketplacePost {
-    id: string;
-    type: 'offer' | 'need';
-    category: string;
-    title: string;
-    description: string;
-    credits: number;
-    priceType: 'fixed' | 'hourly';
-    authorPublicKey: string;
-    authorCallsign: string;
-    createdAt: string;
-    updatedAt?: string;
-    active: boolean;
-    status: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
-    repeatable: boolean;
-    acceptedBy?: string;
-    acceptedByCallsign?: string;
-    acceptedAt?: string;
-    pendingTransactionId?: string;
-    completedAt?: string;
-    lat?: number;
-    lng?: number;
-    photos?: string[];
-    originNode?: string;
-    authorEnergyCycled?: number;
-    authorFoundingNeeded?: boolean; // true = author has no completed trades yet (their first trade unlocks their floor)
-    authorAvatarUrl?: string | null;
-}
+export type { MarketplacePost };
 
 export interface MarketplaceTransaction {
     id: string;
@@ -1237,14 +1195,7 @@ function validatePostPhotos(photos: string[] | undefined): void {
 
 // Contribution-first gate (Gate 1). Stable prefix so clients can detect this
 // specific rejection and show the "list an Offer" prompt instead of a raw error.
-export const CONTRIBUTION_REQUIRED_ERROR = 'CONTRIBUTION_REQUIRED: list at least one Offer before you can post Needs or accept Offers.';
-
-// Offer covenant (Gate 2). To spend on community credit — i.e. take (or keep) your balance
-// negative — you must have at least one LIVE Offer posted right now. Carrying a negative balance
-// means the community is holding credit for you; the covenant is that you keep a line in the
-// water so others can call on you to repay it in kind. Stable prefix so clients can detect this
-// rejection and show the "post an Offer" prompt rather than a raw error.
-export const COVENANT_REQUIRED_ERROR = 'COVENANT_REQUIRED: keep at least one active Offer posted to spend on community credit (a negative balance).';
+export { CONTRIBUTION_REQUIRED_ERROR, COVENANT_REQUIRED_ERROR };
 
 // Offer covenant — BANDED (Trust Model v3). How deep you may spend on credit scales with how many
 // LIVE offers you keep posted (see docs/trust-model-v3.md §3-4). Superset of the flat covenant
@@ -1276,39 +1227,21 @@ function floorLockedError(publicKey: string, postBalance: number): Error {
  */
 export function hasListedOffer(publicKey: string): boolean {
     if (publicKey === getAdminPubkey()) return true;
-    const row = db.prepare(`SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' LIMIT 1`).get(publicKey);
-    return !!row;
+    return hasListedOfferEngine(db, publicKey);
 }
 
-/**
- * Does this member have at least one LIVE Offer posted right now? Unlike hasListedOffer
- * ("ever listed one"), this requires a currently-visible Offer (active row, status 'active').
- * Enforces the offer covenant: you may only spend into a negative balance while you keep a
- * line in the water. The system admin is exempt (it acts at the system level).
- */
 export function hasLiveOffer(publicKey: string): boolean {
     if (publicKey === getAdminPubkey()) return true;
-    const row = db.prepare(`SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' AND active = 1 AND status = 'active' LIMIT 1`).get(publicKey);
-    return !!row;
+    return hasLiveOfferEngine(db, publicKey);
 }
 
-/**
- * Count of a member's currently-LIVE Offers (active row, status 'active'). Drives the banded
- * offer covenant (Trust Model v3): how deep a member may spend on credit scales with this count.
- * Admin is exempt — treated as fully unlocked (max band).
- */
 export function liveOfferCount(publicKey: string): number {
     if (publicKey === getAdminPubkey()) return OFFER_BANDS.length - 1;
-    const row = db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE author_pubkey = ? AND type = 'offer' AND active = 1 AND status = 'active'`).get(publicKey) as any;
-    return row?.c || 0;
+    return liveOfferCountEngine(db, publicKey);
 }
 
-/**
- * The floor a member may actually USE right now = the shallower of their earned limit and the
- * depth their live Offers unlock. Returns a value in [floor, 0] (0 when they hold no live Offer).
- */
 export function usableFloor(publicKey: string): number {
-    const { floor } = getMemberTrustProfile(publicKey);        // earned limit (≤ 0)
+    const { floor } = getMemberTrustProfile(publicKey);
     return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
 }
 
@@ -1370,223 +1303,19 @@ export function createPost(
     type: 'offer' | 'need', category: string, title: string, description: string, credits: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string, authorPublicKey: string, lat?: number, lng?: number, photos?: string[], repeatable?: boolean, id?: string
 ): MarketplacePost | null {
-    assertMemberActive(authorPublicKey);
-    if (!getMember(authorPublicKey)) {
-        return null;
-    }
-    assertProfileComplete(authorPublicKey);
-    assertNotOnHoliday(authorPublicKey);
-    validatePostPhotos(photos);
-
-    // Contribution-first gate: listing an Offer is always allowed (it's what
-    // clears the gate); posting a Need requires having listed an Offer first.
-    if (type === 'need' && !hasListedOffer(authorPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
-
-    const finalId = id || crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    const searchKeywords = generateSearchKeywords(title, description, category);
-    
-    db.transaction(() => {
-        db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?)`).run(finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt, repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords);
-
-        if (photos && photos.length > 0) {
-            const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
-            photos.slice(0, 5).forEach((p, idx) => insertPhoto.run(finalId, p, idx));
-        }
-    })();
-
-    const post = getPosts({ id: finalId }).find(p => p.id === finalId)!;
-    broadcast({ type: 'new_post', post });
-    return post;
+    return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id);
 }
 
-export function getPosts(filter?: { id?: string; type?: string; category?: string; status?: string; offset?: number; limit?: number; updatedAfter?: string; query?: string; authorPubkey?: string; viewerPubkey?: string; sync?: boolean }): MarketplacePost[] {
-    let query = `
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
-               COALESCE((SELECT SUM(amount) FROM transactions WHERE from_pubkey = m.public_key), 0) as author_energy_cycled,
-               COALESCE(m.earned_credit, 0) as author_earned_credit,
-               (
-                 COALESCE((SELECT COUNT(*) FROM transactions t
-                      WHERE (t.from_pubkey = m.public_key OR t.to_pubkey = m.public_key)
-                        AND t.from_pubkey != t.to_pubkey
-                        AND t.from_pubkey NOT LIKE 'escrow_%' AND t.to_pubkey NOT LIKE 'escrow_%'
-                        AND t.from_pubkey != 'SYSTEM' AND t.to_pubkey != 'SYSTEM'), 0) +
-                 COALESCE((SELECT COUNT(*) FROM marketplace_transactions mt
-                      WHERE (mt.buyer_pubkey = m.public_key OR mt.seller_pubkey = m.public_key)
-                        AND mt.status = 'completed'), 0)
-               ) as author_trade_count
-        FROM posts p
-        LEFT JOIN members m ON p.author_pubkey = m.public_key
-        LEFT JOIN members a ON p.accepted_by = a.public_key
-        WHERE 1=1
-    `;
-    const params: any[] = [];
-
-    if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
-        // Regular client paginated fetch: only active/pending — PLUS the author's own paused posts
-        // when they're viewing themselves (so they can find & re-activate them). Viewer-aware: paused
-        // is included only when the signed requester IS the author, never leaked to profile viewers.
-        const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
-        query += selfView
-            ? " AND p.active = 1 AND p.status IN ('active', 'pending', 'paused')"
-            : " AND p.active = 1 AND p.status IN ('active', 'pending')";
-        // Holiday mode: hide away members' posts from the general feed. NOT applied when viewing a
-        // specific author's own listings (authorPubkey) or during sync (updatedAfter) — those carry
-        // every state so each node can re-apply this read-time filter itself.
-        if (!filter?.authorPubkey) {
-            query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
-        }
-    } else if (filter?.updatedAfter || filter?.sync) {
-        // Sync daemon fetch: MUST include completed/cancelled/deleted states to sync deletions
-    } else {
-        query += " AND p.active = 1";
-    }
-
-    if (filter?.id) { query += " AND p.id = ?"; params.push(filter.id); }
-    if (filter?.type && filter.type !== 'all') { query += " AND p.type = ?"; params.push(filter.type); }
-    if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
-    if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
-    if (filter?.authorPubkey) { query += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
-
-    // FTS5 full-text search with synonym-expanded keywords
-    if (filter?.query && filter.query.trim()) {
-        const searchTerms = filter.query.trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
-        if (searchTerms.length > 0) {
-            const ftsQuery = searchTerms.map(t => `"${t}"*`).join(' OR ');
-            query += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
-            params.push(ftsQuery);
-        }
-    }
-
-    if (filter?.updatedAfter) {
-        query += " AND p.updated_at >= ?";
-        params.push(filter.updatedAfter);
-    }
-
-    query += " ORDER BY p.updated_at DESC, p.created_at DESC";
-    
-    if (filter?.limit) {
-        query += " LIMIT ? OFFSET ?";
-        params.push(filter.limit, filter.offset || 0);
-    }
-
-    const rows = db.prepare(query).all(...params) as any[];
-    const postIds = rows.map(r => r.id);
-    
-    // Return URLs for ALL photos of every post — but only the order numbers, never the
-    // image bytes. rowToPost maps these to /photos/:orderNum URLs, so the feed stays tiny
-    // (a few short strings per post) while the client can render the full set. The actual
-    // image data downloads lazily per-photo when each URL is rendered (e.g. post detail
-    // carousel), so the data-light feed behaviour is preserved.
-    const photos = selectInChunks(postIds, ph => `SELECT post_id, order_num, updated_at FROM post_photos WHERE post_id IN (${ph})`);
-
-    // ⚡ Bolt: Group photos by post_id to avoid O(N²) nested filtering, turning it to O(N) lookup.
-    const photosByPost = new Map<string, any[]>();
-    for (const p of photos as any[]) {
-        if (!photosByPost.has(p.post_id)) {
-            photosByPost.set(p.post_id, []);
-        }
-        photosByPost.get(p.post_id)!.push(p);
-    }
-
-    return rows.map(r => rowToPost(r, photosByPost));
+export function getPosts(filter?: PostFilter): MarketplacePost[] {
+    return getPostsEngine(db, filter);
 }
 
 export function removePost(id: string, authorPublicKey: string): boolean {
-    // A post with a funded escrow must not be deletable — that would strand the
-    // buyer's Beans with no release path. (Admin deletes handle this by refunding.)
-    const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'`).get(id) as any;
-    if (pendingTx.c > 0) throw new Error('This post has a deal in escrow — complete or cancel the deal before deleting it');
-
-    let removed = false;
-    db.transaction(() => {
-        const result = db.prepare(`UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ?`).run(id, authorPublicKey);
-        if (result.changes === 0) return;
-        removed = true;
-        // Reject open requests so they don't linger against a deleted post (no funds locked yet)
-        db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
-    })();
-    if (!removed) return false;
-    broadcast({ type: 'post_removed', id });
-    return true;
+    return removePostEngine(broadcast, id, authorPublicKey);
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost>): MarketplacePost | null {
-    if (updates.photos !== undefined && Array.isArray(updates.photos)) {
-        // Clients send back /api/marketplace/posts/{id}/photos/{n} URLs for photos they
-        // kept during an edit (rowToPost serves URLs, never bytes). Re-hydrate those from
-        // the stored data — storing the URL string itself would destroy the photo.
-        const existingByOrder = new Map<number, string>(
-            (db.prepare(`SELECT order_num, photo_data FROM post_photos WHERE post_id=?`).all(id) as any[])
-                .map(r => [r.order_num, r.photo_data])
-        );
-        updates.photos = updates.photos.map(p => {
-            const m = typeof p === 'string' ? p.match(/\/api\/marketplace\/posts\/([^/]+)\/photos\/(\d+)(?:\?.*)?$/) : null;
-            if (m && m[1] === id) {
-                const data = existingByOrder.get(Number(m[2]));
-                if (data) return data;
-            }
-            return p;
-        });
-        validatePostPhotos(updates.photos);
-    }
-    const setClauses: string[] = [];
-    const params: any[] = [];
-    
-    if (updates.title) { setClauses.push("title = ?"); params.push(updates.title); }
-    if (updates.description !== undefined) { setClauses.push("description = ?"); params.push(updates.description); }
-    if (updates.category) { setClauses.push("category = ?"); params.push(updates.category); }
-    if (updates.credits !== undefined) { setClauses.push("credits = ?"); params.push(updates.credits); }
-    if (updates.priceType) { setClauses.push("price_type = ?"); params.push(updates.priceType); }
-    if (updates.type) { setClauses.push("type = ?"); params.push(updates.type); }
-    if (updates.lat !== undefined) { setClauses.push("lat = ?"); params.push(updates.lat); }
-    if (updates.lng !== undefined) { setClauses.push("lng = ?"); params.push(updates.lng); }
-    if (updates.repeatable !== undefined) { setClauses.push("repeatable = ?"); params.push(updates.repeatable ? 1 : 0); }
-    
-    if (setClauses.length === 0 && updates.photos === undefined) return getPosts({ id })[0];
-
-    // Regenerate search keywords if title, description, or category changed
-    if (updates.title || updates.description !== undefined || updates.category) {
-        const existing = db.prepare(`SELECT title, description, category FROM posts WHERE id = ?`).get(id) as any;
-        if (existing) {
-            const newTitle = updates.title || existing.title;
-            const newDesc = updates.description !== undefined ? updates.description : existing.description;
-            const newCat = updates.category || existing.category;
-            const keywords = generateSearchKeywords(newTitle, newDesc, newCat);
-            setClauses.push("search_keywords = ?");
-            params.push(keywords);
-        }
-    }
-
-    setClauses.push("updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')");
-
-    const query = `UPDATE posts SET ${setClauses.join(', ')} WHERE id = ? AND author_pubkey = ? AND active = 1`;
-    params.push(id, authorPublicKey);
-
-    db.transaction(() => {
-        if (setClauses.length > 1) { // >1 because updated_at is always added
-            db.prepare(query).run(...params);
-        }
-        if (updates.photos !== undefined) {
-            // Tombstone existing photos before deletion so mirrors propagate the
-            // removal. Any (post_id, order_num) that gets re-inserted below will
-            // win over the tombstone at import time (newer updated_at).
-            const existingPhotos = db.prepare(`SELECT order_num FROM post_photos WHERE post_id=?`).all(id) as { order_num: number }[];
-            for (const ph of existingPhotos) {
-                writeTombstone('post_photos', `${id}|${ph.order_num}`);
-            }
-            db.prepare(`DELETE FROM post_photos WHERE post_id=?`).run(id);
-            const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
-            updates.photos.slice(0, 5).forEach((p, idx) => insertPhoto.run(id, p, idx));
-        }
-    })();
-
-    const post = getPosts({ id })[0];
-    if (!post) return null;
-    broadcast({ type: 'post_updated', post });
-    return post;
+    return updatePostEngine(broadcast, id, authorPublicKey, updates);
 }
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
@@ -1986,17 +1715,11 @@ export function cancelPostTransaction(transactionId: string, cancellerPublicKey:
 }
 
 export function pausePost(postId: string, authorPublicKey: string): boolean {
-    const result = db.prepare(`UPDATE posts SET status='paused', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND author_pubkey=? AND status='active'`).run(postId, authorPublicKey);
-    if (result.changes === 0) return false;
-    broadcast({ type: 'post_updated', post: getPosts({ id: postId })[0] });
-    return true;
+    return pausePostEngine(broadcast, postId, authorPublicKey);
 }
 
 export function resumePost(postId: string, authorPublicKey: string): boolean {
-    const result = db.prepare(`UPDATE posts SET status='active', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND author_pubkey=? AND status='paused'`).run(postId, authorPublicKey);
-    if (result.changes === 0) return false;
-    broadcast({ type: 'post_updated', post: getPosts({ id: postId })[0] });
-    return true;
+    return resumePostEngine(broadcast, postId, authorPublicKey);
 }
 
 /**
@@ -2101,7 +1824,7 @@ export function getCommunityInfo(publicKey?: string): { memberCount: number; pos
  * getCommunityInfo().postCount (which counts all active=1, paused included).
  */
 export function getActivePostCount(): number {
-    return (db.prepare("SELECT COUNT(*) as c FROM posts WHERE active=1 AND status IN ('active', 'pending')").get() as any).c;
+    return getActivePostCountEngine(db);
 }
 
 // ===================== MESSAGING =====================
@@ -4364,27 +4087,11 @@ export function actionReport(reportId: string, deletePost: boolean = false): boo
 }
 
 export function adminBulkDeletePosts(postIds: string[]): number {
-    let deleted = 0;
-    db.transaction(() => {
-        for (const id of postIds) {
-            try {
-                adminDeletePost(id);
-                deleted++;
-            } catch (e) {
-                console.error(`Failed to delete post ${id}:`, e);
-            }
-        }
-    })();
-    return deleted;
+    return adminBulkDeletePostsEngine(broadcast, postIds, transfer);
 }
 
 export function getPostCount(filter?: { type?: string; category?: string; status?: string; query?: string }): number {
-    let query = `SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status NOT IN ('cancelled')`;
-    const params: any[] = [];
-    if (filter?.type && filter.type !== 'all') { query += " AND type = ?"; params.push(filter.type); }
-    if (filter?.category && filter.category !== 'all') { query += " AND category = ?"; params.push(filter.category); }
-    if (filter?.status) { query += " AND status = ?"; params.push(filter.status); }
-    return (db.prepare(query).get(...params) as any).c;
+    return getPostCountEngine(db, filter);
 }
 
 // ===================== COMMUNITY HEALTH =====================
@@ -4787,17 +4494,7 @@ export function adminSetVoucher(publicKey: string, granted: boolean): { ok: true
 }
 
 export function adminDeletePost(postId: string) {
-    db.transaction(() => {
-        // Find existing pending transactions to refund escrow
-        const pending = db.prepare("SELECT * FROM marketplace_transactions WHERE post_id=? AND status='pending'").all(postId) as any[];
-        for (const tx of pending) {
-            transfer(`escrow_${tx.id}`, tx.buyer_pubkey, tx.credits, `Escrow refund for removed post`, 'escrow', true);
-            db.prepare("UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?").run(tx.id);
-        }
-        db.prepare("UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'").run(postId);
-        db.prepare("UPDATE posts SET active=0, status='cancelled', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?").run(postId);
-    })();
-    broadcast({ type: 'post_removed', id: postId });
+    return adminDeletePostEngine(broadcast, postId, transfer);
 }
 
 export function adminPruneUser(publicKey: string) {

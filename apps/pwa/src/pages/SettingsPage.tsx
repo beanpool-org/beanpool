@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { type BeanPoolIdentity, importIdentity, wipeIdentity } from '../lib/identity';
 
-import { getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile } from '../lib/api';
+import { getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile, getNodeApiUrl, setNodeApiUrl, testNodeConnection } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
 import { type Theme } from '../lib/useTheme';
@@ -88,6 +88,30 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [showPrivateKey, setShowPrivateKey] = useState(false);
     const [wipeConfirmStep, setWipeConfirmStep] = useState(0); // 0=idle, 1=first confirm, 2=wiped
+
+    const [customNodeUrl, setCustomNodeUrl] = useState(() => getNodeApiUrl());
+    const [testingNode, setTestingNode] = useState(false);
+    const [nodeTestResult, setNodeTestResult] = useState<{ ok: boolean; callsign?: string; latencyMs?: number; error?: string } | null>(null);
+
+    const handleTestNodeConnection = async () => {
+        if (!customNodeUrl.trim()) return;
+        setTestingNode(true);
+        setNodeTestResult(null);
+        const res = await testNodeConnection(customNodeUrl.trim());
+        setNodeTestResult(res);
+        setTestingNode(false);
+    };
+
+    const handleSaveNodeUrl = () => {
+        setNodeApiUrl(customNodeUrl.trim() || null);
+        window.location.reload();
+    };
+
+    const handleResetNodeUrl = () => {
+        setNodeApiUrl(null);
+        setCustomNodeUrl('');
+        window.location.reload();
+    };
 
     // Fetch profile (avatar) on mount and when returning from profile editor
     useEffect(() => {
@@ -390,6 +414,54 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                         <p className="text-nature-600 dark:text-nature-400 text-sm mb-5 leading-relaxed transition-colors">
                             Manage referral connections and client-side database/state cache sync.
                         </p>
+
+                        {/* Section: Sovereign Node Connection Manager */}
+                        <div className="mb-6 border-b border-nature-100 dark:border-nature-800/80 pb-6">
+                            <h4 className="text-sm font-bold text-nature-800 dark:text-nature-200 mb-2">🌐 Sovereign Node Connection</h4>
+                            <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-relaxed">
+                                Point this detached client at any sovereign BeanPool node API (e.g. <code className="bg-oat-100 dark:bg-nature-800 px-1 py-0.5 rounded font-mono text-[11px]">https://mullum1.beanpool.org</code>). Leave empty to use same-origin default.
+                            </p>
+                            <input
+                                type="text"
+                                value={customNodeUrl}
+                                onChange={(e) => { setCustomNodeUrl(e.target.value); setNodeTestResult(null); }}
+                                placeholder="Node API URL (e.g. https://mullum1.beanpool.org)"
+                                className="w-full py-2.5 px-4 mb-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-terra-300 dark:focus:ring-terra-600 transition-all font-mono text-sm placeholder:font-sans placeholder:text-sm"
+                                autoCapitalize="none"
+                                autoCorrect="false"
+                            />
+                            {nodeTestResult && (
+                                <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'}`}>
+                                    {nodeTestResult.ok
+                                        ? `✅ Connected to "${nodeTestResult.callsign}" (${nodeTestResult.latencyMs}ms latency)`
+                                        : `❌ Connection failed: ${nodeTestResult.error}`}
+                                </div>
+                            )}
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleTestNodeConnection}
+                                    disabled={testingNode || !customNodeUrl.trim()}
+                                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-oat-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700 transition-all"
+                                >
+                                    {testingNode ? 'Testing...' : '🧪 Test Connection'}
+                                </button>
+                                <button
+                                    onClick={handleSaveNodeUrl}
+                                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:bg-nature-800 dark:hover:bg-oat-100 transition-all shadow-sm"
+                                >
+                                    💾 Save & Connect
+                                </button>
+                                {getNodeApiUrl() && (
+                                    <button
+                                        onClick={handleResetNodeUrl}
+                                        className="py-2.5 px-3 rounded-xl text-xs font-bold bg-gray-200 dark:bg-nature-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 transition-all"
+                                        title="Reset to Same-Origin"
+                                    >
+                                        ↩️ Reset
+                                    </button>
+                                )}
+                            </div>
+                        </div>
 
                         {/* Section 1: Redeem Invite */}
                         <div className="mb-6 border-b border-nature-100 dark:border-nature-800/80 pb-6">

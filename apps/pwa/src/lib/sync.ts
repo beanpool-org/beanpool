@@ -6,7 +6,7 @@
  */
 
 import { loadIdentity } from './identity';
-import { buildSignedWsParams } from './api';
+import { buildSignedWsParams, getNodeWsUrl } from './api';
 
 export interface SyncState {
     connected: boolean;
@@ -99,8 +99,7 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
  * Connect to the BeanPool node's WebSocket state feed.
  */
 export function connectToAnchor(url?: string): void {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const baseWsUrl = url ?? `${protocol}//${window.location.host}/ws`;
+    const baseWsUrl = url ?? getNodeWsUrl('/ws');
 
     loadIdentity()
         .then(async (ident) => {

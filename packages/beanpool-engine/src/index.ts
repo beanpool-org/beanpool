@@ -8,3 +8,5 @@
 // holds — the property that lets the manager independently verify what nodes
 // self-report without maintaining a second, drifting copy of the rules.
 export * from './trust.js';
+export * from './audit.js';
+

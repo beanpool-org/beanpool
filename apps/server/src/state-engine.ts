@@ -2526,10 +2526,15 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
 }
 // ===================== COMMUNITY INFO =====================
 
-export function getCommunityInfo(): { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string } } {
+export function getCommunityInfo(publicKey?: string): { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string } } {
     const memberCount = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
     const postCount = getActivePostCount();
-    const txCount = (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c;
+    let txCount = 0;
+    if (publicKey) {
+        txCount = (db.prepare("SELECT COUNT(*) as c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?").get(publicKey, publicKey) as any).c;
+    } else {
+        txCount = (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c;
+    }
     const config = getLocalConfig();
     return { memberCount, postCount, transactionCount: txCount, commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100, currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' } };
 }

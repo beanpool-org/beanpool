@@ -364,7 +364,8 @@ router.post('/api/local/reset', async (ctx) => {
 // ===================== COMMUNITY API (PUBLIC) =====================
 
 router.get('/api/community/info', async (ctx) => {
-    ctx.body = getCommunityInfo();
+    const pubkey = (ctx.headers['x-public-key'] as string) || (ctx.query.publicKey as string);
+    ctx.body = getCommunityInfo(pubkey);
 });
 
 router.get('/api/community/health', async (ctx) => {

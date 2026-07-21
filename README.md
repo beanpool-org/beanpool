@@ -192,6 +192,25 @@ Install banner with device-specific instructions:
 - **iPhone Safari** → Share → Add to Home Screen steps
 - Bean icon on home screen, full-screen standalone mode
 
+### 🛡️ Gateway Configuration & Self-Protection
+Node-enforced security controls in `local-config.json`:
+- **CORS Allowed Origins**: Restrict API calls to explicit frontend domain whitelists for detached PWA / desktop clients.
+- **Admin IP Allowlist**: Restrict `/settings` and `/api/local/admin/*` access to specified client IPs/CIDRs.
+- **Rate Limiting**: Sliding window per-IP request throttles for API endpoints.
+- **Subsystem Feature Toggles**: Dynamic 503/530 interceptors for `servePwa`, `marketplace`, `messaging`, `federation`, and `invites`.
+
+### 🌐 Detached PWA & Sovereign Node Connection
+- **Configurable API Target**: PWA can be hosted on any static server or CDN (e.g., `https://app.beanpool.org`) while targeting any sovereign node API (`getNodeApiUrl()`).
+- **Dynamic WebSockets**: Automatic `wss://` / `ws://` endpoint derivation (`getNodeWsUrl()`).
+- **Connection Manager**: Interactive node tester & target selector in PWA Settings → Advanced.
+
+### 🎮 Fleet Manager (`apps/manager`)
+Multi-node control plane for community operators:
+- **Stateless Architecture**: Operates strictly as a client over node REST/WS APIs (`/api/local/admin/*`, `/ws/logs`).
+- **Shared Engine Integration**: Reuses `@beanpool/engine` on the frontend for Merkle state hash calculations, trust scores, and audit parsing.
+- **Multi-Node Switching**: Connect and monitor multiple sovereign nodes from a single dashboard.
+- **Hardware Telemetry & Live Logs**: Real-time CPU, RAM, SQLite DB/WAL sizes, libp2p peer counts, and log streaming.
+
 ---
 
 ## Monorepo Structure
@@ -199,18 +218,19 @@ Install banner with device-specific instructions:
 ```
 beanpool/
 ├── apps/
-│   ├── server/        # BeanPool Node — gateway, PWA host, REST API, libp2p mesh
-│   │   └── static/    # Admin settings page (settings.html + settings.js)
+│   ├── server/        # Sovereign Node Appliance — Koa REST API, gateway, PWA host, libp2p mesh (routes/, services/, config/, engine/)
 │   ├── pwa/           # PWA — map, marketplace (13 categories), messaging, ledger (Vite + React + Leaflet)
-│   └── native/        # Native App — 7-tab mobile client (Expo + React Native), SQLite, background sync
+│   ├── native/        # Native App — 7-tab mobile client (Expo + React Native), SQLite, background sync
+│   └── manager/       # Fleet Manager — Decoupled multi-node control plane (Vite + React + @beanpool/engine)
 ├── packages/
-│   └── beanpool-core/ # Shared protocol: Ledger, Merkle, Passport, Governance
+│   ├── beanpool-engine/# Shared node engine: DB-backed business logic (members, trust, escrow, posts, messaging, sync, audit)
+│   └── beanpool-core/  # Shared protocol constants: Ledger, Merkle, Passport, Governance
 ├── scripts/           # Utility and verification scripts (incl. verify-auth-boundary.mjs)
 ├── branding/          # Bean icon assets (16x16 → 512x512)
-├── docs/              # Node admin setup guide
+├── docs/              # Architecture vision, assessment, and setup guides
 ├── Dockerfile         # Multi-stage build (accepts APP_VERSION build arg from CI)
 ├── docker-compose.yml # Docker orchestration
-└── deploy.sh          # Deploy to all nodes via SSH — pulls pre-built GHCR image
+└── deploy.sh          # Deploy to live nodes via SSH — pulls pre-built GHCR image
 ```
 
 ---

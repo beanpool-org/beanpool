@@ -16,6 +16,8 @@
 - **Security:** Private key viewer (reveal/hide + copy), identity wipe with double-confirm, and backup reminder.
 - **Community Status:** Health popover on header tap showing node online/offline status, member count, and membership badge.
 - **Guest Mode:** UI indicators when visiting a node you're not a member of (header badge + sync status).
+- **Detached PWA Architecture:** Make API target configurable (`getNodeApiUrl()`) and derive WebSocket endpoints (`getNodeWsUrl()`). The PWA can be served by the node or deployed on a global CDN/static server while pointing at any sovereign node API.
+- **Sovereign Node Connection Manager:** Interactive Node API URL tester and target selector in Settings → Advanced.
 
 ---
 

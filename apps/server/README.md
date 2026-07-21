@@ -26,6 +26,17 @@
 
 ---
 
+## 🛡️ Gateway Configuration & Self-Protection (`local-config.json`)
+
+The node enforces its own security firewall via `src/config/gateway.ts` and `local-config.json`:
+
+| Control | Field | Description |
+|---|---|---|
+| **CORS Allowed Origins** | `corsAllowedOrigins` | String array of origins allowed cross-origin API access (`['https://app.beanpool.org']`) |
+| **Admin IP Allowlist** | `adminIpAllowlist` | String array of client IPs/CIDRs allowed to access `/settings` and `/api/local/admin/*` |
+| **Rate Limiting** | `rateLimiting.enabled`, `maxRequestsPerMinute` | Sliding-window per-IP request throttle (`429 Too Many Requests`) |
+| **Feature Toggles** | `features.marketplace`, `messaging`, `federation`, `invites`, `servePwa` | Dynamic status interceptors (`503 Service Unavailable` / `530 Headless`) |
+
 ## 🛠️ Node Administration & Setup
 
 ### Prerequisites

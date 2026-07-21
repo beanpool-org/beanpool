@@ -1,10 +1,7 @@
 # Manager convergence — implementation plan
 
-Status: **PLANNING (2026-07-20). Nothing in this doc is built yet.** Extends
-[delta-backup-plan.md](./delta-backup-plan.md) — see below on how it also resolves
-that plan's deferred decision point #4 ("(A) manager-side applier ... duplicates
-applier logic" vs "(B) backup-mode node replica ... more infra"). This plan builds
-a *third* option instead of picking between those two.
+Status: **COMPLETED (2026-07-22). Implemented in `apps/manager` (PR #66).** Extends
+[delta-backup-plan.md](./delta-backup-plan.md) by unifying `@beanpool/engine` calculations and presenting a decoupled multi-node control plane.
 
 ## Why
 

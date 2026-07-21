@@ -84,7 +84,7 @@ Protocol changes have consequences for everyone building on BeanPool. Please fol
 
 ### Code Contributions
 
-The project has a working reference implementation across three apps (BeanPool Node, PWA, and Native App) plus a shared core protocol library. When contributing code:
+The project has a working reference implementation across four apps (`apps/server`, `apps/pwa`, `apps/native`, `apps/manager`) plus two shared packages (`@beanpool/core` and `@beanpool/engine`). When contributing code:
 
 - Read the relevant app's README before starting work.
 - Open an issue first to discuss scope and approach.

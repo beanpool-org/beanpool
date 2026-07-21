@@ -46,7 +46,7 @@
         }
 
         // ======================== TAB SWITCHING ========================
-        const PROTECTED_TABS = ['system', 'moderation', 'members', 'commons', 'comms', 'diagnostics', 'backup', 'connections'];
+        const PROTECTED_TABS = ['system'];
 
         function switchTab(tabName) {
             // Auto-redirect unauthenticated clicks on protected tabs

@@ -10,7 +10,7 @@ import {
     markConversationRead, getUnreadCounts,
     getMember,
 } from '../state-engine.js';
-import { getLocalConfig } from '../local-config.js';
+import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';

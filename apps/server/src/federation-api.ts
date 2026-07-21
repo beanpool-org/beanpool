@@ -12,7 +12,7 @@ import type Koa from 'koa';
 import type Router from '@koa/router';
 import { getPeerOrigins, getConnectorsByLevel } from './connector-manager.js';
 import { getMembers, getPosts, getBalance, createConversation, sendMessage, registerVisitor, getCommunityInfo, getActivePostCount } from './state-engine.js';
-import { getLocalConfig } from './local-config.js';
+import { getLocalConfig } from './config/local-config.js';
 
 /**
  * Dynamic CORS middleware for federation.

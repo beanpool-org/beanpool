@@ -15,13 +15,13 @@ import {
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
     clearReplicationToken, hasReplicationToken,
     updateBackupCadence,
-} from '../local-config.js';
+} from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
-import { getBackupStatus, requestResync } from '../backup-puller.js';
+import { getBackupStatus, requestResync } from '../services/backup-puller.js';
 import {
     writeDbSnapshot, createSnapshot, listSnapshots, resolveSnapshotPath,
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
-} from '../snapshot-scheduler.js';
+} from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
 import type { RouteDeps } from './types.js';
 

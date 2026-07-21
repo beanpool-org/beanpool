@@ -16,7 +16,7 @@ import {
     createCrowdfundProject, updateCrowdfundProject,
     pledgeToProject, deleteCrowdfundProject, db,
 } from '../db/db.js';
-import { getThresholds } from '../local-config.js';
+import { getThresholds } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedVerifyMember } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';

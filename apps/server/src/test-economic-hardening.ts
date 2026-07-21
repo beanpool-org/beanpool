@@ -16,7 +16,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
-import { initTls } from './tls.js';
+import { initTls } from './services/tls.js';
 import {
     initStateEngine, getGovernanceCredits, importRemoteState, setNodeRole, signSyncPayload, type SyncPayload,
 } from './state-engine.js';

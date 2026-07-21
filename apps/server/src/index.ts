@@ -31,8 +31,8 @@ if (fs.existsSync(envPath)) {
 }
 
 import { ensureGenesis } from './genesis.js';
-import { initAdminPassword } from './local-config.js';
-import { initTls, startRenewalScheduler } from './tls.js';
+import { initAdminPassword } from './config/local-config.js';
+import { initTls, startRenewalScheduler } from './services/tls.js';
 import { startDnsShim } from './dns-shim.js';
 import { startHttpServer } from './http-server.js';
 import { startHttpsServer } from './https-server.js';
@@ -41,9 +41,9 @@ import { initConnectorManager, connectAll } from './connector-manager.js';
 import { registerHandshakeHandler } from './handshake.js';
 import { registerFederationHandler } from './federation-protocol.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, promotionSanityCheck } from './state-engine.js';
-import { initDirectoryPublisher } from './directory-publisher.js';
-import { initBackupPuller } from './backup-puller.js';
-import { initSnapshotScheduler } from './snapshot-scheduler.js';
+import { initDirectoryPublisher } from './services/directory-publisher.js';
+import { initBackupPuller } from './services/backup-puller.js';
+import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
 const PORT_HTTPS = Number(process.env.PORT_HTTPS ?? 8443);

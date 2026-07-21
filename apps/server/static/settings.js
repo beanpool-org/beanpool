@@ -1256,7 +1256,15 @@
 
         function renderAdminReports() {
             const el = document.getElementById('admin-reports-inbox');
-            if (!el || !adminDataCache) return;
+            if (!el) return;
+            if (!adminDataCache) {
+                el.innerHTML = `<div style="text-align:center;padding:1.5rem;color:#94a3b8;font-size:0.85rem;">
+                    <div style="font-size:1.5rem;margin-bottom:0.5rem;">🔒</div>
+                    <strong>Admin Authentication Required</strong><br>
+                    <span style="font-size:0.75rem;color:#64748b;">Please enter the admin password in the top-right 🔒 Login box to unlock reports.</span>
+                </div>`;
+                return;
+            }
             const reports = adminDataCache.reports || [];
             const filtered = reportFilterState === 'all' ? reports : reports.filter(r => r.status === reportFilterState);
             const pending = reports.filter(r => r.status === 'pending').length;
@@ -1315,7 +1323,11 @@
 
         function renderHealthAlerts() {
             const el = document.getElementById('admin-health-alerts');
-            if (!el || !adminDataCache) return;
+            if (!el) return;
+            if (!adminDataCache) {
+                el.innerHTML = `<div style="text-align:center;padding:1rem;color:#64748b;font-size:0.8rem;">🔒 Authentication required</div>`;
+                return;
+            }
             const flags = adminDataCache.health?.flags || [];
             if (flags.length === 0) {
                 el.innerHTML = '<div style="text-align:center;padding:0.75rem;"><div style="font-size:1rem;">✅</div><div style="color:#22c55e;font-size:0.8rem;">No health alerts</div></div>';
@@ -1335,7 +1347,15 @@
 
         function renderAdminPosts() {
             const el = document.getElementById('admin-posts-list');
-            if (!el || !adminDataCache) return;
+            if (!el) return;
+            if (!adminDataCache) {
+                el.innerHTML = `<div style="text-align:center;padding:1.5rem;color:#94a3b8;font-size:0.85rem;">
+                    <div style="font-size:1.5rem;margin-bottom:0.5rem;">🔒</div>
+                    <strong>Admin Authentication Required</strong><br>
+                    <span style="font-size:0.75rem;color:#64748b;">Please enter the admin password in the top-right 🔒 Login box to view all posts.</span>
+                </div>`;
+                return;
+            }
             
             const searchQ = (document.getElementById('admin-post-search')?.value || '').toLowerCase().trim();
             const typeFilter = document.getElementById('admin-post-type-filter')?.value || 'all';
@@ -1525,7 +1545,15 @@
 
         function renderAdminMembers() {
             const el = document.getElementById('admin-members-tree');
-            if (!el || !adminDataCache) return;
+            if (!el) return;
+            if (!adminDataCache) {
+                el.innerHTML = `<div style="text-align:center;padding:2rem;color:#94a3b8;font-size:0.85rem;">
+                    <div style="font-size:1.5rem;margin-bottom:0.5rem;">🔒</div>
+                    <strong>Admin Authentication Required</strong><br>
+                    <span style="font-size:0.75rem;color:#64748b;">Please enter the admin password in the top-right 🔒 Login box to view the audit tree.</span>
+                </div>`;
+                return;
+            }
             const { members, profiles, health, reports, memberStats } = adminDataCache;
             const flags = health?.flags || [];
             const stats = memberStats || {};
@@ -2145,7 +2173,17 @@
 
         // ---- Role + Live backup health (poll every 10s) ----
         async function loadBackupStatus() {
-            if (!authToken) return;
+            if (!authToken) {
+                const card = document.getElementById('backup-status-card');
+                if (card) {
+                    card.innerHTML = `<div style="text-align:center;padding:1.5rem;color:#94a3b8;font-size:0.85rem;">
+                        <div style="font-size:1.5rem;margin-bottom:0.5rem;">🔒</div>
+                        <strong>Admin Authentication Required</strong><br>
+                        <span style="font-size:0.75rem;color:#64748b;">Please enter the admin password in the top-right 🔒 Login box to view backup status.</span>
+                    </div>`;
+                }
+                return;
+            }
             try {
                 const res = await fetch(`${API}/admin/backup-status`, {
                     method: 'POST',
@@ -2748,7 +2786,15 @@
         }
 
         async function loadInitialConnections() {
-            if (!authToken) return;
+            if (!authToken) {
+                const container = document.getElementById('conn-list-container');
+                if (container) {
+                    container.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 2.5rem; font-size: 0.85rem; border: 1px dashed #1e293b; border-radius: 12px; background: rgba(15, 23, 42, 0.4);">
+                        🔒 Admin Authentication Required.<br><span style="font-size:0.75rem;color:#64748b;">Please enter the admin password in the top-right 🔒 Login box to view live connections.</span>
+                    </div>`;
+                }
+                return;
+            }
             try {
                 const res = await fetch(`${API}/admin/ws-connections`, {
                     method: 'POST',
@@ -3104,6 +3150,10 @@
 
                 const feed = document.getElementById('log-terminal-feed');
                 if (feed) {
+                    if (!authToken) {
+                        feed.innerHTML = '<div style="color: #94a3b8; text-align: center; padding: 3rem;">🔒 Admin Authentication Required.<br><span style="font-size:0.75rem;color:#64748b;">Please enter the admin password in the top-right 🔒 Login box to stream system logs.</span></div>';
+                        return;
+                    }
                     feed.innerHTML = '';
                     if (data.logs && data.logs.length > 0) {
                         const chronological = [...data.logs].reverse();

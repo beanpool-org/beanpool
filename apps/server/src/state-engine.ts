@@ -69,7 +69,10 @@ import {
     CONTRIBUTION_REQUIRED_ERROR,
     COVENANT_REQUIRED_ERROR,
     type MarketplacePost,
-    type PostFilter
+    type PostFilter,
+    getMarketplaceTransaction as getMarketplaceTransactionEngine,
+    getMarketplaceTransactions as getMarketplaceTransactionsEngine,
+    type MarketplaceTransaction
 } from '@beanpool/engine';
 import {
     addRating,
@@ -86,6 +89,15 @@ import {
     adminDeletePost as adminDeletePostEngine,
     adminBulkDeletePosts as adminBulkDeletePostsEngine
 } from './engine/posts.js';
+import {
+    requestPost as requestPostEngine,
+    approvePostRequest as approvePostRequestEngine,
+    rejectPostRequest as rejectPostRequestEngine,
+    cancelPostRequest as cancelPostRequestEngine,
+    acceptPost as acceptPostEngine,
+    completePostTransaction as completePostTransactionEngine,
+    cancelPostTransaction as cancelPostTransactionEngine
+} from './engine/escrow.js';
 
 
 
@@ -140,20 +152,7 @@ export type { Member, InviteCode };
 
 export type { MarketplacePost };
 
-export interface MarketplaceTransaction {
-    id: string;
-    postId: string;
-    postTitle: string;
-    buyerPublicKey: string;
-    buyerCallsign: string;
-    sellerPublicKey: string;
-    sellerCallsign: string;
-    credits: number;
-    hours?: number;
-    status: 'requested' | 'pending' | 'completed' | 'cancelled' | 'rejected';
-    createdAt: string;
-    completedAt?: string;
-}
+export type { MarketplaceTransaction };
 
 export interface Transaction {
     id: string;
@@ -1320,398 +1319,45 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
+function getEscrowCb() {
+    return {
+        broadcast,
+        transfer,
+        ensureTransactionConversation,
+        injectSystemMessage,
+        dispatchPushNotification,
+        getBalance,
+        floorLockedError,
+        SystemMessageType
+    };
+}
+
 export function requestPost(postId: string, requesterPublicKey: string, hours?: number): MarketplaceTransaction {
-    assertMemberActive(requesterPublicKey);
-    assertProfileComplete(requesterPublicKey);
-    assertNotOnHoliday(requesterPublicKey);
-    const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
-    if (!post) throw new Error('Post not found');
-    if (post.status !== 'active') throw new Error('Post is not active');
-    if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
-    if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
-
-    // One open request per member per post — prevents accidental double-taps and request spam
-    const existingRequest = db.prepare(`SELECT id FROM marketplace_transactions WHERE post_id=? AND status='requested' AND (buyer_pubkey=? OR seller_pubkey=?)`)
-        .get(postId, requesterPublicKey, requesterPublicKey);
-    if (existingRequest) throw new Error('You already have an open request for this post');
-
-    // For Needs, the Author pays. For Offers, the Requester pays.
-    const isOffer = post.type === 'offer';
-    // Contribution-first gate: requesting an Offer extracts value, so it requires
-    // the requester to have listed an Offer of their own. Requesting a Need
-    // (offering to fulfil it) is a contribution and is always allowed.
-    if (isOffer && !hasListedOffer(requesterPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
-    const payerPubkey = isOffer ? requesterPublicKey : post.author_pubkey;
-    const payeePubkey = isOffer ? post.author_pubkey : requesterPublicKey;
-
-    // Check if the PAYER has enough balance at the time of request to prevent spam
-    const cost = post.price_type !== 'fixed' ? (post.credits * (hours || 1)) : post.credits;
-    const { balance, floor, usableFloor: uFloor } = getBalance(payerPubkey);
-    if (balance - cost < floor) throw new Error('Insufficient balance to request this post.');
-    // Offer covenant (v3): how deep you may spend on credit is gated by your live-Offer count —
-    // uFloor already caps the earned floor by the band, so this one check covers "no offer" too.
-    if (balance - cost < uFloor) throw floorLockedError(payerPubkey, balance - cost);
-
-    const transactionId = crypto.randomUUID();
-    
-    db.transaction(() => {
-        db.prepare(`
-            INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'requested', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        `).run(transactionId, postId, payerPubkey, payeePubkey, cost, hours || null);
-    })();
-
-    // Note: getMarketplaceTransactions fetches by user; we'll fetch for the requester
-    const tx = getMarketplaceTransaction(transactionId)!;
-    broadcast({ type: 'transaction_requested', transaction: tx });
-
-    // Push notification: notify the post author that someone wants their item
-    const requesterMember = getMember(requesterPublicKey) as any;
-    const requesterName = requesterMember?.callsign || requesterPublicKey.slice(0, 8);
-    dispatchPushNotification(
-        [post.author_pubkey],
-        requesterPublicKey,
-        '📬 New Request',
-        `${requesterName} wants "${post.title}"`,
-        { screen: 'post', postId },
-        'marketplace'
-    );
-
-    return tx;
+    return requestPostEngine(getEscrowCb(), postId, requesterPublicKey, hours);
 }
 
 export function approvePostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
-    const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='requested'").get(transactionId) as any;
-    if (!row) throw new Error('Request not found');
-
-    const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.author_pubkey !== authorPublicKey) throw new Error('Only the author can approve a request');
-
-    const isOffer = post.type === 'offer';
-    const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
-    if (expectedAuthorRole !== authorPublicKey) throw new Error('Unauthorized');
-
-    // A non-repeatable post already committed to another deal (e.g. via 1-step accept)
-    // must not be approved into a second escrow — that would double-sell the item.
-    if (!post.repeatable && post.status !== 'active') throw new Error('Post is no longer available — it is already committed to another deal');
-
-    // Verify payer STILL has enough money at the exact moment of approval
-    const { balance, floor } = getBalance(row.buyer_pubkey);
-    if (balance - row.credits < floor) throw new Error('Payer has insufficient funds in their wallet');
-
-    // Create the deal conversation BEFORE locking funds — if conversation creation
-    // fails we abort with nothing committed, instead of locking escrow with no
-    // chat thread. (Idempotent if it already exists.)
-    ensureTransactionConversation(row.post_id, row.buyer_pubkey, row.seller_pubkey);
-
-    db.transaction(() => {
-        // Ensure synthetic escrow account exists natively
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${transactionId}`);
-
-        // 1. Lock the funds in Escrow — abort if transfer fails
-        // Wallet keyed by transaction ID to isolate concurrent recurring-post transactions
-        const escrowResult = transfer(row.buyer_pubkey, `escrow_${transactionId}`, row.credits, `Escrow hold for post ${row.post_id}`, 'escrow', true);
-        if (!escrowResult) throw new Error('Failed to lock funds in escrow — insufficient balance or ledger error');
-        
-        // 2. Mark this transaction as pending
-        db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=?`).run(transactionId);
-        
-        // 3. Mark the Post as pending — the status='active' guard makes the commit
-        // conditional, so a post that slipped into another deal aborts the whole escrow
-        if (!post.repeatable) {
-            const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), pending_transaction_id=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`)
-              .run(row.seller_pubkey === authorPublicKey ? row.buyer_pubkey : row.seller_pubkey, transactionId, row.post_id);
-            if (updated.changes === 0) throw new Error('Post is no longer available — it is already committed to another deal');
-
-            // 4. Reject all other competing requests for this Non-Repeatable post
-            db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
-              .run(row.post_id, transactionId);
-        }
-    })();
-
-    const tx = getMarketplaceTransaction(transactionId)!;
-    broadcast({ type: 'transaction_approved', transaction: tx });
-    broadcast({ type: 'post_updated', post: getPosts({ id: row.post_id })[0] });
-
-    // Post-commit side effects must never fail the API call — escrow is already funded.
-    try {
-        injectSystemMessage(row.post_id, SystemMessageType.ESCROW_FUNDED, {
-            amount: row.credits,
-            postId: row.post_id,
-            actorPubkey: authorPublicKey,
-            buyerPubkey: row.buyer_pubkey,
-            sellerPubkey: row.seller_pubkey
-        }, row.buyer_pubkey, row.seller_pubkey);
-    } catch (e) {
-        console.warn('[Marketplace] ESCROW_FUNDED system message failed (deal committed):', e);
-    }
-
-    // Push notification: notify the requester that their request was approved
-    const requesterPubkey = isOffer ? row.buyer_pubkey : row.seller_pubkey;
-    dispatchPushNotification(
-        [requesterPubkey],
-        authorPublicKey,
-        '✅ Request Approved',
-        `Your request for "${post.title}" was approved!`,
-        { screen: 'post', postId: row.post_id },
-        'marketplace'
-    );
-
-    return tx;
+    return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey);
 }
 
 export function rejectPostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
-    const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='requested'").get(transactionId) as any;
-    if (!row) return null;
-
-    const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post) return null;
-
-    const isOffer = post.type === 'offer';
-    const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
-    if (expectedAuthorRole !== authorPublicKey) return null;
-
-    db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(transactionId);
-    
-    const tx = getMarketplaceTransaction(transactionId)!;
-    broadcast({ type: 'transaction_rejected', transaction: tx });
-
-    // Push notification: notify the requester that their request was declined
-    const requesterPubkey = isOffer ? row.buyer_pubkey : row.seller_pubkey;
-    dispatchPushNotification(
-        [requesterPubkey],
-        authorPublicKey,
-        '❌ Request Declined',
-        `Your request for "${post.title}" was declined`,
-        { screen: 'post', postId: row.post_id },
-        'marketplace'
-    );
-
-    return tx;
+    return rejectPostRequestEngine(getEscrowCb(), transactionId, authorPublicKey);
 }
 
 export function cancelPostRequest(transactionId: string, requesterPublicKey: string): MarketplaceTransaction | null {
-    const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='requested'").get(transactionId) as any;
-    if (!row) return null;
-
-    const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post) return null;
-
-    const isOffer = post.type === 'offer';
-    const expectedRequesterRole = isOffer ? row.buyer_pubkey : row.seller_pubkey;
-    if (expectedRequesterRole !== requesterPublicKey) return null;
-
-    db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(transactionId);
-    
-    const tx = getMarketplaceTransaction(transactionId)!;
-    broadcast({ type: 'transaction_cancelled', transaction: tx });
-    return tx;
+    return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
 export function acceptPost(postId: string, buyerPublicKey: string, hours?: number): MarketplaceTransaction {
-    assertMemberActive(buyerPublicKey);
-    assertNotOnHoliday(buyerPublicKey);
-    const post = getPosts({ id: postId, status: 'active' })[0];
-    if (!post) throw new Error('Post not found or not active');
-    if (post.authorPublicKey === buyerPublicKey) throw new Error('Cannot accept your own post');
-    if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');
-
-    if (post.type !== 'offer') {
-        throw new Error('Only Offers can be 1-step accepted');
-    }
-
-    // Contribution-first gate: accepting an Offer extracts value, so the buyer
-    // must have listed an Offer of their own first.
-    if (!hasListedOffer(buyerPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
-
-    if (post.priceType !== 'fixed' && (typeof hours !== 'number' || hours <= 0)) {
-        throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
-    }
-
-    const buyer = getMember(buyerPublicKey);
-    const finalCredits = post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
-
-    // Check balance
-    const { balance, floor, usableFloor: uFloor } = getBalance(buyerPublicKey);
-    if (balance - finalCredits < floor) throw new Error('Insufficient balance to accept this offer');
-    // Offer covenant (v3): how deep you may spend on credit is gated by your live-Offer count.
-    if (balance - finalCredits < uFloor) throw floorLockedError(buyerPublicKey, balance - finalCredits);
-
-    const tx: MarketplaceTransaction = {
-        id: crypto.randomUUID(), postId: post.id, postTitle: post.title, buyerPublicKey,
-        buyerCallsign: buyer?.callsign || 'Anonymous', sellerPublicKey: post.authorPublicKey,
-        sellerCallsign: post.authorCallsign, credits: finalCredits, hours: post.priceType !== 'fixed' ? hours : undefined,
-        status: 'pending', createdAt: new Date().toISOString(),
-    };
-
-    // Create the deal conversation BEFORE locking funds — if conversation creation
-    // fails we abort with nothing committed, instead of locking escrow with no
-    // chat thread and no way to notify either party. (Idempotent if it exists.)
-    ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
-
-    db.transaction(() => {
-        // Ensure synthetic escrow account exists natively
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${tx.id}`);
-
-        // 1. Lock funds — abort if transfer fails
-        // Wallet keyed by transaction ID to isolate concurrent recurring-post transactions
-        const escrowResult = transfer(buyerPublicKey, `escrow_${tx.id}`, finalCredits, `Escrow hold for offer ${post.id}`, 'escrow', true);
-        if (!escrowResult) throw new Error('Failed to lock funds in escrow — insufficient balance or ledger error');
-
-        // 2. Insert pending tx
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
-        
-        // 3. Update post — the status='active' guard prevents a second buyer from
-        // funding escrow on an already-committed item (aborts the whole transaction)
-        if (!post.repeatable) {
-            const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(buyerPublicKey, tx.createdAt, tx.id, post.id);
-            if (updated.changes === 0) throw new Error('Post is no longer available — it is already committed to another deal');
-
-            // 4. Reject competing open requests — the item is now committed to this buyer.
-            // Without this, the author could later approve a stale request and double-sell.
-            db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
-              .run(post.id, tx.id);
-        }
-    })();
-    broadcast({ type: 'post_accepted', postId: post.id, transaction: tx });
-
-    // Post-commit side effects must never fail the API call — the escrow is
-    // already funded, and a thrown error here would report failure for a deal
-    // that actually succeeded.
-    try {
-        injectSystemMessage(post.id, SystemMessageType.ESCROW_FUNDED, {
-            amount: finalCredits,
-            postId: post.id,
-            actorPubkey: buyerPublicKey,
-            buyerPubkey: buyerPublicKey,
-            sellerPubkey: post.authorPublicKey
-        }, buyerPublicKey, post.authorPublicKey);
-    } catch (e) {
-        console.warn('[Marketplace] ESCROW_FUNDED system message failed (deal committed):', e);
-    }
-
-    // Push notification: the seller should learn immediately that their offer was taken
-    dispatchPushNotification(
-        [post.authorPublicKey],
-        buyerPublicKey,
-        '🛒 Offer Accepted',
-        `${buyer?.callsign || 'A member'} accepted "${post.title}" — ${finalCredits} Beans are now in escrow.`,
-        { screen: 'post', postId: post.id },
-        'marketplace'
-    );
-    return tx;
+    return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours);
 }
 
 export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
-    const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='pending'").get(transactionId) as any;
-    
-    // Idempotency: If already completed by the same buyer, return success instead of an error
-    if (!row) {
-        const completedRow = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='completed'").get(transactionId) as any;
-        if (completedRow && completedRow.buyer_pubkey === confirmerPublicKey) {
-            const existing = getMarketplaceTransaction(transactionId);
-            if (existing) return { ...existing, alreadyCompleted: true };
-        }
-        return null;
-    }
-    
-    // Security Fix: IN Escrow, the Payer (buyer) is the ONLY one authorized to release funds to the Payee (seller).
-    if (row.buyer_pubkey !== confirmerPublicKey) return null;
-
-    const post = db.prepare("SELECT * FROM posts WHERE id=?").get(row.post_id) as any;
-    const completedAt = new Date().toISOString();
-
-    let txnRecord: Transaction | undefined;
-    
-    db.transaction(() => {
-        if (finalHours !== undefined && post && post.price_type !== 'fixed' && finalHours > 0) {
-            row.hours = finalHours;
-            row.credits = post.credits * finalHours;
-            db.prepare(`UPDATE marketplace_transactions SET hours=?, credits=? WHERE id=?`).run(row.hours, row.credits, transactionId);
-        }
-
-        if (row.credits > 0 && post) {
-            // Funds are stored in escrow_${tx_id} since the transaction went 'pending'
-            // Transfer whatever the escrow wallet actually holds (may be slightly less than row.credits due to demurrage decay)
-            const escrowKey = `escrow_${transactionId}`;
-            const escrowAcc = ledger.getAccount(escrowKey);
-            const releaseAmount = escrowAcc ? Math.min(escrowAcc.balance, row.credits) : row.credits;
-            const releaseResult = transfer(escrowKey, row.seller_pubkey, releaseAmount, `Completed: ${post.title}`, 'escrow');
-            if (!releaseResult) {
-                throw new Error(`Failed to release ${releaseAmount} beans from ${escrowKey} to ${row.seller_pubkey}`);
-            }
-
-            // Sweep any remainder back to the buyer — e.g. an hourly deal settled with
-            // fewer finalHours than were escrowed. Without this the difference would be
-            // stranded in the escrow wallet forever (it is demurrage-exempt).
-            const remainder = ledger.getAccount(escrowKey)?.balance ?? 0;
-            if (remainder > 0.0001) {
-                transfer(escrowKey, row.buyer_pubkey, remainder, `Escrow overpayment refund: ${post.title}`, 'escrow', true);
-            }
-        }
-
-        db.prepare(`UPDATE marketplace_transactions SET status='completed', completed_at=? WHERE id=?`).run(completedAt, transactionId);
-        
-        if (post && !post.repeatable) {
-            db.prepare(`UPDATE posts SET status='completed', active=0, completed_at=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(completedAt, post.id);
-        } else if (post && post.repeatable) {
-            db.prepare(`UPDATE posts SET status='active', accepted_by=NULL, accepted_at=NULL, pending_transaction_id=NULL, completed_at=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(completedAt, post.id);
-        }
-    })();
-
-    const tx = getMarketplaceTransaction(transactionId)!;
-    broadcast({ type: 'transaction_completed', transaction: tx });
-    
-    try {
-        injectSystemMessage(row.post_id, SystemMessageType.ESCROW_RELEASED, {
-            amount: row.credits,
-            postId: row.post_id,
-            actorPubkey: confirmerPublicKey,
-            buyerPubkey: row.buyer_pubkey,
-            sellerPubkey: row.seller_pubkey
-        }, row.buyer_pubkey, row.seller_pubkey);
-    } catch (e) {
-        console.warn('[Marketplace] ESCROW_RELEASED system message failed (settlement committed):', e);
-    }
-    return tx;
+    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours);
 }
 
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
-    const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='pending'").get(transactionId) as any;
-    if (!row || (row.buyer_pubkey !== cancellerPublicKey && row.seller_pubkey !== cancellerPublicKey)) return null;
-
-    db.transaction(() => {
-        // Reverse Escrow Funds -> Refund Buyer (wallet keyed by transaction ID)
-        // Transfer whatever the escrow wallet actually holds (may be slightly less due to demurrage)
-        const escrowKey = `escrow_${transactionId}`;
-        const escrowAcc = ledger.getAccount(escrowKey);
-        // Refund the full escrow balance, not min(balance, credits) — leaves nothing stranded
-        const refundAmount = escrowAcc ? escrowAcc.balance : row.credits;
-        if (refundAmount > 0.0001) {
-            transfer(escrowKey, row.buyer_pubkey, refundAmount, `Escrow refund for cancelled post ${row.post_id}`, 'escrow', true);
-        }
-
-        db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(transactionId);
-        const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-        if (post && !post.repeatable && post.status === 'pending') {
-            db.prepare(`UPDATE posts SET status='active', accepted_by=NULL, accepted_at=NULL, pending_transaction_id=NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(post.id);
-        }
-    })();
-    const tx = getMarketplaceTransaction(transactionId)!;
-    broadcast({ type: 'transaction_cancelled', transaction: tx });
-    
-    try {
-        injectSystemMessage(row.post_id, SystemMessageType.ESCROW_CANCELLED, {
-            amount: row.credits,
-            postId: row.post_id,
-            actorPubkey: cancellerPublicKey,
-            buyerPubkey: row.buyer_pubkey,
-            sellerPubkey: row.seller_pubkey
-        }, row.buyer_pubkey, row.seller_pubkey);
-    } catch (e) {
-        console.warn('[Marketplace] ESCROW_CANCELLED system message failed (refund committed):', e);
-    }
-    return tx;
+    return cancelPostTransactionEngine(getEscrowCb(), transactionId, cancellerPublicKey);
 }
 
 export function pausePost(postId: string, authorPublicKey: string): boolean {
@@ -1722,87 +1368,14 @@ export function resumePost(postId: string, authorPublicKey: string): boolean {
     return resumePostEngine(broadcast, postId, authorPublicKey);
 }
 
-/**
- * Fetch a single transaction by its primary key. Replaces the
- * `getMarketplaceTransactions(pubkey).find(t => t.id === id)` anti-pattern: that getter
- * applies `LIMIT 50`, so a transaction outside the latest 50 was silently missed (the
- * callers then `!`-asserted it, broadcasting `undefined`). This is O(1) and never paginates.
- */
 export function getMarketplaceTransaction(transactionId: string): MarketplaceTransaction | null {
-    const r = db.prepare(`
-        SELECT mt.*, p.title as postTitle, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
-               EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
-               EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
-        FROM marketplace_transactions mt
-        LEFT JOIN posts p ON mt.post_id = p.id
-        LEFT JOIN members m1 ON mt.buyer_pubkey = m1.public_key
-        LEFT JOIN members m2 ON mt.seller_pubkey = m2.public_key
-        WHERE mt.id = ?
-    `).get(transactionId) as any;
-    if (!r) return null;
-
-    // Cover image as a versioned photo URL — never the base64 bytes. Same pattern as
-    // getPosts: the bytes download lazily via /photos/:orderNum (immutable-cached), so
-    // a transaction row costs a short string instead of ~200KB. Embedding the bytes
-    // here made /api/marketplace/transactions?limit=50 a 9.8MB response that phones
-    // re-downloaded and JSON-parsed every sync cycle (measured 2026-07-18).
-    const coverImageRow = db.prepare(`SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC LIMIT 1`).get(r.post_id) as any;
-    const coverImage = coverImageRow
-        ? `/api/marketplace/posts/${r.post_id}/photos/${coverImageRow.order_num}?v=${coverImageRow.updated_at ? new Date(coverImageRow.updated_at).getTime() : 0}`
-        : null;
-    // Mirror the exact shape getMarketplaceTransactions() returns (incl. the rating/cover
-    // extras). Returned via a variable so it isn't treated as a fresh literal under excess-
-    // property checks — same reason the sibling getter builds these inside a .map().
-    const tx = {
-        id: r.id, postId: r.post_id, postTitle: r.postTitle, buyerPublicKey: r.buyer_pubkey, buyerCallsign: r.buyerCallsign, sellerPublicKey: r.seller_pubkey, sellerCallsign: r.sellerCallsign, credits: r.credits, status: r.status, createdAt: r.created_at, completedAt: r.completed_at, ratedByBuyer: !!r.ratedByBuyer, ratedBySeller: !!r.ratedBySeller, coverImage
-    };
-    return tx;
+    return getMarketplaceTransactionEngine(db, transactionId);
 }
 
 export function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): MarketplaceTransaction[] {
-    let query = `
-        SELECT mt.*, p.title as postTitle, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
-               EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
-               EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
-        FROM marketplace_transactions mt
-        LEFT JOIN posts p ON mt.post_id = p.id
-        LEFT JOIN members m1 ON mt.buyer_pubkey = m1.public_key
-        LEFT JOIN members m2 ON mt.seller_pubkey = m2.public_key
-        WHERE (mt.buyer_pubkey = ? OR mt.seller_pubkey = ?)
-    `;
-    const params: any[] = [publicKey, publicKey];
-    if (filter?.status) { query += " AND mt.status = ?"; params.push(filter.status); }
-    query += " ORDER BY mt.created_at DESC LIMIT ? OFFSET ?";
-    params.push(limit, offset);
-
-    const rows = db.prepare(query).all(...params) as any[];
-    const postIds = Array.from(new Set(rows.map(r => r.post_id)));
-    // Only the metadata needed to build versioned photo URLs — never photo_data.
-    // Loading the bytes here put ~10MB of base64 into every 50-row response.
-    const photos = selectInChunks(postIds, ph => `SELECT post_id, order_num, updated_at FROM post_photos WHERE post_id IN (${ph})`);
-
-    // ⚡ Bolt: Group photos by post_id to avoid O(N²) nested searching
-    const photosByPost = new Map<string, any[]>();
-    for (const p of photos as any[]) {
-        if (!photosByPost.has(p.post_id)) {
-            photosByPost.set(p.post_id, []);
-        }
-        photosByPost.get(p.post_id)!.push(p);
-    }
-
-    return rows.map(r => {
-        const postPhotos = photosByPost.get(r.post_id) || [];
-        const coverImageRow = postPhotos.find(p => p.order_num === 0) || postPhotos[0];
-        // Versioned URL, not bytes — see getMarketplaceTransaction above. Existing
-        // clients already resolve relative cover paths against their anchor URL.
-        const coverImage = coverImageRow
-            ? `/api/marketplace/posts/${r.post_id}/photos/${coverImageRow.order_num}?v=${coverImageRow.updated_at ? new Date(coverImageRow.updated_at).getTime() : 0}`
-            : null;
-        return {
-            id: r.id, postId: r.post_id, postTitle: r.postTitle, buyerPublicKey: r.buyer_pubkey, buyerCallsign: r.buyerCallsign, sellerPublicKey: r.seller_pubkey, sellerCallsign: r.sellerCallsign, credits: r.credits, status: r.status, createdAt: r.created_at, completedAt: r.completed_at, ratedByBuyer: !!r.ratedByBuyer, ratedBySeller: !!r.ratedBySeller, coverImage
-        };
-    });
+    return getMarketplaceTransactionsEngine(db, publicKey, filter, limit, offset);
 }
+
 // ===================== COMMUNITY INFO =====================
 
 export function getCommunityInfo(publicKey?: string): { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string } } {

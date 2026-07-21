@@ -51,8 +51,20 @@ import {
     type InviteCode,
     type MemberProfile,
     type InviteCheckResult,
-    type InviteTreeNode
+    type InviteTreeNode,
+    getRatings as getRatingsEngine,
+    getRatingsGiven as getRatingsGivenEngine,
+    getAverageRating as getAverageRatingEngine,
+    getFriends as getFriendsEngine,
+    type Rating,
+    type FriendEntry
 } from '@beanpool/engine';
+import {
+    addRating,
+    addFriend,
+    removeFriend,
+    setGuardian
+} from './engine/social.js';
 
 
 
@@ -253,18 +265,7 @@ export interface SystemMessageMetadata {
     sellerPubkey?: string;
 }
 
-export interface Rating {
-    id: string;
-    targetPubkey: string;
-    raterPubkey: string;
-    stars: number;
-    comment: string;
-    role: 'provider' | 'receiver';
-    transactionId: string;
-    createdAt: string;
-    target_callsign?: string;
-    target_avatar?: string | null;
-}
+export type { Rating };
 
 export interface AbuseReport {
     id: string;
@@ -275,12 +276,7 @@ export interface AbuseReport {
     createdAt: string;
 }
 
-export interface FriendEntry {
-    publicKey: string;
-    callsign: string;
-    addedAt: string;
-    isGuardian: boolean;
-}
+export type { FriendEntry };
 
 export interface RecoveryRequest {
     id: string;
@@ -4013,128 +4009,24 @@ export async function importRemoteState(remote: SyncPayload): Promise<ImportResu
 }
 // ===================== RATINGS =====================
 
-export function addRating(raterPubkey: string, targetPubkey: string, stars: number, comment: string, transactionId: string): Rating | null {
-    assertMemberActive(raterPubkey);
-    if (!getMember(raterPubkey) || !getMember(targetPubkey) || raterPubkey === targetPubkey || stars < 1 || stars > 5) return null;
-
-    const tx = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='completed'").get(transactionId) as any;
-    if (!tx || (tx.buyer_pubkey !== raterPubkey && tx.seller_pubkey !== raterPubkey) || (tx.buyer_pubkey !== targetPubkey && tx.seller_pubkey !== targetPubkey)) return null;
-
-    const post = db.prepare("SELECT type FROM posts WHERE id=?").get(tx.post_id) as any;
-    const isOffer = post?.type === 'offer';
-    const targetRole: 'provider' | 'receiver' = (tx.seller_pubkey === targetPubkey) 
-        ? (isOffer ? 'provider' : 'receiver') 
-        : (isOffer ? 'receiver' : 'provider');
-
-    const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    
-    // UPSERT pattern
-    const existing = db.prepare("SELECT * FROM ratings WHERE transaction_id=? AND rater_pubkey=?").get(transactionId, raterPubkey) as any;
-    if (existing) {
-        db.prepare("UPDATE ratings SET stars=?, comment=?, created_at=? WHERE id=?").run(stars, comment.slice(0, 200), createdAt, existing.id);
-        return { ...existing, stars, comment, createdAt };
-    }
-
-    db.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, stars, comment, role, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, targetPubkey, raterPubkey, stars, comment.slice(0, 200), targetRole, transactionId, createdAt);
-    return { id, targetPubkey, raterPubkey, stars, comment: comment.slice(0, 200), role: targetRole, transactionId, createdAt };
-}
+export { addRating, addFriend, removeFriend, setGuardian };
 
 export function getRatings(targetPubkey: string): any[] {
-    const rows = db.prepare(`
-        SELECT r.*, m.callsign as rater_callsign, m.avatar_url as rater_avatar
-        FROM ratings r
-        LEFT JOIN members m ON r.rater_pubkey = m.public_key
-        WHERE r.target_pubkey=?
-        ORDER BY r.created_at DESC
-    `).all(targetPubkey) as any[];
-    return rows.map(r => ({
-        id: r.id,
-        targetPubkey: r.target_pubkey,
-        raterPubkey: r.rater_pubkey,
-        stars: r.stars,
-        comment: r.comment,
-        role: r.role,
-        transactionId: r.transaction_id,
-        createdAt: r.created_at,
-        rater_callsign: r.rater_callsign,
-        rater_avatar: r.rater_avatar
-    }));
+    return getRatingsEngine(db, targetPubkey);
 }
 
 export function getRatingsGiven(raterPubkey: string): Rating[] {
-    const rows = db.prepare(`
-        SELECT r.id, r.target_pubkey, r.rater_pubkey, r.stars, r.comment, r.role, r.transaction_id, r.created_at,
-               m.callsign as target_callsign, m.avatar_url as target_avatar
-        FROM ratings r
-        LEFT JOIN members m ON r.target_pubkey = m.public_key
-        WHERE r.rater_pubkey=?
-        ORDER BY r.created_at DESC
-    `).all(raterPubkey) as any[];
-    return rows.map(r => ({
-        id: r.id,
-        targetPubkey: r.target_pubkey,
-        raterPubkey: r.rater_pubkey,
-        stars: r.stars,
-        comment: r.comment,
-        role: r.role,
-        transactionId: r.transaction_id,
-        createdAt: r.created_at,
-        target_callsign: r.target_callsign,
-        target_avatar: r.target_avatar
-    }));
+    return getRatingsGivenEngine(db, raterPubkey);
 }
 
-export function getAverageRating(targetPubkey: string): { average: number; count: number; asProvider: { average: number; count: number }; asReceiver: { average: number; count: number } } {
-    const all = db.prepare("SELECT AVG(stars) as avg, COUNT(*) as cnt FROM ratings WHERE target_pubkey=?").get(targetPubkey) as any;
-    const prov = db.prepare("SELECT AVG(stars) as avg, COUNT(*) as cnt FROM ratings WHERE target_pubkey=? AND role='provider'").get(targetPubkey) as any;
-    const recv = db.prepare("SELECT AVG(stars) as avg, COUNT(*) as cnt FROM ratings WHERE target_pubkey=? AND role='receiver'").get(targetPubkey) as any;
-
-    const round = (val: number) => Math.round((val || 0) * 10) / 10;
-    return {
-        average: round(all.avg), count: all.cnt || 0,
-        asProvider: { average: round(prov.avg), count: prov.cnt || 0 },
-        asReceiver: { average: round(recv.avg), count: recv.cnt || 0 }
-    };
+export function getAverageRating(targetPubkey: string) {
+    return getAverageRatingEngine(db, targetPubkey);
 }
 
 // ===================== FRIENDS & GUARDIANS =====================
 
 export function getFriends(pubkey: string): FriendEntry[] {
-    const rows = db.prepare(`SELECT f.friend_pubkey, m.callsign, f.added_at, f.is_guardian FROM friends f JOIN members m ON f.friend_pubkey = m.public_key WHERE f.owner_pubkey=?`).all(pubkey) as any[];
-    return rows.map(r => ({ publicKey: r.friend_pubkey, callsign: r.callsign, addedAt: r.added_at, isGuardian: Boolean(r.is_guardian) }));
-}
-
-export function addFriend(ownerPubkey: string, friendPubkey: string): FriendEntry | null {
-    if (!getMember(ownerPubkey) || !getMember(friendPubkey) || ownerPubkey === friendPubkey) return null;
-    
-    // UPSERT ignore logic
-    const exists = db.prepare("SELECT * FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(ownerPubkey, friendPubkey);
-    if (!exists) {
-        db.prepare("INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?)").run(ownerPubkey, friendPubkey, new Date().toISOString());
-    }
-    return getFriends(ownerPubkey).find(f => f.publicKey === friendPubkey) || null;
-}
-
-export function removeFriend(ownerPubkey: string, friendPubkey: string): boolean {
-    const res = db.prepare("DELETE FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").run(ownerPubkey, friendPubkey);
-    if (res.changes > 0) {
-        writeTombstone('friends', `${ownerPubkey}|${friendPubkey}`);
-    }
-    return res.changes > 0;
-}
-
-export function setGuardian(ownerPubkey: string, friendPubkey: string, isGuardian: boolean): boolean {
-    if (!getMember(ownerPubkey) || !getMember(friendPubkey) || ownerPubkey === friendPubkey) return false;
-    
-    // Ensure the friend entry exists first
-    const exists = db.prepare("SELECT * FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(ownerPubkey, friendPubkey);
-    if (!exists) {
-        db.prepare("INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?)").run(ownerPubkey, friendPubkey, new Date().toISOString());
-    }
-
-    const res = db.prepare("UPDATE friends SET is_guardian=? WHERE owner_pubkey=? AND friend_pubkey=?").run(isGuardian ? 1 : 0, ownerPubkey, friendPubkey);
-    return res.changes > 0;
+    return getFriendsEngine(db, pubkey);
 }
 
 // ===================== SOCIAL RECOVERY =====================

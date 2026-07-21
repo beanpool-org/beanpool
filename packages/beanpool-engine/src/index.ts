@@ -13,6 +13,8 @@ export * from './members.js';
 export * from './social.js';
 export * from './posts.js';
 export * from './escrow.js';
+export * from './messaging.js';
+
 
 
 

@@ -391,6 +391,10 @@ export default function SettingsScreen() {
         setDiagLoading(true);
         setRemoteStats(null);
         try {
+            try {
+                const { requestSync } = await import('../../services/pillar-sync');
+                await requestSync();
+            } catch (e) {}
             const { getDatabaseStats } = await import('../../utils/db');
             const stats = await getDatabaseStats();
             setDbStats(stats);

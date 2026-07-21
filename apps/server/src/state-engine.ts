@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
+import { ledger } from './engine/ledger.js';
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
@@ -21,6 +22,38 @@ import {
     promotionSanityCheck as promotionSanityCheckEngine,
     type ReplicaConsistency
 } from './engine/audit.js';
+import {
+    recordActivity,
+    seedGenesisMember,
+    registerMember as registerMemberEngine,
+    registerVisitor,
+    updateProfile as updateProfileEngine
+} from './engine/members.js';
+import {
+    generateInvite,
+    adminGenerateInvite,
+    redeemInvite as redeemInviteEngine,
+    redeemOfflineTicket as redeemOfflineTicketEngine
+} from './engine/invites.js';
+import {
+    getMember as getMemberEngine,
+    getMembers as getMembersEngine,
+    getAllMembers as getAllMembersEngine,
+    checkInvite as checkInviteEngine,
+    getInvitesByMember as getInvitesByMemberEngine,
+    getInviteTree as getInviteTreeEngine,
+    getProfile as getProfileEngine,
+    getProfiles as getProfilesEngine,
+    getAllProfiles as getAllProfilesEngine,
+    rowToMember,
+    rowToProfile,
+    type Member,
+    type InviteCode,
+    type MemberProfile,
+    type InviteCheckResult,
+    type InviteTreeNode
+} from '@beanpool/engine';
+
 
 
 // Load synonym map for FTS5 search keyword expansion
@@ -106,35 +139,7 @@ export function generateSearchKeywords(title: string, description: string, categ
 
 // ===================== TYPES =====================
 
-export interface Member {
-    publicKey: string;
-    callsign: string;
-    joinedAt: string;
-    invitedBy: string;
-    inviteCode: string;
-    homeNodeUrl?: string;
-    avatarUrl?: string | null;
-    status?: 'active' | 'migrated' | 'pruned' | 'flagged' | string;
-    profileUpdatedAt?: number | null;
-    bio?: string | null;
-    contactValue?: string | null;
-    contactVisibility?: string | null;
-    lastActiveAt?: string | null;
-    /** Source-of-truth mutation watermark used by delta sync for last-writer-wins conflict resolution. */
-    updatedAt?: string | null;
-    earnedCredit?: number;
-    /** Elder who endorsed this member. For a founding member this also lifts the no-overdraft floor-gate. */
-    elderVouchedBy?: string | null;
-}
-
-export interface InviteCode {
-    code: string;
-    createdBy: string;
-    createdAt: string;
-    usedBy: string | null;
-    usedAt: string | null;
-    intendedFor?: string;
-}
+export type { Member, InviteCode };
 
 export interface MarketplacePost {
     id: string;
@@ -195,21 +200,7 @@ export interface Transaction {
     authPayload?: string | null;
 }
 
-export interface MemberProfile {
-    publicKey: string;
-    avatar: string | null;
-    bio: string;
-    contact: {
-        value: string;
-        visibility: 'hidden' | 'trade_partners' | 'community' | 'friends';
-    } | null;
-    callsign?: string;
-    lastActiveAt?: string;
-    status?: 'active' | 'disabled' | 'pruned';
-    joinedAt?: string;
-    elderVouchedBy?: string | null;
-    elderVouchedByCallsign?: string | null;
-}
+export type { MemberProfile };
 
 export interface Conversation {
     id: string;
@@ -342,9 +333,6 @@ export interface NodeConfig {
     lastDirectoryPush?: string;
 }
 
-// ===================== STATE =====================
-
-const ledger = new LedgerManager();
 const wsClients: Set<any> = new Set();
 
 // ===================== INIT =====================
@@ -693,509 +681,70 @@ export function assertProfileComplete(publicKey: string): void {
     }
 }
 
-function rowToMember(row: any): Member {
-    if (!row) return row;
-    return {
-        publicKey: row.public_key,
-        callsign: row.callsign,
-        joinedAt: row.joined_at,
-        invitedBy: row.invited_by,
-        inviteCode: row.invite_code,
-        homeNodeUrl: row.home_node_url,
-        avatarUrl: row.avatar_url || null,
-        profileUpdatedAt: row.profile_updated_at || null,
-        bio: row.bio || null,
-        contactValue: row.contact_value || null,
-        contactVisibility: row.contact_visibility || null,
-        status: row.status || 'active',
-        lastActiveAt: row.last_active_at || null,
-        updatedAt: row.updated_at || null,
-        earnedCredit: row.earned_credit ?? 0,
-        elderVouchedBy: row.elder_vouched_by || null,
-    };
-}
 
-function rowToProfile(row: any): MemberProfile {
-    if (!row) return row;
-    return {
-        publicKey: row.public_key,
-        avatar: row.avatar_url,
-        bio: row.bio || '',
-        contact: row.contact_value ? { value: row.contact_value, visibility: row.contact_visibility } : null,
-        status: row.status,
-        lastActiveAt: row.last_active_at,
-        callsign: row.callsign,
-        joinedAt: row.joined_at
-    };
-}
 
 // ===================== MEMBERS =====================
 
-export function seedGenesisMember(adminPublicKey: string, callsign: string): Member {
-    const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(adminPublicKey) as any;
-    if (existing) {
-        db.prepare("UPDATE members SET invited_by = 'genesis', invite_code = 'genesis' WHERE public_key = ?").run(adminPublicKey);
-        return getMember(adminPublicKey)!;
-    }
-    // Genesis bootstrap: temporarily disable FK checks because invited_by='genesis'
-    // violates the self-referencing FK (no member with public_key='genesis' exists).
-    db.pragma('foreign_keys = OFF');
-    try {
-        db.transaction(() => {
-            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) 
-                        VALUES (?, ?, ?, ?, ?)`).run(adminPublicKey, callsign, new Date().toISOString(), 'genesis', 'genesis');
-            db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(adminPublicKey);
-        })();
-    } finally {
-        db.pragma('foreign_keys = ON');
-    }
-    ledger.initializeGenesisAccount(adminPublicKey);
-    console.log(`⛰️ Genesis member seeded: ${callsign}`);
-    return getMember(adminPublicKey)!;
-}
-
-function registerMemberInternal(publicKey: string, callsign: string, invitedBy: string | null, inviteCode: string | null): Member | null {
-    // Callsign validation: require 2+ non-whitespace characters
-    if (!callsign || callsign.trim().length < 2) {
-        console.warn(`[Security] Rejected registration with invalid callsign "${callsign}" for ${publicKey}`);
-        return null;
-    }
-    callsign = callsign.trim();
-
-    const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (existing) {
-        db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
-        broadcast({ type: 'profile_updated', publicKey });
-        return getMember(publicKey)!;
-    }
-
-    // SECURITY PATCH: Prevent open registration. If they don't exist and don't have an invite, block them.
-    if (!inviteCode && !invitedBy) {
-        console.warn(`[Security] Blocked unauthorized open registration attempt for ${callsign} (${publicKey})`);
-        return null;
-    }
-
-    db.transaction(() => {
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) 
-                    VALUES (?, ?, ?, ?, ?)`).run(publicKey, callsign, new Date().toISOString(), invitedBy, inviteCode);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
-    })();
-    ledger.initializeGenesisAccount(publicKey);
-    const member = getMember(publicKey)!;
-    broadcast({ type: 'member_joined', member });
-    console.log(`👤 New member: ${callsign} invited by ${invitedBy ? invitedBy.substring(0, 12) : 'system'}...`);
-    return member;
-}
+export { seedGenesisMember, registerVisitor };
 
 export function registerMember(publicKey: string, callsign: string): Member | null {
-    return registerMemberInternal(publicKey, callsign, null, null);
-}
-
-export function registerVisitor(publicKey: string, callsign?: string, homeNodeUrl?: string): void {
-    const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (existing) {
-        if (callsign && existing.callsign.startsWith('Visitor-')) {
-            db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
-        }
-        if (homeNodeUrl && !existing.home_node_url) {
-            db.prepare("UPDATE members SET home_node_url = ? WHERE public_key = ?").run(homeNodeUrl, publicKey);
-        }
-        return;
-    }
-    const generatedCallsign = callsign || `Visitor-${publicKey.substring(0, 8)}`;
-    db.transaction(() => {
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url) 
-                    VALUES (?, ?, ?, ?, ?, ?)`).run(publicKey, generatedCallsign, new Date().toISOString(), null, null, homeNodeUrl || null);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
-    })();
-    ledger.initializeGenesisAccount(publicKey);
-    console.log(`🌐 Visitor registered: ${generatedCallsign} (federation${homeNodeUrl ? ` from ${homeNodeUrl}` : ''})`);
-}
-
-export function getMembers(): Member[] {
-    const rows = db.prepare("SELECT * FROM members WHERE status != 'pruned'").all() as any[];
-    return rows.map(rowToMember);
-}
-
-export function getAllMembers(): Member[] {
-    const rows = db.prepare("SELECT * FROM members").all() as any[];
-    return rows.map(rowToMember);
+    return registerMemberEngine(broadcast, publicKey, callsign);
 }
 
 export function getMember(publicKey: string): Member | undefined {
-    const row = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
-    return row ? rowToMember(row) : undefined;
+    return getMemberEngine(db, publicKey);
+}
+
+export function getMembers(): Member[] {
+    return getMembersEngine(db);
+}
+
+export function getAllMembers(): Member[] {
+    return getAllMembersEngine(db);
 }
 
 // ===================== INVITE CODES =====================
 
-function generateShortCode(): string {
-    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    let code = 'INV-';
-    for (let i = 0; i < 4; i++) code += chars[crypto.randomInt(chars.length)];
-    code += '-';
-    for (let i = 0; i < 4; i++) code += chars[crypto.randomInt(chars.length)];
-    return code;
-}
-
-export function generateInvite(inviterPubkey: string, intendedFor?: string): InviteCode | null {
-    if (!getMember(inviterPubkey)) return null;
-
-    // Every member can invite from day one (tiers are recognition badges and
-    // gate nothing). The old "Ghost gate" here was a no-op — getTier returns
-    // canInvite: true for every tier — and the offline BP- ticket path never
-    // had a tier check anyway; removed rather than half-enforced.
-    recordActivity(inviterPubkey);
-
-    const code = generateShortCode();
-    const createdAt = new Date().toISOString();
-    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`).run(code, inviterPubkey, createdAt, intendedFor || null);
-    const invite: InviteCode = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
-    const inviter = getMember(inviterPubkey);
-    console.log(`🎟️  Invite generated: ${code} by ${inviter?.callsign || inviterPubkey.substring(0, 12)}`);
-    return invite;
-}
-
-/**
- * Admin-only invite generation — bypasses Ghost tier gate and supports tiered genesis invites.
- * The genesis type is stored on the invite code and applied during redemption.
- */
-export function adminGenerateInvite(adminPubkey: string, genesisType: GenesisInviteType = 'standard', intendedFor?: string): InviteCode | null {
-    if (!getMember(adminPubkey)) return null;
-    recordActivity(adminPubkey);
-
-    const code = generateShortCode();
-    const createdAt = new Date().toISOString();
-    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, genesis_type) VALUES (?, ?, ?, ?, ?)`).run(code, adminPubkey, createdAt, intendedFor || null, genesisType);
-    const invite: InviteCode = { code, createdBy: adminPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
-    const tierLabel = genesisType === 'standard' ? '🥚' : genesisType === 'trusted' ? '🏠' : genesisType === 'ambassador' ? '🏛️' : '⛰️';
-    console.log(`🎟️  Admin Genesis Invite generated: ${code} [${genesisType} ${tierLabel}] by ${getMember(adminPubkey)?.callsign || adminPubkey.substring(0, 12)}`);
-    return invite;
-}
+export { generateInvite, adminGenerateInvite };
 
 export function redeemInvite(code: string, publicKey: string, callsign: string): { success: boolean; error?: string; member?: Member } {
-    const invite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(code) as any;
-    if (!invite) return { success: false, error: 'Invalid invite code' };
-    if (invite.used_by) return { success: false, error: 'This invite has already been used' };
-
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-    const createdAtTime = new Date(invite.created_at).getTime();
-    if (Date.now() - createdAtTime > SEVEN_DAYS_MS) {
-        return { success: false, error: 'This invite code has expired (maximum 7 days validation)' };
-    }
-
-    if (getMember(publicKey)) return { success: false, error: 'You are already a member' };
-
-    // Register member FIRST — invite_codes.used_by has FK to members(public_key)
-    const member = registerMemberInternal(publicKey, callsign, invite.created_by, code);
-    if (!member) return { success: false, error: 'Registration failed' };
-
-    db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code COLLATE NOCASE = ?").run(publicKey, new Date().toISOString(), code);
-
-    // Pre-seed earned credit for tiered genesis invites
-    const genesisType = (invite.genesis_type || 'standard') as GenesisInviteType;
-    if (genesisType !== 'standard') {
-        const earnedCredit = getGenesisEarnedCredit(genesisType);
-        if (earnedCredit > 0) {
-            db.prepare("UPDATE members SET earned_credit = ? WHERE public_key = ?").run(earnedCredit, publicKey);
-            const tier = getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - earnedCredit);
-            console.log(`🌟 Genesis invite redeemed: ${callsign} starts as ${tier.emoji} ${tier.name} (earned_credit: ${earnedCredit})`);
-        }
-    }
-
-    return { success: true, member };
-}
-
-/**
- * Parse + cryptographically verify an offline BP- ticket WITHOUT consuming it.
- * Shared by redeemOfflineTicket (which additionally takes the replay lock and
- * registers the member) and checkInvite (read-only pre-flight for onboarding).
- */
-function verifyOfflineTicket(ticketB64: string):
-    | { ok: true; inviterPubkey: string; timestamp: number; intendedFor?: string; codeHash: string }
-    | { ok: false; reason: 'unknown_inviter' | 'expired' | 'invalid' | 'malformed'; error: string } {
-    try {
-        // Support both standard base64 and url-safe base64 by normalizing back to standard
-        const normalizedB64 = ticketB64.replace(/-/g, '+').replace(/_/g, '/');
-        const ticketStr = Buffer.from(normalizedB64, 'base64').toString('utf8');
-        const ticketObj = JSON.parse(ticketStr);
-        const { p: payloadStr, s: signatureBase64 } = ticketObj;
-
-        // Client format split: the PWA puts the raw JSON payload in `p`; the
-        // native app base64-encodes it. Signature verification must run over
-        // the exact bytes that were signed (the JSON), so decode base64 first.
-        let signedBytes = Buffer.from(payloadStr);
-        let payloadJson = payloadStr;
-        if (!payloadStr.trim().startsWith('{')) {
-            signedBytes = Buffer.from(payloadStr, 'base64');
-            payloadJson = signedBytes.toString('utf8');
-        }
-
-        const payloadObj = JSON.parse(payloadJson);
-        const { i: inviterPubkey, t: timestamp, f: intendedFor } = payloadObj;
-
-        // 1. Verify Inviter exists (Sybil Protection)
-        if (!getMember(inviterPubkey)) return { ok: false, reason: 'unknown_inviter', error: 'Inviter is not a formally recognized member of this decentralized mesh' };
-
-        // 2. Strict Time-To-Live expiration (7 Days limit). Future-dated
-        // timestamps are rejected too — otherwise a ticket stamped years ahead
-        // would never age past the TTL.
-        const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-        const FUTURE_SKEW_MS = 10 * 60 * 1000;
-        if (typeof timestamp !== 'number' || timestamp > Date.now() + FUTURE_SKEW_MS) {
-            return { ok: false, reason: 'invalid', error: 'Offline ticket timestamp is invalid' };
-        }
-        if (Date.now() - timestamp > SEVEN_DAYS_MS) {
-            return { ok: false, reason: 'expired', error: 'This offline ticket has expired (maximum 7 days issuance)' };
-        }
-
-        // 3. Mathematical Cryptographic Validation
-        const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
-        const spki = Buffer.concat([spkiHeader, Buffer.from(inviterPubkey, 'hex')]);
-        const publicKeyObject = crypto.createPublicKey({
-            key: spki,
-            format: 'der',
-            type: 'spki'
-        });
-
-        const isValid = crypto.verify(
-            undefined,
-            signedBytes,
-            publicKeyObject,
-            Buffer.from(signatureBase64, 'base64')
-        );
-
-        if (!isValid) return { ok: false, reason: 'invalid', error: 'Invalid cryptographic signature structure' };
-
-        // 4. One-Time Replay Protection key
-        // We hash the signature to map it perfectly matching traditional shortcodes in length (16-char max)
-        const codeHash = crypto.createHash('sha256').update(signatureBase64).digest('hex').substring(0, 16);
-        return { ok: true, inviterPubkey, timestamp, intendedFor, codeHash };
-    } catch (e) {
-        return { ok: false, reason: 'malformed', error: 'Malformed or broken offline ticket payload' };
-    }
+    return redeemInviteEngine(broadcast, code, publicKey, callsign);
 }
 
 export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string): { success: boolean; error?: string; member?: Member } {
-    try {
-        const verified = verifyOfflineTicket(ticketB64);
-        if (!verified.ok) return { success: false, error: verified.error };
-        const { inviterPubkey, timestamp, intendedFor, codeHash } = verified;
-
-        // One-Time Replay Protection Database Matrix
-        const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
-        if (existingInvite) {
-            if (existingInvite.used_by) return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
-        } else {
-            // First time ingestion into the mesh matrix - structurally inject to SQLite to lock memory
-            const createdAt = new Date(timestamp).toISOString();
-            db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`).run(codeHash, inviterPubkey, createdAt, intendedFor || null);
-        }
-
-        // 5. Formal Identity Registration
-        if (getMember(joinerPublicKey)) return { success: false, error: 'You are already a participating identity on the mesh' };
-        recordActivity(inviterPubkey);
-
-        const member = registerMemberInternal(joinerPublicKey, callsign, inviterPubkey, codeHash);
-        if (!member) return { success: false, error: 'Registration failed during state sync' };
-
-        // Update the lock
-        db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code COLLATE NOCASE = ?").run(joinerPublicKey, new Date().toISOString(), codeHash);
-
-        return { success: true, member };
-
-    } catch (e) {
-        return { success: false, error: 'Malformed or broken offline ticket payload' };
-    }
+    return redeemOfflineTicketEngine(broadcast, ticketB64, joinerPublicKey, callsign);
 }
 
-export interface InviteCheckResult {
-    valid: boolean;
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed';
-    inviterCallsign?: string | null;
-}
-
-/**
- * Read-only pre-flight validation of an invite — standard INV- code or offline
- * BP- ticket payload (clients strip the BP- prefix, matching the redeem API).
- * Lets onboarding reject a dud invite at Step 1, before the user has been
- * through the name/photo/seed ceremony. Never consumes or records anything;
- * the inviter's callsign is only revealed for a currently-valid invite.
- */
 export function checkInvite(codeOrTicket: string): InviteCheckResult {
-    const raw = (codeOrTicket || '').trim();
-    if (!raw) return { valid: false, reason: 'invalid' };
-
-    // Offline tickets are long base64url payloads; everything short is a code.
-    if (raw.length > 20 && !/^INV-/i.test(raw)) {
-        const verified = verifyOfflineTicket(raw);
-        if (!verified.ok) return { valid: false, reason: verified.reason };
-        const existing = db.prepare("SELECT used_by FROM invite_codes WHERE code COLLATE NOCASE = ?").get(verified.codeHash) as any;
-        if (existing?.used_by) return { valid: false, reason: 'used' };
-        return { valid: true, inviterCallsign: getMember(verified.inviterPubkey)?.callsign ?? null };
-    }
-
-    const invite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(raw) as any;
-    if (!invite) return { valid: false, reason: 'invalid' };
-    if (invite.used_by) return { valid: false, reason: 'used' };
-
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-    if (Date.now() - new Date(invite.created_at).getTime() > SEVEN_DAYS_MS) {
-        return { valid: false, reason: 'expired' };
-    }
-
-    return { valid: true, inviterCallsign: getMember(invite.created_by)?.callsign ?? null };
+    return checkInviteEngine(db, codeOrTicket);
 }
 
 export function getInvitesByMember(pubkey: string): InviteCode[] {
-    const rows = db.prepare("SELECT * FROM invite_codes WHERE created_by = ?").all(pubkey) as any[];
-    return rows.map(r => ({
-        code: r.code, createdBy: r.created_by, createdAt: r.created_at, usedBy: r.used_by, usedAt: r.used_at, intendedFor: r.intended_for
-    }));
-}
-
-export interface InviteTreeNode {
-    publicKey: string;
-    callsign: string;
-    joinedAt: string;
-    inviteCode: string;
-    children: InviteTreeNode[];
+    return getInvitesByMemberEngine(db, pubkey);
 }
 
 export function getInviteTree(rootPubkey?: string): InviteTreeNode[] {
-    const allMembers = getAllMembers();
-
-    // ⚡ Bolt: Group members by invitedBy to avoid O(N²) nested filtering, turning it to O(N) lookup.
-    const membersByInviter = new Map<string, Member[]>();
-    for (const m of allMembers) {
-        if (m.invitedBy && m.publicKey !== m.invitedBy) {
-            if (!membersByInviter.has(m.invitedBy)) {
-                membersByInviter.set(m.invitedBy, []);
-            }
-            membersByInviter.get(m.invitedBy)!.push(m);
-        }
-    }
-
-    function buildSubtree(parentPubkey: string): InviteTreeNode[] {
-        const children = membersByInviter.get(parentPubkey) || [];
-        return children
-            .map(m => ({
-                publicKey: m.publicKey, callsign: m.callsign, joinedAt: m.joinedAt, inviteCode: m.inviteCode,
-                children: buildSubtree(m.publicKey),
-            }));
-    }
-
-    if (rootPubkey) {
-        return buildSubtree(rootPubkey);
-    }
-
-    const genesisRoots = allMembers.filter(m => (m.invitedBy === 'genesis' || m.publicKey === 'genesis') && m.publicKey !== 'SYSTEM' && !m.publicKey.startsWith('escrow_'));
-    if (genesisRoots.length === 0) {
-        // Restored DB fallback: treat members with null/missing invitedBy as root(s)
-        const roots = allMembers.filter(m => (!m.invitedBy || m.invitedBy === 'system') && m.publicKey !== 'SYSTEM' && !m.publicKey.startsWith('escrow_'));
-        if (roots.length > 0) {
-            return roots.map(m => ({
-                publicKey: m.publicKey, callsign: m.callsign, joinedAt: m.joinedAt, inviteCode: m.inviteCode || '',
-                children: buildSubtree(m.publicKey),
-            }));
-        }
-    }
-    return genesisRoots.map(m => ({
-        publicKey: m.publicKey, callsign: m.callsign, joinedAt: m.joinedAt, inviteCode: m.inviteCode || '',
-        children: buildSubtree(m.publicKey),
-    }));
+    return getInviteTreeEngine(db, rootPubkey);
 }
+
+export type { InviteCheckResult, InviteTreeNode };
 
 // ===================== PROFILES =====================
 
-export function updateProfile(publicKey: string, update: {
-    avatar?: string | null;
-    bio?: string;
-    contact?: { value: string; visibility: 'hidden' | 'trade_partners' | 'community' | 'friends' } | null;
-    callsign?: string;
-}): MemberProfile | null {
-    if (!getMember(publicKey)) return null;
-    recordActivity(publicKey);
-    
-    const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
-    const avatar = update.avatar !== undefined ? update.avatar : existing.avatar_url;
-    const bio = typeof update.bio === 'string' ? update.bio.slice(0, 200) : (update.bio === null ? null : existing.bio);
-    const callsign = typeof update.callsign === 'string' ? update.callsign.slice(0, 32) : existing.callsign;
-    let contact_value = existing.contact_value;
-    let contact_visibility = existing.contact_visibility;
-    if (update.contact !== undefined) {
-        contact_value = update.contact?.value || null;
-        contact_visibility = update.contact?.visibility || null;
-    }
-
-    const profileUpdatedAt = new Date().toISOString();
-
-    db.prepare(`UPDATE members SET avatar_url=?, bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=? WHERE public_key=?`)
-      .run(avatar, bio, contact_value, contact_visibility, callsign, profileUpdatedAt, publicKey);
-      
-    broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt });
-    return getProfile(publicKey);
-}
-
 export function getProfile(publicKey: string, requesterPubkey?: string): MemberProfile | null {
-    const row = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!row) return null;
-    const profile = rowToProfile(row);
-    profile.elderVouchedBy = row.elder_vouched_by || null;
-    if (row.elder_vouched_by) {
-        const voucher = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(row.elder_vouched_by) as any;
-        profile.elderVouchedByCallsign = voucher?.callsign || null;
-    }
-    if (profile.contact && profile.contact.visibility === 'hidden' && requesterPubkey !== publicKey) {
-        profile.contact = null;
-    } else if (profile.contact && profile.contact.visibility === 'friends' && requesterPubkey !== publicKey) {
-        if (!requesterPubkey) {
-            profile.contact = null;
-        } else {
-            const isFriend = db.prepare("SELECT 1 FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(publicKey, requesterPubkey);
-            if (!isFriend) profile.contact = null;
-        }
-    }
-    return profile;
+    return getProfileEngine(db, publicKey, requesterPubkey);
 }
 
 export function getProfiles(): Record<string, MemberProfile> {
-    const rows = db.prepare("SELECT * FROM members WHERE status != 'pruned'").all() as any[];
-    const map: Record<string, MemberProfile> = {};
-    for (const row of rows) {
-        const p = rowToProfile(row);
-        if (p.contact && p.contact.visibility !== 'community') p.contact = null;
-        map[p.publicKey] = p;
-    }
-    return map;
+    return getProfilesEngine(db);
 }
 
 export function getAllProfiles(requesterPubkey?: string): MemberProfile[] {
-    const rows = db.prepare("SELECT * FROM members WHERE status != 'pruned'").all() as any[];
-    
-    // Batch fetch friends where friend_pubkey is the requesterPubkey
-    let friendOwners = new Set<string>();
-    if (requesterPubkey) {
-        const friendRows = db.prepare("SELECT owner_pubkey FROM friends WHERE friend_pubkey = ?").all(requesterPubkey) as any[];
-        friendOwners = new Set(friendRows.map(f => f.owner_pubkey));
-    }
+    return getAllProfilesEngine(db, requesterPubkey);
+}
 
-    const profiles: MemberProfile[] = [];
-    for (const row of rows) {
-        const profile = rowToProfile(row);
-        const publicKey = profile.publicKey;
-        if (profile.contact && requesterPubkey !== publicKey) {
-            if (profile.contact.visibility === 'hidden') {
-                profile.contact = null;
-            } else if (profile.contact.visibility === 'friends') {
-                if (!requesterPubkey || !friendOwners.has(publicKey)) {
-                    profile.contact = null;
-                }
-            }
-        }
-        profiles.push(profile);
-    }
-    return profiles;
+export function updateProfile(publicKey: string, update: any): MemberProfile | null {
+    return updateProfileEngine(broadcast, publicKey, update);
 }
 
 // ===================== TRUST STATS =====================
@@ -5412,9 +4961,7 @@ export function migrateAdminConversations() {} // Deprecated, state is clean now
 
 // ===================== ACTIVITY =====================
 
-export function recordActivity(publicKey: string) {
-    db.prepare("UPDATE members SET last_active_at=? WHERE public_key=?").run(new Date().toISOString(), publicKey);
-}
+export { recordActivity };
 
 // getCommunityHealth, HealthFlag, and CommunityHealth defined above near reports section
 
@@ -5760,7 +5307,7 @@ export function persistCommonsBalance(): void {
  * invisible to audits. Also syncs the decayed balances/epochs back to the accounts table.
  */
 export function persistDecayEvents(): void {
-    persistDecayEventsEngine(ledger);
+    persistDecayEventsEngine();
 }
 
 /**
@@ -5772,7 +5319,7 @@ export function persistDecayEvents(): void {
  * escrow wallets holding funds for settled transactions (always a bug).
  */
 export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
-    return runLedgerAuditEngine(ledger);
+    return runLedgerAuditEngine();
 }
 
 export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
@@ -5810,7 +5357,7 @@ export function getReplicaConsistency(payload: SyncPayload): ReplicaConsistency 
  * when PROMOTED_FROM_BACKUP=true (see index.ts).
  */
 export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
-    return promotionSanityCheckEngine(ledger);
+    return promotionSanityCheckEngine();
 }
 
 // ===================== REPLICATION ACCESS LOG =====================

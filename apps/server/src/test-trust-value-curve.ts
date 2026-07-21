@@ -88,7 +88,7 @@ function main() {
     // contrast: the SAME 5000 as a completed trade earns real trust
     seedMember('mbuyer'); seedMember('mseller');
     mtx('mbuyer', 'mseller', 5000);
-    assert(profile('mbuyer').earnedCredit === 960, `5000 completed trade → earnedCredit 960 (vs 0 for the identical gift), got ${profile('mbuyer').earnedCredit}`);
+    assert(profile('mbuyer').earnedCredit === 174, `5000 completed trade → earnedCredit 174 (vs 0 for the identical gift), got ${profile('mbuyer').earnedCredit}`);
 
     // ── 4. Self-funding farm stays dead: 40 tiny completed trades (even once vouched) ──
     seedMember('farmer'); vouch('farmer');
@@ -100,10 +100,10 @@ function main() {
     for (let i = 0; i < 5; i++) { const s = 'tseller' + i; seedMember(s); mtx('trader', s, 400); }
     assert(floorOf('trader') === -573, `2000 across 5 sellers, vouched → floor −573 (25 vouch + 548 earned), got ${floorOf('trader')}`);
 
-    // ── 6. Diversity cap: 10k with ONE partner counts as 5k (once vouched) ──
+    // ── 6. Diversity cap: 10k with ONE partner counts as 500 (once vouched) ──
     seedMember('whale'); seedMember('buddy'); vouch('whale');
     mtx('whale', 'buddy', 10000);
-    assert(floorOf('whale') === -985, `10k with one partner capped at 5k, vouched → floor −985 (25 vouch + 960 earned), got ${floorOf('whale')}`);
+    assert(floorOf('whale') === -199, `10k with one partner capped at 500, vouched → floor −199 (25 vouch + 174 earned), got ${floorOf('whale')}`);
 
     // ── 7. Grant lane: deepens floor (+voucher, since a grant activates), earnedCredit stays 0 ──
     seedMember('granted');
@@ -132,7 +132,7 @@ function main() {
         'after a trade, holding beans → direct send allowed (60 of 100), no velocity cap');
     // ...but you can NEVER send into debt: gifting beyond your positive balance is blocked (floor 0
     // for gifts), even though this account has a deep earned CREDIT line (−980) usable for trading.
-    assert(floorOf('didTrade') === -985, `vouched (light) + 5000 trade → trading floor −985, got ${floorOf('didTrade')}`);
+    assert(floorOf('didTrade') === -199, `vouched (light) + 5000 trade → trading floor −199, got ${floorOf('didTrade')}`);
     assert(transfer('didTrade', 'rcpt', 1000, 'gift', 'direct') === null,
         'cannot gift beyond positive balance — direct sends never draw on the overdraft/credit line');
 
@@ -140,8 +140,8 @@ function main() {
     assert(!('velocityGate' in getBalance('didTrade')), 'getBalance no longer exposes a velocityGate');
 
     // ── 11. Profile exposes value/ratings detail for the client Trust tab ──
-    assert(profile('mbuyer').qualifiedValue === 5000, `profile exposes qualifiedValue (5000), got ${profile('mbuyer').qualifiedValue}`);
-    assert(profile('whale').qualifiedValue === 5000, `qualifiedValue is diversity-capped (10k with one partner → 5k), got ${profile('whale').qualifiedValue}`);
+    assert(profile('mbuyer').qualifiedValue === 500, `profile exposes qualifiedValue (500), got ${profile('mbuyer').qualifiedValue}`);
+    assert(profile('whale').qualifiedValue === 500, `qualifiedValue is diversity-capped (10k with one partner → 500), got ${profile('whale').qualifiedValue}`);
     assert(profile('fresh').qualifiedValue === 0, `no trades → qualifiedValue 0, got ${profile('fresh').qualifiedValue}`);
     assert(typeof profile('mbuyer').avgRating === 'number' && typeof profile('mbuyer').reviewCount === 'number',
         'profile exposes numeric avgRating & reviewCount');

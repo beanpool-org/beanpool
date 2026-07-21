@@ -6,7 +6,8 @@
 // Stated in apps/server/src/engine/audit.ts to decouple routes and state-engine.ts.
 
 import { db } from '../db/db.js';
-import { COMMONS_BALANCE, LedgerManager } from '@beanpool/core';
+import { COMMONS_BALANCE } from '@beanpool/core';
+import { ledger } from './ledger.js';
 import {
     runConservationCheck,
     computeWashSybilMetrics,
@@ -29,7 +30,7 @@ export function persistCommonsBalance(): void {
 /**
  * Persist demurrage decay events as ledger transaction rows.
  */
-export function persistDecayEvents(ledger: LedgerManager): void {
+export function persistDecayEvents(): void {
     const events = ledger.drainDecayEvents();
     if (events.length === 0) return;
 
@@ -50,8 +51,8 @@ export function persistDecayEvents(ledger: LedgerManager): void {
  * Server wrapper for the ledger conservation audit.
  * Persists decay events and commons balance first, then executes the conservation check.
  */
-export function runLedgerAudit(ledger: LedgerManager): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
-    persistDecayEvents(ledger);
+export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+    persistDecayEvents();
     persistCommonsBalance();
     return runConservationCheck(db);
 }
@@ -86,11 +87,11 @@ export function getReplicaConsistency(payload: AuditSyncPayload): ReplicaConsist
 /**
  * Failover promotion sanity check run before taking live writes.
  */
-export function promotionSanityCheck(ledger: LedgerManager): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
     console.log('\n════════════════════════════════════════════════════════');
     console.log('🔁 FAILOVER PROMOTION — running ledger conservation sanity check');
     console.log('════════════════════════════════════════════════════════');
-    const result = runLedgerAudit(ledger);
+    const result = runLedgerAudit();
     if (result.ok) {
         console.log('✅ PROMOTION OK — replicated ledger is conservation-consistent. Safe to take live writes.');
     } else {

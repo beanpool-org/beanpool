@@ -1,0 +1,17 @@
+# Shadow-run rig for the delta-backup validation (2026-07-19).
+# NODE_ROLE=backup replica pulling from the live `test` primary. Local-only —
+# no public ports needed, self-signed TLS fallback (no CF_RECORD_NAME set).
+# BACKUP_REPLICATION_TOKEN is supplied via shell env at `docker compose up`,
+# never written into this file or committed.
+services:
+  beanpool-shadow-backup:
+    image: beanpool-shadow-backup:latest
+    container_name: beanpool-shadow-backup
+    environment:
+      - BEANPOOL_DATA_DIR=/data
+      - NODE_ROLE=backup
+      - BACKUP_PRIMARY_URL=https://test.beanpool.org
+      - BACKUP_REPLICATION_TOKEN=${BACKUP_REPLICATION_TOKEN}
+    volumes:
+      - ./shadow-backup/data:/data
+    restart: "no"

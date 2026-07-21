@@ -9,4 +9,6 @@
 // self-report without maintaining a second, drifting copy of the rules.
 export * from './trust.js';
 export * from './audit.js';
+export * from './members.js';
+
 

@@ -247,9 +247,9 @@ async function backgroundUpdateCheck() {
     }
 }
 
-// Run initial check after 30s startup delay, then every 6 hours
-setTimeout(() => backgroundUpdateCheck(), 30000);
-setInterval(() => backgroundUpdateCheck(), 6 * 60 * 60 * 1000);
+// Run initial check after 30s startup delay, then every 6 hours (unref'd so timers don't block process exit)
+setTimeout(() => backgroundUpdateCheck(), 30000).unref();
+setInterval(() => backgroundUpdateCheck(), 6 * 60 * 60 * 1000).unref();
 
 router.get('/api/version', (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');

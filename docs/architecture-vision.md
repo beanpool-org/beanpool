@@ -217,17 +217,17 @@ This is the same principle as email: Gmail, Fastmail, and self-hosted Postfix ar
 ### ✅ Phase 1: Route Splitting (DONE — PR #55)
 Split `https-server.ts` (3,957 lines) into 7 route modules + thin server shell.
 
-### 🔜 Phase 2: Engine Extraction
-Extract business logic from `state-engine.ts` (6,359 lines) into `@beanpool/engine` modules. See [node-architecture-assessment.md](./node-architecture-assessment.md) for the detailed extraction order.
+### ✅ Phase 2: Engine Extraction (DONE — PRs #56–#63)
+Extracted business logic from `state-engine.ts` (6,359 lines) across 9 extraction phases into `@beanpool/engine` and `apps/server/src/engine/` modules. See [node-architecture-assessment.md](./node-architecture-assessment.md) for the detailed extraction order.
 
-### Phase 3: Gateway Configuration
-Add the gateway config layer — CORS origins, IP allowlists, feature toggles.
+### ✅ Phase 3: Gateway Configuration (DONE — PR #64)
+Added the gateway config layer — CORS allowed origins, IP allowlists, rate limiting, and subsystem feature toggles.
 
-### Phase 4: PWA Decoupling
-Make the API base URL configurable in the PWA. Deploy independently if desired.
+### ✅ Phase 4: PWA Decoupling (DONE — PR #65)
+Made the API base URL configurable (`getNodeApiUrl()`) and dynamic WebSocket endpoint (`getNodeWsUrl()`) in the PWA. Frontends can now be deployed independently anywhere.
 
-### Phase 5: Manager Convergence
-With the engine extracted, the manager can share `@beanpool/engine` for display logic while calling the node API for mutations.
+### ✅ Phase 5: Manager Convergence (DONE — PR #66)
+Built a modern, decoupled React + TypeScript control plane in `apps/manager` sharing `@beanpool/engine` for frontend calculations while calling sovereign node REST/WS APIs for admin mutations.
 
 ---
 

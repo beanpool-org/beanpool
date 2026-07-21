@@ -17,6 +17,7 @@ type Db = Database.Database;
 // Tuning (owner decision 2026-07-05): Lowered cap from 5000 to 500. One solid trade
 // banks a partner; repeat trades add nothing. Legitimate users need more distinct
 // counterparties to build deep credit.
+// CANONICAL tuning knob — single source of truth for volume caps (do not duplicate in manager or server).
 export const PER_COUNTERPARTY_VOLUME_CAP = 500;
 
 export interface WashAnalysis {

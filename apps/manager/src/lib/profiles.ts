@@ -14,23 +14,37 @@ export interface NodeProfile {
 const PROFILES_KEY = 'bp_fleet_profiles';
 
 export function loadNodeProfiles(): NodeProfile[] {
+    const defaultProfiles: NodeProfile[] = [
+        {
+            id: 'local-node',
+            name: 'Local Sovereign Node',
+            url: window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin,
+            isPrimary: true,
+        },
+        {
+            id: 'test-node',
+            name: 'Test Staging Node (test.beanpool.org)',
+            url: 'https://test.beanpool.org',
+        }
+    ];
+
     try {
         const raw = localStorage.getItem(PROFILES_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                // Ensure local-node is always present in profiles
+                const hasLocal = parsed.some((p: NodeProfile) => p.id === 'local-node' || p.url.includes('localhost:8443'));
+                if (!hasLocal) {
+                    return [defaultProfiles[0], ...parsed];
+                }
+                return parsed;
+            }
         }
     } catch { /* ignore */ }
     
-    // Default fallback profile (Local Sovereign Node)
-    const defaultProfile: NodeProfile = {
-        id: 'local-node',
-        name: 'Local Sovereign Node',
-        url: window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin,
-        isPrimary: true,
-    };
-    saveNodeProfiles([defaultProfile]);
-    return [defaultProfile];
+    saveNodeProfiles(defaultProfiles);
+    return defaultProfiles;
 }
 
 export function saveNodeProfiles(profiles: NodeProfile[]): void {

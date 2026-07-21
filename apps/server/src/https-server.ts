@@ -471,17 +471,19 @@ export async function startHttpsServer(port: number): Promise<void> {
         const clientIp = replicationClientIp(ctx);
 
         // 1. Dynamic CORS Allowed Origins Handling
-        if (gwConfig.corsAllowedOrigins && gwConfig.corsAllowedOrigins.length > 0) {
-            const requestOrigin = ctx.get('Origin');
-            if (requestOrigin && (gwConfig.corsAllowedOrigins.includes('*') || gwConfig.corsAllowedOrigins.includes(requestOrigin))) {
-                ctx.set('Access-Control-Allow-Origin', requestOrigin);
-                ctx.set('Access-Control-Allow-Credentials', 'true');
-                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, x-signature, x-public-key, x-timestamp, x-nonce');
-                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-                if (ctx.method === 'OPTIONS') {
-                    ctx.status = 204;
-                    return;
-                }
+        const requestOrigin = ctx.get('Origin');
+        const allowedOrigins = (gwConfig.corsAllowedOrigins && gwConfig.corsAllowedOrigins.length > 0)
+            ? gwConfig.corsAllowedOrigins
+            : ['*'];
+
+        if (requestOrigin && (allowedOrigins.includes('*') || allowedOrigins.includes(requestOrigin))) {
+            ctx.set('Access-Control-Allow-Origin', requestOrigin);
+            ctx.set('Access-Control-Allow-Credentials', 'true');
+            ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-signature, x-public-key, x-timestamp, x-nonce');
+            ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            if (ctx.method === 'OPTIONS') {
+                ctx.status = 204;
+                return;
             }
         }
 

@@ -31,7 +31,7 @@ export interface GatewayConfig {
 }
 
 export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
-    corsAllowedOrigins: [],
+    corsAllowedOrigins: ['*'],
     adminIpAllowlist: [],
     features: {
         marketplace: true,

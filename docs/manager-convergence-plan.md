@@ -187,7 +187,10 @@ code, not a rewrite of it.
    `pnpm-workspace.yaml` alongside `server`/`pwa`/`native`. This is what
    turns "share code with a separate repo" from a packaging/publishing
    problem into a normal in-workspace import — the same mechanism `pwa` and
-   `server` already use for `beanpool-core`.
+   `server` already use for `beanpool-core`. **CI/Cache note:** update `turbo.json`
+   scope filters and `Dockerfile` multi-stage build targets to explicitly isolate
+   `apps/server` and `apps/manager` dependency chains so root `pnpm install`
+   does not unexpectedly invalidate native node build caches (and vice-versa).
 
 6. **Rewire Sentinel** to call `beanpool-ledger`'s shared functions for the
    rules that overlap the node (conservation drift, stranded escrow, trust
@@ -250,6 +253,10 @@ code, not a rewrite of it.
 - **Package boundary bikeshedding** — whether this becomes a new
   `beanpool-ledger` package or extends `beanpool-core` is a naming/scoping
   call, not an architectural one; doesn't block starting the extraction.
+- **Monorepo build cache invalidation across apps (step 5).** Unifying `beanpool-manager`
+  into `apps/manager` includes manager dependencies in root `pnpm install` steps.
+  Mitigate: update `turbo.json` scope filters and `Dockerfile` builder stages to
+  explicitly separate `apps/server` and `apps/manager` dependency chains.
 - **Over-centralizing admin power in the manager.** The manager already
   holds every node's admin credentials for backup purposes; making it the
   *primary* admin surface too means compromising the manager is now

@@ -37,7 +37,11 @@ export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string):
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const res = await fetch(`${nodeUrl.replace(/\/+$/, '')}/api/local/admin/diagnostics`, {
+    const url = new URL(`${nodeUrl.replace(/\/+$/, '')}/api/local/admin/diagnostics`);
+    if (adminPassword) {
+        url.searchParams.set('password', adminPassword);
+    }
+    const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',
     });
@@ -52,7 +56,11 @@ export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const res = await fetch(`${nodeUrl.replace(/\/+$/, '')}/api/local/admin/gateway`, {
+    const url = new URL(`${nodeUrl.replace(/\/+$/, '')}/api/local/admin/gateway`);
+    if (adminPassword) {
+        url.searchParams.set('password', adminPassword);
+    }
+    const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',
     });
@@ -74,10 +82,11 @@ export async function updateGatewayConfig(
     const res = await fetch(`${nodeUrl.replace(/\/+$/, '')}/api/local/admin/gateway`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(updates),
+        body: JSON.stringify({ ...updates, password: adminPassword }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
-    return res.json();
+    const data = await res.json();
+    return data.gateway || data;
 }

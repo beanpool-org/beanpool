@@ -766,9 +766,10 @@ export async function startHttpsServer(port: number): Promise<void> {
     const ADMIN_FAIL_WINDOW_MS = 60_000;
     async function checkAdminAuth(ctx: any): Promise<boolean> {
         const config = getLocalConfig();
-        const { password } = ctx.requestBody || {};
+        const headerPass = ctx.request?.headers?.['x-admin-password'] || ctx.request?.header?.['x-admin-password'];
+        const password = ctx.requestBody?.password || headerPass || ctx.query?.password || ctx.request?.query?.password;
         const ok = !!password && !!config.adminHash && !!config.salt
-            && await verifyPasswordAsync(password, config.adminHash, config.salt);
+            && await verifyPasswordAsync(password as string, config.adminHash, config.salt);
         if (!ok) {
             const now = Date.now();
             if (now - adminFailWindowStart > ADMIN_FAIL_WINDOW_MS) { adminAuthFailures = 0; adminFailWindowStart = now; }

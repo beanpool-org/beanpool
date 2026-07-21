@@ -98,7 +98,7 @@ router.post('/api/local/admin/logs', async (ctx) => {
     }
 });
 
-router.post('/api/local/admin/diagnostics', async (ctx) => {
+const getDiagnosticsHandler = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
 
     try {
@@ -128,8 +128,21 @@ router.post('/api/local/admin/diagnostics', async (ctx) => {
         const activePeers = connectors.filter(c => c.connected).length;
         const totalPeers = connectors.length;
 
+        const config = getLocalConfig();
+
         ctx.body = {
             success: true,
+            status: 'online',
+            uptimeSeconds: Math.round(process.uptime()),
+            cpuLoadPercent: cpuLoad,
+            memoryUsageMb: Math.round(usedMem / (1024 * 1024)),
+            totalMemoryMb: Math.round(totalMem / (1024 * 1024)),
+            dbSizeBytes: dbSize,
+            walSizeBytes: walSize,
+            activeWsConnections: activeConnections ? activeConnections.size : 0,
+            p2pActivePeers: activePeers,
+            communityName: config.communityName || 'BeanPool Community Node',
+            callsign: config.callsign || 'admin',
             diagnostics: {
                 cpuLoad,
                 cpusCount,
@@ -152,7 +165,10 @@ router.post('/api/local/admin/diagnostics', async (ctx) => {
         ctx.status = 500;
         ctx.body = { error: e.message };
     }
-});
+};
+
+router.get('/api/local/admin/diagnostics', getDiagnosticsHandler);
+router.post('/api/local/admin/diagnostics', getDiagnosticsHandler);
 
 
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {

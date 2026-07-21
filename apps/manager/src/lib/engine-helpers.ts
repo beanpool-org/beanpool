@@ -1,8 +1,8 @@
 /**
- * Shared Engine Helpers — Pure constants and interfaces re-exported from @beanpool/engine for display and audit calculations
+ * Shared Engine Helpers — Pure constants and interfaces for display and audit calculations
  */
 
-import { PER_COUNTERPARTY_VOLUME_CAP } from '../../../../packages/beanpool-engine/src/index.js';
+export const PER_COUNTERPARTY_VOLUME_CAP = 500;
 
 export function getEngineVolumeCap(): number {
     return PER_COUNTERPARTY_VOLUME_CAP;

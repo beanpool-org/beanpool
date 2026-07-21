@@ -6,7 +6,6 @@ export default defineConfig({
     plugins: [react()],
     resolve: {
         alias: {
-            '@beanpool/engine': path.resolve(__dirname, '../../packages/beanpool-engine/src/index.ts'),
             '@beanpool/core': path.resolve(__dirname, '../../packages/beanpool-core/src/index.ts'),
         }
     },

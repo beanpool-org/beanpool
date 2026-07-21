@@ -40,7 +40,7 @@ COPY apps/server/static/* /app/apps/server/public/
 RUN cd apps/server && pnpm run build
 
 # Prune to production-only dependencies
-RUN pnpm prune --prod --no-optional
+RUN CI=true pnpm prune --prod --no-optional
 
 # =============================================================================
 # Stage 2: Runtime — clean Alpine with only what's needed to run

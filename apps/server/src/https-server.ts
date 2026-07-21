@@ -29,6 +29,7 @@ import {
     updateBackupCadence,
     validatePasswordStrength,
     generateReplicationToken, setReplicationToken, clearReplicationToken, hasReplicationToken, verifyReplicationToken,
+    getGatewayConfig,
 } from './config/local-config.js';
 import {
     getConnectors, addConnector, removeConnector,
@@ -459,6 +460,93 @@ export async function startHttpsServer(port: number): Promise<void> {
         ctx.set('X-XSS-Protection', '1; mode=block');
         ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org *; frame-ancestors 'none'");
         ctx.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        await next();
+    });
+
+    // Gateway Configuration Middlewares (CORS Allowed Origins, Admin IP Allowlist, Feature Toggles, Rate Limiting)
+    const gatewayRateLimits = new Map<string, number[]>();
+
+    app.use(async (ctx, next) => {
+        const gwConfig = getGatewayConfig();
+        const clientIp = replicationClientIp(ctx);
+
+        // 1. Dynamic CORS Allowed Origins Handling
+        if (gwConfig.corsAllowedOrigins && gwConfig.corsAllowedOrigins.length > 0) {
+            const requestOrigin = ctx.get('Origin');
+            if (requestOrigin && (gwConfig.corsAllowedOrigins.includes('*') || gwConfig.corsAllowedOrigins.includes(requestOrigin))) {
+                ctx.set('Access-Control-Allow-Origin', requestOrigin);
+                ctx.set('Access-Control-Allow-Credentials', 'true');
+                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, x-signature, x-public-key, x-timestamp, x-nonce');
+                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+                if (ctx.method === 'OPTIONS') {
+                    ctx.status = 204;
+                    return;
+                }
+            }
+        }
+
+        // 2. Admin IP Allowlist Enforcement (/settings and /api/local/admin/*)
+        if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
+            if (ctx.path === '/settings' || ctx.path.startsWith('/api/local/admin/')) {
+                const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => 
+                    clientIp === allowedIp || allowedIp === '*' || (allowedIp.endsWith('*') && clientIp.startsWith(allowedIp.slice(0, -1)))
+                );
+                if (!isAllowed) {
+                    ctx.status = 403;
+                    ctx.body = { error: 'Access denied by Gateway Admin IP allowlist' };
+                    return;
+                }
+            }
+        }
+
+        // 3. Subsystem Feature Toggles Interceptors
+        if (!gwConfig.features?.marketplace && ctx.path.startsWith('/api/marketplace')) {
+            ctx.status = 503;
+            ctx.body = { error: 'Marketplace feature is currently disabled by node gateway' };
+            return;
+        }
+        if (!gwConfig.features?.messaging && ctx.path.startsWith('/api/messaging')) {
+            ctx.status = 503;
+            ctx.body = { error: 'Messaging feature is currently disabled by node gateway' };
+            return;
+        }
+        if (!gwConfig.features?.federation && ctx.path.startsWith('/api/federation')) {
+            ctx.status = 503;
+            ctx.body = { error: 'Federation feature is currently disabled by node gateway' };
+            return;
+        }
+        if (!gwConfig.features?.invites && (ctx.path.startsWith('/api/invite') || ctx.path.startsWith('/api/community/invite'))) {
+            ctx.status = 503;
+            ctx.body = { error: 'Invites feature is currently disabled by node gateway' };
+            return;
+        }
+        if (!gwConfig.features?.servePwa && (ctx.path === '/' || ctx.path.startsWith('/app') || ctx.path.endsWith('.html'))) {
+            if (ctx.path !== '/settings' && !ctx.path.startsWith('/api/')) {
+                ctx.status = 530;
+                ctx.body = { error: 'Headless Mode: PWA hosting is disabled on this node gateway' };
+                return;
+            }
+        }
+
+        // 4. Rate Limiting Middleware
+        if (gwConfig.rateLimiting?.enabled) {
+            const now = Date.now();
+            const windowMs = 60 * 1000;
+            const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute || 120;
+
+            let timestamps = gatewayRateLimits.get(clientIp) || [];
+            timestamps = timestamps.filter(t => now - t < windowMs);
+
+            if (timestamps.length >= maxReqs) {
+                ctx.status = 429;
+                ctx.body = { error: 'Gateway rate limit exceeded. Please try again in 1 minute.' };
+                return;
+            }
+
+            timestamps.push(now);
+            gatewayRateLimits.set(clientIp, timestamps);
+        }
+
         await next();
     });
 

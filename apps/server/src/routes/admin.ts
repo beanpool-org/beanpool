@@ -26,6 +26,7 @@ import {
 } from '../state-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
+    getGatewayConfig, updateGatewayConfig,
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
@@ -391,7 +392,19 @@ router.post('/api/local/admin/commons/projects', async (ctx) => {
     ctx.body = { projects, rounds: getVotingRounds(), balance: getCommonsBalance() };
 });
 
-// ===================== NODE CONFIG =====================
+// ===================== GATEWAY CONFIGURATION =====================
+
+router.get('/api/local/admin/gateway', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = getGatewayConfig();
+});
+
+router.post('/api/local/admin/gateway', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const body = (ctx as any).requestBody || {};
+    const updated = updateGatewayConfig(body);
+    ctx.body = { success: true, gateway: updated };
+});
 
     return router;
 }

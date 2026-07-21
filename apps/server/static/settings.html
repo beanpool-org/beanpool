@@ -935,8 +935,60 @@
                         <input type="text" id="new-callsign" placeholder="e.g. US Node" maxlength="20">
                     </div>
                     <button class="btn btn-primary" id="add-connector-btn">Add Connector</button>
-                    <div class="status-msg" id="connector-status"></div>
+            </div>
+
+            <!-- Gateway Self-Protection -->
+            <div class="glass" data-tab="network" style="margin-top: 1rem;">
+                <h3>🛡️ Gateway Configuration (Self-Protection)</h3>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+                    Configure bootstrap CORS origin rules, admin IP allowlists, rate limiting, and subsystem feature toggles.
+                </p>
+
+                <div class="field">
+                    <label>CORS Allowed Origins (comma-separated, e.g. https://app.beanpool.org, * for all)</label>
+                    <input type="text" id="gw-cors-origins" placeholder="e.g. https://app.beanpool.org">
                 </div>
+
+                <div class="field">
+                    <label>Admin IP Allowlist (comma-separated IPs, empty = all IPs allowed)</label>
+                    <input type="text" id="gw-admin-ips" placeholder="e.g. 127.0.0.1, 192.168.1.100">
+                </div>
+
+                <div class="row">
+                    <div class="field">
+                        <label>Enable Gateway Rate Limiting</label>
+                        <select id="gw-rate-enabled">
+                            <option value="false">Disabled (Default)</option>
+                            <option value="true">Enabled</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Max Requests / Minute per IP</label>
+                        <input type="number" id="gw-rate-max" value="120" min="10" max="1000">
+                    </div>
+                </div>
+
+                <h4 style="font-size: 0.85rem; color: #94a3b8; margin: 1rem 0 0.5rem 0;">Subsystem Feature Toggles</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
+                    <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" id="gw-feat-marketplace" checked> Marketplace Subsystem
+                    </label>
+                    <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" id="gw-feat-messaging" checked> Messaging Subsystem
+                    </label>
+                    <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" id="gw-feat-federation" checked> Federation Subsystem
+                    </label>
+                    <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" id="gw-feat-invites" checked> Invites Subsystem
+                    </label>
+                    <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" id="gw-feat-pwa" checked> Serve Bundled PWA
+                    </label>
+                </div>
+
+                <button class="btn btn-primary" id="save-gateway-btn">Save Gateway Configuration</button>
+                <div class="status-msg" id="gateway-status"></div>
             </div>
 
 

@@ -15,6 +15,8 @@
 import { scryptSync, randomBytes, timingSafeEqual, randomInt, scrypt } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { type GatewayConfig, DEFAULT_GATEWAY_CONFIG } from './gateway.js';
+export { type GatewayConfig, DEFAULT_GATEWAY_CONFIG };
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const CONFIG_PATH = path.join(DATA_DIR, 'local-config.json');
@@ -27,6 +29,7 @@ export interface LocalConfig {
     salt: string | null;
     joinedAt: number | null;
     thresholds?: Thresholds;
+    gateway?: GatewayConfig;
     communityName: string | null;
     contactEmail: string | null;
     contactPhone: string | null;
@@ -367,4 +370,43 @@ export function updateBackupCadence(updates: { pullSeconds?: number | null; reco
     saveLocalConfig(config);
     console.log('⚙️ Backup cadence updated:', { backupPullSeconds: config.backupPullSeconds, backupReconcileMinutes: config.backupReconcileMinutes });
     return { backupPullSeconds: config.backupPullSeconds ?? null, backupReconcileMinutes: config.backupReconcileMinutes ?? null };
+}
+
+export function getGatewayConfig(): GatewayConfig {
+    const config = getLocalConfig();
+    return {
+        ...DEFAULT_GATEWAY_CONFIG,
+        ...(config.gateway || {}),
+        features: {
+            ...DEFAULT_GATEWAY_CONFIG.features,
+            ...(config.gateway?.features || {}),
+        },
+        rateLimiting: {
+            ...DEFAULT_GATEWAY_CONFIG.rateLimiting,
+            ...(config.gateway?.rateLimiting || {}),
+        },
+    };
+}
+
+export function updateGatewayConfig(updates: Partial<GatewayConfig>): GatewayConfig {
+    const config = getLocalConfig();
+    const current = getGatewayConfig();
+    
+    const merged: GatewayConfig = {
+        ...current,
+        ...updates,
+        features: {
+            ...current.features,
+            ...(updates.features || {}),
+        },
+        rateLimiting: {
+            ...current.rateLimiting,
+            ...(updates.rateLimiting || {}),
+        },
+    };
+
+    config.gateway = merged;
+    saveLocalConfig(config);
+    console.log('⚙️ Gateway configuration updated:', merged);
+    return merged;
 }

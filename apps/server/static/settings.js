@@ -3416,6 +3416,9 @@
                         loadThresholds();
                         loadCommunityInfo();
                         loadAdminData();
+                        loadGatewayConfig();
+                        const gwSaveBtn = document.getElementById('save-gateway-btn');
+                        if (gwSaveBtn) gwSaveBtn.addEventListener('click', saveGatewayConfig);
                         switchTab(sessionStorage.getItem('bp-settings-tab') || 'identity');
                         setTimeout(() => {
                             initMap(
@@ -3459,3 +3462,95 @@
         switchTab(sessionStorage.getItem('bp-settings-tab') || 'identity');
 
         init();
+
+        // ======================== GATEWAY CONFIGURATION ========================
+        async function loadGatewayConfig() {
+            try {
+                const res = await fetch('/api/local/admin/gateway', {
+                    headers: { 'X-Admin-Password': authToken }
+                });
+                if (!res.ok) return;
+                const config = await res.json();
+                
+                const originsInput = document.getElementById('gw-cors-origins');
+                const adminIpsInput = document.getElementById('gw-admin-ips');
+                const rateEnabledSelect = document.getElementById('gw-rate-enabled');
+                const rateMaxInput = document.getElementById('gw-rate-max');
+                
+                if (originsInput) originsInput.value = (config.corsAllowedOrigins || []).join(', ');
+                if (adminIpsInput) adminIpsInput.value = (config.adminIpAllowlist || []).join(', ');
+                if (rateEnabledSelect) rateEnabledSelect.value = config.rateLimiting?.enabled ? 'true' : 'false';
+                if (rateMaxInput) rateMaxInput.value = config.rateLimiting?.maxRequestsPerMinute || 120;
+                
+                const features = config.features || {};
+                const checkMarketplace = document.getElementById('gw-feat-marketplace');
+                const checkMessaging = document.getElementById('gw-feat-messaging');
+                const checkFederation = document.getElementById('gw-feat-federation');
+                const checkInvites = document.getElementById('gw-feat-invites');
+                const checkPwa = document.getElementById('gw-feat-pwa');
+
+                if (checkMarketplace) checkMarketplace.checked = !!features.marketplace;
+                if (checkMessaging) checkMessaging.checked = !!features.messaging;
+                if (checkFederation) checkFederation.checked = !!features.federation;
+                if (checkInvites) checkInvites.checked = !!features.invites;
+                if (checkPwa) checkPwa.checked = !!features.servePwa;
+            } catch (e) {
+                console.warn('Failed to load gateway config:', e);
+            }
+        }
+
+        async function saveGatewayConfig() {
+            const statusEl = document.getElementById('gateway-status');
+            const saveBtn = document.getElementById('save-gateway-btn');
+            if (saveBtn) saveBtn.disabled = true;
+
+            try {
+                const corsOriginsStr = document.getElementById('gw-cors-origins')?.value || '';
+                const adminIpsStr = document.getElementById('gw-admin-ips')?.value || '';
+                const rateEnabled = document.getElementById('gw-rate-enabled')?.value === 'true';
+                const rateMax = parseInt(document.getElementById('gw-rate-max')?.value || '120', 10);
+
+                const payload = {
+                    corsAllowedOrigins: corsOriginsStr.split(',').map(s => s.trim()).filter(Boolean),
+                    adminIpAllowlist: adminIpsStr.split(',').map(s => s.trim()).filter(Boolean),
+                    rateLimiting: {
+                        enabled: rateEnabled,
+                        maxRequestsPerMinute: Number.isFinite(rateMax) && rateMax > 0 ? rateMax : 120,
+                    },
+                    features: {
+                        marketplace: !!document.getElementById('gw-feat-marketplace')?.checked,
+                        messaging: !!document.getElementById('gw-feat-messaging')?.checked,
+                        federation: !!document.getElementById('gw-feat-federation')?.checked,
+                        invites: !!document.getElementById('gw-feat-invites')?.checked,
+                        servePwa: !!document.getElementById('gw-feat-pwa')?.checked,
+                    }
+                };
+
+                const res = await fetch('/api/local/admin/gateway', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Password': authToken
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+                    throw new Error(err.error || `HTTP ${res.status}`);
+                }
+
+                if (statusEl) {
+                    statusEl.textContent = '✅ Gateway configuration saved successfully!';
+                    statusEl.className = 'status-msg show success';
+                    setTimeout(() => statusEl.classList.remove('show'), 3000);
+                }
+            } catch (e) {
+                if (statusEl) {
+                    statusEl.textContent = '❌ Failed to save: ' + e.message;
+                    statusEl.className = 'status-msg show error';
+                }
+            } finally {
+                if (saveBtn) saveBtn.disabled = false;
+            }
+        }

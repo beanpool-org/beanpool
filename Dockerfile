@@ -39,8 +39,7 @@ RUN cd apps/pwa && pnpm run build
 COPY apps/server/static/* /app/apps/server/public/
 RUN cd apps/server && pnpm run build
 
-# Prune to production-only dependencies
-RUN CI=true pnpm prune --prod --no-optional || true
+# Multi-stage Docker build for BeanPool node
 
 # =============================================================================
 # Stage 2: Runtime — clean Alpine with only what's needed to run

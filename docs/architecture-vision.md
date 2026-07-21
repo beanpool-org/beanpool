@@ -87,16 +87,47 @@ All clients — PWA, native mobile, desktop — are thin wrappers around the sam
 
 Every piece of client-side logic is either **crypto that must not leave the device** or **UX polish that the node doesn't trust anyway**. There is nothing on the PWA/native that should be moved to the node.
 
-### 3. Manager (Fleet Dashboard)
+### 3. Fleet Manager (Multi-Node Control Plane)
 
-The manager is a separate admin interface for operating one or more nodes remotely. It connects to each node via the same API (with admin credentials). It can:
+The Fleet Manager is a separate management interface designed for operating and monitoring one or more sovereign BeanPool nodes remotely. It operates **strictly as a client** over HTTP/WS APIs without possessing database write authority or bypassing node-level security.
 
-- Monitor health, view diagnostics, check logs
-- Manage members, posts, moderation
-- Configure node settings
-- Trigger backups, manage replication
+#### Operational Model
+- **Stateless Control Plane**: The manager does not own business logic or maintain primary node databases. All state mutations flow through authenticated node API endpoints (`/api/local/admin/*`).
+- **Shared Engine Reuse (Convergence)**: The manager uses `@beanpool/engine` on the read side for calculating metrics, parsing audit payloads, and displaying trust profiles, while leaving state enforcement to each individual node.
 
-The manager does **not** own any business logic — it's just a nicer admin UI that calls the same endpoints the Settings page does.
+#### Security & Access Boundaries
+| Mechanism | Enforced By | Description |
+|---|---|---|
+| **Admin Password Auth** | Node (`checkAdminAuth`) | ASYNC scrypt verification with global failure tarpit throttling brute-force attempts. |
+| **Replication Token** | Node (`verifyReplicationToken`) | Scoped, independently rotatable credential for read-only replication and metrics inspection. |
+| **IP Allowlist** | Node Gateway Config | Server-side protection (`adminIpAllowlist`) restricting admin API calls to manager IP/CIDR ranges. |
+| **Sovereign Disconnect** | Node Operator | Nodes can disable admin APIs or block manager IPs at any time without disrupting P2P mesh operations. |
+
+#### Core Fleet Management Capabilities
+
+1. **Fleet Monitoring & Health Diagnostics**
+   - Live CPU load, RAM usage, process uptime, database size, WAL size, and libp2p active peer counts (`/api/local/admin/diagnostics`).
+   - Real-time system log streaming and level/category filtering (`/api/local/admin/logs`).
+   - Active WebSocket connection tracking and analytics (`/api/local/admin/ws-connections`).
+
+2. **Remote Feature Management & Gateway Toggles**
+   - Centralized feature flags updated live on nodes via `POST /api/local/admin/node/config`:
+     - `servePwa` (Toggle node-hosted PWA vs. headless API mode)
+     - `marketplace` (Enable/disable marketplace posts & escrow transactions)
+     - `messaging` (Enable/disable DM & group messaging threads)
+     - `federation` (Enable/disable inter-community federation relays)
+     - `invites` (Enable/disable new member onboarding & ticket redemption)
+
+3. **Member Management & Moderation**
+   - User status controls: Account freeze (`credit_frozen`), Elder standing, Appointed Voucher capability, and Tier Badges (Newcomer, Resident, Steward, Elder).
+   - Moderation workflows: Report review/dismissal/actioning (`/api/local/admin/reports/*`), bulk post deletion, member/branch pruning.
+   - Community-wide announcements (`/api/local/admin/announcements`).
+
+4. **Replication & Backup Coordination**
+   - Enroll new backup nodes into a primary node's community (`/api/local/admin/backup-enroll`).
+   - Manage primary replication tokens (generate, set token-only mode, rotate, or clear).
+   - Tune backup pull cadence (`pullSeconds`, `reconcileMinutes`) and trigger on-demand delta resyncs.
+   - Inspect auto-snapshots, download snapshots over HTTPS, or trigger full node restores.
 
 ---
 

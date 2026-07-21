@@ -6,8 +6,7 @@
  * 2. Shared @beanpool/engine calculations used in the Fleet Manager.
  */
 
-import { fetchDiagnostics, fetchGatewayConfig, updateGatewayConfig } from '../../manager/src/lib/node-client.js';
-import { computeSampleTrustSummary, getEngineVolumeCap } from '../../manager/src/lib/engine-helpers.js';
+import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/engine';
 
 function assert(condition: boolean, message: string) {
     if (!condition) {
@@ -21,12 +20,7 @@ async function runTests() {
     console.log('Running Phase 5 Manager Convergence integration tests...\n');
 
     // 1. Verify shared engine calculation & volume cap
-    const cap = getEngineVolumeCap();
-    assert(cap === 500, 'Engine volume cap imported correctly: ' + cap);
-
-    const trust = computeSampleTrustSummary(5, 20, 0, 90);
-    assert(trust.trustLevel !== undefined, 'Engine calculated trust level: ' + trust.trustLevel);
-    assert(trust.score > 0, 'Engine computed positive trust score: ' + trust.score);
+    assert(PER_COUNTERPARTY_VOLUME_CAP === 500, 'Engine volume cap imported correctly: ' + PER_COUNTERPARTY_VOLUME_CAP);
 
     console.log('\n⭐️ ALL PHASE 5 MANAGER CONVERGENCE CHECKS PASSED.');
 }

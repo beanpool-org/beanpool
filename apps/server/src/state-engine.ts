@@ -11,6 +11,17 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
+import {
+    persistCommonsBalance as persistCommonsBalanceEngine,
+    runWashSybilMetricsAudit as runWashSybilMetricsEngine,
+    getReplicaConsistency as getReplicaConsistencyEngine,
+    exportLedgerAudit as exportLedgerAuditEngine,
+    persistDecayEvents as persistDecayEventsEngine,
+    runLedgerAudit as runLedgerAuditEngine,
+    promotionSanityCheck as promotionSanityCheckEngine,
+    type ReplicaConsistency
+} from './engine/audit.js';
+
 
 // Load synonym map for FTS5 search keyword expansion
 const __filename_se = fileURLToPath(import.meta.url);
@@ -5494,41 +5505,7 @@ export function getDirectoryInfo(): any {
 
 // ===================== AUDIT EXPORT =====================
 export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: string } {
-    const members = getAllMembers();
-    const projects = getProjects();
-    const commonsBalance = getCommonsBalance();
-    
-    // ⚡ Bolt: Build a Map for O(1) lookups instead of using .find() in a loop, avoiding O(N^2) complexity.
-    const membersByPubKey = new Map(members.map(m => [m.publicKey, m]));
-
-    let balancesCsv = 'Account,Callsign,Balance_Type,Balance\n';
-    balancesCsv += `commons,Community Pool,System,${commonsBalance}\n`;
-    
-    for (const m of members) {
-        const bal = getBalance(m.publicKey).balance;
-        balancesCsv += `${m.publicKey},${m.callsign},Member,${bal}\n`;
-    }
-    
-    for (const p of projects) {
-        if (p.status === 'funded') {
-            balancesCsv += `project_${p.id},Project: ${p.title.replace(/,/g, '')},Project_Funded,${p.requestedAmount}\n`;
-        }
-    }
-    
-    const pendingTxs = db.prepare("SELECT * FROM marketplace_transactions WHERE status='pending'").all() as any[];
-    for (const tx of pendingTxs) {
-        const buyer = membersByPubKey.get(tx.buyer_pubkey);
-        balancesCsv += `escrow_${tx.id},Escrow (Payer: ${buyer?.callsign || 'Unknown'}),Pending_Trade,${tx.credits}\n`;
-    }
-    
-    let transactionsCsv = 'Timestamp,Transaction_ID,From_Account,To_Account,Amount,Memo\n';
-    const txHistory = db.prepare("SELECT * FROM transactions ORDER BY timestamp ASC").all() as any[];
-    for (const tx of txHistory) {
-         const memoSafe = (tx.memo || '').replace(/,/g, ';').replace(/\n/g, ' ').replace(/\r/g, '');
-         transactionsCsv += `${tx.timestamp},${tx.id},${tx.from_pubkey},${tx.to_pubkey},${tx.amount},${memoSafe}\n`;
-    }
-    
-    return { balancesCsv, transactionsCsv };
+    return exportLedgerAuditEngine();
 }
 
 // ===================== COMMUNITY COMMONS =====================
@@ -5773,8 +5750,7 @@ export function getCommonsBalance(): number {
  * Called periodically (every 5 min) and after significant balance events.
  */
 export function persistCommonsBalance(): void {
-    const rounded = Math.round(COMMONS_BALANCE * 100) / 100;
-    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(rounded);
+    persistCommonsBalanceEngine();
 }
 
 /**
@@ -5784,21 +5760,7 @@ export function persistCommonsBalance(): void {
  * invisible to audits. Also syncs the decayed balances/epochs back to the accounts table.
  */
 export function persistDecayEvents(): void {
-    const events = ledger.drainDecayEvents();
-    if (events.length === 0) return;
-    // Deterministic id (account + epoch range): if two mesh nodes lazily apply the
-    // same logical decay, both generate the same row id and INSERT OR IGNORE dedupes
-    // it during replication instead of double-counting the decay in history.
-    const insertTxn = db.prepare(`INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', ?, 0, ?, ?)`);
-    const updateAcc = db.prepare(`UPDATE accounts SET balance=?, last_demurrage_epoch=?, last_updated_at=? WHERE public_key=?`);
-    db.transaction(() => {
-        for (const ev of events) {
-            const id = `demurrage_${ev.accountId.slice(0, 16)}_${ev.toEpoch - ev.epochsPassed}_${ev.toEpoch}`;
-            insertTxn.run(id, ev.accountId, Math.round(ev.amount * 10000) / 10000, `Circulation fee (demurrage, ${ev.epochsPassed}d)`, ev.timestamp);
-            const acc = ledger.getAccount(ev.accountId);
-            updateAcc.run(acc.balance, acc.lastDemurrageEpoch, new Date().toISOString(), ev.accountId);
-        }
-    })();
+    persistDecayEventsEngine(ledger);
 }
 
 /**
@@ -5810,135 +5772,14 @@ export function persistDecayEvents(): void {
  * escrow wallets holding funds for settled transactions (always a bug).
  */
 export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
-    persistDecayEvents();
-    persistCommonsBalance();
-
-    const sumBalances = (db.prepare(`SELECT COALESCE(SUM(balance), 0) as s FROM accounts`).get() as any).s as number;
-
-    const baselineRow = db.prepare(`SELECT value FROM node_config WHERE key='ledger_audit_baseline'`).get() as any;
-    let baseline = baselineRow ? Number(baselineRow.value) : NaN;
-    if (!Number.isFinite(baseline)) {
-        baseline = sumBalances;
-        db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?)`).run(String(sumBalances));
-        console.log(`📐 [LedgerAudit] Baseline established: sum(balances) = ${sumBalances.toFixed(4)}`);
-    }
-    const drift = sumBalances - baseline;
-
-    const strandedEscrows = (db.prepare(`
-        SELECT COUNT(*) as c FROM accounts
-        WHERE public_key LIKE 'escrow_%' AND ABS(balance) > 0.01
-          AND SUBSTR(public_key, 8) NOT IN (SELECT id FROM marketplace_transactions WHERE status IN ('pending', 'requested'))
-    `).get() as any).c as number;
-
-    const ok = Math.abs(drift) < 0.01 && strandedEscrows === 0;
-    if (!ok) {
-        console.warn(`⚠️ [LedgerAudit] FAILED — sum=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)} from baseline, stranded escrows=${strandedEscrows}`);
-    } else {
-        console.log(`✅ [LedgerAudit] OK — sum(balances)=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)}`);
-    }
-    return { sumBalances, baseline, drift, strandedEscrows, ok };
+    return runLedgerAuditEngine(ledger);
 }
 
 export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
-    console.log('📊 [MetricsAudit] Running Wash Trading & Sybil metrics audit...');
-
-    // 1. Total negative balance
-    const totalNegativeRow = db.prepare(`SELECT ABS(SUM(balance)) as s FROM accounts WHERE balance < 0`).get() as any;
-    const totalNegative = totalNegativeRow ? (totalNegativeRow.s || 0) : 0;
-
-    // 2. Count of accounts near floor & Delinquent accounts
-    let accountsNearFloor = 0;
-    let delinquentCount = 0;
-    try {
-        const activeMembers = db.prepare("SELECT public_key FROM members WHERE status = 'active'").all() as { public_key: string }[];
-        for (const member of activeMembers) {
-            const { floor } = getMemberTrustProfile(member.public_key);
-            if (floor < 0) {
-                const bal = ledger.getAccount(member.public_key).balance;
-                if (bal < 0) {
-                    // Near floor: balance within 10 beans of floor
-                    if (bal - floor <= 10) {
-                        accountsNearFloor++;
-                    }
-                    // Delinquent: balance <= floor * 0.8 AND no transaction in 7 days
-                    if (bal <= floor * 0.8) {
-                        const txRow = db.prepare(`
-                            SELECT 1 FROM transactions 
-                            WHERE (from_pubkey = ? OR to_pubkey = ?) 
-                              AND timestamp > datetime('now', '-7 days')
-                            LIMIT 1
-                        `).get(member.public_key, member.public_key);
-                        if (!txRow) {
-                            delinquentCount++;
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error('[MetricsAudit] Failed to compute near-floor/delinquent stats:', e);
-    }
-
-    // 3. Cohort Velocity Report
-    let cohortAnomalies = 0;
-    try {
-        const cohorts = db.prepare(`
-            SELECT strftime('%Y-%W', joined_at) as cohort_week, GROUP_CONCAT(public_key) as keys
-            FROM members
-            WHERE joined_at IS NOT NULL AND status = 'active' AND invited_by IS NOT 'genesis'
-            GROUP BY cohort_week
-        `).all() as { cohort_week: string; keys: string }[];
-
-        for (const c of cohorts) {
-            const keys = c.keys.split(',');
-            if (keys.length === 0) continue;
-
-            let fastGrowingCount = 0;
-            for (const key of keys) {
-                const { floor } = getMemberTrustProfile(key);
-                if (floor <= -600) {
-                    const memberRow = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(key) as any;
-                    if (memberRow?.joined_at) {
-                        const joined = new Date(memberRow.joined_at);
-                        const ageDays = (Date.now() - joined.getTime()) / (1000 * 60 * 60 * 24);
-                        if (ageDays < 14) {
-                            fastGrowingCount++;
-                        }
-                    }
-                }
-            }
-
-            const ratio = fastGrowingCount / keys.length;
-            if (keys.length >= 2 && ratio >= 0.5) {
-                cohortAnomalies++;
-            }
-        }
-    } catch (e) {
-        console.error('[MetricsAudit] Failed to compute cohort velocity anomalies:', e);
-    }
-
-    // 4. Persist to database system_metrics
-    try {
-        db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('total_negative_balance', totalNegative);
-        db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('accounts_near_floor', accountsNearFloor);
-        db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('delinquent_accounts', delinquentCount);
-        db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('cohort_anomalies', cohortAnomalies);
-        console.log(`✅ [MetricsAudit] Metrics saved: negative_bal=${totalNegative.toFixed(2)}, near_floor=${accountsNearFloor}, delinquent=${delinquentCount}, cohort_anomalies=${cohortAnomalies}`);
-    } catch (e) {
-        console.error('[MetricsAudit] Failed to persist system metrics:', e);
-    }
-
-    return { totalNegative, accountsNearFloor, delinquentCount, cohortAnomalies };
+    return runWashSybilMetricsEngine();
 }
 
-export interface ReplicaConsistency {
-    checkedAt: string;
-    snapshotGeneratedAt: string | null;
-    tables: { name: string; primary: number; backup: number; match: boolean }[];
-    sumBalances: { primary: number; backup: number; match: boolean };
-    commons: { primary: number; backup: number; match: boolean } | null;
-    ok: boolean;
-}
+export type { ReplicaConsistency };
 
 /**
  * Replica-fidelity check (backup side). After a backup imports a full snapshot,
@@ -5953,41 +5794,7 @@ export interface ReplicaConsistency {
  * divergence that a self-consistent-but-incomplete replica would otherwise hide.
  */
 export function getReplicaConsistency(payload: SyncPayload): ReplicaConsistency {
-    const count = (t: string) => Number((db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get() as any).c) || 0;
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-
-    // exportSyncState dumps each of these tables with an unfiltered SELECT *, so the
-    // primary's array length equals a raw COUNT(*) here once the import has applied.
-    const tableDefs: [string, number][] = [
-        ['members', payload.members?.length ?? 0],
-        ['accounts', payload.accounts?.length ?? 0],
-        ['transactions', payload.transactions?.length ?? 0],
-        ['posts', payload.posts?.length ?? 0],
-        ['marketplace_transactions', payload.marketplaceTransactions?.length ?? 0],
-        ['messages', payload.messages?.length ?? 0],
-    ];
-    const tables = tableDefs.map(([name, primary]) => {
-        const backup = count(name);
-        return { name, primary, backup, match: primary === backup };
-    });
-
-    const primarySum = round2((payload.accounts ?? []).reduce((s, a) => s + (Number(a.balance) || 0), 0));
-    const backupSum = round2(Number((db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts`).get() as any).s) || 0);
-    const sumBalances = { primary: primarySum, backup: backupSum, match: Math.abs(primarySum - backupSum) < 0.01 };
-
-    let commons: ReplicaConsistency['commons'] = null;
-    if (typeof payload.commonsBalance === 'number') {
-        const primaryC = round2(payload.commonsBalance);
-        const backupC = round2(COMMONS_BALANCE);
-        commons = { primary: primaryC, backup: backupC, match: Math.abs(primaryC - backupC) < 0.01 };
-    }
-
-    const ok = tables.every(t => t.match) && sumBalances.match && (commons ? commons.match : true);
-    return {
-        checkedAt: new Date().toISOString(),
-        snapshotGeneratedAt: payload.generatedAt ?? null,
-        tables, sumBalances, commons, ok,
-    };
+    return getReplicaConsistencyEngine(payload);
 }
 
 /**
@@ -6003,19 +5810,7 @@ export function getReplicaConsistency(payload: SyncPayload): ReplicaConsistency 
  * when PROMOTED_FROM_BACKUP=true (see index.ts).
  */
 export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
-    console.log('\n════════════════════════════════════════════════════════');
-    console.log('🔁 FAILOVER PROMOTION — running ledger conservation sanity check');
-    console.log('════════════════════════════════════════════════════════');
-    const result = runLedgerAudit();
-    if (result.ok) {
-        console.log('✅ PROMOTION OK — replicated ledger is conservation-consistent. Safe to take live writes.');
-    } else {
-        console.error('🛑 PROMOTION WARNING — ledger conservation check FAILED on the replica:');
-        console.error(`   sum(balances)=${result.sumBalances.toFixed(4)} drift=${result.drift.toFixed(4)} stranded escrows=${result.strandedEscrows}`);
-        console.error('   Investigate before this node accepts transactions — the last snapshot may be incomplete/corrupt.');
-    }
-    console.log('════════════════════════════════════════════════════════\n');
-    return result;
+    return promotionSanityCheckEngine(ledger);
 }
 
 // ===================== REPLICATION ACCESS LOG =====================

@@ -5,35 +5,24 @@
 
 ---
 
-## 🏗️ Architecture Overview (Key Files)
+## 🏗️ Architecture Overview (Key Directories & Files)
 
-| File | Purpose |
+| Directory / File | Purpose |
 |------|---------|
 | `src/index.ts` | Main boot orchestrator — 5-stage startup |
-| `src/tls.ts` | **TLS certificate management** — LE via acme-client + self-signed fallback |
-| `src/state-engine.ts` | In-memory state: members, posts, profiles, conversations, messages, invites, ledger, ratings, reports, sybil filters. Handles secure async cryptographic Ed25519 verification for P2P sync payloads on import. |
-| `src/https-server.ts` | 67+ REST API endpoints: community, marketplace, friends, ratings, reports, admin, version/update, push notifications, escrow lifecycle, database backup, social recovery, quadratic voting. Enforces a Deny-by-Default security posture with `ctx.state.actor` and body spoof-checking. |
-| `src/http-server.ts` | HTTP endpoint (port 80) for Let's Encrypt validation, LAN QR Poster, and HTTPS redirect |
+| `src/https-server.ts` | Thin HTTP/HTTPS Fastify server shell with plugin & route registration |
+| `src/state-engine.ts` | Server engine delegate facade (delegates stateful domain calls to `src/engine/` and `@beanpool/engine`) |
+| `src/routes/` | **Decoupled API Route Handlers**: `admin.ts`, `backup.ts`, `commons.ts`, `community.ts`, `marketplace.ts`, `messaging.ts`, `settings.ts` |
+| `src/engine/` | **Stateful Domain Sub-Engines**: `members.ts`, `posts.ts`, `escrow.ts`, `messaging.ts`, `social.ts`, `sync.ts`, `audit.ts` |
+| `src/services/` | **Background Infrastructure Services**: `tls.ts`, `backup-puller.ts`, `snapshot-scheduler.ts`, `directory-publisher.ts` |
+| `src/config/` | **Node Configuration & Protection**: `local-config.ts`, `gateway.ts` |
+| `src/db/` | **Database Layer**: `db.ts` (SQLite setup & migrations), `schema.sql` (schema DDL), `synonyms.json` (FTS5 search maps) |
+| `../../packages/beanpool-engine` | **Shared Engine Package**: Pure SQLite read queries, credit floor math, trust curves, escrow rules, and state export/import logic |
 | `src/p2p.ts` | Core libp2p node instantiation, bootstrap logic, and gossipsub |
-| `src/connector-manager.ts` | Federated connectors with trust levels (mirror/peer — *experimental*, blocked) |
-| `src/federation-api.ts` | Federation CORS middleware + `/api/node/info` |
+| `src/connector-manager.ts` | Federated connectors with trust levels (mirror/peer, blocked) |
 | `src/federation-protocol.ts` | Secure Libp2p authenticated Noise streams for cross-node mesh routing |
-| `src/handshake.ts` | Mutual trust verification + latency via yamux streams |
-| `src/sync-protocol.ts` | Lazy state sync — Merkle hash + delta exchange |
-| `src/test-sync-signature.ts` | **Sync signature integration test** — Standalone suite verifying cryptographic P2P sync payload signing and verification |
-| `src/local-config.ts` | Admin auth (scrypt) + node config |
-| `src/dns-shim.ts` | Captive portal DNS responder to resolve `beanpool.local` locally |
-| `src/genesis.ts` | Initializes node configuration and creates the immutable genesis block |
-| `src/seed-organic.ts` | Test script to seed the database with mock organic marketplace posts |
-| `src/directory-publisher.ts` | Push-model publisher — syncs node metadata to the global beanpool.org Supabase directory |
-| `src/db/db.ts` | SQLite database layer — `better-sqlite3` with WAL mode, self-healing schema migrations |
-| `src/db/schema.sql` | Database schema — members, posts, transactions, conversations, messages, ratings, reports |
-| `src/db/synonyms.json` | FTS5 synonym mapping for marketplace full-text search |
-| `static/settings.html` | Admin settings page — Contextual tab layout (Identity, Network, Invites, Moderation, Audit, Commons, Inbox & Comms) with Database Backup |
-| `static/settings.js` | Admin settings JavaScript — login, tabs, update checks, moderation centre, health dashboard, branch stats (Hardened against Stored XSS). |
-| `../../.jules/sentinel.md` | Security audit journal maintained by the Sentinel process |
-| `../../.jules/security_backlog.md` | Security task backlog |
-| `../../scripts/verify-auth-boundary.mjs` | **Auth boundary verifier** — standalone script to test 38+ routes (114 checks) against the deny-by-default requireSignature middleware |
+| `static/settings.html` | Admin settings page — Contextual tab layout (Identity, Network, Invites, Moderation, Audit, Commons) |
+| `static/settings.js` | Admin settings JavaScript — login, tabs, update checks, moderation centre, health dashboard |
 
 ---
 

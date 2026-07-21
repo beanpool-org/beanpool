@@ -75,6 +75,9 @@
                 loadGatewayConfig();
                 loadNodeConfig();
             }
+            if (tabName === 'system') {
+                loadVersionInfo();
+            }
             // Load data for admin tabs
             if (tabName === 'moderation' || tabName === 'members') loadAdminData();
             if (tabName === 'members') loadThresholdGroup(AUDIT_THRESHOLD_KEYS);

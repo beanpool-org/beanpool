@@ -52,7 +52,7 @@
                 btn.classList.toggle('active', btn.dataset.tab === tabName);
             });
             // Show/hide panels
-            document.querySelectorAll('#view-settings > .glass[data-tab]').forEach(panel => {
+            document.querySelectorAll('#view-settings .glass[data-tab]').forEach(panel => {
                 panel.style.display = panel.dataset.tab === tabName ? '' : 'none';
             });
             // Persist

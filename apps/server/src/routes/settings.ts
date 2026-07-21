@@ -80,8 +80,8 @@ router.get('/.well-known/assetlinks.json', async (ctx) => {
 // ===================== SETTINGS PAGE =====================
 
 router.get('/settings', async (ctx) => {
-    const publicPath = path.join(__dirname, '../public/settings.html');
-    const staticPath = path.join(__dirname, '../static/settings.html');
+    const publicPath = path.resolve('public/settings.html');
+    const staticPath = path.resolve('static/settings.html');
     const resolvedPath = fs.existsSync(publicPath) ? publicPath : staticPath;
 
     if (fs.existsSync(resolvedPath)) {
@@ -95,8 +95,8 @@ router.get('/settings', async (ctx) => {
 });
 
 router.get('/settings.js', async (ctx) => {
-    const publicPath = path.join(__dirname, '../public/settings.js');
-    const staticPath = path.join(__dirname, '../static/settings.js');
+    const publicPath = path.resolve('public/settings.js');
+    const staticPath = path.resolve('static/settings.js');
     const resolvedPath = fs.existsSync(publicPath) ? publicPath : staticPath;
 
     if (fs.existsSync(resolvedPath)) {

@@ -46,16 +46,7 @@
         }
 
         // ======================== TAB SWITCHING ========================
-        const PROTECTED_TABS = ['system'];
-
         function switchTab(tabName) {
-            // Auto-redirect unauthenticated clicks on protected tabs
-            if (PROTECTED_TABS.includes(tabName) && !authToken) {
-                showView('login');
-                showStatus('login-status', `🔒 Admin password required to access the ${tabName.toUpperCase()} panel.`, 'error');
-                return;
-            }
-
             // Update buttons
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.tab === tabName);

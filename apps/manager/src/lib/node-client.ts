@@ -32,12 +32,22 @@ export interface GatewayConfig {
     };
 }
 
+export function normalizeNodeUrl(rawUrl: string): string {
+    const trimmed = (rawUrl || '').trim();
+    if (!trimmed) return 'https://localhost:8443';
+    if (/^https?:\/\//i.test(trimmed)) {
+        return trimmed.replace(/\/+$/, '');
+    }
+    return `https://${trimmed.replace(/\/+$/, '')}`;
+}
+
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string): Promise<DiagnosticsResponse> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const url = new URL(`${nodeUrl.replace(/\/+$/, '')}/api/local/admin/diagnostics`);
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const url = new URL(`${cleanUrl}/api/local/admin/diagnostics`);
     if (adminPassword) {
         url.searchParams.set('password', adminPassword);
     }
@@ -56,7 +66,8 @@ export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const url = new URL(`${nodeUrl.replace(/\/+$/, '')}/api/local/admin/gateway`);
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const url = new URL(`${cleanUrl}/api/local/admin/gateway`);
     if (adminPassword) {
         url.searchParams.set('password', adminPassword);
     }
@@ -79,7 +90,8 @@ export async function updateGatewayConfig(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const res = await fetch(`${nodeUrl.replace(/\/+$/, '')}/api/local/admin/gateway`, {
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/gateway`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ ...updates, password: adminPassword }),

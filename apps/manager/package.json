@@ -1,0 +1,28 @@
+{
+  "name": "@beanpool/manager",
+  "version": "1.1.35",
+  "description": "BeanPool Fleet Manager — Multi-Node Control Plane",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@beanpool/core": "workspace:*",
+    "@beanpool/engine": "workspace:*",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.0",
+    "@types/react-dom": "19.1.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.6.3",
+    "vite": "^6.3.0"
+  }
+}

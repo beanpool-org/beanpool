@@ -4,7 +4,49 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity } from './identity';
-const BASE = '';  // Same-origin — PWA is served by the node
+
+export function getNodeApiUrl(): string {
+    const custom = localStorage.getItem('bp_node_url') || ((import.meta as any).env?.VITE_BEANPOOL_NODE_URL as string);
+    if (custom) return custom.trim().replace(/\/+$/, '');
+    return ''; // Same-origin fallback
+}
+
+export function setNodeApiUrl(url: string | null): void {
+    if (url && url.trim()) {
+        const sanitized = url.trim().replace(/\/+$/, '');
+        localStorage.setItem('bp_node_url', sanitized);
+    } else {
+        localStorage.removeItem('bp_node_url');
+    }
+}
+
+export function getNodeWsUrl(path: string = '/ws'): string {
+    const baseUrl = getNodeApiUrl();
+    if (baseUrl) {
+        const wsProto = baseUrl.startsWith('https:') ? 'wss:' : 'ws:';
+        const host = baseUrl.replace(/^https?:\/\//, '');
+        return `${wsProto}//${host}${path}`;
+    }
+    const loc = window.location;
+    const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${loc.host}${path}`;
+}
+
+export async function testNodeConnection(url: string): Promise<{ ok: boolean; callsign?: string; latencyMs?: number; error?: string }> {
+    const start = Date.now();
+    try {
+        const sanitized = url.trim().replace(/\/+$/, '');
+        const res = await fetch(`${sanitized}/api/community/info`, { cache: 'no-store' });
+        const latencyMs = Date.now() - start;
+        if (!res.ok) {
+            return { ok: false, error: `HTTP ${res.status}: ${res.statusText}` };
+        }
+        const data = await res.json();
+        return { ok: true, callsign: data.communityName || data.callsign || 'BeanPool Node', latencyMs };
+    } catch (e: any) {
+        return { ok: false, error: e.message || 'Connection failed' };
+    }
+}
 
 // Helper to convert hex string to Uint8Array
 function hexToBytes(hex: string): Uint8Array {
@@ -104,7 +146,8 @@ export async function request<T>(method: string, path: string, body?: any): Prom
         }
     }
 
-    const res = await fetch(`${BASE}${path}`, opts);
+    const baseUrl = getNodeApiUrl();
+    const res = await fetch(`${baseUrl}${path}`, opts);
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(err.error || `Request failed: ${res.status}`);

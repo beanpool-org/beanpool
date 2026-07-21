@@ -22,6 +22,12 @@ export interface GatewayConfig {
         invites: boolean;
         servePwa: boolean;
     };
+
+    /** Rate limiting — per-IP request throttling. */
+    rateLimiting: {
+        enabled: boolean;
+        maxRequestsPerMinute: number;
+    };
 }
 
 export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
@@ -33,5 +39,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
         federation: true,
         invites: true,
         servePwa: true,
+    },
+    rateLimiting: {
+        enabled: false,
+        maxRequestsPerMinute: 120,
     },
 };

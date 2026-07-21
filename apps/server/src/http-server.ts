@@ -11,7 +11,7 @@
 
 import Koa from 'koa';
 import Router from '@koa/router';
-import { getCaCertPem, isUsingLetsEncrypt } from './tls.js';
+import { getCaCertPem, isUsingLetsEncrypt } from './services/tls.js';
 import QRCode from 'qrcode';
 
 export async function startHttpServer(port: number): Promise<void> {

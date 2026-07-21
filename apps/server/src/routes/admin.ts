@@ -26,7 +26,7 @@ import {
 } from '../state-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
-} from '../local-config.js';
+} from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';

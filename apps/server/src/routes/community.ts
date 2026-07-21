@@ -30,7 +30,7 @@ import {
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword,
     validatePasswordStrength,
-} from '../local-config.js';
+} from '../config/local-config.js';
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,

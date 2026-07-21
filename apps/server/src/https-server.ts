@@ -22,14 +22,14 @@ import crypto from 'node:crypto';
 import Koa from 'koa';
 import Router from '@koa/router';
 import serve from 'koa-static';
-import { getCaCertPem, getServerCertPem, getServerKeyPem, isUsingLetsEncrypt } from './tls.js';
+import { getCaCertPem, getServerCertPem, getServerKeyPem, isUsingLetsEncrypt } from './services/tls.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword, verifyPasswordAsync,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
     updateBackupCadence,
     validatePasswordStrength,
     generateReplicationToken, setReplicationToken, clearReplicationToken, hasReplicationToken, verifyReplicationToken,
-} from './local-config.js';
+} from './config/local-config.js';
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
@@ -77,12 +77,12 @@ import {
     getGuardiansOf, createRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery
 } from './state-engine.js';
 import { getCrowdfundProjects, getCrowdfundProject, createCrowdfundProject, updateCrowdfundProject, pledgeToProject, deleteCrowdfundProject, db, getDbDataVersion } from './db/db.js';
-import { initDirectoryPublisher, pushDirectoryNow } from './directory-publisher.js';
-import { getBackupStatus, requestResync } from './backup-puller.js';
+import { initDirectoryPublisher, pushDirectoryNow } from './services/directory-publisher.js';
+import { getBackupStatus, requestResync } from './services/backup-puller.js';
 import {
     writeDbSnapshot, createSnapshot, listSnapshots, resolveSnapshotPath,
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
-} from './snapshot-scheduler.js';
+} from './services/snapshot-scheduler.js';
 
 const PUBLIC_DIR = path.resolve('public');
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';

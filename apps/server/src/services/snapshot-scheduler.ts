@@ -22,8 +22,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { db } from './db/db.js';
-import { logger } from './logger.js';
+import { db } from '../db/db.js';
+import { logger } from '../logger.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 export const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');

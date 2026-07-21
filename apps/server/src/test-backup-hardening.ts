@@ -17,7 +17,7 @@ import {
 } from './state-engine.js';
 import { startP2P } from './p2p.js';
 import { addConnector, removeConnector } from './connector-manager.js';
-import { isAllowedPrimaryUrl } from './backup-puller.js';
+import { isAllowedPrimaryUrl } from './services/backup-puller.js';
 import { db } from './db/db.js';
 
 let testsRun = 0, testsPassed = 0;

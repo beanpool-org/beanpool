@@ -14,8 +14,8 @@ import {
 import {
     getLocalConfig, saveLocalConfig, verifyPassword,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
-} from '../local-config.js';
-import { initDirectoryPublisher, pushDirectoryNow } from '../directory-publisher.js';
+} from '../config/local-config.js';
+import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
 import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 

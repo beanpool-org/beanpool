@@ -1,6 +1,6 @@
-import { getDirectoryInfo, getNodeConfig, updateNodeConfig, getNodeRole } from './state-engine.js';
-import { getLocalConfig } from './local-config.js';
-import { getP2PNode, getPrivateKey } from './p2p.js';
+import { getDirectoryInfo, getNodeConfig, updateNodeConfig, getNodeRole } from '../state-engine.js';
+import { getLocalConfig } from '../config/local-config.js';
+import { getP2PNode, getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
 
 // The URL of the directory registry Edge Function

@@ -4,7 +4,7 @@ import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName } fr
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
-import { getThresholds, getLocalConfig } from './local-config.js';
+import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

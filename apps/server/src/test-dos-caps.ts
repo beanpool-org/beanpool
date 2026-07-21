@@ -16,7 +16,7 @@ process.env.MAX_IMPORT_ROWS_PER_CATEGORY = '100'; // small cap so we don't build
 process.env.NODE_ROLE = 'backup';                 // importRemoteState only runs on a backup
 
 import crypto from 'node:crypto';
-import { initTls } from './tls.js';
+import { initTls } from './services/tls.js';
 import { initStateEngine, exportSyncState, importRemoteState, setNodeRole, signSyncPayload, type SyncPayload } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';

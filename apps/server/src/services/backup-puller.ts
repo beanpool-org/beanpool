@@ -38,9 +38,9 @@
  * CA pem (Node honors it for fetch); public Let's Encrypt nodes need nothing.
  */
 
-import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedTables, getStateHash, getSyncCursor, setSyncCursor, type ImportResult, type SyncPayload, type ReplicaConsistency } from './state-engine.js';
-import { logger } from './logger.js';
-import { getLocalConfig } from './local-config.js';
+import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedTables, getStateHash, getSyncCursor, setSyncCursor, type ImportResult, type SyncPayload, type ReplicaConsistency } from '../state-engine.js';
+import { logger } from '../logger.js';
+import { getLocalConfig } from '../config/local-config.js';
 
 const SNAPSHOT_PATH = '/api/local/admin/sync-snapshot';
 const DELTA_PATH = '/api/local/admin/sync-delta';

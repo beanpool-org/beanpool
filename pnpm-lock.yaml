@@ -281,6 +281,9 @@ importers:
       '@beanpool/core':
         specifier: workspace:*
         version: link:../../packages/beanpool-core
+      '@beanpool/engine':
+        specifier: workspace:*
+        version: link:../../packages/beanpool-engine
       '@koa/router':
         specifier: ^13.1.0
         version: 13.1.1
@@ -399,6 +402,25 @@ importers:
         version: 20.19.37
       typescript:
         specifier: ^5.4.5
+        version: 5.9.3
+
+  packages/beanpool-engine:
+    dependencies:
+      '@beanpool/core':
+        specifier: workspace:*
+        version: link:../beanpool-core
+      better-sqlite3:
+        specifier: '*'
+        version: 12.8.0
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/node':
+        specifier: ^22.9.0
+        version: 22.19.15
+      typescript:
+        specifier: ^5.6.3
         version: 5.9.3
 
 packages:

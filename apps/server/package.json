@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",
+    "@beanpool/engine": "workspace:*",
     "@koa/router": "^13.1.0",
     "@libp2p/crypto": "^5.1.13",
     "@libp2p/identify": "^4.0.10",

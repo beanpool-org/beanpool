@@ -37,4 +37,6 @@ export interface RouteDeps {
     calculateAnalytics: () => any;
     /** Whether ENFORCE_READ_AUTH is enabled */
     enforceReadAuth: boolean;
+    /** Real-time WebSocket broadcast helper */
+    broadcast?: (event: any, recipients?: string[]) => void;
 }

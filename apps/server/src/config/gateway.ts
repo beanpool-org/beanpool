@@ -42,6 +42,6 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     },
     rateLimiting: {
         enabled: false,
-        maxRequestsPerMinute: 120,
+        maxRequestsPerMinute: 600,
     },
 };

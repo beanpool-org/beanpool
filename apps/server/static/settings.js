@@ -3537,7 +3537,7 @@
                 if (originsInput) originsInput.value = (config.corsAllowedOrigins || []).join(', ');
                 if (adminIpsInput) adminIpsInput.value = (config.adminIpAllowlist || []).join(', ');
                 if (rateEnabledSelect) rateEnabledSelect.value = config.rateLimiting?.enabled ? 'true' : 'false';
-                if (rateMaxInput) rateMaxInput.value = config.rateLimiting?.maxRequestsPerMinute || 120;
+                if (rateMaxInput) rateMaxInput.value = config.rateLimiting?.maxRequestsPerMinute || 600;
                 
                 const features = config.features || {};
                 const checkMarketplace = document.getElementById('gw-feat-marketplace');

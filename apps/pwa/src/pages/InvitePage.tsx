@@ -237,7 +237,7 @@ export function InvitePage({ identity }: Props) {
                         🎟️ Invite Someone
                     </h2>
                     <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-6 leading-relaxed">
-                        Each invite code is single-use and valid for 7 days. Generate a new cryptographic voucher for each person you invite.
+                        Each invite code is single-use and valid for 30 days. Generate a new cryptographic voucher for each person you invite.
                     </p>
 
                     <input

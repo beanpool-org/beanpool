@@ -451,8 +451,14 @@ async function _doInitDB() {
  * Simple Drop util if the User needs to wipe memory
  */
 export async function clearDB() {
+    try {
+        const { resetSyncFingerprints } = require('../services/pillar-sync');
+        resetSyncFingerprints();
+    } catch (e) {
+        console.warn('[DB] Failed to reset sync fingerprints during clearDB', e);
+    }
     const database = await getDb();
-    await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects;');
+    await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings;');
     
     // Reset flags to force schema recreation
     dbInitialized = false;
@@ -4017,7 +4023,9 @@ export async function getDatabaseStats() {
     } catch (e) {}
 
     try {
-        const postsRow = await database.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM posts WHERE status IN ('active', 'pending')");
+        const postsRow = await database.getFirstAsync<{ count: number }>(
+            "SELECT COUNT(*) as count FROM posts WHERE status IN ('active', 'pending') AND (paused IS NULL OR paused = 0 OR paused = 'false')"
+        );
         postsCount = postsRow?.count || 0;
     } catch (e) {}
 

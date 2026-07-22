@@ -1,31 +1,70 @@
 import React, { useState, useEffect } from 'react';
-import { loadNodeProfiles, saveNodeProfiles, addNodeProfile, removeNodeProfile, loadActiveProfileId, saveActiveProfileId, updateNodeProfile, type NodeProfile } from './lib/profiles';
-import { fetchDiagnostics, fetchGatewayConfig, updateGatewayConfig, normalizeNodeUrl, type DiagnosticsResponse, type GatewayConfig } from './lib/node-client';
-import { computeSampleTrustSummary } from './lib/engine-helpers';
+import {
+    loadNodeProfiles,
+    addNodeProfile,
+    removeNodeProfile,
+    loadActiveProfileId,
+    saveActiveProfileId,
+    updateNodeProfile,
+    type NodeProfile,
+} from './lib/profiles';
+import {
+    fetchDiagnostics,
+    fetchGatewayConfig,
+    updateGatewayConfig,
+    fetchNodeData,
+    fetchNodeLogs,
+    freezeNodeUser,
+    updateNodeUserTier,
+    type DiagnosticsResponse,
+    type GatewayConfig,
+} from './lib/node-client';
+
+import { FleetSidebar, type TabId, type NodeHealthStatus, type AlertCounts } from './components/layout/FleetSidebar';
+import { AddNodeModal } from './components/nodes/AddNodeModal';
+import { EditNodeModal } from './components/nodes/EditNodeModal';
+
+import { TelemetryModule, type NodeDiagnosticState } from './components/modules/TelemetryModule';
+import { GatewayModule } from './components/modules/GatewayModule';
+import { MembersModule } from './components/modules/MembersModule';
+import { TopologyModule } from './components/modules/TopologyModule';
+import { InvitesModule } from './components/modules/InvitesModule';
+import { LogsModule } from './components/modules/LogsModule';
+import { AiServicesModule } from './components/modules/AiServicesModule';
 
 export function App() {
     const [profiles, setProfiles] = useState<NodeProfile[]>(() => loadNodeProfiles());
     const [activeProfileId, setActiveProfileId] = useState<string>(() => loadActiveProfileId());
-    const [activeTab, setActiveTab] = useState<'overview' | 'gateway' | 'members' | 'topology' | 'logs'>(() => {
-        try { return (localStorage.getItem('bp_fleet_active_tab') as any) || 'overview'; } catch { return 'overview'; }
+    const [activeTab, setActiveTab] = useState<TabId>(() => {
+        try {
+            return (localStorage.getItem('bp_fleet_active_tab') as TabId) || 'overview';
+        } catch {
+            return 'overview';
+        }
     });
 
-    const activeNode = profiles.find(p => p.id === activeProfileId) || profiles[0];
+    const activeNode = profiles.find((p) => p.id === activeProfileId) || profiles[0];
 
     const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
     const [diagLoading, setDiagLoading] = useState(false);
     const [diagError, setDiagError] = useState<string | null>(null);
 
+    const [fleetDiags, setFleetDiags] = useState<Record<string, NodeDiagnosticState>>({});
+    const [fleetNodeData, setFleetNodeData] = useState<Record<string, any>>({});
+    const [fleetGateways, setFleetGateways] = useState<Record<string, GatewayConfig>>({});
+
     const [gateway, setGateway] = useState<GatewayConfig | null>(null);
     const [gatewayLoading, setGatewayLoading] = useState(false);
     const [gatewaySuccess, setGatewaySuccess] = useState<string | null>(null);
 
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [newNodeName, setNewNodeName] = useState('');
-    const [newNodeUrl, setNewNodeUrl] = useState('');
-    const [newNodePassword, setNewNodePassword] = useState('');
+    const [nodeData, setNodeData] = useState<any | null>(null);
+    const [nodeDataLoading, setNodeDataLoading] = useState(false);
+    const [nodeLogs, setNodeLogs] = useState<any[]>([]);
 
-    const [adminPasswordInput, setAdminPasswordInput] = useState(activeNode?.adminPassword || '');
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [editingNode, setEditingNode] = useState<NodeProfile | null>(null);
+
+    const [nodeHealthMap, setNodeHealthMap] = useState<Record<string, NodeHealthStatus>>({});
 
     useEffect(() => {
         if (activeProfileId) {
@@ -34,62 +73,184 @@ export function App() {
     }, [activeProfileId]);
 
     useEffect(() => {
-        try { localStorage.setItem('bp_fleet_active_tab', activeTab); } catch {}
+        try {
+            localStorage.setItem('bp_fleet_active_tab', activeTab);
+        } catch {}
     }, [activeTab]);
 
-    useEffect(() => {
-        setAdminPasswordInput(activeNode?.adminPassword || '');
-    }, [activeProfileId, activeNode?.adminPassword]);
+    // Load fleet-wide diagnostics and health flags for all connected nodes
+    const refreshFleetDiagnostics = async () => {
+        profiles.forEach(async (p) => {
+            setFleetDiags((prev) => ({
+                ...prev,
+                [p.id]: { ...(prev[p.id] || { diag: null }), loading: true, error: null },
+            }));
+            try {
+                const data = await fetchDiagnostics(p.url, p.adminPassword);
+                setFleetDiags((prev) => ({
+                    ...prev,
+                    [p.id]: { diag: data, loading: false, error: null },
+                }));
 
-    const handlePasswordChange = (newPass: string) => {
-        setAdminPasswordInput(newPass);
-        if (activeNode) {
-            const updated = updateNodeProfile(activeNode.id, { adminPassword: newPass });
-            setProfiles(updated);
-        }
+                // Fetch node gateway config for security alerts
+                try {
+                    const gData = await fetchGatewayConfig(p.url, p.adminPassword);
+                    setFleetGateways((prev) => ({ ...prev, [p.id]: gData }));
+                    if (p.id === activeNode?.id && gData) {
+                        setGateway(gData);
+                    }
+                } catch {}
+
+                // Fetch node data to check for active abuse/security flags
+                try {
+                    const nData = await fetchNodeData(p.url, p.adminPassword);
+                    setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
+
+                    let savedDismissed = new Set<string>();
+                    try {
+                        const saved = localStorage.getItem('bp_dismissed_flags');
+                        if (saved) savedDismissed = new Set(JSON.parse(saved));
+                    } catch {}
+
+                    const flags = (nData?.health?.flags || []).filter(
+                        (f: any) => !savedDismissed.has(f.id || f.type || f.description)
+                    );
+                    const reports = (nData?.reports || []).filter(
+                        (r: any) => !savedDismissed.has(r.id || r.targetPubkey || r.reason)
+                    );
+
+                    const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
+                    const hasWarning = flags.some((f: any) => f.severity === 'warning');
+
+                    const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
+                    setNodeHealthMap((prev) => ({ ...prev, [p.id]: status }));
+                } catch {
+                    // Do not flip status to offline on rate limits
+                }
+
+                if (p.id === activeNode?.id) {
+                    setDiag(data);
+                    setDiagError(null);
+                }
+            } catch (e: any) {
+                const errMsg = e.message || 'Failed to connect';
+                if (!errMsg.includes('429')) {
+                    setFleetDiags((prev) => ({
+                        ...prev,
+                        [p.id]: { diag: null, loading: false, error: errMsg },
+                    }));
+                    setNodeHealthMap((prev) => ({ ...prev, [p.id]: 'offline' }));
+                    if (p.id === activeNode?.id) {
+                        setDiagError(errMsg);
+                    }
+                }
+            }
+        });
     };
 
-    // Refresh Telemetry Diagnostics
+    // Load active node telemetry
     const loadDiagnostics = async () => {
         if (!activeNode) return;
         setDiagLoading(true);
         setDiagError(null);
         try {
-            const data = await fetchDiagnostics(activeNode.url, adminPasswordInput);
+            const data = await fetchDiagnostics(activeNode.url, activeNode.adminPassword);
             setDiag(data);
+            setFleetDiags((prev) => ({
+                ...prev,
+                [activeNode.id]: { diag: data, loading: false, error: null },
+            }));
         } catch (e: any) {
-            setDiagError(e.message || 'Failed to connect to node');
-            setDiag(null);
+            const errMsg = e.message || 'Failed to connect to node';
+            if (!errMsg.includes('429')) {
+                setDiagError(errMsg);
+            }
         } finally {
             setDiagLoading(false);
         }
     };
 
-    // Refresh Gateway Config
+    // Load gateway config
     const loadGateway = async () => {
         if (!activeNode) return;
         setGatewayLoading(true);
         try {
-            const data = await fetchGatewayConfig(activeNode.url, adminPasswordInput);
+            const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword);
             setGateway(data);
         } catch (e: any) {
-            console.warn('[Manager] Could not fetch gateway config:', e);
+            const errMsg = e.message || '';
+            // Only set gateway to null on explicit auth error, NOT on 429 rate limiting
+            if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
+                setGateway(null);
+            }
         } finally {
             setGatewayLoading(false);
         }
     };
 
-    useEffect(() => {
-        loadDiagnostics();
+    // Load member data
+    const loadNodeData = async () => {
+        if (!activeNode) return;
+        setNodeDataLoading(true);
+        try {
+            const data = await fetchNodeData(activeNode.url, activeNode.adminPassword);
+            setNodeData(data);
+            setFleetNodeData((prev) => ({ ...prev, [activeNode.id]: data }));
+
+            const flags = data?.health?.flags || [];
+            const reports = data?.reports || [];
+            const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
+            const hasWarning = flags.some((f: any) => f.severity === 'warning');
+
+            const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
+            setNodeHealthMap((prev) => ({ ...prev, [activeNode.id]: status }));
+        } catch (e: any) {
+            const errMsg = e.message || '';
+            if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
+                setNodeData(null);
+            }
+        } finally {
+            setNodeDataLoading(false);
+        }
+    };
+
+    // Load logs
+    const loadLogs = async () => {
+        if (!activeNode) return;
+        try {
+            const logs = await fetchNodeLogs(activeNode.url, activeNode.adminPassword);
+            setNodeLogs(logs);
+        } catch (e: any) {
+            // Keep existing logs on error
+        }
+    };
+
+    const refreshAll = () => {
+        refreshFleetDiagnostics();
         loadGateway();
+        loadNodeData();
+        loadLogs();
+    };
+
+    useEffect(() => {
+        refreshFleetDiagnostics();
+    }, [profiles]);
+
+    useEffect(() => {
+        setDiag(null);
+        setGateway(null);
+        setNodeData(null);
+        setNodeLogs([]);
+        refreshAll();
     }, [activeProfileId]);
 
     const handleSaveGateway = async () => {
         if (!activeNode || !gateway) return;
         setGatewaySuccess(null);
         try {
-            const updated = await updateGatewayConfig(activeNode.url, gateway, adminPasswordInput);
+            const updated = await updateGatewayConfig(activeNode.url, gateway, activeNode.adminPassword);
             setGateway(updated);
+            setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');
             setTimeout(() => setGatewaySuccess(null), 3000);
         } catch (e: any) {
@@ -97,20 +258,19 @@ export function App() {
         }
     };
 
-    const handleAddNode = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newNodeName.trim() || !newNodeUrl.trim()) return;
-        const created = addNodeProfile({
-            name: newNodeName.trim(),
-            url: normalizeNodeUrl(newNodeUrl),
-            adminPassword: newNodePassword.trim() || undefined,
-        });
-        setProfiles(loadNodeProfiles());
+    const handleAddNode = (name: string, url: string, adminPassword?: string) => {
+        const created = addNodeProfile({ name, url, adminPassword });
+        const updated = loadNodeProfiles();
+        setProfiles(updated);
         setActiveProfileId(created.id);
         setShowAddModal(false);
-        setNewNodeName('');
-        setNewNodeUrl('');
-        setNewNodePassword('');
+    };
+
+    const handleSaveNodeEdit = (id: string, updates: Partial<NodeProfile>) => {
+        const updatedProfiles = updateNodeProfile(id, updates);
+        setProfiles(updatedProfiles);
+        setEditingNode(null);
+        refreshAll();
     };
 
     const handleRemoveNode = (id: string) => {
@@ -118,7 +278,7 @@ export function App() {
             alert('Cannot delete the last node profile.');
             return;
         }
-        if (confirm('Are you sure you want to remove this node from your fleet manager?')) {
+        if (confirm('Are you sure you want to remove this node profile from Fleet Manager?')) {
             removeNodeProfile(id);
             const remaining = loadNodeProfiles();
             setProfiles(remaining);
@@ -126,397 +286,183 @@ export function App() {
         }
     };
 
-    // Calculate sample trust score using re-exported @beanpool/engine helper
-    const sampleTrust = computeSampleTrustSummary(4, 18, 0, 120);
+    // Aggregate alert and warning counts across all connected nodes in the fleet
+    const offlineNodesCount = profiles.filter((p) => nodeHealthMap[p.id] === 'offline').length;
+    const telemetryWalWarnings = profiles.filter((p) => {
+        const wal = fleetDiags[p.id]?.diag?.walSizeBytes || 0;
+        return wal > 10 * 1024 * 1024; // >10MB SQLite WAL file
+    }).length;
+
+    let globalDismissed = new Set<string>();
+    try {
+        const saved = localStorage.getItem('bp_dismissed_flags');
+        if (saved) globalDismissed = new Set(JSON.parse(saved));
+    } catch {}
+
+    const totalMemberCritical = Object.values(fleetNodeData).reduce((acc, nData: any) => {
+        if (!nData) return acc;
+        const flags = (nData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description));
+        const reports = (nData.reports || []).filter((r: any) => !globalDismissed.has(r.id || r.targetPubkey || r.reason));
+        const crit = flags.filter((f: any) => f.severity === 'critical' || f.severity === 'alert').length;
+        return acc + crit + reports.length;
+    }, 0);
+
+    const totalMemberWarning = Object.values(fleetNodeData).reduce((acc, nData: any) => {
+        if (!nData) return acc;
+        const flags = (nData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description));
+        const warn = flags.filter((f: any) => f.severity === 'warning').length;
+        return acc + warn;
+    }, 0);
+
+    const logErrorsCount = nodeLogs.filter((l: any) => (l.level || '').toUpperCase() === 'ERROR').length;
+    const logWarningsCount = nodeLogs.filter((l: any) => (l.level || '').toUpperCase() === 'WARN' || (l.level || '').toUpperCase() === 'WARNING').length;
+
+    const loadedGateways = Object.keys(fleetGateways).length > 0 ? Object.values(fleetGateways) : (gateway ? [gateway] : []);
+
+    const totalGatewayCritical = loadedGateways.reduce((acc, gData: any) => {
+        if (!gData) return acc;
+        const rateLimitOff = gData.rateLimiting?.enabled === false ? 1 : 0;
+        return acc + rateLimitOff;
+    }, 0);
+
+    const totalGatewayWarning = loadedGateways.reduce((acc, gData: any) => {
+        if (!gData) return acc;
+        const wildcardCors = (gData.corsAllowedOrigins || []).includes('*') ? 1 : 0;
+        const disabledFeatures = Object.values(gData.features || {}).filter((v) => v === false).length;
+        return acc + wildcardCors + disabledFeatures;
+    }, 0);
+
+    const tabAlertCounts: Partial<Record<TabId, AlertCounts>> = {
+        overview: { critical: offlineNodesCount, warning: telemetryWalWarnings },
+        gateway: { critical: totalGatewayCritical, warning: totalGatewayWarning },
+        members: { critical: totalMemberCritical, warning: totalMemberWarning },
+        topology: { critical: 0, warning: 0 },
+        invites: { critical: 0, warning: 0 },
+        logs: { critical: logErrorsCount, warning: logWarningsCount },
+        ai: { critical: 0, warning: 0 },
+    };
 
     return (
-        <div className="min-h-screen bg-nature-950 text-nature-100 flex flex-col font-sans">
-            {/* Top Navbar */}
-            <header className="border-b border-nature-800/80 bg-nature-900/90 backdrop-blur-md px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-40">
-                <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-terra-500 flex items-center justify-center font-bold text-white shadow-md">
-                        🌱
-                    </div>
-                    <div>
-                        <h1 className="text-lg font-bold tracking-tight text-white m-0">BeanPool Fleet Manager</h1>
-                        <p className="text-xs text-nature-400 m-0">Decoupled Multi-Node Control Plane</p>
-                    </div>
-                </div>
-
-                {/* Active Node Switcher */}
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-nature-950/80 border border-nature-800 rounded-xl px-3 py-1.5 text-xs font-mono">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <select
-                            value={activeProfileId}
-                            onChange={(e) => setActiveProfileId(e.target.value)}
-                            className="bg-transparent text-white focus:outline-none cursor-pointer"
-                        >
-                            {profiles.map(p => (
-                                <option key={p.id} value={p.id} className="bg-nature-900 text-white">
-                                    {p.name} ({p.url})
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        className="px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-white text-xs font-bold transition-all border border-nature-700"
-                    >
-                        + Add Node
-                    </button>
-                    {profiles.length > 1 && (
-                        <button
-                            onClick={() => handleRemoveNode(activeProfileId)}
-                            className="px-2 py-1.5 rounded-xl bg-red-900/40 hover:bg-red-900/60 text-red-300 text-xs font-bold transition-all border border-red-800"
-                            title="Remove Active Node"
-                        >
-                            🗑️
-                        </button>
-                    )}
-                </div>
-            </header>
-
-            {/* Sub-header Navigation Tabs */}
-            <div className="border-b border-nature-800/60 bg-nature-900/40 px-6 flex gap-6 text-sm font-semibold overflow-x-auto">
-                <button
-                    onClick={() => setActiveTab('overview')}
-                    className={`py-3.5 border-b-2 transition-all ${activeTab === 'overview' ? 'border-terra-500 text-white' : 'border-transparent text-nature-400 hover:text-nature-200'}`}
-                >
-                    📊 Fleet Overview & Telemetry
-                </button>
-                <button
-                    onClick={() => setActiveTab('gateway')}
-                    className={`py-3.5 border-b-2 transition-all ${activeTab === 'gateway' ? 'border-terra-500 text-white' : 'border-transparent text-nature-400 hover:text-nature-200'}`}
-                >
-                    🛡️ Gateway & Feature Toggles
-                </button>
-                <button
-                    onClick={() => setActiveTab('members')}
-                    className={`py-3.5 border-b-2 transition-all ${activeTab === 'members' ? 'border-terra-500 text-white' : 'border-transparent text-nature-400 hover:text-nature-200'}`}
-                >
-                    👥 Members & Trust Engine
-                </button>
-                <button
-                    onClick={() => setActiveTab('topology')}
-                    className={`py-3.5 border-b-2 transition-all ${activeTab === 'topology' ? 'border-terra-500 text-white' : 'border-transparent text-nature-400 hover:text-nature-200'}`}
-                >
-                    🗄️ Replication & Backups
-                </button>
-                <button
-                    onClick={() => setActiveTab('logs')}
-                    className={`py-3.5 border-b-2 transition-all ${activeTab === 'logs' ? 'border-terra-500 text-white' : 'border-transparent text-nature-400 hover:text-nature-200'}`}
-                >
-                    📜 System Logs Streamer
-                </button>
-            </div>
+        <div className="min-h-screen bg-nature-950 text-nature-100 flex font-sans antialiased">
+            {/* Left Vertical Navigation & Connected Fleet Sidebar */}
+            <FleetSidebar
+                profiles={profiles}
+                activeProfileId={activeProfileId}
+                onSelectNode={(id) => setActiveProfileId(id)}
+                onOpenAddModal={() => setShowAddModal(true)}
+                onEditNode={(node) => setEditingNode(node)}
+                onRemoveNode={handleRemoveNode}
+                activeTab={activeTab}
+                onSelectTab={(tab) => setActiveTab(tab)}
+                nodeHealthMap={nodeHealthMap}
+                tabAlertCounts={tabAlertCounts}
+            />
 
             {/* Main Content Area */}
-            <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
-
-                {/* Auth Password bar */}
-                <div className="bg-nature-900/60 border border-nature-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
-                    <div className="flex items-center gap-2">
-                        <span className="text-nature-400">Target Node API:</span>
-                        <code className="bg-nature-950 px-2.5 py-1 rounded-lg border border-nature-800 text-terra-400 font-mono">
-                            {activeNode?.url}
-                        </code>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-nature-400">Admin Password:</span>
-                        <input
-                            type="password"
-                            value={adminPasswordInput}
-                            onChange={(e) => handlePasswordChange(e.target.value)}
-                            placeholder="Enter Node Admin Password"
-                            className="bg-nature-950 border border-nature-800 px-3 py-1 rounded-lg text-white font-mono focus:outline-none focus:border-terra-500 w-48 text-xs"
-                        />
+            <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+                {/* Active Target Banner for Control Subsystems */}
+                {activeTab !== 'overview' && (
+                    <div className="bg-nature-900/60 border-b border-nature-800 px-6 py-2.5 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 font-mono">
+                            <span className="text-nature-400">Target Control Node:</span>
+                            <span className="text-white font-bold">{activeNode?.name}</span>
+                            <span className="text-nature-600">|</span>
+                            <code className="text-terra-400">{activeNode?.url}</code>
+                        </div>
                         <button
-                            onClick={() => { loadDiagnostics(); loadGateway(); }}
-                            className="px-3 py-1 rounded-lg bg-terra-600 hover:bg-terra-500 text-white font-bold transition-all"
+                            onClick={() => setEditingNode(activeNode)}
+                            className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-nature-200 font-bold transition-all border border-nature-700 flex items-center gap-1.5 active:scale-95"
                         >
-                            Authenticate
+                            <span>⚙️ Configure Credentials</span>
                         </button>
                     </div>
-                </div>
-
-                {/* TAB 1: FLEET OVERVIEW & TELEMETRY */}
-                {activeTab === 'overview' && (
-                    <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-bold text-white">Live Node Telemetry & Hardware Diagnostics</h2>
-                            <button
-                                onClick={loadDiagnostics}
-                                disabled={diagLoading}
-                                className="px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
-                            >
-                                {diagLoading ? 'Refreshing...' : '🔄 Refresh Data'}
-                            </button>
-                        </div>
-
-                        {diagError ? (
-                            <div className="p-4 rounded-2xl bg-red-900/20 border border-red-800 text-red-300 text-sm">
-                                ❌ Connection Error: {diagError}. Make sure the node is running and CORS allows origin.
-                            </div>
-                        ) : diag ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-5 space-y-2">
-                                    <div className="text-xs text-nature-400 uppercase font-bold tracking-wider">Node Status</div>
-                                    <div className="text-xl font-bold text-emerald-400 flex items-center gap-2">
-                                        <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-                                        {diag.status.toUpperCase()}
-                                    </div>
-                                    <div className="text-xs text-nature-500">{diag.communityName || 'BeanPool Community Node'}</div>
-                                </div>
-
-                                <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-5 space-y-2">
-                                    <div className="text-xs text-nature-400 uppercase font-bold tracking-wider">Process Uptime</div>
-                                    <div className="text-xl font-bold text-white font-mono">
-                                        {Math.floor(diag.uptimeSeconds / 3600)}h {Math.floor((diag.uptimeSeconds % 3600) / 60)}m {diag.uptimeSeconds % 60}s
-                                    </div>
-                                    <div className="text-xs text-nature-500">Active server thread</div>
-                                </div>
-
-                                <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-5 space-y-2">
-                                    <div className="text-xs text-nature-400 uppercase font-bold tracking-wider">Active Connections</div>
-                                    <div className="text-xl font-bold text-sky-400 font-mono">
-                                        {diag.activeWsConnections} WebSockets / {diag.p2pActivePeers} P2P Peers
-                                    </div>
-                                    <div className="text-xs text-nature-500">Live client streams</div>
-                                </div>
-
-                                <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-5 space-y-2">
-                                    <div className="text-xs text-nature-400 uppercase font-bold tracking-wider">Database Engine</div>
-                                    <div className="text-xl font-bold text-amber-400 font-mono">
-                                        {(diag.dbSizeBytes / (1024 * 1024)).toFixed(2)} MB
-                                    </div>
-                                    <div className="text-xs text-nature-500">WAL: {(diag.walSizeBytes / 1024).toFixed(1)} KB (SQLite)</div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-8 text-center text-nature-500 text-sm">
-                                Loading live node telemetry...
-                            </div>
-                        )}
-                    </div>
                 )}
 
-                {/* TAB 2: GATEWAY & FEATURE TOGGLES */}
-                {activeTab === 'gateway' && gateway && (
-                    <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-6">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-4">
-                            <div>
-                                <h3 className="text-base font-bold text-white m-0">🛡️ Node Gateway Self-Protection Config</h3>
-                                <p className="text-xs text-nature-400 m-0 mt-1">Configure CORS allowed origins, IP allowlists, rate limiting, and subsystem feature flags.</p>
-                            </div>
-                            <button
-                                onClick={handleSaveGateway}
-                                className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all shadow-md"
-                            >
-                                💾 Save Gateway Config
-                            </button>
-                        </div>
+                {/* Workspace Body */}
+                <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
+                    {activeTab === 'overview' && (
+                        <TelemetryModule
+                            profiles={profiles}
+                            activeProfileId={activeProfileId}
+                            fleetDiags={fleetDiags}
+                            onSelectNode={(id) => setActiveProfileId(id)}
+                            onInspectNodeThreats={(id) => {
+                                setActiveProfileId(id);
+                                setActiveTab('members');
+                            }}
+                            onEditNode={(node) => setEditingNode(node)}
+                            onRefreshFleet={refreshFleetDiagnostics}
+                        />
+                    )}
 
-                        {gatewaySuccess && (
-                            <div className="p-3 rounded-xl bg-emerald-900/30 border border-emerald-800 text-emerald-300 text-xs font-mono">
-                                {gatewaySuccess}
-                            </div>
-                        )}
+                    {activeTab === 'gateway' && (
+                        <GatewayModule
+                            gateway={gateway}
+                            gatewayLoading={gatewayLoading}
+                            gatewaySuccess={gatewaySuccess}
+                            onChangeGateway={(updated) => setGateway(updated)}
+                            onSaveGateway={handleSaveGateway}
+                            onAuthenticate={(pwd) => {
+                                if (activeNode) {
+                                    handleSaveNodeEdit(activeNode.id, { adminPassword: pwd });
+                                }
+                            }}
+                        />
+                    )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Feature Toggles */}
-                            <div className="space-y-3">
-                                <h4 className="text-xs font-bold text-nature-300 uppercase tracking-wider">Subsystem Feature Toggles</h4>
-                                <div className="space-y-2 bg-nature-950/60 p-4 rounded-xl border border-nature-800/60 text-xs">
-                                    <label className="flex items-center justify-between cursor-pointer">
-                                        <span>🛒 Marketplace (Posts & Escrow)</span>
-                                        <input
-                                            type="checkbox"
-                                            checked={gateway.features.marketplace}
-                                            onChange={(e) => setGateway({ ...gateway, features: { ...gateway.features, marketplace: e.target.checked } })}
-                                            className="w-4 h-4 rounded accent-terra-500"
-                                        />
-                                    </label>
-                                    <label className="flex items-center justify-between cursor-pointer">
-                                        <span>💬 Messaging Threads</span>
-                                        <input
-                                            type="checkbox"
-                                            checked={gateway.features.messaging}
-                                            onChange={(e) => setGateway({ ...gateway, features: { ...gateway.features, messaging: e.target.checked } })}
-                                            className="w-4 h-4 rounded accent-terra-500"
-                                        />
-                                    </label>
-                                    <label className="flex items-center justify-between cursor-pointer">
-                                        <span>🌐 Inter-Community Federation</span>
-                                        <input
-                                            type="checkbox"
-                                            checked={gateway.features.federation}
-                                            onChange={(e) => setGateway({ ...gateway, features: { ...gateway.features, federation: e.target.checked } })}
-                                            className="w-4 h-4 rounded accent-terra-500"
-                                        />
-                                    </label>
-                                    <label className="flex items-center justify-between cursor-pointer">
-                                        <span>🎟️ Invite Redemption</span>
-                                        <input
-                                            type="checkbox"
-                                            checked={gateway.features.invites}
-                                            onChange={(e) => setGateway({ ...gateway, features: { ...gateway.features, invites: e.target.checked } })}
-                                            className="w-4 h-4 rounded accent-terra-500"
-                                        />
-                                    </label>
-                                    <label className="flex items-center justify-between cursor-pointer">
-                                        <span>📱 Serve Node-Hosted PWA</span>
-                                        <input
-                                            type="checkbox"
-                                            checked={gateway.features.servePwa}
-                                            onChange={(e) => setGateway({ ...gateway, features: { ...gateway.features, servePwa: e.target.checked } })}
-                                            className="w-4 h-4 rounded accent-terra-500"
-                                        />
-                                    </label>
-                                </div>
-                            </div>
+                    {activeTab === 'members' && (
+                        <MembersModule
+                            nodeData={nodeData}
+                            nodeDataLoading={nodeDataLoading}
+                            onRefresh={() => loadNodeData()}
+                            onFreezeUser={async (pubkey, freeze) => {
+                                if (activeNode) {
+                                    await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword);
+                                }
+                            }}
+                            onUpdateTier={async (pubkey, tier) => {
+                                if (activeNode) {
+                                    await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword);
+                                }
+                            }}
+                        />
+                    )}
 
-                            {/* CORS & Rate Limiting */}
-                            <div className="space-y-3">
-                                <h4 className="text-xs font-bold text-nature-300 uppercase tracking-wider">Rate Limiting & Security</h4>
-                                <div className="space-y-3 bg-nature-950/60 p-4 rounded-xl border border-nature-800/60 text-xs">
-                                    <label className="flex items-center justify-between cursor-pointer">
-                                        <span>⏱️ Rate Limiting Enabled</span>
-                                        <input
-                                            type="checkbox"
-                                            checked={gateway.rateLimiting.enabled}
-                                            onChange={(e) => setGateway({ ...gateway, rateLimiting: { ...gateway.rateLimiting, enabled: e.target.checked } })}
-                                            className="w-4 h-4 rounded accent-terra-500"
-                                        />
-                                    </label>
-                                    <div>
-                                        <span className="text-nature-400 block mb-1">Max Requests Per Minute:</span>
-                                        <input
-                                            type="number"
-                                            value={gateway.rateLimiting.maxRequestsPerMinute}
-                                            onChange={(e) => setGateway({ ...gateway, rateLimiting: { ...gateway.rateLimiting, maxRequestsPerMinute: parseInt(e.target.value) || 120 } })}
-                                            className="w-full bg-nature-900 border border-nature-800 px-3 py-1.5 rounded-lg text-white font-mono text-xs focus:outline-none"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                    {activeTab === 'topology' && (
+                        <TopologyModule
+                            activeNode={activeNode}
+                            diag={diag}
+                            onRefresh={() => loadDiagnostics()}
+                        />
+                    )}
 
-                {/* TAB 3: MEMBERS & TRUST ENGINE */}
-                {activeTab === 'members' && (
-                    <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-6">
-                        <div>
-                            <h3 className="text-base font-bold text-white m-0">👥 Sovereign Trust Engine Inspector (`@beanpool/engine`)</h3>
-                            <p className="text-xs text-nature-400 m-0 mt-1">Calculates node member trust score & standing using pure exported engine algorithms.</p>
-                        </div>
+                    {activeTab === 'invites' && <InvitesModule activeNode={activeNode} />}
 
-                        <div className="bg-nature-950/60 border border-nature-800 p-5 rounded-xl space-y-4">
-                            <h4 className="text-xs font-bold text-terra-400 uppercase tracking-wider">Sample Member Trust Computation</h4>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                                <div>
-                                    <span className="text-nature-500 block">Vouchers:</span>
-                                    <span className="font-mono font-bold text-white">4 Vouchers</span>
-                                </div>
-                                <div>
-                                    <span className="text-nature-500 block">Completed Deals:</span>
-                                    <span className="font-mono font-bold text-white">18 Trades</span>
-                                </div>
-                                <div>
-                                    <span className="text-nature-500 block">Disputes:</span>
-                                    <span className="font-mono font-bold text-emerald-400">0 Disputes</span>
-                                </div>
-                                <div>
-                                    <span className="text-nature-500 block">Calculated Trust Level:</span>
-                                    <span className="font-mono font-bold text-amber-400 uppercase">{sampleTrust.trustLevel}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                    {activeTab === 'logs' && (
+                        <LogsModule logs={nodeLogs} onRefresh={() => loadLogs()} />
+                    )}
 
-                {/* TAB 4: REPLICATION & TOPOLOGY */}
-                {activeTab === 'topology' && (
-                    <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-4">
-                        <h3 className="text-base font-bold text-white m-0">🗄️ Node Replication & Backup Topology</h3>
-                        <p className="text-xs text-nature-400 m-0">Manage primary replication tokens, enrolled backup nodes, and auto-snapshots.</p>
-                        <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800 text-xs text-nature-300 font-mono">
-                            Replication Mode: Sovereign Dual-Role (Primary / Backup pull enabled)
-                        </div>
-                    </div>
-                )}
-
-                {/* TAB 5: SYSTEM LOGS STREAMER */}
-                {activeTab === 'logs' && (
-                    <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-4">
-                        <h3 className="text-base font-bold text-white m-0">📜 Real-Time Node Logs Streamer</h3>
-                        <div className="h-64 bg-nature-950 border border-nature-800 rounded-xl p-4 font-mono text-xs overflow-y-auto space-y-1 text-nature-300">
-                            <div>[INFO] Gateway security middlewares initialized</div>
-                            <div>[INFO] Koa server listening on port 8443</div>
-                            <div>[DEBUG] Database WAL checkpoint completed (0 pages remaining)</div>
-                            <div>[INFO] Active WebSocket stream connected for node admin</div>
-                        </div>
-                    </div>
-                )}
-            </main>
+                    {activeTab === 'ai' && (
+                        <AiServicesModule
+                            activeNode={activeNode}
+                            contextData={{ telemetry: diag, gateway, members: nodeData?.members, logs: nodeLogs }}
+                        />
+                    )}
+                </main>
+            </div>
 
             {/* Add Node Modal */}
             {showAddModal && (
-                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-nature-900 border border-nature-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-                        <h3 className="text-base font-bold text-white m-0">Connect New Sovereign Node</h3>
-                        <form onSubmit={handleAddNode} className="space-y-4 text-xs">
-                            <div>
-                                <label className="block text-nature-400 mb-1">Node Display Name</label>
-                                <input
-                                    type="text"
-                                    value={newNodeName}
-                                    onChange={(e) => setNewNodeName(e.target.value)}
-                                    placeholder="e.g. Byron Bay Primary"
-                                    required
-                                    className="w-full bg-nature-950 border border-nature-800 px-3 py-2 rounded-xl text-white focus:outline-none focus:border-terra-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-nature-400 mb-1">Node API Base URL</label>
-                                <input
-                                    type="url"
-                                    value={newNodeUrl}
-                                    onChange={(e) => setNewNodeUrl(e.target.value)}
-                                    placeholder="https://node2.beanpool.org"
-                                    required
-                                    className="w-full bg-nature-950 border border-nature-800 px-3 py-2 rounded-xl text-white font-mono focus:outline-none focus:border-terra-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-nature-400 mb-1">Admin Password (Optional)</label>
-                                <input
-                                    type="password"
-                                    value={newNodePassword}
-                                    onChange={(e) => setNewNodePassword(e.target.value)}
-                                    placeholder="Admin Password"
-                                    className="w-full bg-nature-950 border border-nature-800 px-3 py-2 rounded-xl text-white font-mono focus:outline-none focus:border-terra-500"
-                                />
-                            </div>
-                            <div className="flex justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAddModal(false)}
-                                    className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-white font-bold transition-all"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold transition-all shadow-sm"
-                                >
-                                    Save Node
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <AddNodeModal onClose={() => setShowAddModal(false)} onAdd={handleAddNode} />
+            )}
+
+            {/* Edit / Configure Node Modal */}
+            {editingNode && (
+                <EditNodeModal
+                    node={editingNode}
+                    onClose={() => setEditingNode(null)}
+                    onSave={handleSaveNodeEdit}
+                />
             )}
         </div>
     );

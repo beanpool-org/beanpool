@@ -244,7 +244,7 @@ export function WelcomePage({ onComplete }: Props) {
                 setError(check.reason === 'used'
                     ? 'This invite has already been used — each one works exactly once. Ask whoever invited you for a fresh one.'
                     : check.reason === 'expired'
-                        ? 'This invite has expired — invites last 7 days. Ask whoever invited you for a fresh one.'
+                        ? 'This invite has expired — invites last 30 days. Ask whoever invited you for a fresh one.'
                         : "That invite wasn't recognised. Double-check the code, or ask whoever invited you for a fresh one.");
                 setLoading(false);
                 return;

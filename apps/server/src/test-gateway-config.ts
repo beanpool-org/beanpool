@@ -23,12 +23,15 @@ function assert(condition: boolean, message: string) {
 async function runTests() {
     console.log('Running Phase 3 Gateway Configuration tests...\n');
 
+    // Reset to defaults for clean test run
+    updateGatewayConfig(DEFAULT_GATEWAY_CONFIG);
+
     // 1. Initial State & Defaults
     const initialGw = getGatewayConfig();
     assert(initialGw.features.marketplace === true, 'Marketplace feature is enabled by default');
     assert(initialGw.features.servePwa === true, 'PWA serving is enabled by default');
     assert(initialGw.rateLimiting.enabled === false, 'Rate limiting is disabled by default');
-    assert(initialGw.rateLimiting.maxRequestsPerMinute === 120, 'Default rate limit is 120 req/min');
+    assert(initialGw.rateLimiting.maxRequestsPerMinute === 600, 'Default rate limit is 600 req/min');
 
     // 2. Gateway Config Updates
     const updated = updateGatewayConfig({

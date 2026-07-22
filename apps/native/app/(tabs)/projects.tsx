@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, SafeAreaView, Image, Alert } from 'react-native';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, SafeAreaView, Image, Alert, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { getProjects, getBalance, voteForProjectApi, getActiveVotingRound } from '../../utils/db';
@@ -147,6 +147,11 @@ export default function ProjectsScreen() {
     }, []);
 
     useFocusEffect(loadData);
+
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener('sync_data_updated', loadData);
+        return () => sub.remove();
+    }, [loadData]);
 
     const sortedProjects = useMemo(() => {
         const projectsWithProgress = projects.map(p => {

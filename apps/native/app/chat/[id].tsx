@@ -1005,18 +1005,23 @@ export default function ChatScreen() {
     }, [messages]);
 
     // List cells are siblings, and a later-mounted cell paints over an earlier one —
-    // so the reaction picker (absolutely positioned at top: -45, overflowing into the
-    // row above) rendered BEHIND that row's bubble. zIndex inside the row can't win
-    // across cells; the whole cell has to be lifted while its picker is open. The
-    // `style` prop carries the inverted list's scaleY transform and must be kept.
-    const renderCell = useCallback(({ children, item, style, ...props }: any) => (
-        <View
-            {...props}
-            style={[style, item?.id === activeEmojiPickerId ? { zIndex: 100, elevation: 100 } : null]}
-        >
-            {children}
-        </View>
-    ), [activeEmojiPickerId]);
+    // so the reaction picker / action buttons (positioned at top/bottom: -45, overflowing into
+    // adjacent rows) rendered BEHIND sibling bubbles. zIndex inside the row can't win
+    // across cells; the whole cell has to be lifted while its picker or action bar is open.
+    const renderCell = useCallback(({ children, item, style, ...props }: any) => {
+        const isActive = item?.id && (item.id === activeEmojiPickerId || item.id === activeMessageActionsId);
+        return (
+            <View
+                {...props}
+                style={[
+                    style,
+                    isActive ? { zIndex: 9999, elevation: 9999, overflow: 'visible' } : { zIndex: 1 }
+                ]}
+            >
+                {children}
+            </View>
+        );
+    }, [activeEmojiPickerId, activeMessageActionsId]);
 
     const renderMessage = ({ item }: { item: any }) => {
         if (item.type === 'day-separator') {

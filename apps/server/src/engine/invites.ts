@@ -73,10 +73,10 @@ export function redeemInvite(
     if (!invite) return { success: false, error: 'Invalid invite code' };
     if (invite.used_by) return { success: false, error: 'This invite has already been used' };
 
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const createdAtTime = new Date(invite.created_at).getTime();
-    if (Date.now() - createdAtTime > SEVEN_DAYS_MS) {
-        return { success: false, error: 'This invite code has expired (maximum 7 days validation)' };
+    if (Date.now() - createdAtTime > THIRTY_DAYS_MS) {
+        return { success: false, error: 'This invite code has expired (maximum 30 days validation)' };
     }
 
     if (getMember(db, publicKey)) return { success: false, error: 'You are already a member' };

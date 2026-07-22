@@ -145,6 +145,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
     const projectId = id || crypto.randomUUID();
     createCrowdfundProject(projectId, creatorPubkey, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
     const project = getCrowdfundProject(projectId);
+    deps.broadcast?.({ type: 'project_created', project });
     
     ctx.body = { success: true, project };
 });
@@ -170,6 +171,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
     try {
         updateCrowdfundProject(id, creatorPubkey, title, description || '', photos || [], Number(goalAmount), deadlineAt);
         const project = getCrowdfundProject(id);
+        deps.broadcast?.({ type: 'project_updated', project });
         ctx.body = { success: true, project };
     } catch (e: any) {
         ctx.status = 400;
@@ -187,6 +189,7 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
 
     try {
         deleteCrowdfundProject(id, creatorPubkey);
+        deps.broadcast?.({ type: 'project_deleted', projectId: id });
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;
@@ -238,6 +241,8 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     try {
         const txId = crypto.randomUUID();
         pledgeToProject(txId, projectId, fromPubkey, parsedAmount, memo || 'Project Pledge', (ctx.state as any).authSig);
+        const updatedProject = getCrowdfundProject(projectId);
+        deps.broadcast?.({ type: 'project_updated', project: updatedProject });
         ctx.body = { success: true, txId };
     } catch (err: any) {
         ctx.status = 400;

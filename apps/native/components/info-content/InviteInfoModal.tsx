@@ -144,7 +144,7 @@ export function InviteInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.cardContainer}>
                         <Text style={styles.cardLabel}>WHO CAN INVITE</Text>
                         <Text style={styles.cardText}>
-                            <Text style={styles.boldWhiteText}>Every member can invite, from day one.</Text> Each invite is a single-use code that lasts <Text style={styles.boldWhiteText}>7 days</Text> — generate as many as you need.
+                            <Text style={styles.boldWhiteText}>Every member can invite, from day one.</Text> Each invite is a single-use code that lasts <Text style={styles.boldWhiteText}>30 days</Text> — generate as many as you need.
                         </Text>
                     </View>
 
@@ -169,7 +169,7 @@ export function InviteInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.processContainer}>
                         <Text style={styles.processLabel}>VOUCHING PROCESS</Text>
                         <View style={{ marginTop: 4 }}>
-                            <ListItem prefix="1.">Generate a <Text style={styles.boldWhiteText}>single-use invite link</Text> (valid for <Text style={styles.boldWhiteText}>7 days</Text>)</ListItem>
+                            <ListItem prefix="1.">Generate a <Text style={styles.boldWhiteText}>single-use invite link</Text> (valid for <Text style={styles.boldWhiteText}>30 days</Text>)</ListItem>
                             <ListItem prefix="2.">Share it securely with someone you trust</ListItem>
                             <ListItem prefix="3.">They create an account and join as a <Text style={styles.boldWhiteText}>Newcomer</Text></ListItem>
                             <ListItem prefix="4.">Your profile is permanently linked as their inviter</ListItem>

@@ -509,6 +509,10 @@ export default function SettingsScreen() {
     const [seedCopied, setSeedCopied] = useState(false);
     const [advancedLoading, setAdvancedLoading] = useState(false);
     const [resyncing, setResyncing] = useState(false);
+    const [resyncModalVisible, setResyncModalVisible] = useState(false);
+    const [resyncProgressStep, setResyncProgressStep] = useState(1);
+    const [resyncTotalSteps, setResyncTotalSteps] = useState(5);
+    const [resyncProgressStage, setResyncProgressStage] = useState('Initializing Database Reset...');
     const [appLockEnabled, setAppLockEnabledState] = useState(false);
 
     useEffect(() => {
@@ -789,6 +793,10 @@ export default function SettingsScreen() {
                     onPress: async () => {
                         setResyncing(true);
                         setAdvancedLoading(true);
+                        setResyncProgressStep(1);
+                        setResyncTotalSteps(5);
+                        setResyncProgressStage('Clearing Local Database Cache...');
+                        setResyncModalVisible(true);
                         try {
                             const urlsToClear = [
                                 targetUrl,
@@ -814,20 +822,28 @@ export default function SettingsScreen() {
                             await clearDB();
                             await initDB();
                             
-                            // Await the sync so the spinner stays up for the whole
-                            // rebuild — previously this was fire-and-forget, so the
-                            // loading state cleared before the (slow) re-download finished.
-                            const { requestSync } = await import('../../services/pillar-sync');
-                            await requestSync();
-                            Alert.alert("Success", "Local database rebuilt and re-synced from the node.");
-                            if (mode === 'diagnostics') {
-                                loadDiagnostics();
+                            // Perform full sync with live progress updates
+                            const { performSync } = await import('../../services/pillar-sync');
+                            const syncRes = await performSync((step, total, stage) => {
+                                setResyncProgressStep(step);
+                                setResyncTotalSteps(total);
+                                setResyncProgressStage(stage);
+                            });
+
+                            if (!syncRes.success && syncRes.errorMessage) {
+                                console.warn('[Resync] Sync finished with notice:', syncRes.errorMessage);
                             }
+
+                            if (mode === 'diagnostics') {
+                                await loadDiagnostics();
+                            }
+                            Alert.alert("Success", "Local database rebuilt, ratings restored, and re-synced from the node.");
                         } catch (e: any) {
                             Alert.alert("Resync Error", e?.message || String(e) || "Failed to rebuild and re-sync.");
                         } finally {
                             setResyncing(false);
                             setAdvancedLoading(false);
+                            setResyncModalVisible(false);
                         }
                     }
                 }
@@ -1792,6 +1808,36 @@ export default function SettingsScreen() {
                     setAvatar(cleaned);
                 }}
             />
+
+            {/* Step-by-Step Database Resync Progress Modal */}
+            <Modal visible={resyncModalVisible} transparent animationType="fade">
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+                    <View style={{ width: '100%', maxWidth: 340, backgroundColor: theme === 'dark' ? colors.surface.card : '#ffffff', borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: colors.border.default, elevation: 10 }}>
+                        <ActivityIndicator size="large" color={colors.brand.primary} style={{ marginBottom: 16 }} />
+                        
+                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 }}>
+                            Rebuilding Database
+                        </Text>
+                        
+                        <Text style={{ fontSize: 13, color: colors.brand.primary, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 }}>
+                            Step {resyncProgressStep} of {resyncTotalSteps} ({Math.round((resyncProgressStep / resyncTotalSteps) * 100)}%)
+                        </Text>
+
+                        {/* Progress Bar Container */}
+                        <View style={{ width: '100%', height: 8, backgroundColor: colors.surface.app, borderRadius: 4, overflow: 'hidden', marginBottom: 16, borderWidth: 1, borderColor: colors.border.default }}>
+                            <View style={{ width: `${Math.round((resyncProgressStep / resyncTotalSteps) * 100)}%`, height: '100%', backgroundColor: colors.brand.primary }} />
+                        </View>
+
+                        <Text style={{ fontSize: 12, color: colors.text.muted, textAlign: 'center', lineHeight: 18 }}>
+                            {resyncProgressStage}
+                        </Text>
+
+                        <Text style={{ fontSize: 11, color: colors.text.secondary, textAlign: 'center', marginTop: 12, fontStyle: 'italic' }}>
+                            Restoring members, posts, deals, and ratings. Please do not close the app.
+                        </Text>
+                    </View>
+                </View>
+            </Modal>
             </ScrollView>
         </KeyboardAvoidingView>
     );

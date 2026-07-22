@@ -119,11 +119,13 @@ let isSyncing = false;
  * Perform the delta-only sync.
  * Returns immediately if hashes match (0 bytes transferred).
  */
-export async function performSync(): Promise<SyncResult> {
+export async function performSync(onProgress?: (step: number, total: number, stage: string) => void): Promise<SyncResult> {
     if (isSyncing) return { success: false, merkleRoot: null, deltaCount: 0, durationMs: 0, aborted: true, errorMessage: 'Already syncing' };
     isSyncing = true;
     const startTime = Date.now();
     const deadline = startTime + SYNC_TIMEOUT_MS;
+
+    onProgress?.(1, 5, 'Discovering Node Connection...');
 
     const result: SyncResult = {
         success: false,
@@ -218,8 +220,7 @@ export async function performSync(): Promise<SyncResult> {
             } catch (e) {}
         }
 
-        // Fetch both sets concurrently
-        
+        onProgress?.(2, 5, 'Synchronizing Members & Profiles...');
         let lastSyncParam = '';
         let incrementalSinceIso = '';
         try {
@@ -365,6 +366,7 @@ export async function performSync(): Promise<SyncResult> {
             }
         }
 
+        onProgress?.(3, 5, 'Synchronizing Active Posts & Projects...');
         // Fetch projects
         try {
             const projectsRes = await fetch(`${anchorUrl}/api/crowdfund/projects?limit=1000${lastSyncParam}&_t=${Date.now()}`, {
@@ -445,6 +447,32 @@ export async function performSync(): Promise<SyncResult> {
             }
         }
 
+        onProgress?.(4, 5, 'Synchronizing Transactions, Ratings & Reviews...');
+
+        // Fetch ratings (preserves review status across database resets)
+        if (pubKey) {
+            try {
+                const [receivedRes, givenRes] = await Promise.all([
+                    fetch(`${anchorUrl}/api/ratings/${pubKey}?_t=${Date.now()}`),
+                    fetch(`${anchorUrl}/api/ratings/${pubKey}?direction=given&_t=${Date.now()}`)
+                ]);
+                const rList: any[] = [];
+                if (receivedRes && receivedRes.ok) {
+                    const data = await receivedRes.json();
+                    if (Array.isArray(data?.ratings)) rList.push(...data.ratings);
+                }
+                if (givenRes && givenRes.ok) {
+                    const data = await givenRes.json();
+                    if (Array.isArray(data?.ratings)) rList.push(...data.ratings);
+                }
+                if (rList.length > 0) {
+                    delta.ratings = rList;
+                }
+            } catch (e) {
+                console.warn('[Pillar Sync] Ratings fetch failed:', e);
+            }
+        }
+
         clearTimeout(postsTimeout);
         clearTimeout(balanceTimeout);
 
@@ -472,6 +500,7 @@ export async function performSync(): Promise<SyncResult> {
         // The full-directory GC flag must travel with the members table it describes.
         if (gatedDelta.members && delta.membersComplete) gatedDelta.membersComplete = true;
 
+        onProgress?.(5, 5, 'Finalizing Local SQLite Database Cache...');
         // Apply physical updates to local Native device SQLite Matrix
         if (Object.keys(gatedDelta).length > 0) {
             await applyDelta(gatedDelta);
@@ -534,6 +563,17 @@ export async function getCachedTransactions(): Promise<any[]> {
 // Per-node, per-table hash of the last payload handed to applyDelta (see the gate
 // in performSync). In-memory only — first sync after a cold start always applies.
 const _lastAppliedFingerprints: Record<string, number> = {};
+
+/**
+ * Reset all in-memory payload fingerprints. Must be called when clearing or resetting
+ * the local SQLite database so the subsequent sync doesn't skip applying payloads.
+ */
+export function resetSyncFingerprints() {
+    for (const key of Object.keys(_lastAppliedFingerprints)) {
+        delete _lastAppliedFingerprints[key];
+    }
+}
+
 function _fingerprint(s: string): number {
     let h = 5381;
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; // djb2

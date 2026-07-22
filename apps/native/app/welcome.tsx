@@ -35,7 +35,7 @@ function inviteProblemMessage(reason?: string): string {
         case 'used':
             return 'This invite has already been used — each one works exactly once. Ask whoever invited you to send a fresh one (it only takes them a minute).';
         case 'expired':
-            return 'This invite has expired — invites last 7 days. Ask whoever invited you to send a fresh one (it only takes them a minute).';
+            return 'This invite has expired — invites last 30 days. Ask whoever invited you to send a fresh one (it only takes them a minute).';
         case 'unknown_inviter':
             return "This community doesn't know the person who made this invite. Double-check you're joining the right community, or ask for a fresh invite.";
         default:

@@ -369,7 +369,7 @@ export default function PeopleScreen() {
             // Offline Fallback
             Alert.alert(
                 'Offline Mode',
-                'You are currently offline. A temporary cryptographic offline invite ticket (valid for 7 days) will be generated instead.',
+                'You are currently offline. A temporary cryptographic offline invite ticket (valid for 30 days) will be generated instead.',
                 [{ text: 'OK' }]
             );
 
@@ -865,7 +865,7 @@ export default function PeopleScreen() {
                         <>
                             {/* GENERATE INVITE SECTION */}
                             <Text style={styles.sectionHeader}>📤 Invite Someone</Text>
-                            <Text style={styles.sectionDesc}>Invite links are single-use and valid for 7 days. If you are offline, a cryptographic voucher ticket will be generated instead.</Text>
+                            <Text style={styles.sectionDesc}>Invite links are single-use and valid for 30 days. If you are offline, a cryptographic voucher ticket will be generated instead.</Text>
 
                             <TextInput
                                 placeholder="Who is this invite for? (Optional)"

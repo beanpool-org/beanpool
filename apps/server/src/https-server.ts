@@ -50,7 +50,7 @@ import {
     acceptPost, completePostTransaction, cancelPostTransaction,
     pausePost, resumePost, getMarketplaceTransactions,
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
-    getCommunityInfo, addWsClient, removeWsClient,
+    getCommunityInfo, addWsClient, removeWsClient, broadcast,
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
     vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer,
@@ -535,11 +535,11 @@ export async function startHttpsServer(port: number): Promise<void> {
             }
         }
 
-        // 4. Rate Limiting Middleware
-        if (gwConfig.rateLimiting?.enabled) {
+        // 4. Rate Limiting Middleware (Exempts authenticated admin control plane)
+        if (gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/')) {
             const now = Date.now();
             const windowMs = 60 * 1000;
-            const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute || 120;
+            const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute || 600;
 
             let timestamps = gatewayRateLimits.get(clientIp) || [];
             timestamps = timestamps.filter(t => now - t < windowMs);
@@ -801,6 +801,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         activeConnections,
         calculateAnalytics,
         enforceReadAuth: ENFORCE_READ_AUTH,
+        broadcast,
     };
 
     // Mount all route modules

@@ -102,3 +102,105 @@ export async function updateGatewayConfig(
     const data = await res.json();
     return data.gateway || data;
 }
+
+export async function fetchNodeData(nodeUrl: string, adminPassword?: string): Promise<any> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/data`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string): Promise<any[]> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/logs`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: adminPassword, limit: 50 }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data.logs || [];
+}
+
+export async function freezeNodeUser(
+    nodeUrl: string,
+    pubkey: string,
+    freeze: boolean,
+    adminPassword?: string
+): Promise<{ success: boolean; frozen: boolean }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ freeze, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function generateNodeInvite(
+    nodeUrl: string,
+    adminPassword?: string,
+    type: 'standard' | 'trusted' | 'ambassador' | 'elder' = 'standard'
+): Promise<{ success: boolean; code: string; type: string }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/admin/seed-invite`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: adminPassword, type }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function updateNodeUserTier(
+    nodeUrl: string,
+    pubkey: string,
+    tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder',
+    adminPassword?: string
+): Promise<{ success: boolean; tier: string }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/tier`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ tier, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+

@@ -158,13 +158,13 @@ export function verifyOfflineTicket(db: Db, ticketB64: string):
             return { ok: false, reason: 'unknown_inviter', error: 'Inviter is not a formally recognized member of this decentralized mesh' };
         }
 
-        const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
         const FUTURE_SKEW_MS = 10 * 60 * 1000;
         if (typeof timestamp !== 'number' || timestamp > Date.now() + FUTURE_SKEW_MS) {
             return { ok: false, reason: 'invalid', error: 'Offline ticket timestamp is invalid' };
         }
-        if (Date.now() - timestamp > SEVEN_DAYS_MS) {
-            return { ok: false, reason: 'expired', error: 'This offline ticket has expired (maximum 7 days issuance)' };
+        if (Date.now() - timestamp > THIRTY_DAYS_MS) {
+            return { ok: false, reason: 'expired', error: 'This offline ticket has expired (maximum 30 days issuance)' };
         }
 
         const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
@@ -211,9 +211,9 @@ export function checkInvite(db: Db, codeOrTicket: string): InviteCheckResult {
     if (!row) return { valid: false, reason: 'invalid' };
     if (row.used_by) return { valid: false, reason: 'used' };
 
-    // standard online codes generated more than 7 days ago expire
+    // standard online codes generated more than 30 days ago expire
     const ageMs = Date.now() - new Date(row.created_at).getTime();
-    if (ageMs > 7 * 24 * 60 * 60 * 1000) return { valid: false, reason: 'expired' };
+    if (ageMs > 30 * 24 * 60 * 60 * 1000) return { valid: false, reason: 'expired' };
 
     const inviter = getMember(db, row.created_by);
     return { valid: true, inviterCallsign: inviter?.callsign || null };

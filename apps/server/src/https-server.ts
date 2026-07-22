@@ -471,20 +471,25 @@ export async function startHttpsServer(port: number): Promise<void> {
         const clientIp = replicationClientIp(ctx);
 
         // 1. Dynamic CORS Allowed Origins Handling
-        const requestOrigin = ctx.get('Origin');
+        const requestOrigin = ctx.get('Origin') || '*';
         const allowedOrigins = (gwConfig.corsAllowedOrigins && gwConfig.corsAllowedOrigins.length > 0)
             ? gwConfig.corsAllowedOrigins
             : ['*'];
 
-        if (requestOrigin && (allowedOrigins.includes('*') || allowedOrigins.includes(requestOrigin))) {
+        const isAllowed = allowedOrigins.includes('*') || (requestOrigin !== '*' && allowedOrigins.includes(requestOrigin));
+
+        if (isAllowed) {
             ctx.set('Access-Control-Allow-Origin', requestOrigin);
-            ctx.set('Access-Control-Allow-Credentials', 'true');
-            ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-signature, x-public-key, x-timestamp, x-nonce');
-            ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-            if (ctx.method === 'OPTIONS') {
-                ctx.status = 204;
-                return;
+            if (requestOrigin !== '*') {
+                ctx.set('Access-Control-Allow-Credentials', 'true');
             }
+            ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, x-signature, x-public-key, x-timestamp, x-nonce');
+            ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        }
+
+        if (ctx.method === 'OPTIONS') {
+            ctx.status = 204;
+            return;
         }
 
         // 2. Admin IP Allowlist Enforcement (/settings and /api/local/admin/*)
@@ -768,8 +773,8 @@ export async function startHttpsServer(port: number): Promise<void> {
     const ADMIN_FAIL_WINDOW_MS = 60_000;
     async function checkAdminAuth(ctx: any): Promise<boolean> {
         const config = getLocalConfig();
-        const headerPass = ctx.request?.headers?.['x-admin-password'] || ctx.request?.header?.['x-admin-password'];
-        const password = ctx.requestBody?.password || headerPass || ctx.query?.password || ctx.request?.query?.password;
+        const headerPass = (typeof ctx.get === 'function' ? ctx.get('x-admin-password') : null) || ctx.request?.headers?.['x-admin-password'] || ctx.headers?.['x-admin-password'];
+        const password = ctx.requestBody?.password || ctx.request?.body?.password || headerPass || ctx.query?.password || ctx.request?.query?.password;
         const ok = !!password && !!config.adminHash && !!config.salt
             && await verifyPasswordAsync(password as string, config.adminHash, config.salt);
         if (!ok) {

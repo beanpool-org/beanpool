@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { loadNodeProfiles, saveNodeProfiles, addNodeProfile, removeNodeProfile, type NodeProfile } from './lib/profiles';
-import { fetchDiagnostics, fetchGatewayConfig, updateGatewayConfig, type DiagnosticsResponse, type GatewayConfig } from './lib/node-client';
+import { fetchDiagnostics, fetchGatewayConfig, updateGatewayConfig, normalizeNodeUrl, type DiagnosticsResponse, type GatewayConfig } from './lib/node-client';
 import { computeSampleTrustSummary } from './lib/engine-helpers';
 
 export function App() {
@@ -82,7 +82,7 @@ export function App() {
         if (!newNodeName.trim() || !newNodeUrl.trim()) return;
         const created = addNodeProfile({
             name: newNodeName.trim(),
-            url: newNodeUrl.trim().replace(/\/+$/, ''),
+            url: normalizeNodeUrl(newNodeUrl),
             adminPassword: newNodePassword.trim() || undefined,
         });
         setProfiles(loadNodeProfiles());

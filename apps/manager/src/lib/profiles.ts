@@ -1,6 +1,4 @@
-/**
- * Node Profiles Manager — Stores multi-node connection profiles
- */
+import { normalizeNodeUrl } from './node-client';
 
 export interface NodeProfile {
     id: string;
@@ -33,12 +31,12 @@ export function loadNodeProfiles(): NodeProfile[] {
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                // Ensure local-node is always present in profiles
-                const hasLocal = parsed.some((p: NodeProfile) => p.id === 'local-node' || p.url.includes('localhost:8443'));
+                const normalized = parsed.map((p: NodeProfile) => ({ ...p, url: normalizeNodeUrl(p.url) }));
+                const hasLocal = normalized.some((p: NodeProfile) => p.id === 'local-node' || p.url.includes('localhost:8443'));
                 if (!hasLocal) {
-                    return [defaultProfiles[0], ...parsed];
+                    return [defaultProfiles[0], ...normalized];
                 }
-                return parsed;
+                return normalized;
             }
         }
     } catch { /* ignore */ }

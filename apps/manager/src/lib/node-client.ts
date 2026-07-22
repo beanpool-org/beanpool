@@ -33,12 +33,12 @@ export interface GatewayConfig {
 }
 
 export function normalizeNodeUrl(rawUrl: string): string {
-    const trimmed = (rawUrl || '').trim();
+    let trimmed = (rawUrl || '').trim();
     if (!trimmed) return 'https://localhost:8443';
-    if (/^https?:\/\//i.test(trimmed)) {
-        return trimmed.replace(/\/+$/, '');
+    if (!/^https?:\/\//i.test(trimmed)) {
+        trimmed = `https://${trimmed}`;
     }
-    return `https://${trimmed.replace(/\/+$/, '')}`;
+    return trimmed.replace(/\/+$/, '');
 }
 
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string): Promise<DiagnosticsResponse> {

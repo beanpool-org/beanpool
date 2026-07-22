@@ -33,16 +33,16 @@ export function GatewayModule({
     React.useEffect(() => {
         if (!gateway?.rateLimiting?.enabled) return;
         const interval = setInterval(() => {
-            setReqHistory((prev) => {
-                const nextVal = (activeWsConnections || 0) * 15;
-                if (nextVal > recordedPeak) {
-                    setRecordedPeak(nextVal);
-                }
-                return [...prev.slice(-24), nextVal];
-            });
+            const nextVal = (activeWsConnections || 0) * 15;
+            // Track peak in its own functional updater — not nested inside the
+            // setReqHistory updater (impure; fires twice under StrictMode) — and
+            // keep recordedPeak out of the deps so the interval isn't torn down
+            // and recreated every time a new peak is recorded.
+            setRecordedPeak((prevPeak) => Math.max(prevPeak, nextVal));
+            setReqHistory((prev) => [...prev.slice(-24), nextVal]);
         }, 3000);
         return () => clearInterval(interval);
-    }, [gateway?.rateLimiting?.maxRequestsPerMinute, gateway?.rateLimiting?.enabled, activeWsConnections, recordedPeak]);
+    }, [gateway?.rateLimiting?.enabled, activeWsConnections]);
 
     if (!gateway) {
         return (

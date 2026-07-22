@@ -72,11 +72,14 @@ export function AnalyticsModule({
                 thresh = 80;
             } else if (metricType === 'memory') {
                 val = pt.memMb;
-                if (pt.memMb < 1500) {
-                    thresh = pt.totalMemMb <= 2048 ? Math.round(pt.totalMemMb * 0.8) : 512;
-                } else {
-                    thresh = pt.totalMemMb > 4096 ? Math.round(pt.totalMemMb * 0.95) : Math.round(pt.totalMemMb * 0.8);
-                }
+                // Threshold keyed off box size (stable per node), NOT current usage.
+                // Keying off pt.memMb crossing 1500MB produced a non-monotonic cliff:
+                // a node at 1499MB got a 512MB threshold (breached) while at 1501MB it
+                // jumped to totalMemMb*0.95 (cleared) — i.e. using MORE memory cleared
+                // the alert. Big boxes still tolerate a higher fraction before alerting.
+                thresh = pt.totalMemMb > 4096
+                    ? Math.round(pt.totalMemMb * 0.95)
+                    : Math.round((pt.totalMemMb || 1024) * 0.8);
             } else if (metricType === 'streams') {
                 val = pt.ws + pt.p2p;
                 thresh = 50;

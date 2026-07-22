@@ -45,8 +45,31 @@ export function loadNodeProfiles(): NodeProfile[] {
     return defaultProfiles;
 }
 
+const ACTIVE_PROFILE_KEY = 'bp_fleet_active_id';
+
+export function loadActiveProfileId(): string {
+    try {
+        const id = localStorage.getItem(ACTIVE_PROFILE_KEY);
+        if (id) return id;
+    } catch { /* ignore */ }
+    return 'local-node';
+}
+
+export function saveActiveProfileId(id: string): void {
+    try {
+        localStorage.setItem(ACTIVE_PROFILE_KEY, id);
+    } catch { /* ignore */ }
+}
+
 export function saveNodeProfiles(profiles: NodeProfile[]): void {
     localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+}
+
+export function updateNodeProfile(id: string, updates: Partial<NodeProfile>): NodeProfile[] {
+    const profiles = loadNodeProfiles();
+    const updated = profiles.map(p => p.id === id ? { ...p, ...updates } : p);
+    saveNodeProfiles(updated);
+    return updated;
 }
 
 export function addNodeProfile(profile: Omit<NodeProfile, 'id'>): NodeProfile {

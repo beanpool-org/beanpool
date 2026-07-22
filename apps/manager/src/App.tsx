@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { loadNodeProfiles, saveNodeProfiles, addNodeProfile, removeNodeProfile, type NodeProfile } from './lib/profiles';
+import { loadNodeProfiles, saveNodeProfiles, addNodeProfile, removeNodeProfile, loadActiveProfileId, saveActiveProfileId, updateNodeProfile, type NodeProfile } from './lib/profiles';
 import { fetchDiagnostics, fetchGatewayConfig, updateGatewayConfig, normalizeNodeUrl, type DiagnosticsResponse, type GatewayConfig } from './lib/node-client';
 import { computeSampleTrustSummary } from './lib/engine-helpers';
 
 export function App() {
     const [profiles, setProfiles] = useState<NodeProfile[]>(() => loadNodeProfiles());
-    const [activeProfileId, setActiveProfileId] = useState<string>(() => profiles[0]?.id || 'local-node');
-    const [activeTab, setActiveTab] = useState<'overview' | 'gateway' | 'members' | 'topology' | 'logs'>('overview');
+    const [activeProfileId, setActiveProfileId] = useState<string>(() => loadActiveProfileId());
+    const [activeTab, setActiveTab] = useState<'overview' | 'gateway' | 'members' | 'topology' | 'logs'>(() => {
+        try { return (localStorage.getItem('bp_fleet_active_tab') as any) || 'overview'; } catch { return 'overview'; }
+    });
 
     const activeNode = profiles.find(p => p.id === activeProfileId) || profiles[0];
 
@@ -26,8 +28,26 @@ export function App() {
     const [adminPasswordInput, setAdminPasswordInput] = useState(activeNode?.adminPassword || '');
 
     useEffect(() => {
-        setAdminPasswordInput(activeNode?.adminPassword || '');
+        if (activeProfileId) {
+            saveActiveProfileId(activeProfileId);
+        }
     }, [activeProfileId]);
+
+    useEffect(() => {
+        try { localStorage.setItem('bp_fleet_active_tab', activeTab); } catch {}
+    }, [activeTab]);
+
+    useEffect(() => {
+        setAdminPasswordInput(activeNode?.adminPassword || '');
+    }, [activeProfileId, activeNode?.adminPassword]);
+
+    const handlePasswordChange = (newPass: string) => {
+        setAdminPasswordInput(newPass);
+        if (activeNode) {
+            const updated = updateNodeProfile(activeNode.id, { adminPassword: newPass });
+            setProfiles(updated);
+        }
+    };
 
     // Refresh Telemetry Diagnostics
     const loadDiagnostics = async () => {
@@ -207,7 +227,7 @@ export function App() {
                         <input
                             type="password"
                             value={adminPasswordInput}
-                            onChange={(e) => setAdminPasswordInput(e.target.value)}
+                            onChange={(e) => handlePasswordChange(e.target.value)}
                             placeholder="Enter Node Admin Password"
                             className="bg-nature-950 border border-nature-800 px-3 py-1 rounded-lg text-white font-mono focus:outline-none focus:border-terra-500 w-48 text-xs"
                         />

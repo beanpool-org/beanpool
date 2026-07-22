@@ -317,15 +317,13 @@ function RootLayoutNav() {
                     );
                 }, 200);
             } else {
-                // Same-node deep link check Guest mode or Repair
-                const showActiveNodeDialog = (isMember: boolean) => {
+                // Same-node deep link check (Guest mode or stale launch URL)
+                const showUnregisteredMemberDialog = () => {
                     setTimeout(() => {
                         if (!isComponentMounted.current) return;
                         Alert.alert(
-                            isMember ? 'Already Connected' : 'Active Connection Invite',
-                            isMember
-                                ? `You are already a member of this community (${targetOrigin}). Would you like to repair/update your connection using this new invite, or wipe and start fresh?`
-                                : `You scanned an invite for your active community (${targetOrigin}). How would you like to proceed?`,
+                            'Active Connection Invite',
+                            `You scanned an invite for your active community (${targetOrigin}). How would you like to proceed?`,
                             [
                                 { text: 'Cancel', style: 'cancel' },
                                 {
@@ -357,13 +355,12 @@ function RootLayoutNav() {
                                     }
                                 },
                                 {
-                                    text: 'Update Connection',
+                                    text: 'Join Node',
                                     onPress: () => {
                                         redeemInvite(parsedCode, identity?.callsign || 'Unknown', identity)
                                             .then(async () => {
-                                                Alert.alert('Success', 'Invite redeemed! Your connection is repaired and registered.');
+                                                Alert.alert('Success', 'Invite redeemed! Your connection is registered.');
                                                 requestSync().catch(console.error);
-                                                // Refresh membership before routing (see note above).
                                                 await recheck();
                                                 router.replace('/(tabs)');
                                             })
@@ -382,13 +379,17 @@ function RootLayoutNav() {
                     .then(data => {
                         if (!isComponentMounted.current) return;
                         const isMember = !!(data && data.isMember);
-                        showActiveNodeDialog(isMember);
+                        if (isMember) {
+                            console.log('[DeepLink] User is already an active member of current node. Ignoring stale invite link.');
+                            return;
+                        }
+                        showUnregisteredMemberDialog();
                     })
                     .catch(err => {
                         console.warn('Failed to check membership on same-node deep link', err);
                         if (!isComponentMounted.current) return;
-                        // Fallback to active member flow since node is already saved
-                        showActiveNodeDialog(true);
+                        // Active node already saved & connected locally - ignore stale link
+                        console.log('[DeepLink] Active node locally connected. Ignoring stale invite link.');
                     });
             }
         });

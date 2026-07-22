@@ -29,7 +29,7 @@ export function createSettingsRoutes(deps: RouteDeps): Router {
 
 // ===================== UNIVERSAL DEEP LINKS (AASA / ASSETLINKS) =====================
 // Apple App Site Association
-router.get('/.well-known/apple-app-site-association', async (ctx) => {
+const handleAppleAppSiteAssociation = async (ctx: any) => {
     // IMPORTANT: Set APPLE_TEAM_ID in your .env to the 10-character Team ID of the new Apple Developer Account.
     // Failing to do so will break Universal Links (deep linking) for the iOS app.
     const teamId = process.env.APPLE_TEAM_ID || '485XM2R33S'; // Fallback to original Assignor Team ID
@@ -56,7 +56,10 @@ router.get('/.well-known/apple-app-site-association', async (ctx) => {
             ]
         }
     };
-});
+};
+
+router.get('/.well-known/apple-app-site-association', handleAppleAppSiteAssociation);
+router.get('/apple-app-site-association', handleAppleAppSiteAssociation);
 
 // Android App Links
 router.get('/.well-known/assetlinks.json', async (ctx) => {

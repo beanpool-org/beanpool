@@ -12,6 +12,7 @@ interface TelemetryModuleProps {
     profiles: NodeProfile[];
     activeProfileId: string;
     fleetDiags: Record<string, NodeDiagnosticState>;
+    fleetNodeData?: Record<string, any>;
     onSelectNode: (id: string) => void;
     onInspectNodeThreats?: (id: string) => void;
     onEditNode: (node: NodeProfile) => void;
@@ -22,6 +23,7 @@ export function TelemetryModule({
     profiles,
     activeProfileId,
     fleetDiags,
+    fleetNodeData,
     onSelectNode,
     onInspectNodeThreats,
     onEditNode,
@@ -46,6 +48,18 @@ export function TelemetryModule({
         return acc + (fleetDiags[p.id]?.diag?.p2pActivePeers || 0);
     }, 0);
 
+    const totalFleetUsers = profiles.reduce((acc, p) => {
+        const diagCount = fleetDiags[p.id]?.diag?.userCount;
+        if (typeof diagCount === 'number') {
+            return acc + diagCount;
+        }
+        const nodeMembers = fleetNodeData?.[p.id]?.members;
+        if (Array.isArray(nodeMembers)) {
+            return acc + nodeMembers.length;
+        }
+        return acc;
+    }, 0);
+
     return (
         <div className="space-y-6 animate-fade-in font-sans">
             {/* Header */}
@@ -58,7 +72,7 @@ export function TelemetryModule({
                         </span>
                     </h2>
                     <p className="text-xs text-nature-400 m-0 mt-1">
-                        Real-time hardware diagnostics, SQLite storage, process uptime, and WebSocket mesh streams across all connected nodes.
+                        Real-time hardware diagnostics, SQLite storage, process uptime, registered users, and WebSocket mesh streams across all connected nodes.
                     </p>
                 </div>
                 <button
@@ -72,13 +86,20 @@ export function TelemetryModule({
             </div>
 
             {/* Fleet At-a-Glance Summary Ribbon */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-sans">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-xs font-sans">
                 <div className="bg-nature-900/90 border border-nature-800 rounded-2xl p-4 space-y-1">
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block">Fleet Standing</span>
                     <div className="text-xl font-black text-emerald-400 font-mono">
                         {onlineNodesCount} / {profiles.length} Online
                     </div>
                     <span className="text-[11px] text-nature-400 font-semibold">Active Sovereign Nodes</span>
+                </div>
+                <div className="bg-nature-900/90 border border-nature-800 rounded-2xl p-4 space-y-1">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block">Total Users</span>
+                    <div className="text-xl font-black text-indigo-400 font-mono">
+                        {totalFleetUsers} Users
+                    </div>
+                    <span className="text-[11px] text-nature-400 font-semibold">Registered across fleet</span>
                 </div>
                 <div className="bg-nature-900/90 border border-nature-800 rounded-2xl p-4 space-y-1">
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block">Total Storage</span>
@@ -114,6 +135,11 @@ export function TelemetryModule({
                         const isSelected = profile.id === activeProfileId;
                         const state = fleetDiags[profile.id] || { diag: null, loading: false, error: null };
                         const { diag, loading, error } = state;
+                        const nodeUserCount = typeof diag?.userCount === 'number'
+                            ? diag.userCount
+                            : (Array.isArray(fleetNodeData?.[profile.id]?.members)
+                                ? fleetNodeData[profile.id].members.length
+                                : undefined);
 
                         return (
                             <div
@@ -197,7 +223,7 @@ export function TelemetryModule({
                                         Connecting and fetching telemetry...
                                     </div>
                                 ) : diag ? (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-sans">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 text-xs font-sans">
                                         <div className="bg-nature-950/60 border border-nature-800/80 rounded-xl p-3.5 space-y-1">
                                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block">Standing</span>
                                             <div className="text-lg font-bold text-emerald-400 font-mono">
@@ -206,6 +232,14 @@ export function TelemetryModule({
                                             <span className="text-[11px] text-nature-400 truncate block">
                                                 {diag.communityName || 'BeanPool Node'}
                                             </span>
+                                        </div>
+
+                                        <div className="bg-nature-950/60 border border-nature-800/80 rounded-xl p-3.5 space-y-1">
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block">Registered Users</span>
+                                            <div className="text-lg font-bold text-indigo-400 font-mono">
+                                                {typeof nodeUserCount === 'number' ? `${nodeUserCount} Users` : 'N/A'}
+                                            </div>
+                                            <span className="text-[11px] text-nature-400 block">Active registered members</span>
                                         </div>
 
                                         <div className="bg-nature-950/60 border border-nature-800/80 rounded-xl p-3.5 space-y-1">

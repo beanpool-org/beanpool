@@ -6,7 +6,7 @@
  * Recovery:   Enter 12-word phrase to recover identity
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { createIdentity, createIdentityFromMnemonic, importIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
@@ -200,13 +200,7 @@ export function WelcomePage({ onComplete }: Props) {
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [pendingInviteCode, setPendingInviteCode] = useState('');
     const [showOnboardingGuide, setShowOnboardingGuide] = useState(false);
-    const [showNewUser, setShowNewUser] = useState(() => {
-        return false;
-    });
-    const [isTrampoline, setIsTrampoline] = useState(() => {
-        // ALWAYS default to the native app trampoline page
-        return true;
-    });
+    const [showNewUser, setShowNewUser] = useState(() => true);
     const [showMemberOptions, setShowMemberOptions] = useState(false);
     const [openFaq, setOpenFaq] = useState<number | null>(null);
 
@@ -215,15 +209,6 @@ export function WelcomePage({ onComplete }: Props) {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        if (isTrampoline && inviteCode) {
-            const nativeDeepLink = `beanpool://welcome?invite=${encodeURIComponent(inviteCode)}&server=${encodeURIComponent(window.location.origin)}`;
-            try {
-                window.location.href = nativeDeepLink;
-            } catch (e) {}
-        }
-    }, [isTrampoline, inviteCode]);
 
 
     async function handleCreate() {
@@ -259,7 +244,9 @@ export function WelcomePage({ onComplete }: Props) {
                 return;
             }
 
-            const identity = await createIdentity(trimmedCallsign);
+            const identity = pendingIdentity
+                ? { ...pendingIdentity, callsign: trimmedCallsign }
+                : await createIdentity(trimmedCallsign);
             setPendingIdentity(identity);
             setPendingInviteCode(trimmedCode);
 
@@ -972,94 +959,6 @@ export function WelcomePage({ onComplete }: Props) {
                                 }}
                             >
                                 ← Back
-                            </button>
-                        </>
-                    ) : isTrampoline ? (
-                        /* ===== DEEP LINK TRAMPOLINE GATEWAY ===== */
-                        <>
-                            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-                                {inviteCode ? "🎟️ You've been invited!" : "📱 Download the App"}
-                            </h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-                                BeanPool is designed as a native mobile app. For the best experience, download the app from your store, then tap the button below to join the node instantly.
-                            </p>
-
-                            {/* NATIVE APP STORE DOWNLOAD BUTTONS */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-                                {/* Apple App Store */}
-                                <a 
-                                    onClick={async () => { try { if (inviteCode) await navigator.clipboard.writeText(`${window.location.origin}/?invite=${inviteCode}`); } catch (e) {} }}
-                                    href="https://apps.apple.com/app/id6761870086" 
-                                    target="_blank" rel="noopener noreferrer"
-                                    style={{
-                                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                                        padding: '0.85rem 0.5rem', borderRadius: '12px',
-                                        background: '#000000', border: '1px solid #333', 
-                                        textDecoration: 'none', color: 'white',
-                                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.4)', transition: 'transform 0.1s'
-                                    }}
-                                >
-                                    <span style={{ fontSize: '0.65rem', color: '#a1a1aa', fontWeight: 600, letterSpacing: '0.5px', marginBottom: '2px' }}>Download on the</span>
-                                    <span style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <svg width="16" height="19" viewBox="0 0 384 512" fill="white"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7-44.5 0-80.4 20-101.9 61.4-23.9 44.8-12 112 11.6 142.4 12.3 15.6 28 32 44.7 32 15 0 22.8-9.4 46-9.4 22.8 0 29.8 9.4 46 9.4 21.2 0 33.7-16.7 44.7-32 11.8-16.7 16.7-32.5 16.7-33.5-3.3-1.6-47.6-17.7-47.6-61.9zm-46.7-183.1c11.8-15 20.3-34.9 18.2-54.6-17.2 1.3-40 12-53.5 27.5-11.8 13.5-21.7 33.9-19.2 53.6 19.3 1.8 39.7-11.8 54.5-26.5z"/></svg>
-                                        App Store
-                                    </span>
-                                </a>
-
-                                {/* Google Play Store — when there's an invite, pack invite+server into
-                                    the store link's `referrer` param: the Play Install Referrer API hands
-                                    it to the app on first launch, so the invite survives the install even
-                                    if the clipboard copy below gets lost along the way. */}
-                                <a
-                                    onClick={async () => { try { if (inviteCode) await navigator.clipboard.writeText(`${window.location.origin}/?invite=${inviteCode}`); } catch (e) {} }}
-                                    href={inviteCode
-                                        ? `https://play.google.com/store/apps/details?id=org.beanpool.pillar&referrer=${encodeURIComponent(new URLSearchParams({ invite: inviteCode, server: window.location.origin }).toString())}`
-                                        : 'https://play.google.com/store/apps/details?id=org.beanpool.pillar'}
-                                    target="_blank" rel="noopener noreferrer"
-                                    style={{
-                                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                                        padding: '0.85rem 0.5rem', borderRadius: '12px',
-                                        background: '#000000', border: '1px solid #333', 
-                                        textDecoration: 'none', color: 'white',
-                                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.4)', transition: 'transform 0.1s'
-                                    }}
-                                >
-                                    <span style={{ fontSize: '0.65rem', color: '#a1a1aa', fontWeight: 600, letterSpacing: '0.5px', marginBottom: '2px' }}>GET IT ON</span>
-                                    <span style={{ fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <svg width="18" height="19" viewBox="0 0 512 512" fill="#fff"><path d="M325.3 234.3L104.6 13l280.8 161.2-60.1 60.1zM47 0C34 6.8 25.3 19.2 25.3 35.3v441.3c0 16.1 8.7 28.5 21.7 35.3l256.6-256L47 0zm425.2 225.6l-58.9-34.1-65.7 64.5 65.7 64.5 60.1-34.1c18-14.3 18-46.5-1.2-60.8zM104.6 499l280.8-161.2-60.1-60.1 220.7 221.3z" fillRule="evenodd"/></svg>
-                                        Google Play
-                                    </span>
-                                </a>
-                            </div>
-
-                            {/* OPEN IN NATIVE APP ESCAPE HATCH */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1.5rem' }}>
-                                <a
-                                    href={`beanpool://welcome?invite=${inviteCode || new URLSearchParams(window.location.search).get('invite')}&server=${encodeURIComponent(window.location.origin)}`}
-                                    style={{
-                                        display: 'block', width: '100%', padding: '1rem', borderRadius: '12px',
-                                        border: '1px solid #3b82f6', background: 'transparent', textDecoration: 'none',
-                                        color: '#3b82f6', fontSize: '1rem', fontWeight: 700, 
-                                        cursor: 'pointer', fontFamily: 'inherit'
-                                    }}
-                                >
-                                    🚀 I already have the BeanPool App
-                                </a>
-                            </div>
-
-                            <button
-                                onClick={() => {
-                                    setIsTrampoline(false);
-                                    setShowNewUser(true);
-                                }}
-                                style={{
-                                    background: 'none', border: 'none',
-                                    color: '#64748b', fontSize: '0.85rem',
-                                    cursor: 'pointer', marginTop: '2rem', fontFamily: 'inherit',
-                                    textDecoration: 'underline'
-                                }}
-                            >
-                                Continue in Web Browser Instead
                             </button>
                         </>
                     ) : showNewUser ? (

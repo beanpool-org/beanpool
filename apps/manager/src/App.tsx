@@ -385,6 +385,7 @@ export function App() {
                             profiles={profiles}
                             activeProfileId={activeProfileId}
                             fleetDiags={fleetDiags}
+                            fleetNodeData={fleetNodeData}
                             onSelectNode={(id) => setActiveProfileId(id)}
                             onInspectNodeThreats={(id) => {
                                 setActiveProfileId(id);

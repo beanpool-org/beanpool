@@ -18,7 +18,16 @@
       "buildNumber": "170",
       "associatedDomains": [
         "applinks:beanpool.org",
-        "applinks:*.beanpool.org"
+        "applinks:*.beanpool.org",
+        "applinks:mullum.beanpool.org",
+        "applinks:mullum1.beanpool.org",
+        "applinks:mullum2.beanpool.org",
+        "applinks:bris.beanpool.org",
+        "applinks:test.beanpool.org",
+        "applinks:review.beanpool.org",
+        "applinks:melb.beanpool.org",
+        "applinks:castlemaine.beanpool.org",
+        "applinks:gippsland.beanpool.org"
       ],
       "infoPlist": {
         "UIBackgroundModes": [
@@ -61,6 +70,30 @@
             {
               "scheme": "https",
               "host": "*.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "mullum.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "mullum1.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "mullum2.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "bris.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "test.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "review.beanpool.org"
             }
           ],
           "category": [

@@ -251,6 +251,8 @@ export default function WelcomeScreen() {
         (async () => {
             const pending = await getPendingOnboarding();
             if (!pending || !mounted) return;
+            const incomingInvite = params?.invite || (incomingUrl && incomingUrl.includes('invite='));
+            if (incomingInvite && pending.inviteCode !== params?.invite) return;
             const stored = await loadIdentity();
             if (!stored) {
                 // Keypair never made it to storage — nothing to resume.
@@ -267,7 +269,7 @@ export default function WelcomeScreen() {
             setMode(pending.step);
         })();
         return () => { mounted = false; };
-    }, []);
+    }, [params?.invite, incomingUrl]);
 
     async function handleCreate() {
         if (!inviteCode.trim()) {
@@ -326,7 +328,9 @@ export default function WelcomeScreen() {
 
             await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
 
-            const identity = storedIdentity || await createIdentity(callsign.trim());
+            const identity = storedIdentity
+                ? { ...storedIdentity, callsign: callsign.trim() }
+                : await createIdentity(callsign.trim());
             setPendingIdentity(identity);
             setPendingInviteCode(parsedCode);
 

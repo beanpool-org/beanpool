@@ -129,6 +129,11 @@ const getDiagnosticsHandler = async (ctx: any) => {
         const totalPeers = connectors.length;
 
         const config = getLocalConfig();
+        let userCount = 0;
+        try {
+            const row = db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any;
+            userCount = row?.c || 0;
+        } catch (err) {}
 
         ctx.body = {
             success: true,
@@ -141,6 +146,7 @@ const getDiagnosticsHandler = async (ctx: any) => {
             walSizeBytes: walSize,
             activeWsConnections: activeConnections ? activeConnections.size : 0,
             p2pActivePeers: activePeers,
+            userCount,
             communityName: config.communityName || 'BeanPool Community Node',
             callsign: config.callsign || 'admin',
             diagnostics: {
@@ -152,6 +158,7 @@ const getDiagnosticsHandler = async (ctx: any) => {
                 ramUsage,
                 dbSize,
                 walSize,
+                userCount,
                 uptime: Math.round(process.uptime()),
                 activePeers,
                 totalPeers,

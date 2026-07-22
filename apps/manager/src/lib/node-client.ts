@@ -12,6 +12,7 @@ export interface DiagnosticsResponse {
     walSizeBytes: number;
     activeWsConnections: number;
     p2pActivePeers: number;
+    userCount?: number;
     communityName: string;
     callsign: string;
 }

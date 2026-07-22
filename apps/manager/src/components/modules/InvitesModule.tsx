@@ -29,7 +29,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
     const buildFullUrl = (code: string) => {
         const cleanNodeUrl = activeNode?.url ? activeNode.url.replace(/\/$/, '') : 'https://test.beanpool.org';
-        return `${cleanNodeUrl}/app/onboarding?invite=${encodeURIComponent(code)}&node=${encodeURIComponent(cleanNodeUrl)}`;
+        return `${cleanNodeUrl}/?invite=${encodeURIComponent(code)}`;
     };
 
     const handleGenerate = async () => {
@@ -118,32 +118,35 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                         <div style="font-size: 12px; color: #86efac; margin-top: 2px;">Target Node: ${activeNode?.name || 'Sovereign Node'} (${activeNode?.url})</div>
                     </div>
                     <div style="text-align: right;">
-                        <span style="background: #14532d; color: #4ade80; padding: 4px 10px; border-radius: 8px; font-weight: bold; font-size: 11px; border: 1px solid #22c55e; display: inline-block;">
-                            ${getTierBadge(item.tier).toUpperCase()} TIER
+                        <span style="background: #15803d; color: #ffffff; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: bold;">
+                            ${getTierBadge(item.tier)}
                         </span>
-                        <div style="font-size: 10px; color: #86efac; margin-top: 4px;">Single-Use • Expires in 30 days</div>
                     </div>
                 </div>
 
                 <div style="display: flex; gap: 20px; align-items: center;">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(item.fullUrl)}" width="140" height="140" style="border-radius: 10px; border: 2px solid #22c55e; background: #ffffff; padding: 6px;" alt="Invite QR Code" />
-                    
-                    <div style="flex: 1; font-size: 12px; line-height: 1.6;">
-                        <div style="margin-bottom: 8px;">
-                            <span style="color: #86efac; font-weight: bold;">CRYPTOGRAPHIC CODE:</span><br/>
-                            <strong style="font-size: 18px; color: #ffffff; letter-spacing: 1px;">${item.code}</strong>
+                    <div style="background: #ffffff; padding: 10px; border-radius: 12px; display: inline-block;">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(item.fullUrl)}" width="140" height="140" style="display: block;" />
+                    </div>
+
+                    <div style="flex: 1; space-y: 8px;">
+                        <div style="font-size: 11px; color: #86efac; text-transform: uppercase; letter-spacing: 1px;">Single-Use Onboarding Code:</div>
+                        <div style="font-size: 22px; font-weight: 900; color: #4ade80; letter-spacing: 2px;">${item.code}</div>
+                        <div style="font-size: 11px; color: #a7f3d0; margin-top: 8px;">
+                            Scan the QR code with your camera or open this URL in your web browser:
                         </div>
-                        <div style="margin-bottom: 8px;">
-                            <span style="color: #86efac; font-weight: bold;">FULL DEEP-LINK URL:</span><br/>
-                            <div style="word-break: break-all; color: #bbf7d0; font-size: 11px;">${item.fullUrl}</div>
-                        </div>
-                        <div style="font-size: 11px; color: #86efac; font-style: italic; border-top: 1px dashed #15803d; padding-top: 6px;">
-                            Scan QR code with smartphone camera or paste URL into browser to complete single-use onboarding.
+                        <div style="font-size: 11px; color: #6ee7b7; word-break: break-all; font-weight: bold; background: rgba(0,0,0,0.3); padding: 6px 10px; border-radius: 6px; border: 1px solid #15803d;">
+                            ${item.fullUrl}
                         </div>
                     </div>
                 </div>
+
+                <div style="margin-top: 15px; pt: 10px; border-top: 1px dashed #15803d; font-size: 10px; color: #86efac; display: flex; justify-content: space-between;">
+                    <span>🔒 Single-use cryptographic invite code</span>
+                    <span>⏰ Valid for 30 days from issuance</span>
+                </div>
             </div>
-        `
+            `
             )
             .join('');
 
@@ -151,20 +154,24 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
             <!DOCTYPE html>
             <html>
                 <head>
-                    <title>BeanPool Printable Invites - ${activeNode?.name}</title>
+                    <title>BeanPool Onboarding Passes — ${activeNode?.name || 'Sovereign Node'}</title>
                     <style>
-                        body { background: #022c22; font-family: monospace; padding: 30px; margin: 0; }
+                        body { background: #022c22; color: #fff; padding: 40px; }
                         @media print {
-                            body { background: #ffffff; color: #000000; padding: 0; }
-                            div { border-color: #000000 !important; background: #ffffff !important; color: #000000 !important; }
+                            body { background: transparent; color: #000; padding: 0; }
                         }
                     </style>
                 </head>
                 <body>
-                    <h2 style="color: #4ade80; font-family: sans-serif; margin-bottom: 20px;">🎫 Batch Onboarding Pass Sheet (${generatedTokens.length} Invites)</h2>
-                    ${cardsHtml}
+                    <div style="max-width: 650px; margin: 0 auto;">
+                        <div style="margin-bottom: 25px; text-align: center;">
+                            <h1 style="font-family: sans-serif; font-size: 24px; margin: 0; color: #4ade80;">🌱 Sovereign Onboarding Passes</h1>
+                            <p style="font-family: sans-serif; font-size: 13px; color: #86efac; margin-top: 4px;">Print or export as PDF for sharing offline or via external channels.</p>
+                        </div>
+                        ${cardsHtml}
+                    </div>
                     <script>
-                        window.onload = function() { window.print(); }
+                        setTimeout(() => { window.print(); }, 500);
                     </script>
                 </body>
             </html>
@@ -173,70 +180,82 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
     };
 
     return (
-        <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-6 shadow-xl font-sans animate-fade-in">
-            <div>
-                <h3 className="text-lg font-bold text-white m-0">🎫 Fleet Invite & Onboarding Factory</h3>
-                <p className="text-xs text-nature-400 m-0 mt-1">
-                    Generate single-use cryptographic invitation passes and QR onboarding cards for node <code className="text-terra-400 font-mono">{activeNode?.name}</code> (<code className="text-nature-300 font-mono">{activeNode?.url}</code>).
-                </p>
-            </div>
-
-            <div className="bg-nature-950/60 border border-nature-800 p-5 rounded-2xl space-y-4 max-w-2xl">
-                <h4 className="text-xs font-extrabold text-nature-300 uppercase tracking-wider">
-                    Batch Token & QR Generation
-                </h4>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <div className="space-y-6 font-sans animate-fade-in">
+            {/* Top Control Bar */}
+            <div className="bg-nature-900/90 border border-nature-800 rounded-2xl p-6 space-y-5 shadow-xl">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-nature-800 pb-4">
                     <div>
-                        <label className="block text-nature-400 mb-1 font-semibold">Granted Trust Level / Tier:</label>
+                        <h3 className="text-lg font-bold text-white m-0 flex items-center gap-2">
+                            <span>🎟️ Sovereign Node Invite Generator</span>
+                            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono font-bold">
+                                {activeNode?.name || 'Node'}
+                            </span>
+                        </h3>
+                        <p className="text-xs text-nature-400 m-0 mt-1">
+                            Generate single-use cryptographic invite passes bound to this sovereign node.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleGenerate}
+                            disabled={isGenerating}
+                            className="px-5 py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50"
+                        >
+                            <span>⚡</span>
+                            <span>{isGenerating ? 'Generating...' : `Generate ${inviteCount} Pass${inviteCount > 1 ? 'es' : ''}`}</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Configuration Options */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1.5">
+                        <label className="text-nature-400 font-extrabold uppercase text-[10px] tracking-wider block">
+                            Target Member Tier
+                        </label>
                         <select
                             value={inviteTier}
                             onChange={(e) => setInviteTier(e.target.value as InviteTier)}
-                            className="w-full bg-nature-900 border border-nature-700 px-3 py-2 rounded-xl text-white font-semibold text-xs focus:outline-none focus:border-terra-500 shadow-inner cursor-pointer"
+                            className="w-full bg-nature-950 border border-nature-800 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-terra-500"
                         >
-                            <option value="standard">🥚 Newcomer (Standard Invite — 0 Floor Boost)</option>
-                            <option value="trusted">🏠 Resident (Trusted Invite — -200 Credit Floor)</option>
-                            <option value="ambassador">🏛️ Steward (Ambassador Invite — -600 Credit Floor)</option>
-                            <option value="elder">⛰️ Elder (Elder Invite — -1400 Credit Floor)</option>
+                            <option value="standard">🥚 Newcomer (Standard Membership)</option>
+                            <option value="trusted">🏠 Resident (Pre-verified Member)</option>
+                            <option value="ambassador">🏛️ Steward (Community Ambassador)</option>
+                            <option value="elder">⛰️ Elder (Genesis Sovereign Elder)</option>
                         </select>
                     </div>
 
-                    <div>
-                        <label className="block text-nature-400 mb-1 font-semibold">Number of Passes:</label>
-                        <input
-                            type="number"
-                            min={1}
-                            max={50}
-                            value={inviteCount}
-                            onChange={(e) => setInviteCount(parseInt(e.target.value) || 1)}
-                            className="w-full bg-nature-900 border border-nature-700 px-3 py-2 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-terra-500 shadow-inner"
-                        />
+                    <div className="space-y-1.5">
+                        <label className="text-nature-400 font-extrabold uppercase text-[10px] tracking-wider block">
+                            Quantity to Generate
+                        </label>
+                        <div className="flex items-center gap-2">
+                            {[1, 5, 10, 20].map((num) => (
+                                <button
+                                    key={num}
+                                    onClick={() => setInviteCount(num)}
+                                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${
+                                        inviteCount === num
+                                            ? 'bg-terra-500/20 text-terra-300 border-terra-500/50'
+                                            : 'bg-nature-950 text-nature-400 border-nature-800 hover:border-nature-700'
+                                    }`}
+                                >
+                                    {num}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                </div>
-
-                <div className="flex justify-end pt-2 border-t border-nature-800/80">
-                    <button
-                        onClick={handleGenerate}
-                        disabled={isGenerating}
-                        className="px-6 py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 disabled:opacity-50 font-bold text-white text-xs transition-all shadow-md active:scale-95 flex items-center gap-2"
-                    >
-                        {isGenerating && <span className="animate-spin">🔄</span>}
-                        <span>{isGenerating ? 'Generating Passes...' : '⚡ Generate Single-Use Invites & QR Passes'}</span>
-                    </button>
                 </div>
             </div>
 
+            {/* Generated Passes Output */}
             {generatedTokens.length > 0 && (
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between flex-wrap gap-3 border-b border-nature-800 pb-3">
-                        <div>
-                            <h4 className="text-xs font-extrabold text-nature-300 uppercase tracking-wider m-0">
-                                Generated Single-Use Invites ({generatedTokens.length})
-                            </h4>
-                            <p className="text-[11px] text-nature-400 m-0 mt-0.5">
-                                Each link is single-use and expires 30 days after generation.
-                            </p>
-                        </div>
+                <div className="bg-nature-900/90 border border-nature-800 rounded-2xl p-6 space-y-4 shadow-xl animate-fade-in">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                        <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider">
+                            Generated Passes ({generatedTokens.length})
+                        </h4>
 
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
@@ -244,77 +263,38 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                 className="px-3 py-1.5 rounded-xl bg-terra-950 hover:bg-terra-900 text-terra-300 hover:text-white text-xs font-bold border border-terra-800 transition-all flex items-center gap-1.5 active:scale-95"
                             >
                                 <span>💬</span>
-                                <span>{copiedIndex === 'all_messages' ? '✓ Messages Copied!' : 'Copy Messages (WhatsApp/Signal)'}</span>
+                                <span>{copiedIndex === 'all_messages' ? '✓ Messages Copied!' : 'Copy All Share Messages'}</span>
                             </button>
                             <button
                                 onClick={handleCopyAllLinks}
                                 className="px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 hover:text-white text-xs font-bold border border-nature-700 transition-all flex items-center gap-1.5 active:scale-95"
                             >
                                 <span>🔗</span>
-                                <span>{copiedIndex === 'all_links' ? '✓ Links Copied!' : 'Copy Raw Links Only'}</span>
+                                <span>{copiedIndex === 'all_links' ? '✓ Links Copied!' : 'Copy All Links'}</span>
                             </button>
                             <button
                                 onClick={handlePrintCards}
-                                className="px-3.5 py-1.5 rounded-xl bg-emerald-900/60 hover:bg-emerald-800/80 text-emerald-300 hover:text-white text-xs font-bold border border-emerald-700/80 transition-all flex items-center gap-1.5 active:scale-95"
+                                className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-white text-xs font-bold border border-emerald-800 transition-all flex items-center gap-1.5 active:scale-95"
                             >
                                 <span>🖨️</span>
-                                <span>Print / Export Cards</span>
+                                <span>Print Cards</span>
                             </button>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3.5 max-h-[520px] overflow-y-auto pr-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {generatedTokens.map((item, idx) => (
-                            <div
-                                key={idx}
-                                className="p-4 bg-nature-950/80 border border-nature-800 hover:border-nature-700 rounded-2xl space-y-3 transition-all text-xs"
-                            >
-                                <div className="flex items-center justify-between flex-wrap gap-2">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono font-bold uppercase">
-                                            🔒 Single-Use Pass
-                                        </span>
-                                        <span className="px-2 py-0.5 rounded bg-nature-900 text-nature-300 border border-nature-800 text-[10px] font-mono">
-                                            ⏰ Expires in 30 Days
-                                        </span>
-                                        <span className="text-terra-300 font-bold text-xs">
-                                            • Tier: {getTierBadge(item.tier)}
-                                        </span>
+                            <div key={idx} className="bg-nature-950 border border-nature-800 rounded-xl p-4 flex flex-col justify-between gap-3">
+                                <div>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <code className="text-emerald-400 font-bold text-sm tracking-widest">{item.code}</code>
+                                        <span className="text-[9px] font-bold text-nature-500 uppercase bg-nature-900 px-2 py-1 rounded">{getTierBadge(item.tier)}</span>
                                     </div>
-
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <button
-                                            onClick={() => setPreviewQrItem(item)}
-                                            className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-nature-200 hover:text-white text-[11px] font-bold border border-nature-700 transition-all flex items-center gap-1"
-                                        >
-                                            <span>📷</span>
-                                            <span>View QR</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleCopy(getShareMessage(item), `msg_${idx}`)}
-                                            className="px-3 py-1 rounded-lg bg-terra-950 hover:bg-terra-900 text-terra-300 hover:text-white text-[11px] font-bold border border-terra-800 transition-all flex items-center gap-1"
-                                        >
-                                            <span>💬</span>
-                                            <span>{copiedIndex === `msg_${idx}` ? '✓ Message Copied!' : 'Share Message'}</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleCopy(item.fullUrl, `link_${idx}`)}
-                                            className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-nature-200 hover:text-white text-[11px] font-bold border border-nature-700 transition-all"
-                                        >
-                                            {copiedIndex === `link_${idx}` ? '✓ Link Copied' : 'Copy Link Only'}
-                                        </button>
-                                    </div>
+                                    <div className="text-[10px] text-nature-400 truncate font-mono">{item.fullUrl}</div>
                                 </div>
-
-                                <div className="flex items-center justify-between gap-4 bg-nature-900/80 p-3 rounded-xl border border-nature-800/80">
-                                    <div>
-                                        <div className="text-[10px] text-nature-400 uppercase font-mono font-bold">Invite Code</div>
-                                        <code className="text-emerald-400 font-mono font-bold text-base tracking-wider">{item.code}</code>
-                                    </div>
-                                    <div className="text-right flex-1 min-w-0">
-                                        <div className="text-[10px] text-nature-400 uppercase font-mono font-bold">Full Deep-Link URL</div>
-                                        <div className="font-mono text-[11px] text-nature-200 truncate">{item.fullUrl}</div>
-                                    </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setPreviewQrItem(item)} className="flex-1 text-[10px] font-bold py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white">QR</button>
+                                    <button onClick={() => handleCopy(item.fullUrl, idx)} className="flex-1 text-[10px] font-bold py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white">{copiedIndex === idx ? '✓' : 'Copy'}</button>
                                 </div>
                             </div>
                         ))}
@@ -324,7 +304,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
             {/* QR Code Preview Modal */}
             {previewQrItem && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
                     <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-sm w-full space-y-4 text-center shadow-2xl">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                             <span className="text-xs font-bold text-terra-400 uppercase tracking-wider">

@@ -204,4 +204,27 @@ export async function updateNodeUserTier(
     return res.json();
 }
 
+export async function updateNodeUserVoucher(
+    nodeUrl: string,
+    pubkey: string,
+    canVouch: boolean,
+    adminPassword?: string
+): Promise<{ success: boolean; granted: boolean }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/voucher`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ grant: canVouch, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+
 

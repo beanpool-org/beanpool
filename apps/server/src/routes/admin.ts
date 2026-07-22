@@ -37,15 +37,35 @@ export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { checkAdminAuth, activeConnections, calculateAnalytics } = deps;
 
-
 // ===================== ADMIN ACTIONS (Requires Password) =====================
 
 router.post('/api/local/admin/data', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    
+    const pushTokenRows = (db.prepare(`SELECT public_key, platform FROM push_tokens`).all() as any[]) || [];
+    const platformMap = new Map<string, string>();
+    for (const row of pushTokenRows) {
+        if (row.public_key && row.platform) {
+            platformMap.set(row.public_key, row.platform.toLowerCase());
+        }
+    }
+
     ctx.body = {
-        // Enrich each member with canVouch — the admin panel's voucher toggle reflects it.
-        // (rowToMember drops the can_vouch column, so surface it explicitly here.)
-        members: getAllMembers().map(m => ({ ...m, canVouch: canVouch(m.publicKey) })),
+        members: getAllMembers().map(m => {
+            const isVoucher = canVouch(m.publicKey);
+            const earned = m.earnedCredit || 0;
+            let tier = earned >= 1400 ? 'Elder' : earned >= 600 ? 'Steward' : earned >= 200 ? 'Resident' : 'Newcomer';
+            if (isVoucher && tier === 'Newcomer') {
+                tier = 'Elder';
+            }
+            return {
+                ...m,
+                tier,
+                standing: tier,
+                canVouch: isVoucher,
+                platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
+            };
+        }),
         profiles: getAllProfiles(),
         posts: getPosts().filter(p => p.status !== 'cancelled'),
         health: getCommunityHealth(),
@@ -98,12 +118,30 @@ router.post('/api/local/admin/logs', async (ctx) => {
     }
 });
 
+let lastCpuUsage = process.cpuUsage();
+let lastCpuTime = Date.now();
+
+function getProcessCpuLoad(): number {
+    const now = Date.now();
+    const timeDeltaMs = (now - lastCpuTime) || 1;
+    const usageDelta = process.cpuUsage(lastCpuUsage);
+
+    lastCpuUsage = process.cpuUsage();
+    lastCpuTime = now;
+
+    // Total CPU time spent by this process in milliseconds
+    const totalMs = (usageDelta.user + usageDelta.system) / 1000;
+    const cpusCount = os.cpus().length || 1;
+    const pct = Math.round((totalMs / (timeDeltaMs * cpusCount)) * 100);
+    return Math.min(100, Math.max(0, pct));
+}
+
 const getDiagnosticsHandler = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
 
     try {
         const cpusCount = os.cpus().length;
-        const cpuLoad = Math.min(Math.round((os.loadavg()[0] / cpusCount) * 100), 100);
+        const cpuLoad = getProcessCpuLoad();
 
         const totalMem = os.totalmem();
         const freeMem = os.freemem();
@@ -135,12 +173,15 @@ const getDiagnosticsHandler = async (ctx: any) => {
             userCount = row?.c || 0;
         } catch (err) {}
 
+        const procMem = process.memoryUsage();
+        const nodeRssMb = Math.round(procMem.rss / (1024 * 1024));
+
         ctx.body = {
             success: true,
             status: 'online',
             uptimeSeconds: Math.round(process.uptime()),
             cpuLoadPercent: cpuLoad,
-            memoryUsageMb: Math.round(usedMem / (1024 * 1024)),
+            memoryUsageMb: nodeRssMb,
             totalMemoryMb: Math.round(totalMem / (1024 * 1024)),
             dbSizeBytes: dbSize,
             walSizeBytes: walSize,

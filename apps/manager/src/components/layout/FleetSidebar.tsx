@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 
-export type TabId = 'overview' | 'gateway' | 'members' | 'topology' | 'invites' | 'logs' | 'ai';
+export type TabId = 'overview' | 'analytics' | 'gateway' | 'members' | 'topology' | 'invites' | 'logs' | 'ai';
 
 export type NodeHealthStatus = 'online' | 'warning' | 'critical' | 'alert' | 'offline' | 'loading';
 
@@ -17,6 +17,7 @@ interface FleetSidebarProps {
     onOpenAddModal: () => void;
     onEditNode: (node: NodeProfile) => void;
     onRemoveNode: (id: string) => void;
+    onReorderNodes?: (fromIndex: number, toIndex: number) => void;
     activeTab: TabId;
     onSelectTab: (tab: TabId) => void;
     nodeHealthMap?: Record<string, NodeHealthStatus>;
@@ -30,13 +31,17 @@ export function FleetSidebar({
     onOpenAddModal,
     onEditNode,
     onRemoveNode,
+    onReorderNodes,
     activeTab,
     onSelectTab,
     nodeHealthMap = {},
     tabAlertCounts = {},
 }: FleetSidebarProps) {
+    const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const navItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
         { id: 'overview', label: 'Fleet Telemetry', icon: '📊' },
+        { id: 'analytics', label: 'Peak Analytics', icon: '📈' },
         { id: 'gateway', label: 'Gateway Security', icon: '🛡️' },
         { id: 'members', label: 'Trust & Members', icon: '👥' },
         { id: 'topology', label: 'Replication & Backups', icon: '🗄️' },
@@ -134,16 +139,52 @@ export function FleetSidebar({
 
                 {/* Scrollable Node Cards */}
                 <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                    {profiles.map((p) => {
+                    {profiles.map((p, index) => {
                         const isSelected = p.id === activeProfileId;
                         const health = nodeHealthMap[p.id] || 'loading';
+                        const isDragging = draggedIndex === index;
+                        const isDragOver = dragOverIndex === index && draggedIndex !== index;
 
                         return (
                             <div
                                 key={p.id}
+                                draggable={true}
+                                onDragStart={(e) => {
+                                    setDraggedIndex(index);
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    e.dataTransfer.setData('text/plain', index.toString());
+                                }}
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = 'move';
+                                    if (dragOverIndex !== index) {
+                                        setDragOverIndex(index);
+                                    }
+                                }}
+                                onDragLeave={() => {
+                                    if (dragOverIndex === index) {
+                                        setDragOverIndex(null);
+                                    }
+                                }}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    if (draggedIndex !== null && draggedIndex !== index && onReorderNodes) {
+                                        onReorderNodes(draggedIndex, index);
+                                    }
+                                    setDraggedIndex(null);
+                                    setDragOverIndex(null);
+                                }}
+                                onDragEnd={() => {
+                                    setDraggedIndex(null);
+                                    setDragOverIndex(null);
+                                }}
                                 onClick={() => onSelectNode(p.id)}
-                                className={`p-3 rounded-xl cursor-pointer transition-all border relative group ${
-                                    health === 'critical' || health === 'alert'
+                                className={`p-3 rounded-xl cursor-grab active:cursor-grabbing transition-all border relative group ${
+                                    isDragging
+                                        ? 'opacity-40 scale-[0.98] border-dashed border-terra-500 bg-terra-950/20'
+                                        : isDragOver
+                                        ? 'ring-2 ring-terra-400 border-terra-400 bg-terra-950/30 scale-[1.01] shadow-lg'
+                                        : health === 'critical' || health === 'alert'
                                         ? 'bg-red-950/20 border-red-800/80 ring-1 ring-red-500/40 shadow-lg'
                                         : health === 'warning'
                                         ? 'bg-amber-950/20 border-amber-800/80 ring-1 ring-amber-500/40'
@@ -154,6 +195,12 @@ export function FleetSidebar({
                             >
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
+                                        <span
+                                            className="text-nature-500 group-hover:text-nature-300 transition-colors shrink-0 cursor-grab active:cursor-grabbing text-xs select-none"
+                                            title="Drag to rearrange node position"
+                                        >
+                                            ⠿
+                                        </span>
                                         <span className="relative flex h-2.5 w-2.5 shrink-0">
                                             {health === 'critical' || health === 'alert' ? (
                                                 <>

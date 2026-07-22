@@ -33,7 +33,7 @@ services:
       # stack — to /data (persisted), so a freeze like 2026-07-18 is diagnosable
       # instead of erased by the restart. Also dumps a report on any uncaught
       # exception. No effect on normal operation. See ops/watchdog/.
-      - NODE_OPTIONS=--report-on-signal --report-directory=/data --report-uncaught-exception
+      - NODE_OPTIONS=--max-old-space-size=128 --report-on-signal --report-directory=/data --report-uncaught-exception
     volumes:
       - ./data:/data
     networks:

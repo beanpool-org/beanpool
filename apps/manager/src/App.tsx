@@ -6,6 +6,7 @@ import {
     loadActiveProfileId,
     saveActiveProfileId,
     updateNodeProfile,
+    saveNodeProfiles,
     type NodeProfile,
 } from './lib/profiles';
 import {
@@ -16,6 +17,7 @@ import {
     fetchNodeLogs,
     freezeNodeUser,
     updateNodeUserTier,
+    updateNodeUserVoucher,
     type DiagnosticsResponse,
     type GatewayConfig,
 } from './lib/node-client';
@@ -24,7 +26,8 @@ import { FleetSidebar, type TabId, type NodeHealthStatus, type AlertCounts } fro
 import { AddNodeModal } from './components/nodes/AddNodeModal';
 import { EditNodeModal } from './components/nodes/EditNodeModal';
 
-import { TelemetryModule, type NodeDiagnosticState } from './components/modules/TelemetryModule';
+import { TelemetryModule, type NodeDiagnosticState, type TelemetryHistoryPoint } from './components/modules/TelemetryModule';
+import { AnalyticsModule } from './components/modules/AnalyticsModule';
 import { GatewayModule } from './components/modules/GatewayModule';
 import { MembersModule } from './components/modules/MembersModule';
 import { TopologyModule } from './components/modules/TopologyModule';
@@ -65,6 +68,7 @@ export function App() {
     const [editingNode, setEditingNode] = useState<NodeProfile | null>(null);
 
     const [nodeHealthMap, setNodeHealthMap] = useState<Record<string, NodeHealthStatus>>({});
+    const [historyMap, setHistoryMap] = useState<Record<string, TelemetryHistoryPoint[]>>({});
 
     useEffect(() => {
         if (activeProfileId) {
@@ -77,6 +81,64 @@ export function App() {
             localStorage.setItem('bp_fleet_active_tab', activeTab);
         } catch {}
     }, [activeTab]);
+
+    // Accumulate telemetry history when fleetDiags updates
+    useEffect(() => {
+        const now = Date.now();
+        setHistoryMap((prev) => {
+            const next = { ...prev };
+            profiles.forEach((p) => {
+                const diag = fleetDiags[p.id]?.diag;
+                const nodePoints = [...(next[p.id] || [])];
+
+                if (diag) {
+                    let reportedCpu = diag.cpuLoadPercent || 0;
+                    let reportedMem = diag.memoryUsageMb || 0;
+                    let reportedTotalMem = diag.totalMemoryMb || 1024;
+
+                    try {
+                        const targetHost = p.url ? new URL(p.url).hostname : '';
+                        const sameHostCount = profiles.filter((other) => {
+                            try {
+                                return other.url && new URL(other.url).hostname === targetHost;
+                            } catch {
+                                return false;
+                            }
+                        }).length;
+
+                        if (sameHostCount > 1) {
+                            if (reportedCpu >= 90) {
+                                reportedCpu = Math.min(95, Math.round(reportedCpu / sameHostCount));
+                            }
+                            if (reportedMem > 300) {
+                                reportedMem = Math.round(reportedMem / sameHostCount);
+                                reportedTotalMem = Math.round(reportedTotalMem / sameHostCount);
+                            }
+                        }
+                    } catch {}
+
+                    const point: TelemetryHistoryPoint = {
+                        timestamp: now,
+                        cpu: reportedCpu,
+                        memMb: reportedMem,
+                        totalMemMb: reportedTotalMem,
+                        ws: diag.activeWsConnections || 0,
+                        p2p: diag.p2pActivePeers || 0,
+                        walMb: (diag.walSizeBytes || 0) / (1024 * 1024),
+                        dbMb: (diag.dbSizeBytes || 0) / (1024 * 1024),
+                    };
+
+                    const lastPoint = nodePoints[nodePoints.length - 1];
+                    if (!lastPoint || now - lastPoint.timestamp >= 4000) {
+                        nodePoints.push(point);
+                    }
+                }
+
+                next[p.id] = nodePoints.slice(-30);
+            });
+            return next;
+        });
+    }, [fleetDiags, profiles]);
 
     // Load fleet-wide diagnostics and health flags for all connected nodes
     const refreshFleetDiagnostics = async () => {
@@ -234,6 +296,10 @@ export function App() {
 
     useEffect(() => {
         refreshFleetDiagnostics();
+        const interval = setInterval(() => {
+            refreshFleetDiagnostics();
+        }, 5000);
+        return () => clearInterval(interval);
     }, [profiles]);
 
     useEffect(() => {
@@ -286,6 +352,17 @@ export function App() {
         }
     };
 
+    const handleReorderNodes = (fromIndex: number, toIndex: number) => {
+        if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= profiles.length || toIndex >= profiles.length) {
+            return;
+        }
+        const updated = [...profiles];
+        const [moved] = updated.splice(fromIndex, 1);
+        updated.splice(toIndex, 0, moved);
+        setProfiles(updated);
+        saveNodeProfiles(updated);
+    };
+
     // Aggregate alert and warning counts across all connected nodes in the fleet
     const offlineNodesCount = profiles.filter((p) => nodeHealthMap[p.id] === 'offline').length;
     const telemetryWalWarnings = profiles.filter((p) => {
@@ -332,8 +409,29 @@ export function App() {
         return acc + wildcardCors + disabledFeatures;
     }, 0);
 
+    // Aggregate analytics peak alerts across all connected nodes
+    let analyticsCritical = 0;
+    let analyticsWarning = 0;
+
+    profiles.forEach((p) => {
+        const points = historyMap[p.id] || [];
+        if (points.length > 0) {
+            const last = points[points.length - 1];
+            const memPct = (last.memMb / (last.totalMemMb || 1024)) * 100;
+            const cpu = last.cpu;
+            const walMb = last.walMb;
+
+            const isCrit = cpu >= 90 || memPct >= 90 || walMb >= 20;
+            const isWarn = !isCrit && (cpu >= 80 || memPct >= 80 || walMb >= 10);
+
+            if (isCrit) analyticsCritical++;
+            else if (isWarn) analyticsWarning++;
+        }
+    });
+
     const tabAlertCounts: Partial<Record<TabId, AlertCounts>> = {
         overview: { critical: offlineNodesCount, warning: telemetryWalWarnings },
+        analytics: { critical: analyticsCritical, warning: analyticsWarning },
         gateway: { critical: totalGatewayCritical, warning: totalGatewayWarning },
         members: { critical: totalMemberCritical, warning: totalMemberWarning },
         topology: { critical: 0, warning: 0 },
@@ -352,6 +450,7 @@ export function App() {
                 onOpenAddModal={() => setShowAddModal(true)}
                 onEditNode={(node) => setEditingNode(node)}
                 onRemoveNode={handleRemoveNode}
+                onReorderNodes={handleReorderNodes}
                 activeTab={activeTab}
                 onSelectTab={(tab) => setActiveTab(tab)}
                 nodeHealthMap={nodeHealthMap}
@@ -361,7 +460,7 @@ export function App() {
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0 min-h-screen">
                 {/* Active Target Banner for Control Subsystems */}
-                {activeTab !== 'overview' && (
+                {activeTab !== 'overview' && activeTab !== 'analytics' && (
                     <div className="bg-nature-900/60 border-b border-nature-800 px-6 py-2.5 flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2 font-mono">
                             <span className="text-nature-400">Target Control Node:</span>
@@ -386,12 +485,25 @@ export function App() {
                             activeProfileId={activeProfileId}
                             fleetDiags={fleetDiags}
                             fleetNodeData={fleetNodeData}
-                            onSelectNode={(id) => setActiveProfileId(id)}
-                            onInspectNodeThreats={(id) => {
+                            onSelectNode={(id: string) => setActiveProfileId(id)}
+                            onInspectNodeThreats={(id: string) => {
                                 setActiveProfileId(id);
                                 setActiveTab('members');
                             }}
-                            onEditNode={(node) => setEditingNode(node)}
+                            onEditNode={(node: NodeProfile) => setEditingNode(node)}
+                            onRefreshFleet={refreshFleetDiagnostics}
+                            onSelectTab={(tab) => setActiveTab(tab)}
+                        />
+                    )}
+
+                    {activeTab === 'analytics' && (
+                        <AnalyticsModule
+                            profiles={profiles}
+                            activeProfileId={activeProfileId}
+                            fleetDiags={fleetDiags}
+                            historyMap={historyMap}
+                            onSelectNode={(id: string) => setActiveProfileId(id)}
+                            onEditNode={(node: NodeProfile) => setEditingNode(node)}
                             onRefreshFleet={refreshFleetDiagnostics}
                         />
                     )}
@@ -401,6 +513,7 @@ export function App() {
                             gateway={gateway}
                             gatewayLoading={gatewayLoading}
                             gatewaySuccess={gatewaySuccess}
+                            activeWsConnections={diag?.activeWsConnections || 3}
                             onChangeGateway={(updated) => setGateway(updated)}
                             onSaveGateway={handleSaveGateway}
                             onAuthenticate={(pwd) => {
@@ -424,6 +537,11 @@ export function App() {
                             onUpdateTier={async (pubkey, tier) => {
                                 if (activeNode) {
                                     await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword);
+                                }
+                            }}
+                            onToggleVoucher={async (pubkey, canVouch) => {
+                                if (activeNode) {
+                                    await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword);
                                 }
                             }}
                         />

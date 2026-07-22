@@ -203,6 +203,7 @@ for HOST in $UNIQUE_HOSTS; do
   ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF
     sudo docker builder prune -a -f 2>/dev/null || true
     sudo docker system prune -f 2>/dev/null || true
+    sudo journalctl --vacuum-time=1d 2>/dev/null || true
     sync && echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null || true
 EOF
 done

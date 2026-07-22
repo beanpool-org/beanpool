@@ -8,7 +8,7 @@ interface MemberDetailModalProps {
     isFrozen: boolean;
     isVoucher?: boolean;
     onToggleFreeze: (pubkey: string) => void;
-    onToggleVouch?: (pubkey: string) => void;
+    onToggleVouch?: (pubkey: string, isCurrentlyVoucher: boolean) => void;
     onClose: () => void;
 }
 
@@ -62,6 +62,23 @@ export function MemberDetailModal({
                         <div>
                             <h3 className="text-lg font-black text-white m-0 tracking-tight flex items-center gap-2">
                                 <span>{displayName}</span>
+                                {member?.platform && member.platform !== 'unknown' && (
+                                    <span
+                                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                                            member.platform.toLowerCase() === 'ios'
+                                                ? 'bg-sky-950/80 text-sky-300 border-sky-800/80'
+                                                : member.platform.toLowerCase() === 'android'
+                                                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80'
+                                                : 'bg-purple-950/80 text-purple-300 border-purple-800/80'
+                                        }`}
+                                    >
+                                        {member.platform.toLowerCase() === 'ios'
+                                            ? '📱 iOS'
+                                            : member.platform.toLowerCase() === 'android'
+                                            ? '🤖 Android'
+                                            : '🌐 PWA'}
+                                    </span>
+                                )}
                                 {isFrozen && (
                                     <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-mono font-bold">
                                         FROZEN
@@ -170,7 +187,7 @@ export function MemberDetailModal({
                 <div className="flex items-center justify-between gap-3 border-t border-nature-800 pt-4 text-xs">
                     <button
                         disabled={isFrozen}
-                        onClick={() => onToggleVouch?.(pubkey)}
+                        onClick={() => onToggleVouch?.(pubkey, !!isVoucher)}
                         className={`px-3.5 py-2 rounded-xl font-bold transition-all border ${
                             isFrozen
                                 ? 'opacity-50 cursor-not-allowed bg-nature-900 text-nature-500 border-nature-800'

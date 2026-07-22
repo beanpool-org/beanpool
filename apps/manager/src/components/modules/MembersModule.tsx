@@ -8,6 +8,7 @@ interface MembersModuleProps {
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
     onUpdateTier?: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
+    onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
 }
 
 export function getMemberDisplayName(m: any, profiles: any[] = []): string {
@@ -27,16 +28,6 @@ export function getMemberDisplayName(m: any, profiles: any[] = []): string {
     if (m?.callsign?.trim()) return m.callsign.trim();
     if (m?.handle?.trim()) return `@${m.handle.trim()}`;
 
-    // Test seed prefixes
-    if (pub.startsWith('userA')) return 'User A (Test Account)';
-    if (pub.startsWith('userB')) return 'User B (Test Account)';
-    if (pub.startsWith('wash1')) return 'Wash Account 1';
-    if (pub.startsWith('wash2')) return 'Wash Account 2';
-    if (pub.startsWith('ring0')) return 'Ring Node 0';
-    if (pub.startsWith('ring1')) return 'Ring Node 1';
-    if (pub.startsWith('ring2')) return 'Ring Node 2';
-    if (pub.startsWith('ring3')) return 'Ring Node 3';
-
     if (pub.includes('-')) {
         const prefix = pub.split('-')[0];
         return `${prefix.charAt(0).toUpperCase() + prefix.slice(1)} Member`;
@@ -49,15 +40,34 @@ export function getMemberDisplayName(m: any, profiles: any[] = []): string {
     return pub || 'Sovereign Member';
 }
 
-export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUser, onUpdateTier }: MembersModuleProps) {
+export function getMemberTier(m: any): string {
+    if (!m) return 'Citizen';
+    const pub = m.publicKey || m.pubkey || '';
+    if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'Elder';
+
+    if (m.tier && m.tier !== 'Citizen') return m.tier;
+    if (m.standing && m.standing !== 'Citizen' && m.standing !== 'FROZEN') return m.standing;
+    if (m.role && m.role !== 'Citizen') return m.role;
+
+    const earned = typeof m.earnedCredit === 'number' ? m.earnedCredit : (typeof m.earned_credit === 'number' ? m.earned_credit : 0);
+    if (earned >= 1400) return 'Elder';
+    if (earned >= 600) return 'Steward';
+    if (earned >= 200) return 'Resident';
+
+    if (m.canVouch || m.isVoucher) return 'Elder';
+
+    return 'Citizen';
+}
+
+export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUser, onUpdateTier, onToggleVoucher }: MembersModuleProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeThreat, setActiveThreat] = useState<any | null>(null);
     const [selectedMember, setSelectedMember] = useState<any | null>(null);
     const [tierEditMember, setTierEditMember] = useState<any | null>(null);
     const [selectedTierValue, setSelectedTierValue] = useState<'Newcomer' | 'Resident' | 'Steward' | 'Elder'>('Resident');
     const [isUpdatingTier, setIsUpdatingTier] = useState(false);
-    const [frozenPubkeys, setFrozenPubkeys] = useState<Set<string>>(new Set(['frozen-1']));
-    const [customVouchers, setCustomVouchers] = useState<Set<string>>(new Set(['userA-17', 'userB-17']));
+    const [frozenPubkeys, setFrozenPubkeys] = useState<Set<string>>(new Set());
+    const [customVouchers, setCustomVouchers] = useState<Set<string>>(new Set());
 
     const handleApplyTierUpgrade = async () => {
         if (!tierEditMember || !onUpdateTier) return;
@@ -78,17 +88,21 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
 
     React.useEffect(() => {
         if (nodeData?.members) {
-            const serverFrozen = nodeData.members
-                .filter((m: any) => m.creditFrozen || m.isFrozen || m.status === 'frozen')
-                .map((m: any) => m.publicKey || m.pubkey)
-                .filter(Boolean);
-            if (serverFrozen.length > 0) {
-                setFrozenPubkeys((prev) => {
-                    const next = new Set(prev);
-                    serverFrozen.forEach((p: string) => next.add(p));
-                    return next;
-                });
-            }
+            const serverFrozen = new Set<string>(
+                nodeData.members
+                    .filter((m: any) => m.creditFrozen || m.isFrozen || m.status === 'frozen')
+                    .map((m: any) => m.publicKey || m.pubkey)
+                    .filter(Boolean)
+            );
+            setFrozenPubkeys(serverFrozen);
+
+            const serverVouchers = new Set<string>(
+                nodeData.members
+                    .filter((m: any) => m.canVouch || m.isVoucher)
+                    .map((m: any) => m.publicKey || m.pubkey)
+                    .filter(Boolean)
+            );
+            setCustomVouchers(serverVouchers);
         }
     }, [nodeData]);
 
@@ -132,19 +146,28 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
         }
     };
 
-    const handleToggleVouchMember = (pubkey: string) => {
+    const handleToggleVouchMember = async (pubkey: string, isCurrentlyVoucher: boolean) => {
+        const nextState = !isCurrentlyVoucher;
         setCustomVouchers((prev) => {
             const next = new Set(prev);
             const matches = Array.from(next).filter(
                 (v) => v === pubkey || (pubkey && v && (pubkey.startsWith(v) || v.startsWith(pubkey)))
             );
-            if (matches.length > 0) {
-                matches.forEach((m) => next.delete(m));
-            } else {
+            if (nextState) {
                 next.add(pubkey);
+            } else {
+                matches.forEach((m) => next.delete(m));
             }
             return next;
         });
+        if (onToggleVoucher) {
+            try {
+                await onToggleVoucher(pubkey, nextState);
+                onRefresh();
+            } catch (e: any) {
+                alert(e?.message || 'Failed to update voucher status on server');
+            }
+        }
     };
 
     const [dismissedFlags, setDismissedFlags] = useState<Set<string>>(() => {
@@ -191,6 +214,23 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
         const term = searchTerm.toLowerCase();
         return name.includes(term) || pub.includes(term);
     });
+
+    const platformTallies = React.useMemo(() => {
+        let ios = 0;
+        let android = 0;
+        let pwa = 0;
+        let unknown = 0;
+
+        members.forEach((m: any) => {
+            const plat = (m.platform || '').toLowerCase();
+            if (plat === 'ios') ios++;
+            else if (plat === 'android') android++;
+            else if (plat === 'web' || plat === 'pwa') pwa++;
+            else unknown++;
+        });
+
+        return { ios, android, pwa, unknown };
+    }, [members]);
 
     return (
         <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-6 shadow-xl font-sans animate-fade-in">
@@ -274,10 +314,24 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
             {nodeData ? (
                 <div className="space-y-6">
                     {/* Stat Badges */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 text-xs">
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Total Members</span>
                             <span className="text-2xl font-black text-white font-mono">{members.length}</span>
+                        </div>
+                        <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
+                            <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Device Platforms</span>
+                            <div className="flex items-center gap-1.5 font-mono pt-1 text-[11px]">
+                                <span className="px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/80 font-bold" title="iOS Native App Users">
+                                    📱 {platformTallies.ios}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 font-bold" title="Android Native App Users">
+                                    🤖 {platformTallies.android}
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/80 font-bold" title="PWA Web Users">
+                                    🌐 {platformTallies.pwa}
+                                </span>
+                            </div>
                         </div>
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Active Vouchers</span>
@@ -359,6 +413,24 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-white truncate flex items-center gap-1.5 group-hover:text-terra-400 transition-colors">
                                                             <span>{displayName}</span>
+                                                            {m.platform && m.platform !== 'unknown' && (
+                                                                <span
+                                                                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border shrink-0 ${
+                                                                        m.platform.toLowerCase() === 'ios'
+                                                                            ? 'bg-sky-950/80 text-sky-300 border-sky-800/80'
+                                                                            : m.platform.toLowerCase() === 'android'
+                                                                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80'
+                                                                            : 'bg-purple-950/80 text-purple-300 border-purple-800/80'
+                                                                    }`}
+                                                                    title={`Device Platform: ${m.platform.toUpperCase()}`}
+                                                                >
+                                                                    {m.platform.toLowerCase() === 'ios'
+                                                                        ? '📱 iOS'
+                                                                        : m.platform.toLowerCase() === 'android'
+                                                                        ? '🤖 Android'
+                                                                        : '🌐 PWA'}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <code className="text-[10px] text-nature-500 font-mono truncate block">
                                                             {pubkey ? `${pubkey.slice(0, 20)}...` : ''}
@@ -375,16 +447,16 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setTierEditMember(m);
-                                                                const currentTier = (m.standing || m.role || 'Resident');
+                                                                const currentTier = getMemberTier(m);
                                                                 const valid = ['Newcomer', 'Resident', 'Steward', 'Elder'].find(
                                                                     (t) => t.toLowerCase() === currentTier.toLowerCase()
                                                                 );
-                                                                setSelectedTierValue((valid as any) || 'Resident');
+                                                                setSelectedTierValue((valid as any) || 'Elder');
                                                             }}
                                                             title="Click to upgrade or edit member standing tier"
                                                             className="px-2.5 py-1 rounded bg-nature-900 hover:bg-nature-800 text-amber-400 hover:text-amber-300 font-bold text-xs border border-nature-800 transition-all hover:scale-105 flex items-center gap-1.5 cursor-pointer shadow-sm"
                                                         >
-                                                            <span>{m.standing || m.role || 'Citizen'}</span>
+                                                            <span>{getMemberTier(m)}</span>
                                                             <span className="text-[10px] text-nature-400 hover:text-white">✏️ Upgrade</span>
                                                         </button>
                                                     )}
@@ -398,7 +470,7 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleToggleVouchMember(pubkey);
+                                                                handleToggleVouchMember(pubkey, true);
                                                             }}
                                                             title="Click to toggle voucher authority"
                                                             className="px-2 py-0.5 rounded-md bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 text-[10px] font-bold border border-emerald-800/60 transition-all hover:scale-105"
@@ -409,7 +481,7 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleToggleVouchMember(pubkey);
+                                                                handleToggleVouchMember(pubkey, false);
                                                             }}
                                                             title="Click to nominate / grant voucher authority"
                                                             className="px-2 py-0.5 rounded-md bg-nature-900 hover:bg-nature-800 text-nature-400 hover:text-emerald-300 text-[10px] font-semibold border border-nature-800 transition-all hover:scale-105 flex items-center gap-1"
@@ -495,7 +567,7 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                         })
                     }
                     onToggleFreeze={handleToggleFreezeMember}
-                    onToggleVouch={handleToggleVouchMember}
+                    onToggleVouch={(pk, isV) => handleToggleVouchMember(pk, isV)}
                     onClose={() => setSelectedMember(null)}
                 />
             )}

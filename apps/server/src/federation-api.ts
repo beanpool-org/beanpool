@@ -21,14 +21,16 @@ import { getLocalConfig } from './config/local-config.js';
  */
 export function federationCors(): Koa.Middleware {
     return async (ctx, next) => {
+        // Only handle CORS preflights/headers for federation routes
+        if (!ctx.path.startsWith('/api/federation') && ctx.path !== '/api/node/info') {
+            await next();
+            return;
+        }
+
         const origin = ctx.get('Origin');
 
         if (origin) {
-            // SECURITY (SRV-5): exact-origin match only. The previous prefix match
-            // (origin.startsWith(o) || o.startsWith(origin)) granted CORS — with
-            // Allow-Credentials: true — to any origin that was a prefix of, or
-            // prefixed by, a peer URL (e.g. https://peer.com.evil.com matches
-            // https://peer.com). Compare full origins, ignoring a trailing slash.
+            // SECURITY (SRV-5): exact-origin match only.
             const allowedOrigins = getPeerOrigins();
             const normalized = origin.replace(/\/+$/, '');
             if (allowedOrigins.some(o => o.replace(/\/+$/, '') === normalized)) {
@@ -39,7 +41,7 @@ export function federationCors(): Koa.Middleware {
             }
         }
 
-        // Handle preflight
+        // Handle preflight for federation routes
         if (ctx.method === 'OPTIONS') {
             ctx.status = 200;
             ctx.body = '';

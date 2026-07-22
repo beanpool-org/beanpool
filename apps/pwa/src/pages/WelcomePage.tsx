@@ -6,7 +6,7 @@
  * Recovery:   Enter 12-word phrase to recover identity
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createIdentity, createIdentityFromMnemonic, importIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
@@ -216,6 +216,15 @@ export function WelcomePage({ onComplete }: Props) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
 
+    useEffect(() => {
+        if (isTrampoline && inviteCode) {
+            const nativeDeepLink = `beanpool://welcome?invite=${encodeURIComponent(inviteCode)}&server=${encodeURIComponent(window.location.origin)}`;
+            try {
+                window.location.href = nativeDeepLink;
+            } catch (e) {}
+        }
+    }, [isTrampoline, inviteCode]);
+
 
     async function handleCreate() {
         const trimmedCallsign = callsign.trim();
@@ -253,6 +262,22 @@ export function WelcomePage({ onComplete }: Props) {
             const identity = await createIdentity(trimmedCallsign);
             setPendingIdentity(identity);
             setPendingInviteCode(trimmedCode);
+
+            // Redeem invite immediately so user is registered on node right away
+            try {
+                const { redeemInvite, redeemOfflineTicket } = await import('../lib/api');
+                if (trimmedCode.length > 20 && trimmedCode.startsWith('BP-')) {
+                    const ticketB64 = trimmedCode.slice(3);
+                    await redeemOfflineTicket(ticketB64, identity.publicKey, identity.callsign);
+                } else {
+                    await redeemInvite(trimmedCode, identity.publicKey, identity.callsign);
+                }
+            } catch (redeemErr: any) {
+                if (!redeemErr?.message?.includes('already a member') && !redeemErr?.message?.includes('already been used')) {
+                    throw redeemErr;
+                }
+            }
+
             setShowAvatarSetup(true);
             setLoading(false);
         } catch (err) {

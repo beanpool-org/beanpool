@@ -244,13 +244,11 @@ export default function WelcomeScreen() {
     }, [params?.invite, params?.t, incomingUrl]);
 
     // Resume a join wizard that was interrupted after the keypair was created
-    // (Step 1) but before the invite was redeemed (final step). Without this,
-    // the half-registered identity strands the user on node-mismatch at next
-    // launch. A fresh incoming invite link outranks a stale half-done wizard.
+    // (Step 1). A fresh incoming invite link outranks a stale half-done wizard,
+    // UNLESS the incoming link is for the exact invite code already in progress.
     React.useEffect(() => {
         let mounted = true;
         (async () => {
-            if (params?.invite || (incomingUrl && incomingUrl.includes('invite='))) return;
             const pending = await getPendingOnboarding();
             if (!pending || !mounted) return;
             const stored = await loadIdentity();
@@ -282,9 +280,6 @@ export default function WelcomeScreen() {
         }
         const rawInvite = inviteCode.trim();
         const extractedOrigin = extractNodeOrigin(rawInvite);
-        // The invite link usually carries the node origin. If it doesn't (plain code),
-        // the node address is required info — without it the account can't reach a
-        // community, so block rather than let someone in half-set-up.
         const nodeUrl = normalizeNodeUrl(extractedOrigin || createAnchorUrl.trim() || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
         if (!nodeUrl) {
             setError('Enter your community node address — you need it to connect to your community.');
@@ -294,9 +289,6 @@ export default function WelcomeScreen() {
             setError("That node address doesn't look right. Use something like node.yourcommunity.org");
             return;
         }
-        // Choke point for EVERY node-url source (pasted links, clipboard,
-        // manual entry): same cleartext-public rule as deep links — an http://
-        // public node would expose keys and messages to interception.
         if (shouldBlockCleartextNodeUrl(nodeUrl)) {
             setError('That node address is insecure (http on a public host). Ask your inviter for the https:// address.');
             return;
@@ -306,14 +298,26 @@ export default function WelcomeScreen() {
         setError(null);
         try {
             const parsedCode = normaliseInviteCode(rawInvite);
+            const { checkInvite, redeemInvite } = await import('../utils/db');
+            const storedIdentity = await loadIdentity();
 
-            // Pre-flight the invite BEFORE creating an identity — a dud code
-            // should fail here, not after the name/photo/seed ceremony. A null
-            // result (node unreachable / older node) fails open; redeemInvite
-            // at the final step stays the definitive check.
-            const { checkInvite } = await import('../utils/db');
             const check = await checkInvite(parsedCode, nodeUrl);
             if (check && !check.valid) {
+                // If invite is already used, check if stored identity is ALREADY a member on this node
+                if (check.reason === 'used' && storedIdentity) {
+                    try {
+                        const res = await fetch(`${nodeUrl}/api/community/membership/${storedIdentity.publicKey}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data && data.isMember) {
+                                await clearPendingOnboarding();
+                                await recheckNodeStatus().catch(() => {});
+                                setIdentity(storedIdentity);
+                                return;
+                            }
+                        }
+                    } catch {}
+                }
                 setError(inviteProblemMessage(check.reason));
                 return;
             }
@@ -322,22 +326,32 @@ export default function WelcomeScreen() {
 
             await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
 
-            const identity = await createIdentity(callsign.trim());
+            const identity = storedIdentity || await createIdentity(callsign.trim());
             setPendingIdentity(identity);
             setPendingInviteCode(parsedCode);
-            // A keypair now exists on-device but the node doesn't know it yet —
-            // record the wizard so an interrupted join resumes instead of
-            // stranding the user (see utils/onboarding-state.ts).
+
+            // Redeem invite on node IMMEDIATELY so member is registered right away
+            try {
+                await redeemInvite(parsedCode, identity.callsign, identity);
+            } catch (redeemErr: any) {
+                // If already redeemed (e.g. retry), check if registered
+                if (!redeemErr?.message?.includes('already a member') && !redeemErr?.message?.includes('already been used')) {
+                    throw redeemErr;
+                }
+            }
+
+            // Record wizard state so an interrupted setup (avatar/seed) resumes
             await setPendingOnboarding({
                 step: 'profileSetup',
                 inviteCode: parsedCode,
                 anchorUrl: nodeUrl,
                 callsign: callsign.trim(),
             });
-            // Go to avatar selection (Step 2) instead of seed phrase
+
+            // Go to avatar selection (Step 2)
             setMode('profileSetup');
         } catch (err: any) {
-            setError(`Failed to generate identity: ${err?.message || err}`);
+            setError(`Failed to register identity: ${err?.message || err}`);
             console.error(err);
         } finally {
             setLoading(false);
@@ -349,14 +363,17 @@ export default function WelcomeScreen() {
         setLoading(true);
         setError(null);
         try {
+            // Member was already redeemed at Step 1, but run backup safety check if needed
             if (pendingInviteCode) {
-                const { redeemInvite } = await import('../utils/db');
-                await redeemInvite(pendingInviteCode, pendingIdentity.callsign, pendingIdentity);
+                try {
+                    const { redeemInvite } = await import('../utils/db');
+                    await redeemInvite(pendingInviteCode, pendingIdentity.callsign, pendingIdentity);
+                } catch {
+                    /* already redeemed at Step 1 */
+                }
             }
 
-            // The member now exists on the node, so it's finally safe to publish the avatar/profile
-            // chosen in Step 2 (publishing before redeemInvite always 404s). On failure we leave the
-            // pending_profile_sync flag set so pillar-sync re-publishes on the next successful sync.
+            // Sync avatar to node if set
             if (pendingAvatar) {
                 try {
                     const url = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -376,8 +393,6 @@ export default function WelcomeScreen() {
                         if (res.ok) {
                             await AsyncStorage.removeItem('pending_profile_sync');
                         } else {
-                            const errText = await res.text().catch(() => '');
-                            console.warn('[Welcome] Post-registration profile publish rejected:', res.status, errText);
                             await AsyncStorage.setItem('pending_profile_sync', 'true');
                         }
                     }
@@ -387,21 +402,16 @@ export default function WelcomeScreen() {
                 }
             }
 
-            // Wizard complete: the member now exists on the node, so the
-            // half-registered-identity rescue record can go, and the seed
-            // backup the user confirmed at Step 3 counts as backed up (this
-            // also stops the Settings red-dot nag from firing 24h later).
             await clearPendingOnboarding();
             await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
 
-            // Refresh node recognition — on a resumed wizard it is still the
-            // stale pre-redeem 'stranger', which would pin us to this screen.
+            // Refresh node recognition
             await recheckNodeStatus().catch(() => {});
 
             // Final step — enter the app
             setIdentity(pendingIdentity);
         } catch (err: any) {
-            setError(err.message || 'Failed to redeem invite code.');
+            setError(err.message || 'Failed to complete registration.');
         } finally {
             setLoading(false);
         }
@@ -531,16 +541,35 @@ export default function WelcomeScreen() {
                 avatar_url: pendingAvatar,
             });
 
-            // 2. Defer the server publish until AFTER the member is registered on the node.
-            // `/api/profile/update` requires an existing member, so publishing here — before
-            // redeemInvite (which runs in handleConfirmSeed, Step 3) — always 404s and silently
-            // drops the avatar. We mark the profile pending; it is published the moment the
-            // member is registered (handleConfirmSeed), with the pillar-sync heal as a backstop.
-            await AsyncStorage.setItem('pending_profile_sync', 'true');
+            // 2. Publish avatar to the node since member was registered in Step 1
+            try {
+                const url = await AsyncStorage.getItem('beanpool_anchor_url');
+                if (url) {
+                    const payloadObj = {
+                        publicKey: pendingIdentity.publicKey,
+                        avatar: pendingAvatar,
+                        callsign: pendingIdentity.callsign,
+                    };
+                    const bodyString = JSON.stringify(payloadObj);
+                    const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, pendingIdentity.privateKey, pendingIdentity.publicKey);
+                    const res = await fetch(`${url}/api/profile/update`, {
+                        method: 'POST',
+                        headers,
+                        body: bodyString,
+                    });
+                    if (res.ok) {
+                        await AsyncStorage.removeItem('pending_profile_sync');
+                    } else {
+                        await AsyncStorage.setItem('pending_profile_sync', 'true');
+                    }
+                }
+            } catch {
+                await AsyncStorage.setItem('pending_profile_sync', 'true');
+            }
 
             await updatePendingOnboarding({ step: 'seedBackup', avatar: pendingAvatar });
 
-            // 3. Profile done — go to seed phrase (Step 3) instead of entering app
+            // 3. Profile done — go to seed phrase (Step 3)
             setMode('seedBackup');
         } catch (err: any) {
             setError(err.message || 'Failed to save profile.');

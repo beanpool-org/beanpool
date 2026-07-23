@@ -21,9 +21,10 @@ interface Props {
     onTrade?: (post: MarketplacePost) => void;
     viewMode?: 'grid' | 'list' | 'compact';
     onOpenProfile?: (pubkey: string) => void;
+    isOwnPost?: boolean;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES.find((c) => c.id === post.category);
     const typeColor = POST_TYPE_COLORS[post.type];
     const emoji = categoryConfig?.emoji ?? '📦';
@@ -41,6 +42,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const isPaused = post.status === 'paused';
     const pausedPill = isPaused ? (
         <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300/50">⏸ Paused</span>
+    ) : null;
+    const youPill = isOwnPost ? (
+        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-300/50">👤 You</span>
     ) : null;
 
     const elderCard = isElder(authorEnergy);
@@ -63,7 +67,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {post.title}
                         </h3>
                         <span className="text-[10px] text-nature-500 truncate flex items-center gap-1 flex-wrap">
-                            by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'}
+                            by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 font-bold">👤 (You)</span>}
                             {post.authorFoundingNeeded && (
                                 <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300/30 shrink-0">
                                     🌱 FOUNDING
@@ -122,6 +126,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             }`}>
                                 {post.type}
                             </span>
+                            {youPill}
                             {pausedPill}
                             {categoryConfig && (
                                 <span className="text-[10px] font-black text-nature-500 dark:text-nature-450 flex items-center gap-1">
@@ -199,6 +204,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <span className={`font-bold text-nature-950 dark:text-white truncate text-xs mt-0.5`}>
                         {post.title}
                     </span>
+                    {youPill && <div className="mt-1">{youPill}</div>}
                     {pausedPill && <div className="mt-1">{pausedPill}</div>}
                 </div>
 

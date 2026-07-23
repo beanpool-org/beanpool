@@ -756,7 +756,6 @@ export default function MarketScreen() {
         if (p.status !== 'active') return false;
         if (blockedUsers.includes(p.author_pubkey)) return false;
         if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
-        if (identity && p.author_pubkey === identity.publicKey) return false;
         
         // Type / For You filters
         if (filter === 'offers' && p.type !== 'offer') return false;
@@ -799,7 +798,6 @@ export default function MarketScreen() {
 
     const freshTodayCount = posts.filter(post => {
         if (post.status !== 'active') return false;
-        if (identity && post.author_pubkey === identity.publicKey) return false;
         const postTime = new Date(post.created_at || post.createdAt).getTime();
         const diffDays = Math.floor((Date.now() - postTime) / (24 * 60 * 60 * 1000));
         return diffDays === 0;
@@ -1156,6 +1154,7 @@ export default function MarketScreen() {
 
         const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || 'Unknown';
         const elderCard = isElder(item.author_energy_cycled);
+        const isOwn = !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
         
         const priceLabel = item.price_type === 'hourly' ? '/Hr' :
                            item.price_type === 'daily' ? '/Dy' :
@@ -1198,6 +1197,11 @@ export default function MarketScreen() {
                                 <Text style={styles.gridPriceText}>↻ RECURRING</Text>
                             </View>
                         )}
+                        {isOwn && (
+                            <View style={[styles.gridPriceBadge, { left: !!item.repeatable ? 95 : 8, right: undefined, backgroundColor: '#2563eb' }]}>
+                                <Text style={styles.gridPriceText}>👤 YOU</Text>
+                            </View>
+                        )}
                         <View style={[styles.gridTypeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
                             <Text style={[styles.badgeText, { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
                         </View>
@@ -1223,7 +1227,7 @@ export default function MarketScreen() {
                                 {item.title}
                             </Text>
                             <Text style={styles.compactAuthor} numberOfLines={1}>
-                                by {cardAuthor} {elderCard ? '⛰️' : ''}
+                                by {cardAuthor} {elderCard ? '⛰️' : ''} {isOwn ? '👤 (You)' : ''}
                             </Text>
                         </View>
                         <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
@@ -1268,6 +1272,11 @@ export default function MarketScreen() {
                                 <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
                                     <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
                                 </View>
+                                {isOwn && (
+                                    <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>👤 YOU</Text>
+                                    </View>
+                                )}
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text.secondary }}>
                                     {catEmoji} {catLabel}
                                 </Text>

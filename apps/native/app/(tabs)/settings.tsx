@@ -387,14 +387,16 @@ export default function SettingsScreen() {
         }
     };
 
-    const loadDiagnostics = async () => {
+    const loadDiagnostics = async (opts?: { skipSync?: boolean }) => {
         setDiagLoading(true);
         setRemoteStats(null);
         try {
-            try {
-                const { requestSync } = await import('../../services/pillar-sync');
-                await requestSync();
-            } catch (e) {}
+            if (!opts?.skipSync) {
+                try {
+                    const { requestSync } = await import('../../services/pillar-sync');
+                    await requestSync();
+                } catch (e) {}
+            }
             const { getDatabaseStats } = await import('../../utils/db');
             const stats = await getDatabaseStats();
             setDbStats(stats);
@@ -834,11 +836,24 @@ export default function SettingsScreen() {
                                 console.warn('[Resync] Sync finished with notice:', syncRes.errorMessage);
                             }
 
+                            // Dismiss modal immediately when sync completes before post-sync checks or alerts
+                            setResyncModalVisible(false);
+                            setResyncing(false);
+                            setAdvancedLoading(false);
+
+                            if (identity?.publicKey) {
+                                const { syncMessages } = await import('../../utils/db');
+                                syncMessages(identity.publicKey).catch(() => {});
+                            }
+
                             if (mode === 'diagnostics') {
-                                await loadDiagnostics();
+                                await loadDiagnostics({ skipSync: true });
                             }
                             Alert.alert("Success", "Local database rebuilt, ratings restored, and re-synced from the node.");
                         } catch (e: any) {
+                            setResyncModalVisible(false);
+                            setResyncing(false);
+                            setAdvancedLoading(false);
                             Alert.alert("Resync Error", e?.message || String(e) || "Failed to rebuild and re-sync.");
                         } finally {
                             setResyncing(false);
@@ -1664,7 +1679,7 @@ export default function SettingsScreen() {
                             {/* Action Buttons */}
                             <Pressable
                                 style={[styles.primaryBtn, { backgroundColor: colors.accent.primary, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]}
-                                onPress={loadDiagnostics}
+                                onPress={() => loadDiagnostics()}
                                 accessibilityRole="button"
                             >
                                 <Text style={{ fontSize: 16 }}>🔄</Text>

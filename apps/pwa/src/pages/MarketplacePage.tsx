@@ -1614,7 +1614,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {loading ? (
                 <p className="text-nature-500 text-center py-8">Loading...</p>
             ) : (() => {
-                let filtered = posts.filter(p => p.status === 'active' && (!identity || p.authorPublicKey !== identity.publicKey));
+                let filtered = posts.filter(p => p.status === 'active');
 
                 // Text search (synonym-expanded)
                 if (searchQuery.trim()) {
@@ -1775,6 +1775,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
                                                     remoteNode={(post as any)._remoteNode}
                                                     viewMode={viewMode}
+                                                    isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                 />
                                             </div>
                                         ))}
@@ -1831,6 +1832,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
                                                         remoteNode={(post as any)._remoteNode}
                                                         viewMode={viewMode}
+                                                        isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                     />
                                                 </div>
                                             ))}

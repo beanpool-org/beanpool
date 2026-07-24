@@ -1,8 +1,8 @@
 import React, { forwardRef } from 'react';
 import ClusteredMapView from 'react-native-map-clustering';
-import { Marker, Callout, PROVIDER_DEFAULT } from 'react-native-maps';
+import { Marker, Callout, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
 
-export { Marker, Callout, PROVIDER_DEFAULT };
+export { Marker, Callout, Circle, PROVIDER_DEFAULT };
 
 /**
  * Patched MapView wrapper that disables LayoutAnimation on iOS by default.

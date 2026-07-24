@@ -4,6 +4,7 @@ import { View, Text } from 'react-native';
 export const PROVIDER_DEFAULT = 'default';
 
 export const Marker = () => null;
+export const Circle = () => null;
 
 const MapView = (props: any) => {
     return (

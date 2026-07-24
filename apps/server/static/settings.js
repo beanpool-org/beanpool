@@ -1078,8 +1078,8 @@
             const directoryPushIntervalHours = isNaN(val) ? 12 : val;
             
             const update = { publishLocation, publishMembers, publishContacts, publishHealth, directoryPushIntervalHours };
-            if (!isNaN(lat) && !isNaN(lng) && km > 0) {
-                update.serviceRadius = { lat, lng, radiusKm: km };
+            if (!isNaN(lat) && !isNaN(lng)) {
+                update.serviceRadius = { lat, lng, radiusKm: Math.max(0, km) };
             } else {
                 update.serviceRadius = null;
             }

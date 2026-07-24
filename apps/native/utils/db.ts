@@ -5,6 +5,7 @@ import * as Crypto from 'expo-crypto';
 import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders } from './crypto';
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
+import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -1262,6 +1263,22 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
             contact_value = excluded.contact_value,
             contact_visibility = excluded.contact_visibility
     `, [pubkey, data.callsign, data.avatar_url || null, data.bio || null, data.contact_value || null, data.contact_visibility || 'hidden']);
+
+    // Mirror the user's OWN profile into the canonical (node-independent) store
+    // so it can be re-published to any other node they join. Guarded to the
+    // active identity so a sync writing another member's row can never clobber
+    // it. Merge-save: only fields present in this update are touched.
+    try {
+        const self = await loadIdentity();
+        if (self && self.publicKey === pubkey) {
+            await saveCanonicalProfile({
+                avatar: data.avatar_url,
+                bio: data.bio,
+                contactValue: data.contact_value,
+                contactVisibility: data.contact_visibility,
+            });
+        }
+    } catch { /* canonical mirror is best-effort */ }
 }
 
 export async function getProjects() {
@@ -1375,7 +1392,7 @@ export async function createPost(post: any) {
             // Auto-heal: server may not yet know about the user's avatar if the
             // onboarding publish failed. Push the profile and retry once.
             if (_isProfilePhotoError(errMsg)) {
-                const healed = await _pushProfileToServer();
+                const healed = await pushProfileToServer();
                 if (healed) {
                     const retryHeaders = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
                     const retryRes = await fetch(`${anchorUrl}/api/marketplace/posts`, {
@@ -3061,21 +3078,41 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
 // to the anchor node. Returns true if the server accepted the update.
 // Used both as a one-shot heal when marketplace actions fail with the
 // "Please set a profile photo" error, and by pillar-sync's retry loop.
-async function _pushProfileToServer(): Promise<boolean> {
+// Publish the user's profile (callsign + avatar + bio + contact) to the ACTIVE
+// node. Used three ways: the marketplace "please set a profile photo" auto-heal,
+// pillar-sync's offline-edit retry loop, and a proactive push right after joining
+// a new node so the picture lands before the user ever opens the composer.
+//
+// The avatar is resolved from THIS node's local DB first, then falls back to the
+// canonical (node-independent) profile — that fallback is what makes the picture
+// follow the user onto a freshly-joined second community, where the local row
+// exists (from registration) but has no avatar yet.
+export async function pushProfileToServer(): Promise<boolean> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const identity = await loadIdentity();
     if (!anchorUrl || !identity) return false;
     const profile = await getMemberProfile(identity.publicKey);
-    if (!profile || !profile.avatar_url) return false;
+
+    const canonical = await getCanonicalProfile();
+    const avatar = profile?.avatar_url || canonical?.avatar || null;
+    if (!avatar) {
+        // Genuinely no picture anywhere — nothing to publish. Clear any stale
+        // pending flag so the sync loop doesn't retry forever.
+        await AsyncStorage.removeItem('pending_profile_sync');
+        return false;
+    }
+
+    const callsign = profile?.callsign || identity.callsign;
+    const bio = profile?.bio ?? canonical?.bio ?? '';
+    const contactValue = profile?.contact_value ?? canonical?.contactValue ?? null;
+    const contactVisibility = profile?.contact_visibility ?? canonical?.contactVisibility ?? 'community';
 
     const payloadObj = {
         publicKey: identity.publicKey,
-        avatar: profile.avatar_url,
-        bio: profile.bio || '',
-        contact: profile.contact_value
-            ? { value: profile.contact_value, visibility: profile.contact_visibility || 'community' }
-            : null,
-        callsign: profile.callsign,
+        avatar,
+        bio: bio || '',
+        contact: contactValue ? { value: contactValue, visibility: contactVisibility } : null,
+        callsign,
     };
     const bodyString = JSON.stringify(payloadObj);
     const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
@@ -3085,10 +3122,33 @@ async function _pushProfileToServer(): Promise<boolean> {
             headers,
             body: bodyString,
         });
-        if (res.ok) {
-            await AsyncStorage.removeItem('pending_profile_sync');
-            return true;
+        if (!res.ok) return false;
+        // A 200 alone isn't proof the avatar took: if we sent one but the node
+        // echoed none back, the write didn't land — keep the pending flag and
+        // retry rather than silently giving up (this previously stranded pics).
+        let avatarPersisted = true;
+        try {
+            const data = await res.json();
+            const savedAvatar = data?.profile?.avatar || null;
+            if (avatar && !savedAvatar) avatarPersisted = false;
+        } catch { /* non-JSON body — trust the 2xx */ }
+        if (!avatarPersisted) return false;
+
+        await AsyncStorage.removeItem('pending_profile_sync');
+        // Mirror the canonical avatar into THIS node's local DB when it was
+        // missing, so local reads and the marketplace pre-check see it at once.
+        if (!profile?.avatar_url) {
+            try {
+                await updateMemberProfile(identity.publicKey, {
+                    callsign,
+                    avatar_url: avatar,
+                    bio: bio || undefined,
+                    contact_value: contactValue || undefined,
+                    contact_visibility: contactVisibility,
+                });
+            } catch { /* local mirror is best-effort */ }
         }
+        return true;
     } catch {}
     return false;
 }
@@ -3139,7 +3199,7 @@ async function _signedRequest(endpoint: string, payload: any) {
         // server doesn't know about it (common for users whose initial onboarding
         // publish failed), push the profile and retry the request once.
         if (_isProfilePhotoError(errorMsg)) {
-            const healed = await _pushProfileToServer();
+            const healed = await pushProfileToServer();
             if (healed) {
                 const retryHeaders = await buildSignedHeaders('POST', endpoint, bodyString, identity.privateKey, identity.publicKey);
                 const retryRes = await fetch(`${anchorUrl}${endpoint}`, {

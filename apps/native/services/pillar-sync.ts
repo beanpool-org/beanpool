@@ -169,50 +169,15 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const pendingSync = await AsyncStorage.getItem('pending_profile_sync');
                 if (pendingSync === 'true') {
                     try {
-                        const { getMemberProfile } = await import('../utils/db');
-                        const profile = await getMemberProfile(pubKey);
-                        if (!profile) {
-                            // Nothing to publish — clear the stale flag so it doesn't loop forever.
-                            console.warn('[Pillar Sync] Profile heal: pending flag set but no local profile found — clearing stale flag');
-                            await AsyncStorage.removeItem('pending_profile_sync');
-                        } else {
-                            const { buildSignedHeaders } = require('../utils/crypto');
-                            const payloadObj = {
-                                publicKey: pubKey,
-                                avatar: profile.avatar_url,
-                                bio: profile.bio,
-                                contact: profile.contact_value ? { value: profile.contact_value, visibility: profile.contact_visibility || 'community' } : null,
-                                callsign: profile.callsign,
-                            };
-                            const bodyString = JSON.stringify(payloadObj);
-                            const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, id.privateKey, pubKey);
-                            const res = await fetch(`${anchorUrl}/api/profile/update`, {
-                                method: 'POST',
-                                headers,
-                                body: bodyString
-                            });
-                            if (res.ok) {
-                                // A 200 alone isn't proof: if we sent an avatar but the node came
-                                // back with none, the write didn't take — keep the flag and retry
-                                // rather than silently giving up (this is what stranded Jay's pic).
-                                const localAvatar = profile.avatar_url || null;
-                                let avatarPersisted = true;
-                                try {
-                                    const data = await res.json();
-                                    const savedAvatar = (data?.profile?.avatar) || null;
-                                    if (localAvatar && !savedAvatar) avatarPersisted = false;
-                                } catch { /* non-JSON body — trust the 2xx */ }
-                                if (avatarPersisted) {
-                                    await AsyncStorage.removeItem('pending_profile_sync');
-                                    console.log('[Pillar Sync] Successfully healed pending profile sync');
-                                } else {
-                                    console.warn('[Pillar Sync] Profile heal: node accepted the request but did not store the avatar — keeping pending flag for retry');
-                                }
-                            } else {
-                                const errText = await res.text().catch(() => '');
-                                console.warn(`[Pillar Sync] Profile heal rejected (HTTP ${res.status}) — will retry next sync:`, errText.slice(0, 200));
-                            }
-                        }
+                        // Delegate to the single canonical-aware publisher: it verifies
+                        // the node actually stored the avatar before clearing the flag,
+                        // and falls back to the canonical picture when THIS node's local
+                        // row has none yet (e.g. a freshly-joined second community).
+                        const { pushProfileToServer } = await import('../utils/db');
+                        const ok = await pushProfileToServer();
+                        console.log(ok
+                            ? '[Pillar Sync] Successfully healed pending profile sync'
+                            : '[Pillar Sync] Profile heal deferred — will retry next sync');
                     } catch (healErr) {
                         console.warn('[Pillar Sync] Profile heal attempt failed (will retry next sync):', healErr);
                     }

@@ -1,14 +1,16 @@
 /**
- * SettingsPage — Identity management + export/import
- *
- * Shows the current identity details and provides
- * tools for transferring identity between devices.
+ * SettingsPage — Identity management, recovery phrase, social recovery,
+ * database diagnostics, notification preferences, and subsystem controls.
  */
 
 import { useState, useEffect } from 'react';
-import { type BeanPoolIdentity, importIdentity, wipeIdentity } from '../lib/identity';
-
-import { getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile, getNodeApiUrl, setNodeApiUrl, testNodeConnection } from '../lib/api';
+import { type BeanPoolIdentity, wipeIdentity } from '../lib/identity';
+import {
+    getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
+    getNodeApiUrl, setNodeApiUrl, testNodeConnection, getPendingRecoveryRequests,
+    approveRecoveryRequest, rejectRecoveryRequest, getNotificationPreferences,
+    updateNotificationPreferences, getNodeStats
+} from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
 import { type Theme } from '../lib/useTheme';
@@ -20,10 +22,19 @@ interface Props {
     onBack: () => void;
     theme: Theme;
     onToggleTheme: () => void;
-    initialMode?: 'menu' | 'profile' | 'advanced';
+    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications';
 }
 
 export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode }: Props) {
+    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications'>(initialMode || 'menu');
+
+    useEffect(() => {
+        if (initialMode) {
+            setMode(initialMode);
+        }
+    }, [initialMode]);
+
+    // App Preferences & Toggles
     const [useModernMarkers, setUseModernMarkers] = useState(() => {
         return localStorage.getItem('beanpool_modern_markers') !== 'false';
     });
@@ -44,7 +55,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         localStorage.setItem('beanpool-privacy-tier', next);
     };
 
-    // Holiday mode — pause presence. Queried directly so an unset flag reads OFF.
+    // Holiday mode
     const [holidayMode, setHolidayMode] = useState(false);
     const [holidayLoading, setHolidayLoading] = useState(false);
 
@@ -64,21 +75,145 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
             await setHolidayModeApi(next);
             setHolidayMode(next);
         } catch (e) {
-            // Server blocks turning it on while trades are in progress — surface that message.
             window.alert(e instanceof Error ? e.message : 'Could not update holiday mode.');
         } finally {
             setHolidayLoading(false);
         }
     };
 
-    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced'>(initialMode || 'menu');
+    // Notification Preferences
+    const [notifLoading, setNotifLoading] = useState(false);
+    const [notifChat, setNotifChat] = useState(true);
+    const [notifMarketplace, setNotifMarketplace] = useState(true);
+    const [notifEscrow, setNotifEscrow] = useState(true);
+
+    const loadNotificationPreferences = async () => {
+        setNotifLoading(true);
+        try {
+            const prefs = await getNotificationPreferences(identity.publicKey);
+            if (prefs) {
+                setNotifChat(prefs.notify_chat !== 'false' && prefs.notify_chat !== false);
+                setNotifMarketplace(prefs.notify_marketplace !== 'false' && prefs.notify_marketplace !== false);
+                setNotifEscrow(prefs.notify_escrow !== 'false' && prefs.notify_escrow !== false);
+            }
+        } catch (e) {
+            console.warn('[NotifPrefs] Failed:', e);
+        } finally {
+            setNotifLoading(false);
+        }
+    };
+
+    const handleToggleNotif = async (key: 'chat' | 'marketplace' | 'escrow') => {
+        const nextChat = key === 'chat' ? !notifChat : notifChat;
+        const nextMkt = key === 'marketplace' ? !notifMarketplace : notifMarketplace;
+        const nextEscrow = key === 'escrow' ? !notifEscrow : notifEscrow;
+
+        if (key === 'chat') setNotifChat(nextChat);
+        if (key === 'marketplace') setNotifMarketplace(nextMkt);
+        if (key === 'escrow') setNotifEscrow(nextEscrow);
+
+        try {
+            await updateNotificationPreferences(identity.publicKey, {
+                notify_chat: nextChat,
+                notify_marketplace: nextMkt,
+                notify_escrow: nextEscrow,
+            });
+        } catch (e) {
+            console.warn('[NotifPrefs] Save failed:', e);
+        }
+    };
+
+    // Recovery Requests (Guardian)
+    const [recoveryReqs, setRecoveryReqs] = useState<any[]>([]);
+    const [recoveryLoading, setRecoveryLoading] = useState(false);
 
     useEffect(() => {
-        if (initialMode) {
-            setMode(initialMode);
+        if (mode === 'recovery-requests') {
+            setRecoveryLoading(true);
+            getPendingRecoveryRequests(identity.publicKey)
+                .then(setRecoveryReqs)
+                .catch(err => console.warn('[RecoveryReqs] Failed:', err))
+                .finally(() => setRecoveryLoading(false));
         }
-    }, [initialMode]);
+    }, [mode, identity.publicKey]);
 
+    const handleApproveRecovery = async (reqId: string) => {
+        if (!window.confirm('Approve this recovery request? This confirms you vouch for this member restoring their identity.')) return;
+        try {
+            await approveRecoveryRequest(reqId);
+            setRecoveryReqs(prev => prev.filter(r => r.id !== reqId));
+        } catch (e: any) {
+            alert(e.message || 'Approval failed');
+        }
+    };
+
+    const handleRejectRecovery = async (reqId: string) => {
+        if (!window.confirm('Reject this recovery request?')) return;
+        try {
+            await rejectRecoveryRequest(reqId);
+            setRecoveryReqs(prev => prev.filter(r => r.id !== reqId));
+        } catch (e: any) {
+            alert(e.message || 'Rejection failed');
+        }
+    };
+
+    // Database Diagnostics
+    const [diagLoading, setDiagLoading] = useState(false);
+    const [nodeStats, setNodeStatsData] = useState<any>(null);
+    const [storageEstimate, setStorageEstimate] = useState<string>('Detecting...');
+    const [dbStats, setDbStats] = useState<any>(null);
+
+    const loadDiagnostics = async () => {
+        setDiagLoading(true);
+        try {
+            const stats = await getNodeStats();
+            setNodeStatsData(stats);
+
+            if (navigator.storage && navigator.storage.estimate) {
+                const est = await navigator.storage.estimate();
+                if (est.usage) {
+                    const mb = (est.usage / (1024 * 1024)).toFixed(2);
+                    setStorageEstimate(`${mb} MB`);
+                } else {
+                    setStorageEstimate('< 1 MB');
+                }
+            } else {
+                setStorageEstimate('Local Web Storage');
+            }
+
+            let memberCount = 0;
+            let postCount = 0;
+            try {
+                const keys = Object.keys(localStorage);
+                memberCount = keys.filter(k => k.includes('member')).length;
+                postCount = keys.filter(k => k.includes('post') || k.includes('offer')).length;
+            } catch {}
+
+            setDbStats({
+                integrity: 'ok',
+                members: memberCount || (stats?.members ?? 0),
+                posts: postCount || (stats?.posts ?? 0),
+                transactions: stats?.transactions ?? 0,
+                messages: 0
+            });
+        } catch (e) {
+            console.warn('[Diagnostics] Failed:', e);
+        } finally {
+            setDiagLoading(false);
+        }
+    };
+
+    // Seed phrase copy
+    const [seedCopied, setSeedCopied] = useState(false);
+
+    const handleCopySeed = () => {
+        if (!identity.mnemonic) return;
+        navigator.clipboard.writeText(identity.mnemonic.join(' '));
+        setSeedCopied(true);
+        setTimeout(() => setSeedCopied(false), 2000);
+    };
+
+    // Redeem invite & Node settings
     const [redeemInviteCode, setRedeemInviteCode] = useState('');
     const [redeemLoading, setRedeemLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -87,7 +222,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
     const [copied, setCopied] = useState(false);
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [showPrivateKey, setShowPrivateKey] = useState(false);
-    const [wipeConfirmStep, setWipeConfirmStep] = useState(0); // 0=idle, 1=first confirm, 2=wiped
+    const [wipeConfirmStep, setWipeConfirmStep] = useState(0);
 
     const [customNodeUrl, setCustomNodeUrl] = useState(() => getNodeApiUrl());
     const [testingNode, setTestingNode] = useState(false);
@@ -113,14 +248,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         window.location.reload();
     };
 
-    // Fetch profile (avatar) on mount and when returning from profile editor
     useEffect(() => {
         getMemberProfile(identity.publicKey).then(setProfile).catch(() => {});
     }, [identity.publicKey, mode]);
 
     const fingerprint = identity.publicKey.slice(0, 16) + '…';
-
-
 
     async function handleRedeemInvite() {
         if (!redeemInviteCode.trim()) return;
@@ -144,14 +276,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
             setError(null);
             setSuccess(null);
             try {
-                // Clear PWA client cache items
                 sessionStorage.clear();
                 localStorage.removeItem('beanpool-sync-state');
                 localStorage.removeItem(`bp_offline_invites_${identity.publicKey}`);
                 localStorage.removeItem('bp_geo_settings');
                 localStorage.removeItem('bp_peer_prefs');
                 localStorage.removeItem('beanpool-privacy-tier');
-                
+
                 setSuccess('Cache cleared. Resynced & reloading application...');
                 setTimeout(() => {
                     window.location.reload();
@@ -163,23 +294,31 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         }
     }
 
-
-
     return (
         <div className="flex justify-center p-4 min-h-screen bg-oat-50 dark:bg-nature-950 transition-colors">
-            <div className="max-w-[420px] w-full mt-4 pb-32">
+            <div className="max-w-[440px] w-full mt-2 pb-32">
                 {/* Header */}
                 <div className="flex items-center mb-6">
-                    <div className="w-16" />
+                    <button
+                        onClick={onBack}
+                        className="text-nature-600 dark:text-nature-400 font-semibold text-sm cursor-pointer border-none bg-transparent hover:text-nature-900 dark:hover:text-white"
+                    >
+                        ← Back
+                    </button>
                     <h2 className="flex-1 text-center text-xl font-bold text-nature-950 dark:text-white tracking-tight m-0 transition-colors">
                         Settings
                     </h2>
-                    <div className="w-16" />
+                    <div className="w-12" />
                 </div>
 
                 {/* Identity Card */}
-                <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 mb-4 shadow-soft border border-nature-200 dark:border-nature-800 transition-colors">
-                    {/* Avatar */}
+                <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 transition-colors relative">
+                    <button
+                        onClick={() => setMode('profile')}
+                        className="absolute top-4 right-4 text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 transition-all"
+                    >
+                        ✏️ Edit Profile
+                    </button>
                     <div className="flex justify-center mb-4">
                         <div className="w-20 h-20 rounded-full border-4 border-terra-300 dark:border-terra-600 flex items-center justify-center text-3xl bg-oat-50 dark:bg-nature-800 shadow-inner overflow-hidden transition-colors">
                             {profile?.avatar ? (
@@ -191,205 +330,264 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                             )}
                         </div>
                     </div>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-1">Callsign</div>
-                    <div className="text-xl font-bold text-nature-950 dark:text-white mb-4 transition-colors">{identity.callsign}</div>
+                    <div className="text-center mb-4">
+                        <div className="text-xl font-extrabold text-nature-950 dark:text-white">{identity.callsign}</div>
+                        {profile?.bio && <div className="text-xs text-nature-500 dark:text-nature-400 italic mt-1">{profile.bio}</div>}
+                    </div>
+
                     <div className="text-xs font-semibold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-1">Public Key</div>
-                    <div className="text-sm font-mono text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-2 rounded-lg border border-terra-100 dark:border-terra-800/50 transition-colors break-all mb-4">{fingerprint}</div>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-1">Community Node</div>
-                    <div className="text-sm font-mono text-nature-600 dark:text-nature-400 bg-nature-50 dark:bg-nature-900/30 px-3 py-2 rounded-lg border border-nature-100 dark:border-nature-800/50 transition-colors break-all mb-4">{window.location.origin}</div>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-1">App Version</div>
-                    <div className="text-sm font-mono text-nature-600 dark:text-nature-400 bg-nature-50 dark:bg-nature-900/30 px-3 py-2 rounded-lg border border-nature-100 dark:border-nature-800/50 transition-colors break-all">v{pkg.version} (Build 61)</div>
-                </div>
-
-                {/* Theme Toggle */}
-                <div className="bg-white dark:bg-nature-900 rounded-2xl px-6 py-5 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 flex justify-between items-center transition-colors">
-                    <span className="text-[15px] font-bold text-nature-900 dark:text-white transition-colors">
-                        {theme === 'dark' ? '🌙 Dark Theme' : '☀️ Light Theme'}
-                    </span>
-                    <button
-                        onClick={onToggleTheme}
-                        className={`w-14 h-[30px] rounded-full relative cursor-pointer outline-none transition-colors duration-300 ease-in-out border-2 shadow-inner ${
-                            theme === 'light' ? 'bg-terra-100 border-terra-200' : 'bg-slate-700 border-slate-600'
-                        }`}
-                        aria-label="Toggle Theme"
-                    >
-                        <span className={`block w-[22px] h-[22px] rounded-full bg-white absolute top-[2px] shadow-sm transform transition-transform duration-300 ease-in-out ${
-                            theme === 'dark' ? 'translate-x-[26px]' : 'translate-x-[2px] drop-shadow-[0_2px_4px_rgba(226,114,91,0.4)]'
-                        }`} />
-                    </button>
-                </div>
-
-                {/* Modern Markers Toggle */}
-                <div className="bg-white dark:bg-nature-900 rounded-2xl px-6 py-5 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 flex justify-between items-center transition-colors">
-                    <div>
-                        <span className="block text-[15px] font-bold text-nature-900 dark:text-white transition-colors">🗺️ Modern Map Pins</span>
-                        <span className="block text-xs text-nature-500 dark:text-nature-400 mt-0.5">Toggle standard vs custom styles</span>
+                    <div className="text-sm font-mono text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-2 rounded-lg border border-terra-100 dark:border-terra-800/50 transition-colors break-all mb-3 flex items-center justify-between">
+                        <span>{fingerprint}</span>
+                        <button
+                            onClick={() => {
+                                navigator.clipboard.writeText(identity.publicKey);
+                                alert('Public Key copied to clipboard');
+                            }}
+                            className="text-xs border-none bg-transparent cursor-pointer"
+                            title="Copy Public Key"
+                        >
+                            📋
+                        </button>
                     </div>
-                    <button
-                        onClick={handleToggleModernMarkers}
-                        className={`w-14 h-[30px] rounded-full relative cursor-pointer outline-none transition-colors duration-300 ease-in-out border-2 shadow-inner ${
-                            useModernMarkers ? 'bg-emerald-500 border-emerald-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300 dark:border-nature-600'
-                        }`}
-                        aria-label="Toggle Modern Markers"
-                    >
-                        <span className={`block w-[22px] h-[22px] rounded-full bg-white absolute top-[2px] shadow-sm transform transition-transform duration-300 ease-in-out ${
-                            useModernMarkers ? 'translate-x-[26px]' : 'translate-x-[2px]'
-                        }`} />
-                    </button>
-                </div>
 
-                {/* Location Privacy Toggle */}
-                <div className="bg-white dark:bg-nature-900 rounded-2xl px-6 py-5 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 flex justify-between items-center transition-colors">
-                    <div>
-                        <span className="block text-[15px] font-bold text-nature-900 dark:text-white transition-colors">
-                            {privacyTier === '3' ? '🔴 Live Location Sharing' : '👻 Ghost Mode (Location Hidden)'}
-                        </span>
-                        <span className="block text-xs text-nature-500 dark:text-nature-400 mt-0.5">Toggle real-time sharing vs absolute privacy</span>
+                    <div className="flex justify-between items-center text-xs text-nature-500 dark:text-nature-400 pt-2 border-t border-nature-100 dark:border-nature-800">
+                        <span>Node: <code className="font-mono text-nature-700 dark:text-nature-300">{window.location.host}</code></span>
+                        <span>v{pkg.version} (PWA)</span>
                     </div>
-                    <button
-                        onClick={handleTogglePrivacy}
-                        className={`w-14 h-[30px] rounded-full relative cursor-pointer outline-none transition-colors duration-300 ease-in-out border-2 shadow-inner ${
-                            privacyTier === '3' ? 'bg-red-500 border-red-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300 dark:border-nature-600'
-                        }`}
-                        aria-label="Toggle Location Privacy"
-                    >
-                        <span className={`block w-[22px] h-[22px] rounded-full bg-white absolute top-[2px] shadow-sm transform transition-transform duration-300 ease-in-out ${
-                            privacyTier === '3' ? 'translate-x-[26px]' : 'translate-x-[2px]'
-                        }`} />
-                    </button>
-                </div>
-
-                {/* Holiday Mode Toggle */}
-                <div className="bg-white dark:bg-nature-900 rounded-2xl px-6 py-5 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 flex justify-between items-center transition-colors">
-                    <div>
-                        <span className="block text-[15px] font-bold text-nature-900 dark:text-white transition-colors">🌴 Holiday Mode</span>
-                        <span className="block text-xs text-nature-500 dark:text-nature-400 mt-0.5">
-                            {holidayMode ? "You're away — offers hidden, no new requests" : 'Going away? Hide your offers and pause requests'}
-                        </span>
-                    </div>
-                    <button
-                        onClick={handleToggleHoliday}
-                        disabled={holidayLoading}
-                        className={`w-14 h-[30px] rounded-full relative cursor-pointer outline-none transition-colors duration-300 ease-in-out border-2 shadow-inner disabled:opacity-50 ${
-                            holidayMode ? 'bg-amber-500 border-amber-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300 dark:border-nature-600'
-                        }`}
-                        aria-label="Toggle Holiday Mode"
-                    >
-                        <span className={`block w-[22px] h-[22px] rounded-full bg-white absolute top-[2px] shadow-sm transform transition-transform duration-300 ease-in-out ${
-                            holidayMode ? 'translate-x-[26px]' : 'translate-x-[2px]'
-                        }`} />
-                    </button>
                 </div>
 
                 {mode === 'menu' && (
-                    <div className="space-y-3">
-                        <button
-                            onClick={() => setMode('profile')}
-                            className="w-full py-4 px-5 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center justify-between group"
-                        >
-                            <span>👤 Edit Profile</span>
-                            <span className="text-nature-400 dark:text-nature-500 group-hover:text-nature-600 dark:group-hover:text-nature-300 transition-colors">→</span>
-                        </button>
-
-                        <button
-                            onClick={() => { setMode('advanced'); setRedeemInviteCode(''); setError(null); setSuccess(null); }}
-                            className="w-full py-4 px-5 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center justify-between group"
-                        >
-                            <span>⚙️ Advanced / Subsystem</span>
-                            <span className="text-nature-400 dark:text-nature-500 group-hover:text-nature-600 dark:group-hover:text-nature-300 transition-colors">→</span>
-                        </button>
-                    </div>
-                )}
-
-                {/* Security Section */}
-                {mode === 'menu' && (
-                    <div className="mt-6">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-3 px-1">Security</h3>
-                        <div className="space-y-3">
-                            {/* Backup Reminder */}
-                            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl px-5 py-4 border border-amber-200 dark:border-amber-800 shadow-sm">
-                                <div className="flex items-start gap-3">
-                                    <span className="text-xl mt-0.5">⚠️</span>
-                                    <div>
-                                        <div className="font-bold text-amber-900 dark:text-amber-400 text-[13px] mb-1">Backup Your Identity</div>
-                                        <p className="text-amber-800 dark:text-amber-300/70 text-[12px] leading-relaxed m-0">
-                                            Your identity keys live in this browser only. Make sure to save your private key somewhere safe. If you clear browser data, your identity will be lost forever.
-                                        </p>
-                                    </div>
-                                </div>
+                    <div className="space-y-6">
+                        {/* ─── ACCOUNT & IDENTITY ─── */}
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                                ACCOUNT & IDENTITY
                             </div>
+                            <div className="space-y-2.5">
+                                <button
+                                    onClick={() => setMode('recovery-requests')}
+                                    className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
+                                >
+                                    <span className="text-xl">🛡️</span>
+                                    <div className="flex-1">
+                                        <div className="text-[15px] font-bold">Recovery Requests</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Help a friend recover their identity</div>
+                                    </div>
+                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                </button>
 
-                            {/* View Private Key */}
-                            <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 border border-nature-200 dark:border-nature-800 shadow-sm">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="font-bold text-[15px] text-nature-900 dark:text-white">🔑 Private Key</span>
+                                <button
+                                    onClick={() => setMode('seed')}
+                                    className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
+                                >
+                                    <span className="text-xl">🔑</span>
+                                    <div className="flex-1">
+                                        <div className="text-[15px] font-bold">View Recovery Phrase</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">View your 12-word backup seed</div>
+                                    </div>
+                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* ─── APP SETTINGS ─── */}
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                                APP SETTINGS
+                            </div>
+                            <div className="space-y-2.5">
+                                {/* Dark Mode Switch */}
+                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl">{theme === 'dark' ? '🌙' : '☀️'}</span>
+                                        <div>
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Dark Appearance</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">Toggle dark mode</div>
+                                        </div>
+                                    </div>
                                     <button
-                                        onClick={() => setShowPrivateKey(!showPrivateKey)}
-                                        className="text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-lg border border-terra-200 dark:border-terra-800 cursor-pointer hover:bg-terra-100 dark:hover:bg-terra-900/50 transition-colors"
+                                        onClick={onToggleTheme}
+                                        className={`w-13 h-7 rounded-full relative cursor-pointer outline-none transition-colors duration-300 border ${
+                                            theme === 'light' ? 'bg-terra-100 border-terra-200' : 'bg-slate-700 border-slate-600'
+                                        }`}
                                     >
-                                        {showPrivateKey ? 'Hide' : 'Reveal'}
+                                        <span className={`block w-5 h-5 rounded-full bg-white absolute top-0.5 shadow-sm transform transition-transform duration-300 ${
+                                            theme === 'dark' ? 'translate-x-6' : 'translate-x-0.5'
+                                        }`} />
                                     </button>
                                 </div>
-                                {showPrivateKey ? (
-                                    <div className="relative">
-                                        <div className="text-[10px] font-mono text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800 break-all select-all">
-                                            {identity.privateKey}
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(identity.privateKey);
-                                                setCopied(true);
-                                                setTimeout(() => setCopied(false), 2000);
-                                            }}
-                                            className="absolute top-1 right-1 text-[10px] font-bold bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 px-2 py-1 rounded border border-nature-200 dark:border-nature-700 cursor-pointer hover:bg-nature-50 transition-colors"
-                                        >
-                                            {copied ? '✅ Copied' : '📋 Copy'}
-                                        </button>
-                                        <p className="text-red-500 dark:text-red-400 text-[10px] mt-1.5 font-semibold m-0">
-                                            ⚠️ Never share this key. Anyone with it controls your identity.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">
-                                        Tap "Reveal" to view your private key. Keep it secret.
-                                    </div>
-                                )}
-                            </div>
 
-                            {/* Wipe Identity */}
+                                {/* Notification Preferences */}
+                                <button
+                                    onClick={() => { setMode('notifications'); loadNotificationPreferences(); }}
+                                    className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
+                                >
+                                    <span className="text-xl">🔔</span>
+                                    <div className="flex-1">
+                                        <div className="text-[15px] font-bold">Notification Preferences</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Control alerts by category</div>
+                                    </div>
+                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                </button>
+
+                                {/* Location Privacy */}
+                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl">📍</span>
+                                        <div>
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">
+                                                {privacyTier === '3' ? 'Live Location Sharing' : 'Ghost Mode (Location Hidden)'}
+                                            </div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">Real-time vs hidden presence</div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleTogglePrivacy}
+                                        className={`w-13 h-7 rounded-full relative cursor-pointer outline-none transition-colors duration-300 border ${
+                                            privacyTier === '3' ? 'bg-red-500 border-red-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300'
+                                        }`}
+                                    >
+                                        <span className={`block w-5 h-5 rounded-full bg-white absolute top-0.5 shadow-sm transform transition-transform duration-300 ${
+                                            privacyTier === '3' ? 'translate-x-6' : 'translate-x-0.5'
+                                        }`} />
+                                    </button>
+                                </div>
+
+                                {/* Modern Map Pins */}
+                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl">🗺️</span>
+                                        <div>
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Modern Map Pins</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">Toggle custom pin markers</div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleToggleModernMarkers}
+                                        className={`w-13 h-7 rounded-full relative cursor-pointer outline-none transition-colors duration-300 border ${
+                                            useModernMarkers ? 'bg-emerald-500 border-emerald-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300'
+                                        }`}
+                                    >
+                                        <span className={`block w-5 h-5 rounded-full bg-white absolute top-0.5 shadow-sm transform transition-transform duration-300 ${
+                                            useModernMarkers ? 'translate-x-6' : 'translate-x-0.5'
+                                        }`} />
+                                    </button>
+                                </div>
+
+                                {/* Holiday Mode */}
+                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl">🌴</span>
+                                        <div>
+                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">Holiday Mode</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">
+                                                {holidayMode ? "Away — offers hidden" : 'Hide offers & pause requests'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleToggleHoliday}
+                                        disabled={holidayLoading}
+                                        className={`w-13 h-7 rounded-full relative cursor-pointer outline-none transition-colors duration-300 border disabled:opacity-50 ${
+                                            holidayMode ? 'bg-amber-500 border-amber-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300'
+                                        }`}
+                                    >
+                                        <span className={`block w-5 h-5 rounded-full bg-white absolute top-0.5 shadow-sm transform transition-transform duration-300 ${
+                                            holidayMode ? 'translate-x-6' : 'translate-x-0.5'
+                                        }`} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ─── LEGAL & PRIVACY ─── */}
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                                LEGAL & PRIVACY
+                            </div>
+                            <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
+                                <a href="https://beanpool.org/privacy.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
+                                    <span className="flex items-center gap-3">🛡️ Privacy Policy</span>
+                                    <span className="text-nature-400">›</span>
+                                </a>
+                                <a href="https://beanpool.org/terms.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
+                                    <span className="flex items-center gap-3">⚖️ Terms of Service & EULA</span>
+                                    <span className="text-nature-400">›</span>
+                                </a>
+                                <a href="https://beanpool.org/safety.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
+                                    <span className="flex items-center gap-3">🚸 Child Safety Standards</span>
+                                    <span className="text-nature-400">›</span>
+                                </a>
+                            </div>
+                        </div>
+
+                        {/* ─── SYSTEM ─── */}
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                                SYSTEM
+                            </div>
+                            <div className="space-y-2.5">
+                                <button
+                                    onClick={() => { setMode('diagnostics'); loadDiagnostics(); }}
+                                    className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
+                                >
+                                    <span className="text-xl">📊</span>
+                                    <div className="flex-1">
+                                        <div className="text-[15px] font-bold">Database Health & Stats</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Local storage metrics & integrity checks</div>
+                                    </div>
+                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                </button>
+
+                                <button
+                                    onClick={() => setMode('advanced')}
+                                    className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
+                                >
+                                    <span className="text-xl">⚙️</span>
+                                    <div className="flex-1">
+                                        <div className="text-[15px] font-bold">Advanced / Subsystem</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Node management & cache controls</div>
+                                    </div>
+                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* ─── DANGER ZONE ─── */}
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-red-500 dark:text-red-400 mb-2 px-1">
+                                DANGER ZONE
+                            </div>
                             {wipeConfirmStep === 0 && (
                                 <button
                                     onClick={() => setWipeConfirmStep(1)}
-                                    className="w-full py-4 px-5 rounded-2xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 font-bold border border-red-200 dark:border-red-800 shadow-sm hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-left flex items-center justify-between group cursor-pointer"
+                                    className="w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 font-bold border border-red-200 dark:border-red-800 shadow-sm hover:bg-red-100 transition-colors text-left flex items-center justify-between cursor-pointer"
                                 >
-                                    <span>🗑️ Wipe Identity</span>
-                                    <span className="text-red-300 dark:text-red-600 group-hover:text-red-500 transition-colors">→</span>
+                                    <span className="flex items-center gap-3">⚠️ Delete Account</span>
+                                    <span>→</span>
                                 </button>
                             )}
                             {wipeConfirmStep === 1 && (
-                                <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-5 border-2 border-red-300 dark:border-red-700 shadow-md animate-in fade-in slide-in-from-bottom-2 duration-200">
-                                    <h4 className="text-red-800 dark:text-red-400 font-bold text-[15px] mb-2 m-0">⚠️ Are you absolutely sure?</h4>
-                                    <p className="text-red-700 dark:text-red-300/70 text-[12px] mb-4 leading-relaxed m-0">
-                                        This will permanently delete your identity from this browser. You will lose access to your callsign, balance, and friends unless you have a backup.
+                                <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-5 border-2 border-red-300 dark:border-red-700 shadow-md">
+                                    <h4 className="text-red-800 dark:text-red-400 font-bold text-sm mb-2">⚠️ Are you absolutely sure?</h4>
+                                    <p className="text-red-700 dark:text-red-300 text-xs mb-4 leading-relaxed">
+                                        This will permanently delete your identity from this browser. You will lose access to your callsign and community balance unless you have saved your 12-word recovery phrase.
                                     </p>
                                     <div className="flex gap-3">
                                         <button
                                             onClick={() => setWipeConfirmStep(0)}
-                                            className="flex-1 py-2.5 rounded-xl bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold border border-nature-200 dark:border-nature-700 cursor-pointer hover:bg-nature-50 transition-colors text-sm"
+                                            className="flex-1 py-2.5 rounded-xl bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold border border-nature-200 dark:border-nature-700 cursor-pointer text-xs"
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             onClick={async () => {
-                                                // Delete the key from IndexedDB (the real store) and clear any
-                                                // legacy localStorage artifact, so "Wipe Forever" actually wipes.
                                                 await wipeIdentity();
-                                                localStorage.removeItem('beanpool_identity');
-                                                localStorage.removeItem('beanpool_modern_markers');
+                                                localStorage.clear();
                                                 setWipeConfirmStep(2);
                                                 setTimeout(() => window.location.reload(), 1500);
                                             }}
-                                            className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold border-none cursor-pointer hover:bg-red-700 transition-colors text-sm shadow-sm"
+                                            className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold border-none cursor-pointer hover:bg-red-700 text-xs"
                                         >
                                             🗑️ Wipe Forever
                                         </button>
@@ -397,133 +595,342 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 </div>
                             )}
                             {wipeConfirmStep === 2 && (
-                                <div className="bg-red-100 dark:bg-red-900/30 rounded-2xl p-5 text-center border border-red-200 dark:border-red-800">
-                                    <span className="text-3xl">💨</span>
-                                    <p className="text-red-800 dark:text-red-400 font-bold text-sm mt-2 mb-0">Identity wiped. Reloading...</p>
+                                <div className="bg-red-100 dark:bg-red-900/30 rounded-2xl p-4 text-center border border-red-200 dark:border-red-800">
+                                    <p className="text-red-800 dark:text-red-400 font-bold text-xs m-0">Identity wiped. Reloading...</p>
                                 </div>
                             )}
                         </div>
                     </div>
                 )}
 
+                {/* ─── MODE: VIEW RECOVERY PHRASE (SEED) ─── */}
+                {mode === 'seed' && (
+                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🔑 Recovery Phrase</h3>
+                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
+                            Your 12-word recovery phrase allows you to restore your identity on any device. Anyone with these words can control your account. Keep them secret and offline.
+                        </p>
 
+                        {identity.mnemonic && identity.mnemonic.length === 12 ? (
+                            <>
+                                <div className="grid grid-cols-3 gap-2 mb-6">
+                                    {identity.mnemonic.map((word, i) => (
+                                        <div key={i} className="bg-oat-50 dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 rounded-xl p-2.5 text-center">
+                                            <span className="text-[10px] text-nature-400 block font-mono mb-0.5">{i + 1}.</span>
+                                            <span className="text-sm font-bold font-mono text-nature-900 dark:text-white">{word}</span>
+                                        </div>
+                                    ))}
+                                </div>
 
+                                <button
+                                    onClick={handleCopySeed}
+                                    className="w-full py-3 mb-4 rounded-xl font-bold bg-terra-500 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
+                                >
+                                    {seedCopied ? '✅ Copied to Clipboard!' : '📋 Copy All Words'}
+                                </button>
+                            </>
+                        ) : (
+                            <div className="bg-amber-50 dark:bg-amber-950/30 p-4 rounded-xl text-xs text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 mb-6">
+                                This identity was generated without seed phrase storage. Your raw Private Key is available under Advanced settings.
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => setMode('menu')}
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                        >
+                            ← Back to Settings
+                        </button>
+                    </div>
+                )}
+
+                {/* ─── MODE: RECOVERY REQUESTS ─── */}
+                {mode === 'recovery-requests' && (
+                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🛡️ Recovery Requests</h3>
+                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
+                            Members who listed you as a Guardian can request account recovery if they lose their phone. Verify their identity before approving.
+                        </p>
+
+                        {recoveryLoading ? (
+                            <div className="py-8 text-center text-sm text-nature-400 animate-pulse">Checking pending recovery requests...</div>
+                        ) : recoveryReqs.length === 0 ? (
+                            <div className="bg-oat-50 dark:bg-nature-950/50 p-6 rounded-2xl text-center text-xs text-nature-500 dark:text-nature-400 border border-nature-200 dark:border-nature-800 mb-6">
+                                🟢 No pending recovery requests.
+                            </div>
+                        ) : (
+                            <div className="space-y-3 mb-6">
+                                {recoveryReqs.map(req => (
+                                    <div key={req.id} className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
+                                        <div className="font-bold text-sm text-nature-900 dark:text-white mb-1">
+                                            Request from <span className="text-terra-600 dark:text-terra-400">{req.callsign || 'Unknown Member'}</span>
+                                        </div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400 mb-3">
+                                            Submitted {new Date(req.createdAt).toLocaleDateString()}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => handleRejectRecovery(req.id)}
+                                                className="flex-1 py-2 rounded-lg text-xs font-bold bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 cursor-pointer"
+                                            >
+                                                Reject
+                                            </button>
+                                            <button
+                                                onClick={() => handleApproveRecovery(req.id)}
+                                                className="flex-1 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white border-none cursor-pointer hover:bg-emerald-700"
+                                            >
+                                                Approve
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => setMode('menu')}
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                        >
+                            ← Back to Settings
+                        </button>
+                    </div>
+                )}
+
+                {/* ─── MODE: DATABASE DIAGNOSTICS & HEALTH ─── */}
+                {mode === 'diagnostics' && (
+                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">📊 Database Diagnostics & Health</h3>
+                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
+                            Transparency metrics for your local off-grid database cache. Structural check verifies zero data corruption.
+                        </p>
+
+                        {diagLoading ? (
+                            <div className="py-10 text-center text-sm text-nature-500 animate-pulse">Running Structural Integrity Check...</div>
+                        ) : (
+                            <>
+                                {/* Status Banner */}
+                                <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-4 rounded-xl flex items-center justify-between mb-5">
+                                    <span className="text-xs font-bold text-nature-700 dark:text-nature-300">Database Status:</span>
+                                    <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300 px-3 py-1 bg-emerald-100 dark:bg-emerald-900/40 rounded-full border border-emerald-300 dark:border-emerald-700">
+                                        🟢 Healthy & Synced
+                                    </span>
+                                </div>
+
+                                {/* Cache Metrics Grid */}
+                                <div className="grid grid-cols-2 gap-3 mb-5">
+                                    <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
+                                        <div className="text-xl mb-1">👥</div>
+                                        <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.members ?? 0}</div>
+                                        <div className="text-[11px] text-nature-500 font-semibold">Cached Members</div>
+                                    </div>
+                                    <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
+                                        <div className="text-xl mb-1">🛒</div>
+                                        <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.posts ?? 0}</div>
+                                        <div className="text-[11px] text-nature-500 font-semibold">Active Posts</div>
+                                    </div>
+                                    <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
+                                        <div className="text-xl mb-1">💸</div>
+                                        <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.transactions ?? 0}</div>
+                                        <div className="text-[11px] text-nature-500 font-semibold">Ledger Deals</div>
+                                    </div>
+                                    <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
+                                        <div className="text-xl mb-1">💬</div>
+                                        <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.messages ?? 0}</div>
+                                        <div className="text-[11px] text-nature-500 font-semibold">Messages</div>
+                                    </div>
+                                </div>
+
+                                {/* Storage info */}
+                                <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 mb-5 text-xs space-y-1.5">
+                                    <div className="flex justify-between">
+                                        <span className="text-nature-500">Storage Usage:</span>
+                                        <span className="font-bold text-nature-900 dark:text-white">{storageEstimate}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-nature-500">Active Node:</span>
+                                        <span className="font-mono text-nature-900 dark:text-white">{window.location.origin}</span>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={loadDiagnostics}
+                                    className="w-full py-3 mb-3 rounded-xl font-bold bg-nature-900 text-white dark:bg-white dark:text-nature-900 border-none cursor-pointer text-xs"
+                                >
+                                    🔄 Re-Run Structural Diagnostic Check
+                                </button>
+
+                                <button
+                                    onClick={handleForceResync}
+                                    className="w-full py-3 mb-6 rounded-xl font-bold bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 cursor-pointer text-xs"
+                                >
+                                    ⚡ Force Clear & Re-Sync Database
+                                </button>
+                            </>
+                        )}
+
+                        <button
+                            onClick={() => setMode('menu')}
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                        >
+                            ← Back to Settings
+                        </button>
+                    </div>
+                )}
+
+                {/* ─── MODE: NOTIFICATION PREFERENCES ─── */}
+                {mode === 'notifications' && (
+                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🔔 Notification Preferences</h3>
+                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
+                            Control which activity triggers browser notifications and alerts.
+                        </p>
+
+                        {notifLoading ? (
+                            <div className="py-8 text-center text-sm text-nature-400 animate-pulse">Loading preferences...</div>
+                        ) : (
+                            <div className="space-y-4 mb-6">
+                                <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                    <div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">Chat Messages</div>
+                                        <div className="text-xs text-nature-500">Alerts when someone messages you</div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleToggleNotif('chat')}
+                                        className={`w-12 h-6 rounded-full relative cursor-pointer border ${notifChat ? 'bg-emerald-500 border-emerald-600' : 'bg-nature-200 border-nature-300'}`}
+                                    >
+                                        <span className={`block w-4 h-4 rounded-full bg-white absolute top-0.5 transform transition-transform ${notifChat ? 'translate-x-6.5' : 'translate-x-0.5'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                    <div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">Marketplace Activity</div>
+                                        <div className="text-xs text-nature-500">Alerts on new offers & needs in your area</div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleToggleNotif('marketplace')}
+                                        className={`w-12 h-6 rounded-full relative cursor-pointer border ${notifMarketplace ? 'bg-emerald-500 border-emerald-600' : 'bg-nature-200 border-nature-300'}`}
+                                    >
+                                        <span className={`block w-4 h-4 rounded-full bg-white absolute top-0.5 transform transition-transform ${notifMarketplace ? 'translate-x-6.5' : 'translate-x-0.5'}`} />
+                                    </button>
+                                </div>
+
+                                <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                    <div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">Escrow & Deals</div>
+                                        <div className="text-xs text-nature-500">Alerts on trade updates & credit transfers</div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleToggleNotif('escrow')}
+                                        className={`w-12 h-6 rounded-full relative cursor-pointer border ${notifEscrow ? 'bg-emerald-500 border-emerald-600' : 'bg-nature-200 border-nature-300'}`}
+                                    >
+                                        <span className={`block w-4 h-4 rounded-full bg-white absolute top-0.5 transform transition-transform ${notifEscrow ? 'translate-x-6.5' : 'translate-x-0.5'}`} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => setMode('menu')}
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                        >
+                            ← Back to Settings
+                        </button>
+                    </div>
+                )}
+
+                {/* ─── MODE: ADVANCED / SUBSYSTEM ─── */}
                 {mode === 'advanced' && (
-                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800 animate-in fade-in slide-in-from-bottom-2 duration-300 transition-colors">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-3 m-0 transition-colors">⚙️ Advanced Settings</h3>
-                        <p className="text-nature-600 dark:text-nature-400 text-sm mb-5 leading-relaxed transition-colors">
+                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-3 m-0">⚙️ Advanced Settings</h3>
+                        <p className="text-nature-600 dark:text-nature-400 text-xs mb-5 leading-relaxed">
                             Manage referral connections and client-side database/state cache sync.
                         </p>
 
-                        {/* Section: Sovereign Node Connection Manager */}
-                        <div className="mb-6 border-b border-nature-100 dark:border-nature-800/80 pb-6">
-                            <h4 className="text-sm font-bold text-nature-800 dark:text-nature-200 mb-2">🌐 Sovereign Node Connection</h4>
-                            <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-relaxed">
-                                Point this detached client at any sovereign BeanPool node API (e.g. <code className="bg-oat-100 dark:bg-nature-800 px-1 py-0.5 rounded font-mono text-[11px]">https://mullum1.beanpool.org</code>). Leave empty to use same-origin default.
-                            </p>
+                        {/* Node Connection */}
+                        <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🌐 Sovereign Node Connection</h4>
                             <input
                                 type="text"
                                 value={customNodeUrl}
                                 onChange={(e) => { setCustomNodeUrl(e.target.value); setNodeTestResult(null); }}
                                 placeholder="Node API URL (e.g. https://mullum1.beanpool.org)"
-                                className="w-full py-2.5 px-4 mb-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-terra-300 dark:focus:ring-terra-600 transition-all font-mono text-sm placeholder:font-sans placeholder:text-sm"
+                                className="w-full py-2.5 px-4 mb-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white font-mono text-xs"
                                 autoCapitalize="none"
-                                autoCorrect="false"
                             />
                             {nodeTestResult && (
-                                <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'}`}>
-                                    {nodeTestResult.ok
-                                        ? `✅ Connected to "${nodeTestResult.callsign}" (${nodeTestResult.latencyMs}ms latency)`
-                                        : `❌ Connection failed: ${nodeTestResult.error}`}
+                                <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                    {nodeTestResult.ok ? `✅ Connected to "${nodeTestResult.callsign}" (${nodeTestResult.latencyMs}ms)` : `❌ ${nodeTestResult.error}`}
                                 </div>
                             )}
                             <div className="flex gap-2">
                                 <button
                                     onClick={handleTestNodeConnection}
                                     disabled={testingNode || !customNodeUrl.trim()}
-                                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-oat-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700 transition-all"
+                                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-oat-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 border-none cursor-pointer"
                                 >
-                                    {testingNode ? 'Testing...' : '🧪 Test Connection'}
+                                    {testingNode ? 'Testing...' : '🧪 Test'}
                                 </button>
                                 <button
                                     onClick={handleSaveNodeUrl}
-                                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:bg-nature-800 dark:hover:bg-oat-100 transition-all shadow-sm"
+                                    className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-nature-900 dark:bg-white text-white dark:text-nature-900 border-none cursor-pointer"
                                 >
                                     💾 Save & Connect
                                 </button>
-                                {getNodeApiUrl() && (
-                                    <button
-                                        onClick={handleResetNodeUrl}
-                                        className="py-2.5 px-3 rounded-xl text-xs font-bold bg-gray-200 dark:bg-nature-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 transition-all"
-                                        title="Reset to Same-Origin"
-                                    >
-                                        ↩️ Reset
-                                    </button>
-                                )}
                             </div>
                         </div>
 
-                        {/* Section 1: Redeem Invite */}
-                        <div className="mb-6 border-b border-nature-100 dark:border-nature-800/80 pb-6">
-                            <h4 className="text-sm font-bold text-nature-800 dark:text-nature-200 mb-2">🎟️ Redeem / Update Invite</h4>
-                            <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-relaxed">
-                                Associate this client profile with a referral or new parent node to sync marketplace products and permissions.
-                            </p>
+                        {/* Private Key Reveal */}
+                        <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🔑 Raw Private Key</h4>
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs text-nature-500">View underlying Ed25519 secret seed</span>
+                                <button
+                                    onClick={() => setShowPrivateKey(!showPrivateKey)}
+                                    className="text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1 rounded-lg border border-terra-200 cursor-pointer"
+                                >
+                                    {showPrivateKey ? 'Hide' : 'Reveal'}
+                                </button>
+                            </div>
+                            {showPrivateKey && (
+                                <div className="text-[11px] font-mono text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 p-3 rounded-xl border border-red-200 dark:border-red-800 break-all select-all">
+                                    {identity.privateKey}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Redeem Invite */}
+                        <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🎟️ Redeem Invite Code</h4>
                             <input
                                 type="text"
                                 value={redeemInviteCode}
                                 onChange={(e) => setRedeemInviteCode(e.target.value)}
-                                placeholder="Enter Invite Code (e.g. BEAN-XXXX)"
-                                className="w-full py-2.5 px-4 mb-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-terra-300 dark:focus:ring-terra-600 transition-all font-mono text-sm placeholder:font-sans placeholder:text-sm"
-                                autoCapitalize="characters"
-                                autoCorrect="false"
+                                placeholder="Enter Invite Code (e.g. BP-7K3X-9M2W)"
+                                className="w-full py-2.5 px-4 mb-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white font-mono text-xs"
                             />
                             <button
                                 onClick={handleRedeemInvite}
                                 disabled={redeemLoading || !redeemInviteCode.trim()}
-                                className={`w-full py-2.5 rounded-xl font-bold transition-all shadow-sm text-sm ${
-                                    !redeemLoading && redeemInviteCode.trim()
-                                        ? 'bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:bg-nature-800 dark:hover:bg-oat-100 hover:shadow-md'
-                                        : 'bg-oat-200 dark:bg-nature-800 text-oat-500 dark:text-nature-500 cursor-not-allowed'
-                                }`}
+                                className="w-full py-2.5 rounded-xl font-bold bg-nature-900 text-white dark:bg-white dark:text-nature-900 border-none cursor-pointer text-xs"
                             >
                                 {redeemLoading ? 'Redeeming...' : 'Redeem Code'}
                             </button>
                         </div>
 
-                        {/* Section 2: Reset Node Client Cache */}
-                        <div className="mb-6">
-                            <h4 className="text-sm font-bold text-nature-800 dark:text-nature-200 mb-2">🔄 Reset Client Cache & Resync</h4>
-                            <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-relaxed">
-                                Clears the local sessionStorage and offline cursors (invites, map preferences, and privacy tiers) to perform a clean sync from the node.
-                            </p>
-                            <button
-                                onClick={handleForceResync}
-                                disabled={loading}
-                                className={`w-full py-2.5 rounded-xl font-bold border transition-all text-sm shadow-sm ${
-                                    !loading
-                                        ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30'
-                                        : 'bg-oat-200 dark:bg-nature-800 text-oat-500 dark:text-nature-500 border-transparent cursor-not-allowed'
-                                }`}
-                            >
-                                {loading ? 'Clearing Cache...' : 'Reset Cache & Resync'}
-                            </button>
-                        </div>
+                        {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
+                        {success && <p className="text-emerald-600 text-xs mb-3">{success}</p>}
 
-                        {/* Feedback Messages */}
-                        {error && <p className="text-red-500 dark:text-red-400 text-sm mb-4 font-medium px-1 animate-pulse">{error}</p>}
-                        {success && <p className="text-emerald-600 dark:text-emerald-400 text-sm mb-4 font-medium px-1">{success}</p>}
-
-                        {/* Back Button */}
                         <button
-                            onClick={() => { setMode('menu'); setError(null); setSuccess(null); }}
-                            className="w-full py-3 rounded-xl font-semibold bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-400 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors"
+                            onClick={() => setMode('menu')}
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer text-sm"
                         >
-                            Back to Settings
+                            ← Back to Settings
                         </button>
                     </div>
                 )}
 
+                {/* ─── MODE: PROFILE EDITOR ─── */}
                 {mode === 'profile' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden transition-colors">
                         <ProfilePage

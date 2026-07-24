@@ -470,15 +470,31 @@ export default function PublicProfileScreen() {
                                     
                                     {/* Clear Nuanced Trust Explanation */}
                                     <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                                        {(trust.stats?.tradeCount || 0) === 0 ? (
-                                            <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 17, fontWeight: '500' }}>
-                                                💡 <Text style={{ fontWeight: '700', color: colors.text.heading }}>New Member Notice:</Text> A low score simply means they are new to the community — not that they've done anything wrong! Complete a marketplace trade with them to help them build community trust.
-                                            </Text>
-                                        ) : (
-                                            <Text style={{ fontSize: 12, color: colors.brand.primary, lineHeight: 17, fontWeight: '600' }}>
-                                                🤝 <Text style={{ fontWeight: '800' }}>Proven Partner:</Text> Earned trust through {trust.stats?.tradeCount || 0} completed trade{(trust.stats?.tradeCount || 0) === 1 ? '' : 's'} across {trust.stats?.uniquePartners || 0} unique partner{(trust.stats?.uniquePartners || 0) === 1 ? '' : 's'}.
-                                            </Text>
-                                        )}
+                                        {(() => {
+                                            const tradeCount = trust.stats?.tradeCount || 0;
+                                            const isHighRisk = trust.risk?.band === 'red' || trust.risk?.band === 'black';
+                                            const completionPct = trust.completionRate !== null && trust.completionRate !== undefined ? Math.round(trust.completionRate * 100) : 100;
+
+                                            if (tradeCount === 0) {
+                                                return (
+                                                    <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 17, fontWeight: '500' }}>
+                                                        🌱 <Text style={{ fontWeight: '700', color: colors.text.heading }}>New Member:</Text> Has not completed any trades yet. Complete a marketplace trade with them to help build their community trust score.
+                                                    </Text>
+                                                );
+                                            }
+                                            if (isHighRisk || completionPct < 75) {
+                                                return (
+                                                    <Text style={{ fontSize: 12, color: colors.feedback.danger.fg, lineHeight: 17, fontWeight: '600' }}>
+                                                        ⚠️ <Text style={{ fontWeight: '800' }}>Mixed Track Record:</Text> Completed {tradeCount} trade{tradeCount === 1 ? '' : 's'} with a {completionPct}% completion rate across {trust.stats?.uniquePartners || 0} partner{trust.stats?.uniquePartners === 1 ? '' : 's'}.
+                                                    </Text>
+                                                );
+                                            }
+                                            return (
+                                                <Text style={{ fontSize: 12, color: colors.brand.primary, lineHeight: 17, fontWeight: '600' }}>
+                                                    🤝 <Text style={{ fontWeight: '800' }}>Proven Partner:</Text> Earned trust through {tradeCount} completed trade{tradeCount === 1 ? '' : 's'} across {trust.stats?.uniquePartners || 0} unique partner{trust.stats?.uniquePartners === 1 ? '' : 's'}.
+                                                </Text>
+                                            );
+                                        })()}
                                     </View>
                                 </View>
                             </View>

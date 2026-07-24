@@ -127,6 +127,7 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
       <a class="cta secondary" id="iosStore" href="#" rel="noopener">App Store</a>
       <a class="cta secondary" id="androidStore" href="#" rel="noopener">Google Play</a>
     </div>
+    <a class="cta secondary" id="openAppBtn" href="#" style="margin-top:10px; display:none;">Already have the app? Open BeanPool →</a>
     <div class="desktop-note" id="desktopNote">Open this invite link on your phone to install the app.</div>
   </div>
 
@@ -185,6 +186,16 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
         var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } catch(e){}
     });
   });
+
+  // Open App button for existing installs
+  var openAppBtn = document.getElementById('openAppBtn');
+  if (isAndroid || isIOS) {
+    openAppBtn.style.display = 'block';
+    openAppBtn.href = 'beanpool://invite?code=' + encodeURIComponent(code) + '&server=' + encodeURIComponent(origin);
+    openAppBtn.addEventListener('click', function(){
+      copyInvite().catch(function(){});
+    });
+  }
 
   // Platform-specific install CTA + steps
   var installBtn = document.getElementById('installBtn');

@@ -660,11 +660,11 @@ export function getAllMembers(): Member[] {
 
 export { generateInvite, adminGenerateInvite };
 
-export function redeemInvite(code: string, publicKey: string, callsign: string): { success: boolean; error?: string; member?: Member } {
+export function redeemInvite(code: string, publicKey: string, callsign: string): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
     return redeemInviteEngine(broadcast, code, publicKey, callsign);
 }
 
-export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string): { success: boolean; error?: string; member?: Member } {
+export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
     return redeemOfflineTicketEngine(broadcast, ticketB64, joinerPublicKey, callsign);
 }
 

@@ -3035,8 +3035,18 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
             throw new Error(errorMsg);
         }
 
-        console.log('[DB] ✅ Invite redeemed successfully!');
-        return true;
+        let alreadyMember = false;
+        try {
+            const data = await res.json();
+            if (data?.alreadyMember) alreadyMember = true;
+        } catch {}
+
+        if (alreadyMember) {
+            console.log('[DB] ℹ️ User is already a registered member of this community.');
+        } else {
+            console.log('[DB] ✅ Invite redeemed successfully!');
+        }
+        return { success: true, alreadyMember } as any;
     } catch (e: any) {
         console.warn('[DB] Failed to redeem invite:', e.message);
         throw e;

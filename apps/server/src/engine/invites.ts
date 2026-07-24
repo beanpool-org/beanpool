@@ -68,10 +68,9 @@ export function redeemInvite(
     code: string,
     publicKey: string,
     callsign: string
-): { success: boolean; error?: string; member?: Member } {
+): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
     const invite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(code) as any;
     if (!invite) return { success: false, error: 'Invalid invite code' };
-    if (invite.used_by) return { success: false, error: 'This invite has already been used' };
 
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const createdAtTime = new Date(invite.created_at).getTime();
@@ -79,7 +78,22 @@ export function redeemInvite(
         return { success: false, error: 'This invite code has expired (maximum 30 days validation)' };
     }
 
-    if (getMember(db, publicKey)) return { success: false, error: 'You are already a member' };
+    // Check if identity is ALREADY a member before "already used" check
+    const existingMember = getMember(db, publicKey);
+    if (existingMember) {
+        return { success: true, member: existingMember, alreadyMember: true };
+    }
+
+    // Check intended_for restriction if specified
+    if (invite.intended_for) {
+        const normIntended = invite.intended_for.toLowerCase().replace(/^@/, '').trim();
+        const normCallsign = callsign.toLowerCase().replace(/^@/, '').trim();
+        if (normIntended && normCallsign && normIntended !== normCallsign) {
+            return { success: false, error: `This invite was issued specifically for @${invite.intended_for.replace(/^@/, '')}` };
+        }
+    }
+
+    if (invite.used_by) return { success: false, error: 'This invite has already been used' };
 
     // Register member FIRST — invite_codes.used_by has FK to members(public_key)
     const member = registerMemberInternal(broadcast, publicKey, callsign, invite.created_by, code);
@@ -109,11 +123,26 @@ export function redeemOfflineTicket(
     ticketB64: string,
     joinerPublicKey: string,
     callsign: string
-): { success: boolean; error?: string; member?: Member } {
+): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
     try {
         const verified = verifyOfflineTicket(db, ticketB64);
         if (!verified.ok) return { success: false, error: verified.error };
         const { inviterPubkey, timestamp, intendedFor, codeHash } = verified;
+
+        // Check if identity is ALREADY a member before "already used" check
+        const existingMember = getMember(db, joinerPublicKey);
+        if (existingMember) {
+            return { success: true, member: existingMember, alreadyMember: true };
+        }
+
+        // Check intended_for restriction if specified
+        if (intendedFor) {
+            const normIntended = intendedFor.toLowerCase().replace(/^@/, '').trim();
+            const normCallsign = callsign.toLowerCase().replace(/^@/, '').trim();
+            if (normIntended && normCallsign && normIntended !== normCallsign) {
+                return { success: false, error: `This offline ticket was issued specifically for @${intendedFor.replace(/^@/, '')}` };
+            }
+        }
 
         const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
         if (existingInvite) {
@@ -123,7 +152,6 @@ export function redeemOfflineTicket(
             db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`).run(codeHash, inviterPubkey, createdAt, intendedFor || null);
         }
 
-        if (getMember(db, joinerPublicKey)) return { success: false, error: 'You are already a participating identity on the mesh' };
         recordActivity(inviterPubkey);
 
         const member = registerMemberInternal(broadcast, joinerPublicKey, callsign, inviterPubkey, codeHash);

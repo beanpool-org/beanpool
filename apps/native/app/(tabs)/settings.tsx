@@ -1792,7 +1792,28 @@ export default function SettingsScreen() {
                 <View style={styles.card}>
                     <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.feedback.danger.solid, marginBottom: 8 }}>Danger Zone</Text>
                     <Text style={styles.infoText}>This is a total nuke. It permanently destroys your private key from this phone AND removes every saved community, all of their local data, and all sync state.{'\n\n'}Your identity is one key shared across every community — without your 12-word recovery phrase (or an identity export) you will lose access to all communities and all ledger balances, everywhere. This cannot be undone.</Text>
-                    
+
+                    {identity.mnemonic ? (
+                        <View style={{ backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 14, marginTop: 4, marginBottom: 16 }}>
+                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 14, lineHeight: 20, marginBottom: 12 }}>
+                                Might you want this account back later — say, to switch to a different one and return to this one? Save your 12 recovery words first. They're the only way back.
+                            </Text>
+                            <Pressable
+                                style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.feedback.warning.border, padding: 14, borderRadius: 12, alignItems: 'center' }}
+                                onPress={() => { setSeedConfirm(''); setSeedVisible(false); setMode('seed'); }}
+                                accessibilityRole="button"
+                            >
+                                <Text style={{ color: colors.feedback.warning.fg, fontSize: 15, fontWeight: '700' }}>🔑 Back up my 12 words first</Text>
+                            </Pressable>
+                        </View>
+                    ) : (
+                        <View style={{ backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, borderRadius: 12, padding: 14, marginTop: 4, marginBottom: 16 }}>
+                            <Text style={{ color: colors.feedback.danger.fg, fontSize: 14, lineHeight: 20 }}>
+                                ⚠️ This account has no recovery words saved on it, so deleting it here is permanent — there is no way to bring it back. Only continue if you're certain.
+                            </Text>
+                        </View>
+                    )}
+
                     <Text style={styles.label}>TYPE 'WIPE' TO VERIFY</Text>
                     <TextInput
                         style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.feedback.danger.solid, borderColor: colors.feedback.danger.border }]}

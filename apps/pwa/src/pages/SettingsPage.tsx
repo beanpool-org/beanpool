@@ -25,6 +25,42 @@ interface Props {
     initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications';
 }
 
+function ToggleSwitch({
+    checked,
+    onChange,
+    disabled,
+    activeBgClass = 'bg-emerald-500 border-emerald-600',
+    inactiveBgClass = 'bg-nature-200 dark:bg-nature-700 border-nature-300 dark:border-nature-600',
+}: {
+    checked: boolean;
+    onChange: () => void;
+    disabled?: boolean;
+    activeBgClass?: string;
+    inactiveBgClass?: string;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onChange}
+            disabled={disabled}
+            style={{ width: '48px', height: '26px' }}
+            className={`rounded-full relative cursor-pointer outline-none transition-colors duration-300 border shrink-0 disabled:opacity-50 ${
+                checked ? activeBgClass : inactiveBgClass
+            }`}
+        >
+            <span
+                style={{
+                    width: '20px',
+                    height: '20px',
+                    top: '2px',
+                    transform: checked ? 'translateX(22px)' : 'translateX(2px)',
+                }}
+                className="block rounded-full bg-white shadow-md transition-transform duration-300 absolute"
+            />
+        </button>
+    );
+}
+
 export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode }: Props) {
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications'>(initialMode || 'menu');
 
@@ -405,16 +441,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                             <div className="text-xs text-nature-500 dark:text-nature-400">Toggle dark mode</div>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={onToggleTheme}
-                                        className={`w-13 h-7 rounded-full relative cursor-pointer outline-none transition-colors duration-300 border ${
-                                            theme === 'light' ? 'bg-terra-100 border-terra-200' : 'bg-slate-700 border-slate-600'
-                                        }`}
-                                    >
-                                        <span className={`block w-5 h-5 rounded-full bg-white absolute top-0.5 shadow-sm transform transition-transform duration-300 ${
-                                            theme === 'dark' ? 'translate-x-6' : 'translate-x-0.5'
-                                        }`} />
-                                    </button>
+                                    <ToggleSwitch
+                                        checked={theme === 'dark'}
+                                        onChange={onToggleTheme}
+                                        activeBgClass="bg-slate-700 border-slate-600"
+                                        inactiveBgClass="bg-terra-100 border-terra-200"
+                                    />
                                 </div>
 
                                 {/* Notification Preferences */}
@@ -441,16 +473,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                             <div className="text-xs text-nature-500 dark:text-nature-400">Real-time vs hidden presence</div>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={handleTogglePrivacy}
-                                        className={`w-13 h-7 rounded-full relative cursor-pointer outline-none transition-colors duration-300 border ${
-                                            privacyTier === '3' ? 'bg-red-500 border-red-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300'
-                                        }`}
-                                    >
-                                        <span className={`block w-5 h-5 rounded-full bg-white absolute top-0.5 shadow-sm transform transition-transform duration-300 ${
-                                            privacyTier === '3' ? 'translate-x-6' : 'translate-x-0.5'
-                                        }`} />
-                                    </button>
+                                    <ToggleSwitch
+                                        checked={privacyTier === '3'}
+                                        onChange={handleTogglePrivacy}
+                                        activeBgClass="bg-red-500 border-red-600"
+                                    />
                                 </div>
 
                                 {/* Modern Map Pins */}
@@ -462,16 +489,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                             <div className="text-xs text-nature-500 dark:text-nature-400">Toggle custom pin markers</div>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={handleToggleModernMarkers}
-                                        className={`w-13 h-7 rounded-full relative cursor-pointer outline-none transition-colors duration-300 border ${
-                                            useModernMarkers ? 'bg-emerald-500 border-emerald-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300'
-                                        }`}
-                                    >
-                                        <span className={`block w-5 h-5 rounded-full bg-white absolute top-0.5 shadow-sm transform transition-transform duration-300 ${
-                                            useModernMarkers ? 'translate-x-6' : 'translate-x-0.5'
-                                        }`} />
-                                    </button>
+                                    <ToggleSwitch
+                                        checked={useModernMarkers}
+                                        onChange={handleToggleModernMarkers}
+                                        activeBgClass="bg-emerald-500 border-emerald-600"
+                                    />
                                 </div>
 
                                 {/* Holiday Mode */}
@@ -485,17 +507,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                             </div>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={handleToggleHoliday}
+                                    <ToggleSwitch
+                                        checked={holidayMode}
+                                        onChange={handleToggleHoliday}
                                         disabled={holidayLoading}
-                                        className={`w-13 h-7 rounded-full relative cursor-pointer outline-none transition-colors duration-300 border disabled:opacity-50 ${
-                                            holidayMode ? 'bg-amber-500 border-amber-600' : 'bg-nature-200 dark:bg-nature-700 border-nature-300'
-                                        }`}
-                                    >
-                                        <span className={`block w-5 h-5 rounded-full bg-white absolute top-0.5 shadow-sm transform transition-transform duration-300 ${
-                                            holidayMode ? 'translate-x-6' : 'translate-x-0.5'
-                                        }`} />
-                                    </button>
+                                        activeBgClass="bg-amber-500 border-amber-600"
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -794,12 +811,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">Chat Messages</div>
                                         <div className="text-xs text-nature-500">Alerts when someone messages you</div>
                                     </div>
-                                    <button
-                                        onClick={() => handleToggleNotif('chat')}
-                                        className={`w-12 h-6 rounded-full relative cursor-pointer border ${notifChat ? 'bg-emerald-500 border-emerald-600' : 'bg-nature-200 border-nature-300'}`}
-                                    >
-                                        <span className={`block w-4 h-4 rounded-full bg-white absolute top-0.5 transform transition-transform ${notifChat ? 'translate-x-6.5' : 'translate-x-0.5'}`} />
-                                    </button>
+                                    <ToggleSwitch
+                                        checked={notifChat}
+                                        onChange={() => handleToggleNotif('chat')}
+                                    />
                                 </div>
 
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
@@ -807,12 +822,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">Marketplace Activity</div>
                                         <div className="text-xs text-nature-500">Alerts on new offers & needs in your area</div>
                                     </div>
-                                    <button
-                                        onClick={() => handleToggleNotif('marketplace')}
-                                        className={`w-12 h-6 rounded-full relative cursor-pointer border ${notifMarketplace ? 'bg-emerald-500 border-emerald-600' : 'bg-nature-200 border-nature-300'}`}
-                                    >
-                                        <span className={`block w-4 h-4 rounded-full bg-white absolute top-0.5 transform transition-transform ${notifMarketplace ? 'translate-x-6.5' : 'translate-x-0.5'}`} />
-                                    </button>
+                                    <ToggleSwitch
+                                        checked={notifMarketplace}
+                                        onChange={() => handleToggleNotif('marketplace')}
+                                    />
                                 </div>
 
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
@@ -820,12 +833,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">Escrow & Deals</div>
                                         <div className="text-xs text-nature-500">Alerts on trade updates & credit transfers</div>
                                     </div>
-                                    <button
-                                        onClick={() => handleToggleNotif('escrow')}
-                                        className={`w-12 h-6 rounded-full relative cursor-pointer border ${notifEscrow ? 'bg-emerald-500 border-emerald-600' : 'bg-nature-200 border-nature-300'}`}
-                                    >
-                                        <span className={`block w-4 h-4 rounded-full bg-white absolute top-0.5 transform transition-transform ${notifEscrow ? 'translate-x-6.5' : 'translate-x-0.5'}`} />
-                                    </button>
+                                    <ToggleSwitch
+                                        checked={notifEscrow}
+                                        onChange={() => handleToggleNotif('escrow')}
+                                    />
                                 </div>
                             </div>
                         )}

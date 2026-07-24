@@ -72,7 +72,7 @@ router.get('/.well-known/assetlinks.json', async (ctx) => {
     // builds), plus any extra comma-separated fingerprints supplied via env.
     const PLAY_APP_SIGNING_SHA256 = '46:AA:D0:CB:A8:9D:1F:E7:EF:F0:60:99:77:CE:06:5D:85:DD:7E:AC:13:57:D4:48:97:EC:70:AF:B2:02:6C:81';
     const UPLOAD_KEY_SHA256 = 'FA:55:52:D6:8C:4A:D6:19:2F:AD:A6:A7:78:39:B4:E8:4D:50:FE:E9:FD:6C:C5:DF:6B:0F:51:E7:CB:DC:03:2B';
-    const envShas = (process.env.ANDROID_CERT_SHA256 || '').split(',').map(s => s.trim()).filter(Boolean);
+    const envShas = (process.env.ANDROID_CERT_SHA256 || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     const sha256Fingerprints = [...new Set([PLAY_APP_SIGNING_SHA256, UPLOAD_KEY_SHA256, ...envShas])];
     const packageName = 'org.beanpool.pillar';
 

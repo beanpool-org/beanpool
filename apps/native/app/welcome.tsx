@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { updateMemberProfile } from '../utils/db';
-import { buildSignedHeaders } from '../utils/crypto';
+import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
@@ -48,7 +48,7 @@ export default function WelcomeScreen() {
     const incomingUrl = Linking.useURL();
     const { setIdentity } = useIdentity();
     const { recheck: recheckNodeStatus } = useNodeStatus();
-    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide'>('home');
+    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>('home');
     const [callsign, setCallsign] = useState('');
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryCallsign, setRecoveryCallsign] = useState('');
@@ -67,6 +67,17 @@ export default function WelcomeScreen() {
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
+
+    // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone
+    // that already holds one). Rare, but destructive: the phone can only hold one
+    // identity, so restoring a different one replaces — and can orphan — the
+    // current account. We force an explicit typed confirmation and offer to back
+    // up the outgoing account's 12 words first so it can always be retrieved. ---
+    const [outgoingIdentity, setOutgoingIdentity] = useState<BeanPoolIdentity | null>(null);
+    const [pendingRecovery, setPendingRecovery] = useState<{ words: string[]; callsign: string; anchorUrl: string } | null>(null);
+    const [replaceConfirmText, setReplaceConfirmText] = useState('');
+    const [showOutgoingSeed, setShowOutgoingSeed] = useState(false);
+    const [outgoingSeedCopied, setOutgoingSeedCopied] = useState(false);
 
     // The web trampoline copies the invite link to the clipboard before sending
     // people to the app store, but nothing can read it for them automatically —
@@ -421,6 +432,9 @@ export default function WelcomeScreen() {
         }
     }
 
+    // Validates the recovery form and either proceeds straight to recovery, or —
+    // when this would REPLACE a different identity already on the phone — diverts
+    // to the confirm-replace screen so the swap can never happen by accident.
     async function handleRecover() {
         if (recoveryCallsign.trim().length < 2) {
             setError('Callsign must be at least 2 characters.');
@@ -430,6 +444,10 @@ export default function WelcomeScreen() {
         const valid = words.filter(w => w.length > 0).length === 12;
         if (!valid) {
             setError('Please enter all 12 recovery words.');
+            return;
+        }
+        if (!validateMnemonic(words)) {
+            setError("One or more of those words isn't a valid recovery word. Check your spelling — they're all lowercase, single words.");
             return;
         }
         const rawAnchor = recoveryAnchorUrl.trim();
@@ -445,9 +463,40 @@ export default function WelcomeScreen() {
         setLoading(true);
         setError(null);
         try {
+            // Derive the incoming account's public key WITHOUT saving it, so we can
+            // tell whether recovering would overwrite a DIFFERENT account already
+            // stored on this phone.
+            const { publicKeyHex } = await mnemonicToKeypair(words);
+            const existing = await loadIdentity();
+            if (existing && existing.publicKey !== publicKeyHex) {
+                // A different account lives here — divert to the guarded screen.
+                setPendingRecovery({ words, callsign: recoveryCallsign.trim(), anchorUrl: finalAnchorUrl });
+                setOutgoingIdentity(existing);
+                setReplaceConfirmText('');
+                setShowOutgoingSeed(false);
+                setOutgoingSeedCopied(false);
+                setLoading(false);
+                setMode('confirmReplace');
+                return;
+            }
+            // Fresh phone, or restoring the SAME account — no overwrite, proceed.
+            await doRecover(words, recoveryCallsign.trim(), finalAnchorUrl);
+        } catch (err) {
+            setError('Recovery failed. Check words and try again.');
+            setLoading(false);
+        }
+    }
+
+    // Performs the actual identity restore. Only called once we're certain the
+    // user intends any overwrite (either no prior identity, the same identity, or
+    // an explicit typed WIPE confirmation on the confirm-replace screen).
+    async function doRecover(words: string[], callsign: string, finalAnchorUrl: string) {
+        setLoading(true);
+        setError(null);
+        try {
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
 
-            const identity = await createIdentityFromMnemonic(words, recoveryCallsign.trim());
+            const identity = await createIdentityFromMnemonic(words, callsign);
             // Recovering an existing account supersedes any half-finished join
             // wizard on this device — drop the rescue record so the gatekeeper
             // doesn't bounce a recovered member back into onboarding.
@@ -458,6 +507,26 @@ export default function WelcomeScreen() {
         } finally {
             setLoading(false);
         }
+    }
+
+    // --- Copy the OUTGOING account's seed to the clipboard (confirm-replace) ---
+    async function handleCopyOutgoingSeed() {
+        if (!outgoingIdentity?.mnemonic) return;
+        await Clipboard.setStringAsync(outgoingIdentity.mnemonic.join(' '));
+        hapticTick();
+        setOutgoingSeedCopied(true);
+        setTimeout(() => setOutgoingSeedCopied(false), 2000);
+    }
+
+    // Confirm the overwrite: proceed with the pending recovery, then clear state.
+    async function handleConfirmReplace() {
+        if (!pendingRecovery) return;
+        const { words, callsign, anchorUrl } = pendingRecovery;
+        await doRecover(words, callsign, anchorUrl);
+        setPendingRecovery(null);
+        setOutgoingIdentity(null);
+        setReplaceConfirmText('');
+        setShowOutgoingSeed(false);
     }
 
 
@@ -1046,6 +1115,120 @@ export default function WelcomeScreen() {
 
 
     // --- RECOVER FROM 12 WORDS ---
+    // --- IDENTITY-OVERWRITE GUARD: restoring a DIFFERENT account onto a phone
+    // that already holds one. Blocking, plain-language, with a backup of the
+    // outgoing account's words and a typed WIPE confirmation. ---
+    if (mode === 'confirmReplace' && outgoingIdentity) {
+        const outCallsign = outgoingIdentity.callsign?.trim() || 'your current account';
+        const hasOutgoingSeed = !!(outgoingIdentity.mnemonic && outgoingIdentity.mnemonic.length > 0);
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style="dark" />
+                <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+                    <ScrollView contentContainerStyle={styles.scroll}>
+                        <View style={styles.card}>
+                            <Text style={styles.title}>⚠️ Replace this phone's account?</Text>
+                            <Text style={styles.subtitle}>
+                                This phone is already set up as <Text style={styles.emphasis}>{outCallsign}</Text>. A phone can only hold one account at a time.
+                            </Text>
+
+                            <View style={styles.replaceWarnBox}>
+                                <Text style={styles.replaceWarnText}>
+                                    If you continue, <Text style={styles.emphasis}>{outCallsign}</Text> will be removed from this phone and replaced by the account you're restoring. Any community you joined as <Text style={styles.emphasis}>{outCallsign}</Text> will no longer open on this phone.
+                                </Text>
+                            </View>
+
+                            {hasOutgoingSeed ? (
+                                <>
+                                    <Text style={styles.replaceBackupIntro}>
+                                        The only way to get <Text style={styles.emphasis}>{outCallsign}</Text> back afterwards is with its own 12 recovery words. Save them now, before you continue:
+                                    </Text>
+                                    {!showOutgoingSeed ? (
+                                        <Pressable
+                                            style={styles.secondaryBtn}
+                                            onPress={() => { hapticTick(); setShowOutgoingSeed(true); }}
+                                            accessibilityRole="button"
+                                        >
+                                            <Text style={styles.secondaryBtnText}>🔑 Show {outCallsign}'s 12 words</Text>
+                                        </Pressable>
+                                    ) : (
+                                        <>
+                                            <View style={styles.seedGrid}>
+                                                {outgoingIdentity.mnemonic?.map((word, i) => (
+                                                    <View key={i} style={styles.seedCell}>
+                                                        <Text style={styles.seedIndex}>{i + 1}.</Text>
+                                                        <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                            <Pressable
+                                                style={[styles.secondaryBtn, { marginBottom: 8 }]}
+                                                onPress={handleCopyOutgoingSeed}
+                                                accessibilityRole="button"
+                                            >
+                                                <Text style={styles.secondaryBtnText}>{outgoingSeedCopied ? '✅ Copied!' : '📋 Copy All Words'}</Text>
+                                            </Pressable>
+                                            <Text style={styles.fieldHint}>
+                                                Write these 12 words down somewhere safe — they bring {outCallsign} back on any phone.
+                                            </Text>
+                                        </>
+                                    )}
+                                </>
+                            ) : (
+                                <View style={styles.noSeedWarnBox}>
+                                    <Text style={styles.noSeedWarnText}>
+                                        ⚠️ {outCallsign}'s recovery words aren't stored on this phone, so we can't show them here. If you don't already have them written down somewhere, continuing may permanently lose access to {outCallsign}.
+                                    </Text>
+                                </View>
+                            )}
+
+                            <Text style={styles.wipeLabel}>TYPE 'WIPE' TO CONFIRM</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={replaceConfirmText}
+                                onChangeText={setReplaceConfirmText}
+                                placeholder="WIPE"
+                                placeholderTextColor={colors.text.muted}
+                                autoCapitalize="characters"
+                                autoCorrect={false}
+                                accessibilityLabel="Type WIPE to confirm replacing this phone's account"
+                            />
+
+                            {error && <Text style={styles.error}>{error}</Text>}
+
+                            <Pressable
+                                style={[styles.dangerBtn, (loading || replaceConfirmText !== 'WIPE') && styles.disabledBtn]}
+                                disabled={loading || replaceConfirmText !== 'WIPE'}
+                                onPress={handleConfirmReplace}
+                                accessibilityRole="button"
+                                accessibilityHint="Replaces the account currently stored on this phone"
+                            >
+                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.dangerBtnText}>Replace Account</Text>}
+                            </Pressable>
+
+                            <Pressable
+                                style={styles.backBtn}
+                                onPress={() => {
+                                    setMode('recover');
+                                    setPendingRecovery(null);
+                                    setOutgoingIdentity(null);
+                                    setReplaceConfirmText('');
+                                    setShowOutgoingSeed(false);
+                                    setError(null);
+                                }}
+                                disabled={loading}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Keep ${outCallsign} and go back`}
+                            >
+                                <Text style={styles.backBtnText}>← Keep {outCallsign}, go back</Text>
+                            </Pressable>
+                        </View>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </SafeAreaView>
+        );
+    }
+
     if (mode === 'recover') {
         return (
             <SafeAreaView style={styles.container}>
@@ -1223,6 +1406,16 @@ const styles = StyleSheet.create({
     primaryBtn: { backgroundColor: palette.blue600, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
     disabledBtn: { backgroundColor: palette.slate300 },
+    // Identity-overwrite guard (confirm-replace screen)
+    emphasis: { fontWeight: '700', color: colors.text.heading },
+    replaceWarnBox: { backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 14, marginBottom: 16 },
+    replaceWarnText: { color: colors.feedback.warning.fg, fontSize: 15, lineHeight: 22 },
+    replaceBackupIntro: { color: colors.text.secondary, fontSize: 14, lineHeight: 20, marginBottom: 12 },
+    noSeedWarnBox: { backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, borderRadius: 12, padding: 14, marginBottom: 16 },
+    noSeedWarnText: { color: colors.feedback.danger.fg, fontSize: 15, lineHeight: 22 },
+    wipeLabel: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, letterSpacing: 1, marginTop: 8, marginBottom: 8 },
+    dangerBtn: { backgroundColor: colors.feedback.danger.solid, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+    dangerBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
     backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
     backBtnText: { color: colors.text.secondary, fontSize: 14 },
     error: { color: colors.feedback.danger.solid, fontSize: 14, marginBottom: 16, textAlign: 'center' },

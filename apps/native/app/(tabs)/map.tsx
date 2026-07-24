@@ -6,11 +6,12 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import { Picker } from '@react-native-picker/picker';
-import MapView, { Marker, PROVIDER_DEFAULT } from '../../components/Map';
+import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
-import { getPosts, createPost, getBalance } from '../../utils/db';
+import { getPosts, createPost, getBalance, getMemberProfile } from '../../utils/db';
+import { getCanonicalAvatar } from '../../utils/canonical-profile';
 import { useIdentity } from '../IdentityContext';
 import { CurrencyDisplay, useCurrencyString } from '../../components/CurrencyDisplay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -420,7 +421,7 @@ export default function MapScreen() {
     useFocusEffect(
         useCallback(() => {
             if (params.newPost === 'true') {
-                setShowNewPost(true);
+                openComposer();
                 router.setParams({ newPost: '' });
             }
         }, [params.newPost])
@@ -472,10 +473,35 @@ export default function MapScreen() {
     const [mapTypeFilter, setMapTypeFilter] = useState<'all' | 'offers' | 'needs'>('all');
     const [mapCategoryFilter, setMapCategoryFilter] = useState('all');
     const [showMapCategoryPicker, setShowMapCategoryPicker] = useState(false);
+    const [nodeRadius, setNodeRadius] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
+
+    const fetchNodeLocation = async () => {
+        try {
+            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (!anchorUrl) return;
+            const res = await fetch(`${anchorUrl}/api/node/config`);
+            if (!res.ok) return;
+            const config = await res.json();
+            if (config?.serviceRadius && typeof config.serviceRadius.lat === 'number' && typeof config.serviceRadius.lng === 'number') {
+                setNodeRadius(config.serviceRadius);
+                const nextRegion = {
+                    latitude: config.serviceRadius.lat,
+                    longitude: config.serviceRadius.lng,
+                    latitudeDelta: 0.0922,
+                    longitudeDelta: 0.0421,
+                };
+                setCurrentRegion(nextRegion);
+                mapRef.current?.animateToRegion(nextRegion, 500);
+            }
+        } catch (e) {
+            console.warn('Failed to fetch node config for map center:', e);
+        }
+    };
 
     useFocusEffect(
         React.useCallback(() => { 
-            loadPosts(); 
+            loadPosts();
+            fetchNodeLocation();
         }, [])
     );
 
@@ -565,6 +591,94 @@ export default function MapScreen() {
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
         setValidationToast('');
     };
+
+    // ── Draft persistence + up-front profile-photo check ──
+    // A post used to be lost if the user left the composer to fix something
+    // (e.g. to add a required profile photo). The draft is now saved as they
+    // type and restored next time they open the composer, scoped to the active
+    // node so it never leaks between communities.
+    const OFFER_DRAFT_KEY = 'beanpool_offer_draft';
+
+    const draftHasContent = () =>
+        !!(postTitle.trim() || postDescription.trim() || postCategory || postPhotos.length > 0 || postLat != null);
+
+    const persistDraft = useCallback(async () => {
+        try {
+            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+            const draft = {
+                anchorUrl, postType, postCategory, postTitle, postDescription, postCredits,
+                postPriceType, postRepeatable, postPhotos, postLat, postLng, savedAt: Date.now(),
+            };
+            await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
+        } catch { /* draft is best-effort */ }
+    }, [postType, postCategory, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postPhotos, postLat, postLng]);
+
+    const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
+
+    const restoreDraft = (d: any) => {
+        setPostType(d.postType === 'need' ? 'need' : 'offer');
+        setPostCategory(d.postCategory || '');
+        setPostTitle(d.postTitle || '');
+        setPostDescription(d.postDescription || '');
+        setPostCredits(d.postCredits || '');
+        setPostPriceType(d.postPriceType || 'fixed');
+        setPostRepeatable(!!d.postRepeatable);
+        setPostPhotos(Array.isArray(d.postPhotos) ? d.postPhotos : []);
+        setPostLat(typeof d.postLat === 'number' ? d.postLat : null);
+        setPostLng(typeof d.postLng === 'number' ? d.postLng : null);
+    };
+
+    // Posting requires a profile photo. Resolve it from this node's row first,
+    // then the canonical (node-independent) copy — matching the publish path —
+    // so a user who set a photo on ANY community isn't asked again.
+    const hasUsableAvatar = async (): Promise<boolean> => {
+        if (!identity) return false;
+        try {
+            const p = await getMemberProfile(identity.publicKey);
+            if (p?.avatar_url) return true;
+        } catch {}
+        return !!(await getCanonicalAvatar());
+    };
+
+    // Open the composer, but check the profile photo UP FRONT (so nobody
+    // composes a whole offer only to be blocked at the end) and offer to resume
+    // an unfinished draft.
+    const openComposer = async () => {
+        if (!(await hasUsableAvatar())) {
+            Alert.alert(
+                'Add a profile photo first',
+                "Your community likes to see who they're dealing with, so a photo is needed before you can post. It only takes a moment.",
+                [
+                    { text: 'Not now', style: 'cancel' },
+                    { text: 'Add photo', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } }) },
+                ]
+            );
+            return;
+        }
+        try {
+            const raw = await AsyncStorage.getItem(OFFER_DRAFT_KEY);
+            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (raw) {
+                const d = JSON.parse(raw);
+                const restorable = d && d.anchorUrl === anchorUrl && (d.postTitle?.trim() || d.postDescription?.trim() || (d.postPhotos?.length));
+                if (restorable) {
+                    Alert.alert('Unfinished post', 'You started a post earlier. Continue it, or start fresh?', [
+                        { text: 'Start fresh', style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); setShowNewPost(true); } },
+                        { text: 'Continue', onPress: () => { restoreDraft(d); setShowNewPost(true); } },
+                    ]);
+                    return;
+                }
+            }
+        } catch { /* fall through to a blank composer */ }
+        setShowNewPost(true);
+    };
+
+    // Auto-save the draft as the user edits (only while the composer is open and
+    // there's something worth keeping).
+    useEffect(() => {
+        if (!showNewPost || !draftHasContent()) return;
+        persistDraft();
+    }, [showNewPost, persistDraft]);
 
     const useMyLocation = async () => {
         const { status: initStatus, canAskAgain } = await Location.getForegroundPermissionsAsync();
@@ -696,6 +810,7 @@ export default function MapScreen() {
                 photos: postPhotos.length > 0 ? JSON.stringify(postPhotos) : null,
                 created_at: new Date().toISOString(),
             });
+            clearDraft();
             setTimeout(() => {
                 resetNewPost();
                 setShowNewPost(false);
@@ -803,6 +918,17 @@ export default function MapScreen() {
                             />
                         );
                     })}
+
+                    {/* Service radius circle overlay */}
+                    {nodeRadius && nodeRadius.radiusKm > 0 && (
+                        <Circle
+                            center={{ latitude: nodeRadius.lat, longitude: nodeRadius.lng }}
+                            radius={nodeRadius.radiusKm * 1000}
+                            strokeColor="#f59e0b"
+                            fillColor="rgba(245, 158, 11, 0.06)"
+                            strokeWidth={2}
+                        />
+                    )}
 
                     {/* Pin drop preview marker */}
                     {showNewPost && postLat != null && postLng != null && (
@@ -958,7 +1084,7 @@ export default function MapScreen() {
                                 );
                                 return;
                             }
-                            setShowNewPost(true);
+                            openComposer();
                         }}
                         activeOpacity={0.8}
                     >

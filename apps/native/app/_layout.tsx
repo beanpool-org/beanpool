@@ -9,7 +9,7 @@ import { registerPillarSync } from '../services/background-task';
 import { requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
 import { registerForPushNotifications, setupNotificationResponseHandler } from '../services/push-notifications';
-import { initDB, clearDB, closeDB, redeemInvite } from '../utils/db';
+import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, extractNodeOrigin } from '../utils/invite-parser';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import { IdentityProvider, useIdentity } from './IdentityContext';
@@ -306,6 +306,10 @@ function RootLayoutNav() {
                                             } else {
                                                 Alert.alert('Success', 'Node switched and invite redeemed successfully!');
                                             }
+                                            // Land the user's canonical picture on the newly-joined node so the
+                                            // marketplace never blocks them for a "missing" profile photo they
+                                            // already set on another community.
+                                            pushProfileToServer().catch(() => {});
                                             requestSync().catch(console.error);
                                             // Refresh membership for the new node before routing, so a stale
                                             // 'stranger' verdict can't bounce us to the wrong-node screen.
@@ -383,6 +387,8 @@ function RootLayoutNav() {
                                                 } else {
                                                     Alert.alert('Success', 'Invite redeemed! Your connection is registered.');
                                                 }
+                                                // Publish the canonical picture to this node up front.
+                                                pushProfileToServer().catch(() => {});
                                                 requestSync().catch(console.error);
                                                 await recheck();
                                                 router.replace('/(tabs)');

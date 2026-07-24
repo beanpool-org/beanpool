@@ -146,6 +146,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             return result;
         }
         console.log(`[Pillar Sync] ✅ Anchor discovered: ${anchorUrl}`);
+        // Pin this sync to the node it started on. Everything fetched below
+        // belongs to `anchorUrl`; if the user switches communities mid-sync we
+        // must NOT apply it to the newly-active node's local DB.
+        const expectedDbName = getDatabaseFilenameForNode(anchorUrl);
 
         // Step 2: Fetch Posts and Balance directly via standard REST APIs
         let identityRaw = null;
@@ -169,50 +173,15 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const pendingSync = await AsyncStorage.getItem('pending_profile_sync');
                 if (pendingSync === 'true') {
                     try {
-                        const { getMemberProfile } = await import('../utils/db');
-                        const profile = await getMemberProfile(pubKey);
-                        if (!profile) {
-                            // Nothing to publish — clear the stale flag so it doesn't loop forever.
-                            console.warn('[Pillar Sync] Profile heal: pending flag set but no local profile found — clearing stale flag');
-                            await AsyncStorage.removeItem('pending_profile_sync');
-                        } else {
-                            const { buildSignedHeaders } = require('../utils/crypto');
-                            const payloadObj = {
-                                publicKey: pubKey,
-                                avatar: profile.avatar_url,
-                                bio: profile.bio,
-                                contact: profile.contact_value ? { value: profile.contact_value, visibility: profile.contact_visibility || 'community' } : null,
-                                callsign: profile.callsign,
-                            };
-                            const bodyString = JSON.stringify(payloadObj);
-                            const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, id.privateKey, pubKey);
-                            const res = await fetch(`${anchorUrl}/api/profile/update`, {
-                                method: 'POST',
-                                headers,
-                                body: bodyString
-                            });
-                            if (res.ok) {
-                                // A 200 alone isn't proof: if we sent an avatar but the node came
-                                // back with none, the write didn't take — keep the flag and retry
-                                // rather than silently giving up (this is what stranded Jay's pic).
-                                const localAvatar = profile.avatar_url || null;
-                                let avatarPersisted = true;
-                                try {
-                                    const data = await res.json();
-                                    const savedAvatar = (data?.profile?.avatar) || null;
-                                    if (localAvatar && !savedAvatar) avatarPersisted = false;
-                                } catch { /* non-JSON body — trust the 2xx */ }
-                                if (avatarPersisted) {
-                                    await AsyncStorage.removeItem('pending_profile_sync');
-                                    console.log('[Pillar Sync] Successfully healed pending profile sync');
-                                } else {
-                                    console.warn('[Pillar Sync] Profile heal: node accepted the request but did not store the avatar — keeping pending flag for retry');
-                                }
-                            } else {
-                                const errText = await res.text().catch(() => '');
-                                console.warn(`[Pillar Sync] Profile heal rejected (HTTP ${res.status}) — will retry next sync:`, errText.slice(0, 200));
-                            }
-                        }
+                        // Delegate to the single canonical-aware publisher: it verifies
+                        // the node actually stored the avatar before clearing the flag,
+                        // and falls back to the canonical picture when THIS node's local
+                        // row has none yet (e.g. a freshly-joined second community).
+                        const { pushProfileToServer } = await import('../utils/db');
+                        const ok = await pushProfileToServer();
+                        console.log(ok
+                            ? '[Pillar Sync] Successfully healed pending profile sync'
+                            : '[Pillar Sync] Profile heal deferred — will retry next sync');
                     } catch (healErr) {
                         console.warn('[Pillar Sync] Profile heal attempt failed (will retry next sync):', healErr);
                     }
@@ -476,6 +445,19 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         clearTimeout(postsTimeout);
         clearTimeout(balanceTimeout);
 
+        // Abort if the user switched communities while this sync was in flight:
+        // everything fetched belongs to `anchorUrl`, and applying it now would
+        // contaminate the newly-active node's local DB. Bail BEFORE advancing the
+        // per-table fingerprints so this node re-syncs cleanly on its next cycle.
+        const activeAnchorNow = await AsyncStorage.getItem('beanpool_anchor_url');
+        if (getDatabaseFilenameForNode(activeAnchorNow) !== expectedDbName) {
+            console.warn(`[Pillar Sync] Node switched mid-sync (${anchorUrl} → ${activeAnchorNow}); discarding fetched delta to avoid cross-node contamination.`);
+            result.aborted = true;
+            result.errorMessage = 'Node switched during sync';
+            result.durationMs = Date.now() - startTime;
+            return result;
+        }
+
         // Gate applyDelta per table: skip any table whose fetched payload is identical
         // to what we last applied. applyDelta rewrites every row it's given inside one
         // lock-held transaction, and re-applying unchanged data on every WS-triggered
@@ -503,7 +485,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         onProgress?.(5, 5, 'Finalizing Local SQLite Database Cache...');
         // Apply physical updates to local Native device SQLite Matrix
         if (Object.keys(gatedDelta).length > 0) {
-            await applyDelta(gatedDelta);
+            await applyDelta(gatedDelta, expectedDbName);
         }
 
         // Notify active screens to re-render only when something actually changed —

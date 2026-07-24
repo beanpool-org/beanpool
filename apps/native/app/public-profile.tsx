@@ -405,7 +405,7 @@ export default function PublicProfileScreen() {
                 {/* Banner */}
                 <View style={styles.banner}>
                     <View style={styles.avatarRing}>
-                        <MemberAvatar avatarUrl={profile?.avatar_url} pubkey={pubKeyStr} callsign={callsignStr || '?'} size={80} />
+                        <MemberAvatar avatarUrl={profile?.avatar_url} pubkey={pubKeyStr} callsign={callsignStr || '?'} size={80} enlargeable />
                     </View>
                     <View style={styles.nameRow}>
                         <Text style={styles.callsignText} numberOfLines={1}>{callsignStr}</Text>

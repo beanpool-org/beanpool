@@ -1747,10 +1747,20 @@ export async function deletePost(id: string) {
     refreshBalanceFromServer(identity.publicKey).catch(() => null);
 }
 
-export async function applyDelta(delta: any) {
+export async function applyDelta(delta: any, expectedDbName?: string) {
     await acquireSyncLock();
     try {
         const database = await getDb();
+        // Cross-node contamination guard. This delta was fetched from ONE node,
+        // but getDb() returns whichever node is active NOW. If the user switched
+        // communities while the sync was in flight, writing here would leak the
+        // other node's posts/members/ledger into this node's local cache — the
+        // server stays clean, but the app shows the wrong community's listings.
+        // Skip the write; the newly-active node syncs cleanly on its own cycle.
+        if (expectedDbName && currentDbName !== expectedDbName) {
+            console.warn(`[DB] applyDelta: skipping write — active DB '${currentDbName}' != fetch-time DB '${expectedDbName}' (node switched mid-sync)`);
+            return;
+        }
         await database.withTransactionAsync(async () => {
             const txn = database;
 // Full-replace sync: server response is the source of truth

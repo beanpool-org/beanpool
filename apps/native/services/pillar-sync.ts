@@ -146,6 +146,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             return result;
         }
         console.log(`[Pillar Sync] ✅ Anchor discovered: ${anchorUrl}`);
+        // Pin this sync to the node it started on. Everything fetched below
+        // belongs to `anchorUrl`; if the user switches communities mid-sync we
+        // must NOT apply it to the newly-active node's local DB.
+        const expectedDbName = getDatabaseFilenameForNode(anchorUrl);
 
         // Step 2: Fetch Posts and Balance directly via standard REST APIs
         let identityRaw = null;
@@ -441,6 +445,19 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         clearTimeout(postsTimeout);
         clearTimeout(balanceTimeout);
 
+        // Abort if the user switched communities while this sync was in flight:
+        // everything fetched belongs to `anchorUrl`, and applying it now would
+        // contaminate the newly-active node's local DB. Bail BEFORE advancing the
+        // per-table fingerprints so this node re-syncs cleanly on its next cycle.
+        const activeAnchorNow = await AsyncStorage.getItem('beanpool_anchor_url');
+        if (getDatabaseFilenameForNode(activeAnchorNow) !== expectedDbName) {
+            console.warn(`[Pillar Sync] Node switched mid-sync (${anchorUrl} → ${activeAnchorNow}); discarding fetched delta to avoid cross-node contamination.`);
+            result.aborted = true;
+            result.errorMessage = 'Node switched during sync';
+            result.durationMs = Date.now() - startTime;
+            return result;
+        }
+
         // Gate applyDelta per table: skip any table whose fetched payload is identical
         // to what we last applied. applyDelta rewrites every row it's given inside one
         // lock-held transaction, and re-applying unchanged data on every WS-triggered
@@ -468,7 +485,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         onProgress?.(5, 5, 'Finalizing Local SQLite Database Cache...');
         // Apply physical updates to local Native device SQLite Matrix
         if (Object.keys(gatedDelta).length > 0) {
-            await applyDelta(gatedDelta);
+            await applyDelta(gatedDelta, expectedDbName);
         }
 
         // Notify active screens to re-render only when something actually changed —

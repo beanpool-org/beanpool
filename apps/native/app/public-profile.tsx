@@ -415,10 +415,10 @@ export default function PublicProfileScreen() {
                     {profile?.joined_at && (
                         <Text style={styles.joinedText} numberOfLines={1}>📅 Joined {new Date(profile.joined_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     )}
-                    {/* Visual Reciprocity Health Ring / Badge (#4) — 50% larger */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.brand.tint, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 24, borderWidth: 1.5, borderColor: colors.brand.primary, marginTop: 10 }}>
-                        <MaterialCommunityIcons name="circle-outline" size={22} color={colors.brand.primary} />
-                        <Text style={{ fontSize: 18, fontWeight: '900', color: colors.brand.primary }}>
+                    {/* Visual Reciprocity Health Ring / Badge (#4) — 20% larger */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: colors.brand.tint, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 22, borderWidth: 1, borderColor: colors.brand.primary, marginTop: 8 }}>
+                        <MaterialCommunityIcons name="circle-outline" size={18} color={colors.brand.primary} />
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.brand.primary }}>
                             {trust?.completionRate === null || trust?.completionRate === undefined ? 100 : Math.round(trust.completionRate * 100)}% Reciprocity Health
                         </Text>
                     </View>

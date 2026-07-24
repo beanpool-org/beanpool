@@ -20,8 +20,6 @@
         "applinks:beanpool.org",
         "applinks:*.beanpool.org",
         "applinks:mullum.beanpool.org",
-        "applinks:mullum1.beanpool.org",
-        "applinks:mullum2.beanpool.org",
         "applinks:bris.beanpool.org",
         "applinks:test.beanpool.org",
         "applinks:review.beanpool.org",
@@ -71,14 +69,6 @@
             {
               "scheme": "https",
               "host": "mullum.beanpool.org"
-            },
-            {
-              "scheme": "https",
-              "host": "mullum1.beanpool.org"
-            },
-            {
-              "scheme": "https",
-              "host": "mullum2.beanpool.org"
             },
             {
               "scheme": "https",

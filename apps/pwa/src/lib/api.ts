@@ -930,3 +930,58 @@ export interface NodeConfig {
 export async function getNodeConfig(): Promise<NodeConfig> {
     return request('GET', '/api/node/config');
 }
+
+// ===================== SOCIAL RECOVERY & GUARDIANS =====================
+
+export async function lookupRecoveryCallsign(callsign: string): Promise<any[]> {
+    return request<any[]>('GET', `/api/recovery/lookup/${encodeURIComponent(callsign)}`);
+}
+
+export async function createRecoveryRequest(oldPubkey: string, guardianGuess: string, newIdentity: any): Promise<any> {
+    return request<any>('POST', '/api/recovery/request', {
+        oldPubkey,
+        guardianGuess,
+        newPubkey: newIdentity.publicKey,
+    });
+}
+
+export async function getPendingRecoveryRequests(pubkey: string): Promise<any[]> {
+    return request<any[]>('GET', `/api/recovery/pending/${encodeURIComponent(pubkey)}`);
+}
+
+export async function approveRecoveryRequest(requestId: string): Promise<void> {
+    await request<void>('POST', '/api/recovery/approve', { requestId });
+}
+
+export async function rejectRecoveryRequest(requestId: string): Promise<void> {
+    await request<void>('POST', '/api/recovery/reject', { requestId });
+}
+
+export async function cancelRecoveryRequest(requestId: string): Promise<void> {
+    await request<void>('POST', '/api/recovery/cancel', { requestId });
+}
+
+export async function getRecoveryStatus(pubkey: string): Promise<any> {
+    return request<any>('GET', `/api/recovery/status/${encodeURIComponent(pubkey)}`);
+}
+
+// ===================== NOTIFICATION PREFERENCES =====================
+
+export async function getNotificationPreferences(pubkey: string): Promise<any> {
+    return request<any>('GET', `/api/members/preferences?publicKey=${encodeURIComponent(pubkey)}`);
+}
+
+export async function updateNotificationPreferences(pubkey: string, preferences: Record<string, boolean>): Promise<any> {
+    return request<any>('POST', '/api/members/preferences', { publicKey: pubkey, preferences });
+}
+
+// ===================== DIAGNOSTICS & NODE STATS =====================
+
+export async function getNodeStats(): Promise<{ members: number; posts: number; transactions: number } | null> {
+    try {
+        return await request<{ members: number; posts: number; transactions: number }>('GET', '/api/stats');
+    } catch {
+        return null;
+    }
+}
+

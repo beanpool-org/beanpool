@@ -165,26 +165,32 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         //     setUserMarker(map, e.latlng);
         // });
 
-        // Draw service radius circle from node config
+        // Draw service radius circle from node config & center map on node location
         getNodeConfig().then(config => {
-            if (config.serviceRadius && config.serviceRadius.radiusKm > 0 && mapRef.current) {
+            if (config.serviceRadius && typeof config.serviceRadius.lat === 'number' && typeof config.serviceRadius.lng === 'number' && mapRef.current) {
                 setNodeRadius(config.serviceRadius);
                 const { lat, lng, radiusKm } = config.serviceRadius;
                 if (radiusCircleRef.current) {
                     mapRef.current.removeLayer(radiusCircleRef.current);
+                    radiusCircleRef.current = null;
                 }
-                radiusCircleRef.current = L.circle([lat, lng], {
-                    radius: radiusKm * 1000,
-                    color: '#f59e0b',
-                    fillColor: '#f59e0b',
-                    fillOpacity: 0.06,
-                    weight: 2,
-                    dashArray: '8 5',
-                    interactive: false,
-                }).addTo(mapRef.current);
+                if (radiusKm && radiusKm > 0) {
+                    radiusCircleRef.current = L.circle([lat, lng], {
+                        radius: radiusKm * 1000,
+                        color: '#f59e0b',
+                        fillColor: '#f59e0b',
+                        fillOpacity: 0.06,
+                        weight: 2,
+                        dashArray: '8 5',
+                        interactive: false,
+                    }).addTo(mapRef.current);
 
-                // Frame the map around the radius so it touches the edges
-                mapRef.current.fitBounds(radiusCircleRef.current.getBounds(), { padding: [10, 10] });
+                    // Frame the map around the radius so it touches the edges
+                    mapRef.current.fitBounds(radiusCircleRef.current.getBounds(), { padding: [10, 10] });
+                } else {
+                    // Radius is 0 or unassigned — center map on node lat/lng directly
+                    mapRef.current.setView([lat, lng], DEFAULT_ZOOM);
+                }
             }
         }).catch(() => {});
 
@@ -431,8 +437,10 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                 lng = post.lng;
             } else {
                 const hash = simpleHash(post.id || post.title);
-                lat = DEFAULT_CENTER[0] + ((hash % 1000) - 500) * 0.00004;
-                lng = DEFAULT_CENTER[1] + ((Math.floor(hash / 1000) % 1000) - 500) * 0.00004;
+                const centerLat = nodeRadius?.lat ?? DEFAULT_CENTER[0];
+                const centerLng = nodeRadius?.lng ?? DEFAULT_CENTER[1];
+                lat = centerLat + ((hash % 1000) - 500) * 0.00004;
+                lng = centerLng + ((Math.floor(hash / 1000) % 1000) - 500) * 0.00004;
             }
 
             const typeLabel = post.type === 'offer' ? 'Offer' : 'Need';

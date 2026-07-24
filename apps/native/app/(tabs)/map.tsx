@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import { Picker } from '@react-native-picker/picker';
-import MapView, { Marker, PROVIDER_DEFAULT } from '../../components/Map';
+import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -473,10 +473,35 @@ export default function MapScreen() {
     const [mapTypeFilter, setMapTypeFilter] = useState<'all' | 'offers' | 'needs'>('all');
     const [mapCategoryFilter, setMapCategoryFilter] = useState('all');
     const [showMapCategoryPicker, setShowMapCategoryPicker] = useState(false);
+    const [nodeRadius, setNodeRadius] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
+
+    const fetchNodeLocation = async () => {
+        try {
+            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (!anchorUrl) return;
+            const res = await fetch(`${anchorUrl}/api/node/config`);
+            if (!res.ok) return;
+            const config = await res.json();
+            if (config?.serviceRadius && typeof config.serviceRadius.lat === 'number' && typeof config.serviceRadius.lng === 'number') {
+                setNodeRadius(config.serviceRadius);
+                const nextRegion = {
+                    latitude: config.serviceRadius.lat,
+                    longitude: config.serviceRadius.lng,
+                    latitudeDelta: 0.0922,
+                    longitudeDelta: 0.0421,
+                };
+                setCurrentRegion(nextRegion);
+                mapRef.current?.animateToRegion(nextRegion, 500);
+            }
+        } catch (e) {
+            console.warn('Failed to fetch node config for map center:', e);
+        }
+    };
 
     useFocusEffect(
         React.useCallback(() => { 
-            loadPosts(); 
+            loadPosts();
+            fetchNodeLocation();
         }, [])
     );
 
@@ -893,6 +918,17 @@ export default function MapScreen() {
                             />
                         );
                     })}
+
+                    {/* Service radius circle overlay */}
+                    {nodeRadius && nodeRadius.radiusKm > 0 && (
+                        <Circle
+                            center={{ latitude: nodeRadius.lat, longitude: nodeRadius.lng }}
+                            radius={nodeRadius.radiusKm * 1000}
+                            strokeColor="#f59e0b"
+                            fillColor="rgba(245, 158, 11, 0.06)"
+                            strokeWidth={2}
+                        />
+                    )}
 
                     {/* Pin drop preview marker */}
                     {showNewPost && postLat != null && postLng != null && (

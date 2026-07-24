@@ -1266,6 +1266,7 @@ export function WelcomePage({ onComplete }: Props) {
                                 placeholder="e.g. Alice"
                                 maxLength={32}
                                 disabled={loading}
+                                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
                                 style={inputStyle}
                             />
 

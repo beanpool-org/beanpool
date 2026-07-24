@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ThreatReviewModal } from './ThreatReviewModal';
 import { MemberDetailModal } from './MemberDetailModal';
+import { resolveAvatarUrl } from '../../lib/avatar';
 
 interface MembersModuleProps {
     nodeData: any | null;
@@ -15,7 +16,8 @@ interface MembersModuleProps {
 export function getMemberAvatar(m: any, profiles: any[] = []): string | null {
     const pub = m?.publicKey || m?.pubkey || '';
     const profile = profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
-    return profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
+    const raw = profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
+    return resolveAvatarUrl(raw);
 }
 
 export function fmtDate(iso?: string | null): string {

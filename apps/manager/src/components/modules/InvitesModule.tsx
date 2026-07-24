@@ -285,16 +285,27 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {generatedTokens.map((item, idx) => (
                             <div key={idx} className="bg-nature-950 border border-nature-800 rounded-xl p-4 flex flex-col justify-between gap-3">
-                                <div>
-                                    <div className="flex justify-between items-start mb-2">
-                                        <code className="text-emerald-400 font-bold text-sm tracking-widest">{item.code}</code>
-                                        <span className="text-[9px] font-bold text-nature-500 uppercase bg-nature-900 px-2 py-1 rounded">{getTierBadge(item.tier)}</span>
+                                <div className="flex gap-4 items-center">
+                                    <div className="bg-white p-2 rounded-xl flex-shrink-0 border border-emerald-500/40 shadow-md">
+                                        <img
+                                            src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(item.fullUrl)}`}
+                                            alt={`QR Code for ${item.code}`}
+                                            width="110"
+                                            height="110"
+                                            className="block rounded-lg"
+                                        />
                                     </div>
-                                    <div className="text-[10px] text-nature-400 truncate font-mono">{item.fullUrl}</div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => setPreviewQrItem(item)} className="flex-1 text-[10px] font-bold py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white">QR</button>
-                                    <button onClick={() => handleCopy(item.fullUrl, idx)} className="flex-1 text-[10px] font-bold py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white">{copiedIndex === idx ? '✓' : 'Copy'}</button>
+                                    <div className="space-y-1.5 flex-1 min-w-0">
+                                        <div className="flex justify-between items-start flex-wrap gap-1">
+                                            <code className="text-emerald-400 font-bold text-sm tracking-widest">{item.code}</code>
+                                            <span className="text-[9px] font-bold text-nature-500 uppercase bg-nature-900 px-2 py-0.5 rounded">{getTierBadge(item.tier)}</span>
+                                        </div>
+                                        <div className="text-[10px] text-nature-400 truncate font-mono bg-nature-900/60 p-1.5 rounded border border-nature-800/80">{item.fullUrl}</div>
+                                        <div className="flex gap-2 pt-1">
+                                            <button onClick={() => setPreviewQrItem(item)} className="px-3 text-[10px] font-bold py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white transition-colors">Enlarge</button>
+                                            <button onClick={() => handleCopy(item.fullUrl, idx)} className="flex-1 text-[10px] font-bold py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white transition-colors">{copiedIndex === idx ? '✓ Copied' : 'Copy Link'}</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ))}

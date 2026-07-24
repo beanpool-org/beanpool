@@ -177,7 +177,7 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
   }
   var copyBtn = document.getElementById('copyBtn');
   copyBtn.addEventListener('click', function(){
-    copyCode().then(function(){
+    copyInvite().then(function(){
       copyBtn.textContent = 'Copied ✓';
       setTimeout(function(){ copyBtn.textContent = 'Copy code'; }, 2000);
     }).catch(function(){
@@ -207,7 +207,7 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
     installBtn.textContent = 'Get BeanPool on the App Store';
     installBtn.href = APP_STORE;
     // No install-referrer on iOS: copy the code so the app can offer paste after install.
-    installBtn.addEventListener('click', function(){ copyCode().catch(function(){}); });
+    installBtn.addEventListener('click', function(){ copyInvite().catch(function(){}); });
     step('1', 'Install BeanPool from the App Store', 'We\\u2019ve copied your code to the clipboard.');
     step('2', 'Open the app and paste your code', 'Or type the code shown above.');
     step('3', 'Choose a callsign and you\\u2019re in');

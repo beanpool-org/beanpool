@@ -216,7 +216,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        The balance slider is a continuous, color-coded spectrum showing your current financial state relative to your credit limits and holding fee brackets.
+                        The balance slider is a continuous, color-coded spectrum showing your current financial state relative to your credit limits and idle balance tiers.
                     </Text>
 
                     <View style={styles.sweetSpotCard}>
@@ -234,7 +234,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
                             <View style={[styles.zoneIndicator, { backgroundColor: palette.red500 }]} />
                             <View style={styles.zoneTextContainer}>
                                 <Text style={styles.zoneTitle}>Red Zone (Extremes)</Text>
-                                <Text style={styles.zoneDesc}>Max overdraft reached (left) or high holding fee bracket (<Text style={styles.boldWhiteText}>2.5%</Text> at <Text style={styles.boldWhiteText}>+2000B</Text>, right).</Text>
+                                <Text style={styles.zoneDesc}>Max overdraft reached (left) or highest recirculation tier (<Text style={styles.boldWhiteText}>2.5%</Text> at <Text style={styles.boldWhiteText}>+2000B</Text>, right).</Text>
                             </View>
                         </View>
 
@@ -242,7 +242,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
                             <View style={[styles.zoneIndicator, { backgroundColor: palette.orange500 }]} />
                             <View style={styles.zoneTextContainer}>
                                 <Text style={styles.zoneTitle}>Orange & Yellow (Warning)</Text>
-                                <Text style={styles.zoneDesc}>Approaching overdraft limits, or entering higher holding fee brackets (<Text style={styles.boldWhiteText}>1.5% to 2.0%</Text>).</Text>
+                                <Text style={styles.zoneDesc}>Approaching overdraft limits, or entering higher recirculation tiers (<Text style={styles.boldWhiteText}>1.5% to 2.0%</Text>).</Text>
                             </View>
                         </View>
 
@@ -306,19 +306,19 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
         },
         {
             id: 'brackets',
-            label: 'Holding Fee Brackets',
+            label: 'Idle Balance Tiers',
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        The positive (right) side of the slider shows your <Text style={styles.boldWhiteText}>Holding Fee Brackets</Text>. Progressive circulation fees apply monthly to positive balances to prevent hoarding.
+                        The positive (right) side of the slider shows your <Text style={styles.boldWhiteText}>Idle Balance Tiers</Text>. To keep credits circulating and prevent hoarding, balances above <Text style={styles.boldWhiteText}>200B</Text> gradually contribute a small monthly percentage back to the community.
                     </Text>
 
                     <View style={styles.cardContainer}>
-                        <Text style={styles.cardLabel}>PROGRESSIVE MONTHLY CIRCULATION FEE</Text>
+                        <Text style={styles.cardLabel}>IDLE BALANCE RECIRCULATION TIERS</Text>
                         
                         <View style={styles.bracketRow}>
                             <Text style={styles.bracketRange}>0 – 200B</Text>
-                            <Text style={[styles.bracketRate, { color: palette.green500 }]}>0.0% (Fee-Free)</Text>
+                            <Text style={[styles.bracketRate, { color: palette.green500 }]}>0.0% (Fee-Free Zone)</Text>
                         </View>
                         
                         <View style={styles.bracketRow}>
@@ -342,15 +342,21 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
                         </View>
                     </View>
 
-                    <View style={styles.exampleCard}>
-                        <Text style={styles.exampleLabel}>CALCULATION EXAMPLE</Text>
-                        <Text style={[styles.exampleText, { marginBottom: 8 }]}>
-                            A balance of <Text style={styles.boldWhiteText}>600B</Text> pays progressive monthly circulation fees of:
+                    <View style={[styles.infoBox, { marginBottom: 16, marginTop: 0 }]}>
+                        <MaterialCommunityIcons name="hand-heart" size={24} color={colors.accent.primary} style={styles.infoBoxIcon} />
+                        <Text style={styles.infoBoxText}>
+                            <Text style={styles.boldWhiteText}>Where do recirculated beans go?</Text> 100% of collected funds return directly to the <Text style={styles.boldWhiteText}>Community Commons</Text> to fund local initiatives — zero corporate profit.
                         </Text>
-                        <ListItem>First <Text style={styles.boldWhiteText}>200B</Text> × <Text style={styles.boldWhiteText}>0%</Text> = <Text style={styles.boldWhiteText}>0.0B</Text></ListItem>
-                        <ListItem>Next <Text style={styles.boldWhiteText}>300B</Text> (200 to 500) × <Text style={styles.boldWhiteText}>1.0%</Text> = <Text style={styles.boldWhiteText}>3.0B</Text></ListItem>
-                        <ListItem>Remaining <Text style={styles.boldWhiteText}>100B</Text> (500 to 600) × <Text style={styles.boldWhiteText}>1.5%</Text> = <Text style={styles.boldWhiteText}>1.5B</Text></ListItem>
-                        <ListItem><Text style={styles.boldWhiteText}>Total circulation fee = 4.5B / month</Text></ListItem>
+                    </View>
+
+                    <View style={styles.exampleCard}>
+                        <Text style={styles.exampleLabel}>MONTHLY SUMMARY EXAMPLE</Text>
+                        <Text style={[styles.exampleText, { marginBottom: 8 }]}>
+                            For a balance of <Text style={styles.boldWhiteText}>600B</Text>:
+                        </Text>
+                        <ListItem>First <Text style={styles.boldWhiteText}>200B</Text> is <Text style={styles.boldWhiteText}>100% Fee-Free (0B)</Text></ListItem>
+                        <ListItem>Recirculated amount above 200B: <Text style={styles.boldWhiteText}>4.5B / month</Text></ListItem>
+                        <ListItem><Text style={styles.boldWhiteText}>Effective rate: ~0.75% per month</Text></ListItem>
                     </View>
                 </View>
             )

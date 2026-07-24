@@ -284,7 +284,7 @@ function RootLayoutNav() {
                                             if (!isComponentMounted.current) return;
                                             
                                             // Redeem!
-                                            await redeemInvite(parsedCode, identity?.callsign || 'Unknown', identity);
+                                            const redeemRes: any = await redeemInvite(parsedCode, identity?.callsign || 'Unknown', identity);
 
                                             // Fetch and save new node details
                                             try {
@@ -301,7 +301,11 @@ function RootLayoutNav() {
                                                 console.warn('Failed to fetch node details for saving in deep link', e);
                                             }
 
-                                            Alert.alert('Success', 'Node switched and invite redeemed successfully!');
+                                            if (redeemRes?.alreadyMember) {
+                                                Alert.alert("You're already in! 🫘", `Switched active node to ${targetOrigin}. You are already a registered member!`);
+                                            } else {
+                                                Alert.alert('Success', 'Node switched and invite redeemed successfully!');
+                                            }
                                             requestSync().catch(console.error);
                                             // Refresh membership for the new node before routing, so a stale
                                             // 'stranger' verdict can't bounce us to the wrong-node screen.
@@ -309,7 +313,22 @@ function RootLayoutNav() {
                                             router.replace('/(tabs)');
                                         })
                                         .catch(err => {
-                                            Alert.alert('Redemption Failed', err.message || String(err));
+                                            const errStr = err?.message || String(err);
+                                            if (errStr.includes('already been used') || errStr.includes('already used')) {
+                                                Alert.alert(
+                                                    'Invite Already Used',
+                                                    'This invite code has already been redeemed. If you are setting up on a new device, would you like to recover your account using your seed phrase?',
+                                                    [
+                                                        { text: 'Cancel', style: 'cancel' },
+                                                        {
+                                                            text: 'Recover Account',
+                                                            onPress: () => router.replace({ pathname: '/welcome', params: { mode: 'recover' } })
+                                                        }
+                                                    ]
+                                                );
+                                            } else {
+                                                Alert.alert('Redemption Failed', errStr);
+                                            }
                                         });
                                 }
                             }
@@ -358,14 +377,33 @@ function RootLayoutNav() {
                                     text: 'Join Node',
                                     onPress: () => {
                                         redeemInvite(parsedCode, identity?.callsign || 'Unknown', identity)
-                                            .then(async () => {
-                                                Alert.alert('Success', 'Invite redeemed! Your connection is registered.');
+                                            .then(async (redeemRes: any) => {
+                                                if (redeemRes?.alreadyMember) {
+                                                    Alert.alert("You're already in! 🫘", 'Your connection is active and registered.');
+                                                } else {
+                                                    Alert.alert('Success', 'Invite redeemed! Your connection is registered.');
+                                                }
                                                 requestSync().catch(console.error);
                                                 await recheck();
                                                 router.replace('/(tabs)');
                                             })
                                             .catch(err => {
-                                                Alert.alert('Redemption Failed', err.message || String(err));
+                                                const errStr = err?.message || String(err);
+                                                if (errStr.includes('already been used') || errStr.includes('already used')) {
+                                                    Alert.alert(
+                                                        'Invite Already Used',
+                                                        'This invite code has already been redeemed. If you are setting up on a new device, would you like to recover your account using your seed phrase?',
+                                                        [
+                                                            { text: 'Cancel', style: 'cancel' },
+                                                            {
+                                                                text: 'Recover Account',
+                                                                onPress: () => router.replace({ pathname: '/welcome', params: { mode: 'recover' } })
+                                                            }
+                                                        ]
+                                                    );
+                                                } else {
+                                                    Alert.alert('Redemption Failed', errStr);
+                                                }
                                             });
                                     }
                                 }
@@ -380,7 +418,8 @@ function RootLayoutNav() {
                         if (!isComponentMounted.current) return;
                         const isMember = !!(data && data.isMember);
                         if (isMember) {
-                            console.log('[DeepLink] User is already an active member of current node. Ignoring stale invite link.');
+                            console.log('[DeepLink] User is already an active member of current node.');
+                            Alert.alert("You're already in! 🫘", 'You are already an active, registered member of this community.');
                             return;
                         }
                         showUnregisteredMemberDialog();
@@ -388,8 +427,9 @@ function RootLayoutNav() {
                     .catch(err => {
                         console.warn('Failed to check membership on same-node deep link', err);
                         if (!isComponentMounted.current) return;
-                        // Active node already saved & connected locally - ignore stale link
-                        console.log('[DeepLink] Active node locally connected. Ignoring stale invite link.');
+                        // Active node already saved & connected locally - show already in toast
+                        console.log('[DeepLink] Active node locally connected.');
+                        Alert.alert("You're already in! 🫘", 'You are already connected to this community.');
                     });
             }
         });

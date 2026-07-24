@@ -436,7 +436,7 @@ router.post('/api/invite/redeem', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
-    ctx.body = { success: true, member: result.member };
+    ctx.body = { success: true, member: result.member, alreadyMember: result.alreadyMember };
 });
 
 router.post('/api/invite/redeem-offline', async (ctx) => {
@@ -452,7 +452,7 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
-    ctx.body = { success: true, member: result.member };
+    ctx.body = { success: true, member: result.member, alreadyMember: result.alreadyMember };
 });
 
 // Read-only pre-flight: lets onboarding reject a dud invite at Step 1 (before

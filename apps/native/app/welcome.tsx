@@ -973,7 +973,25 @@ export default function WelcomeScreen() {
                             💡 Tip: adding your suburb helps locals find you!
                         </Text>
 
-                        {error && <Text style={styles.error}>{error}</Text>}
+                        {error && (
+                            <View style={{ marginBottom: 12 }}>
+                                <Text style={styles.error}>{error}</Text>
+                                {(error.includes('already been used') || error.includes('already used')) && (
+                                    <Pressable
+                                        style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: palette.blue50 || '#eff6ff', borderRadius: 8, borderWidth: 1, borderColor: palette.blue200 || '#bfdbfe', alignItems: 'center' }}
+                                        onPress={() => {
+                                            setError(null);
+                                            setMode('recover');
+                                        }}
+                                        accessibilityRole="button"
+                                    >
+                                        <Text style={{ color: palette.blue600 || '#2563eb', fontWeight: 'bold', fontSize: 13 }}>
+                                            🔑 Recover an existing account with seed phrase →
+                                        </Text>
+                                    </Pressable>
+                                )}
+                            </View>
+                        )}
 
                         <Pressable style={styles.primaryBtn} onPress={handleCreate} disabled={loading} accessibilityRole="button">
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Next →</Text>}

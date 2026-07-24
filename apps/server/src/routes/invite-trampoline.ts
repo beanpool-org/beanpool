@@ -191,7 +191,7 @@ export function renderInviteTrampoline(opts: { webJoin: boolean }): string {
   var openAppBtn = document.getElementById('openAppBtn');
   if (isAndroid || isIOS) {
     openAppBtn.style.display = 'block';
-    openAppBtn.href = 'beanpool://invite?code=' + encodeURIComponent(code) + '&server=' + encodeURIComponent(origin);
+    openAppBtn.href = 'beanpool://welcome?invite=' + encodeURIComponent(code) + '&server=' + encodeURIComponent(origin);
     openAppBtn.addEventListener('click', function(){
       copyInvite().catch(function(){});
     });

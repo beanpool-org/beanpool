@@ -12,6 +12,31 @@ interface MembersModuleProps {
     onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
 }
 
+export function getMemberAvatar(m: any, profiles: any[] = []): string | null {
+    const pub = m?.publicKey || m?.pubkey || '';
+    const profile = profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
+    return profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
+}
+
+export function fmtDate(iso?: string | null): string {
+    if (!iso) return 'N/A';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return 'N/A';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export function fmtLastActive(iso?: string | null): string {
+    if (!iso) return 'Unknown';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return 'Unknown';
+    const days = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+    if (days <= 0) return 'Active today';
+    if (days === 1) return 'Active yesterday';
+    if (days < 7) return `Active ${days}d ago`;
+    if (days < 30) return `Active ${Math.floor(days / 7)}w ago`;
+    return `Active ${d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
+}
+
 export function getMemberDisplayName(m: any, profiles: any[] = []): string {
     const pub = m?.publicKey || m?.pubkey || '';
     if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'System Node Operator';
@@ -415,13 +440,27 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                                                 }`}
                                             >
                                                 <div className="col-span-5 flex items-center gap-2.5">
-                                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
-                                                        isMemberFrozen
-                                                            ? 'bg-red-950 text-red-400 border-red-800'
-                                                            : 'bg-terra-600/30 text-terra-300 border-terra-500/30'
-                                                    }`}>
-                                                        {initial}
-                                                    </div>
+                                                    {(() => {
+                                                        const avatar = getMemberAvatar(m, profiles);
+                                                        if (avatar) {
+                                                            return (
+                                                                <img
+                                                                    src={avatar}
+                                                                    alt={displayName}
+                                                                    className="w-7 h-7 rounded-full object-cover shrink-0 border border-terra-500/40 shadow-sm"
+                                                                />
+                                                            );
+                                                        }
+                                                        return (
+                                                            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
+                                                                isMemberFrozen
+                                                                    ? 'bg-red-950 text-red-400 border-red-800'
+                                                                    : 'bg-terra-600/30 text-terra-300 border-terra-500/30'
+                                                            }`}>
+                                                                {initial}
+                                                            </div>
+                                                        );
+                                                    })()}
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-white truncate flex items-center gap-1.5 group-hover:text-terra-400 transition-colors">
                                                             <span>{displayName}</span>

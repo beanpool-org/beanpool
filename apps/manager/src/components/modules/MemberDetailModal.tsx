@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getMemberDisplayName } from './MembersModule';
+import { getMemberDisplayName, getMemberAvatar, fmtDate, fmtLastActive } from './MembersModule';
 
 interface MemberDetailModalProps {
     member: any;
@@ -55,13 +55,27 @@ export function MemberDetailModal({
                 {/* Modal Header */}
                 <div className="flex items-start justify-between border-b border-nature-800 pb-4">
                     <div className="flex items-center gap-3.5">
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-lg border ${
-                            isFrozen
-                                ? 'bg-red-950/80 text-red-400 border-red-800/80'
-                                : 'bg-terra-600/30 text-terra-300 border-terra-500/40'
-                        }`}>
-                            {initial}
-                        </div>
+                        {(() => {
+                            const avatar = getMemberAvatar(member, profiles);
+                            if (avatar) {
+                                return (
+                                    <img
+                                        src={avatar}
+                                        alt={displayName}
+                                        className="w-12 h-12 rounded-2xl object-cover shrink-0 border border-terra-500/40 shadow-md"
+                                    />
+                                );
+                            }
+                            return (
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-lg border ${
+                                    isFrozen
+                                        ? 'bg-red-950/80 text-red-400 border-red-800/80'
+                                        : 'bg-terra-600/30 text-terra-300 border-terra-500/40'
+                                }`}>
+                                    {initial}
+                                </div>
+                            );
+                        })()}
                         <div>
                             <h3 className="text-lg font-black text-white m-0 tracking-tight flex items-center gap-2">
                                 <span>{displayName}</span>
@@ -158,8 +172,16 @@ export function MemberDetailModal({
                             </span>
                         </div>
                         <div className="flex items-center justify-between text-nature-300">
-                            <span className="text-nature-400">Account Registration:</span>
-                            <span className="font-mono text-nature-200">Sovereign Peer #17</span>
+                            <span className="text-nature-400">Joined Date:</span>
+                            <span className="font-mono text-nature-200">
+                                {fmtDate(member?.joinedAt || member?.joined_at)}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between text-nature-300">
+                            <span className="text-nature-400">Last Seen / Active:</span>
+                            <span className="font-mono font-semibold text-terra-300">
+                                {fmtLastActive(member?.lastActiveAt || member?.last_active_at || member?.last_seen)}
+                            </span>
                         </div>
                     </div>
                 </div>

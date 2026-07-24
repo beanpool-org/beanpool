@@ -10,7 +10,8 @@ import MapView, { Marker, PROVIDER_DEFAULT } from '../../components/Map';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
-import { getPosts, createPost, getBalance } from '../../utils/db';
+import { getPosts, createPost, getBalance, getMemberProfile } from '../../utils/db';
+import { getCanonicalAvatar } from '../../utils/canonical-profile';
 import { useIdentity } from '../IdentityContext';
 import { CurrencyDisplay, useCurrencyString } from '../../components/CurrencyDisplay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -420,7 +421,7 @@ export default function MapScreen() {
     useFocusEffect(
         useCallback(() => {
             if (params.newPost === 'true') {
-                setShowNewPost(true);
+                openComposer();
                 router.setParams({ newPost: '' });
             }
         }, [params.newPost])
@@ -566,6 +567,94 @@ export default function MapScreen() {
         setValidationToast('');
     };
 
+    // ── Draft persistence + up-front profile-photo check ──
+    // A post used to be lost if the user left the composer to fix something
+    // (e.g. to add a required profile photo). The draft is now saved as they
+    // type and restored next time they open the composer, scoped to the active
+    // node so it never leaks between communities.
+    const OFFER_DRAFT_KEY = 'beanpool_offer_draft';
+
+    const draftHasContent = () =>
+        !!(postTitle.trim() || postDescription.trim() || postCategory || postPhotos.length > 0 || postLat != null);
+
+    const persistDraft = useCallback(async () => {
+        try {
+            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+            const draft = {
+                anchorUrl, postType, postCategory, postTitle, postDescription, postCredits,
+                postPriceType, postRepeatable, postPhotos, postLat, postLng, savedAt: Date.now(),
+            };
+            await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
+        } catch { /* draft is best-effort */ }
+    }, [postType, postCategory, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postPhotos, postLat, postLng]);
+
+    const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
+
+    const restoreDraft = (d: any) => {
+        setPostType(d.postType === 'need' ? 'need' : 'offer');
+        setPostCategory(d.postCategory || '');
+        setPostTitle(d.postTitle || '');
+        setPostDescription(d.postDescription || '');
+        setPostCredits(d.postCredits || '');
+        setPostPriceType(d.postPriceType || 'fixed');
+        setPostRepeatable(!!d.postRepeatable);
+        setPostPhotos(Array.isArray(d.postPhotos) ? d.postPhotos : []);
+        setPostLat(typeof d.postLat === 'number' ? d.postLat : null);
+        setPostLng(typeof d.postLng === 'number' ? d.postLng : null);
+    };
+
+    // Posting requires a profile photo. Resolve it from this node's row first,
+    // then the canonical (node-independent) copy — matching the publish path —
+    // so a user who set a photo on ANY community isn't asked again.
+    const hasUsableAvatar = async (): Promise<boolean> => {
+        if (!identity) return false;
+        try {
+            const p = await getMemberProfile(identity.publicKey);
+            if (p?.avatar_url) return true;
+        } catch {}
+        return !!(await getCanonicalAvatar());
+    };
+
+    // Open the composer, but check the profile photo UP FRONT (so nobody
+    // composes a whole offer only to be blocked at the end) and offer to resume
+    // an unfinished draft.
+    const openComposer = async () => {
+        if (!(await hasUsableAvatar())) {
+            Alert.alert(
+                'Add a profile photo first',
+                "Your community likes to see who they're dealing with, so a photo is needed before you can post. It only takes a moment.",
+                [
+                    { text: 'Not now', style: 'cancel' },
+                    { text: 'Add photo', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } }) },
+                ]
+            );
+            return;
+        }
+        try {
+            const raw = await AsyncStorage.getItem(OFFER_DRAFT_KEY);
+            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (raw) {
+                const d = JSON.parse(raw);
+                const restorable = d && d.anchorUrl === anchorUrl && (d.postTitle?.trim() || d.postDescription?.trim() || (d.postPhotos?.length));
+                if (restorable) {
+                    Alert.alert('Unfinished post', 'You started a post earlier. Continue it, or start fresh?', [
+                        { text: 'Start fresh', style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); setShowNewPost(true); } },
+                        { text: 'Continue', onPress: () => { restoreDraft(d); setShowNewPost(true); } },
+                    ]);
+                    return;
+                }
+            }
+        } catch { /* fall through to a blank composer */ }
+        setShowNewPost(true);
+    };
+
+    // Auto-save the draft as the user edits (only while the composer is open and
+    // there's something worth keeping).
+    useEffect(() => {
+        if (!showNewPost || !draftHasContent()) return;
+        persistDraft();
+    }, [showNewPost, persistDraft]);
+
     const useMyLocation = async () => {
         const { status: initStatus, canAskAgain } = await Location.getForegroundPermissionsAsync();
         let status = initStatus;
@@ -696,6 +785,7 @@ export default function MapScreen() {
                 photos: postPhotos.length > 0 ? JSON.stringify(postPhotos) : null,
                 created_at: new Date().toISOString(),
             });
+            clearDraft();
             setTimeout(() => {
                 resetNewPost();
                 setShowNewPost(false);
@@ -958,7 +1048,7 @@ export default function MapScreen() {
                                 );
                                 return;
                             }
-                            setShowNewPost(true);
+                            openComposer();
                         }}
                         activeOpacity={0.8}
                     >

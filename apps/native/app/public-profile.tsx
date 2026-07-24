@@ -452,14 +452,34 @@ export default function PublicProfileScreen() {
                                 );
                             })()}
 
-                            {/* Tier + tenure */}
+                            {/* Tier + Trust Points Banner */}
                             <View style={styles.trustSignalCard}>
                                 <Text style={styles.trustEmoji} allowFontScaling={false}>{trust.tier?.emoji || '🌱'}</Text>
-                                <View style={{ flexShrink: 1 }}>
-                                    <Text style={styles.trustTierName} numberOfLines={1}>{trust.tier?.name || 'Member'}</Text>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                                        <Text style={styles.trustTierName} numberOfLines={1}>{trust.tier?.name || 'Member'}</Text>
+                                        <View style={{ backgroundColor: colors.brand.tint, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary }}>
+                                            <Text style={{ fontSize: 13, fontWeight: '900', color: colors.brand.primary }}>
+                                                {Math.round(trust.earnedCredit || 0)} Trust Points
+                                            </Text>
+                                        </View>
+                                    </View>
                                     <Text style={styles.trustSub} numberOfLines={1}>
                                         {[trust.joinedAt ? `Member since ${fmtMonthYear(trust.joinedAt)}` : '', fmtLastActive(trust.lastActiveAt)].filter(Boolean).join(' · ')}
                                     </Text>
+                                    
+                                    {/* Clear Nuanced Trust Explanation */}
+                                    <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border.default }}>
+                                        {(trust.stats?.tradeCount || 0) === 0 ? (
+                                            <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 17, fontWeight: '500' }}>
+                                                💡 <Text style={{ fontWeight: '700', color: colors.text.heading }}>New Member Notice:</Text> A low score simply means they are new to the community — not that they've done anything wrong! Complete a marketplace trade with them to help them build community trust.
+                                            </Text>
+                                        ) : (
+                                            <Text style={{ fontSize: 12, color: colors.brand.primary, lineHeight: 17, fontWeight: '600' }}>
+                                                🤝 <Text style={{ fontWeight: '800' }}>Proven Partner:</Text> Earned trust through {trust.stats?.tradeCount || 0} completed trade{(trust.stats?.tradeCount || 0) === 1 ? '' : 's'} across {trust.stats?.uniquePartners || 0} unique partner{(trust.stats?.uniquePartners || 0) === 1 ? '' : 's'}.
+                                            </Text>
+                                        )}
+                                    </View>
                                 </View>
                             </View>
 
@@ -476,7 +496,7 @@ export default function PublicProfileScreen() {
                                 </View>
                                 <View style={styles.statDivider} />
                                 <View style={styles.statTile}>
-                                    <Text style={styles.statTileNum} numberOfLines={1}>{trust.completionRate === null || trust.completionRate === undefined ? '—' : `${Math.round(trust.completionRate * 100)}%`}</Text>
+                                    <Text style={styles.statTileNum} numberOfLines={1}>{trust.completionRate === null || trust.completionRate === undefined ? '100%' : `${Math.round(trust.completionRate * 100)}%`}</Text>
                                     <Text style={styles.statTileLabel} numberOfLines={1}>Completion</Text>
                                 </View>
                             </View>

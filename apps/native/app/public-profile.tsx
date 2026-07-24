@@ -467,7 +467,7 @@ export default function PublicProfileScreen() {
                                         <Text style={styles.trustTierName} numberOfLines={1}>{trust.tier?.name || 'Member'}</Text>
                                         <View style={{ backgroundColor: colors.brand.tint, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary }}>
                                             <Text style={{ fontSize: 13, fontWeight: '900', color: colors.brand.primary }}>
-                                                {Math.round(trust.earnedCredit || 0)} Trust Points
+                                                {Math.round(trust.earnedCredit || 0)} / 1920 Trust Points
                                             </Text>
                                         </View>
                                     </View>

@@ -422,6 +422,10 @@ export default function PublicProfileScreen() {
                             {trust?.completionRate === null || trust?.completionRate === undefined ? 100 : Math.round(trust.completionRate * 100)}% Reciprocity Health
                         </Text>
                     </View>
+                    {/* Trust Points Raw Score / 1920 Max — line directly below Reciprocity Health (20% larger text) */}
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: colors.brand.primary, marginTop: 8 }}>
+                        ⭐ {Math.round(trust?.earnedCredit || 0)} / 1920 Trust Points
+                    </Text>
                     {profile?.bio && (
                         <Text style={styles.bioText}>"{profile.bio}"</Text>
                     )}
@@ -459,18 +463,11 @@ export default function PublicProfileScreen() {
                                 );
                             })()}
 
-                            {/* Tier + Trust Points Banner */}
+                            {/* Tier Banner */}
                             <View style={styles.trustSignalCard}>
                                 <Text style={styles.trustEmoji} allowFontScaling={false}>{trust.tier?.emoji || '🌱'}</Text>
                                 <View style={{ flex: 1, minWidth: 0 }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                                        <Text style={styles.trustTierName} numberOfLines={1}>{trust.tier?.name || 'Member'}</Text>
-                                        <View style={{ backgroundColor: colors.brand.tint, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary }}>
-                                            <Text style={{ fontSize: 13, fontWeight: '900', color: colors.brand.primary }}>
-                                                {Math.round(trust.earnedCredit || 0)} / 1920 Trust Points
-                                            </Text>
-                                        </View>
-                                    </View>
+                                    <Text style={styles.trustTierName} numberOfLines={1}>{trust.tier?.name || 'Member'}</Text>
                                     <Text style={styles.trustSub} numberOfLines={1}>
                                         {[trust.joinedAt ? `Member since ${fmtMonthYear(trust.joinedAt)}` : '', fmtLastActive(trust.lastActiveAt)].filter(Boolean).join(' · ')}
                                     </Text>

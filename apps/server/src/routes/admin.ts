@@ -51,7 +51,7 @@ router.post('/api/local/admin/data', async (ctx) => {
     }
 
     ctx.body = {
-        members: getAllMembers().map(m => {
+        members: getAllMembers().filter(m => m.status !== 'pruned').map(m => {
             const isVoucher = canVouch(m.publicKey);
             const earned = m.earnedCredit || 0;
             let tier = earned >= 1400 ? 'Elder' : earned >= 600 ? 'Steward' : earned >= 200 ? 'Resident' : 'Newcomer';

@@ -246,6 +246,7 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
     );
 
     const filteredMembers = members.filter((m: any) => {
+        if (m.status === 'pruned') return false;
         const name = getMemberDisplayName(m, profiles).toLowerCase();
         const pub = (m.publicKey || '').toLowerCase();
         const term = searchTerm.toLowerCase();

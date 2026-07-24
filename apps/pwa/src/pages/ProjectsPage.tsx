@@ -222,7 +222,7 @@ export function ProjectsPage({ identity }: Props) {
     return (
         <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', paddingBottom: '4rem' }}>
             <header className="sticky top-0 z-40 bg-nature-900 border-b border-nature-800 p-4 shadow-sm flex flex-col gap-3">
-                <div className="flex justify-between items-center">
+                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center">
                     <div>
                         <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> Community Projects
@@ -250,7 +250,7 @@ export function ProjectsPage({ identity }: Props) {
                     <p className="text-4xl opacity-50">🌱</p>
                 </div>
             ) : (
-                <div className="p-4 flex flex-col gap-4">
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {projects.map(project => {
                         const commonsAlloc = project.commons_allocation || 0;
                         const pledgeAmount = project.current_amount - commonsAlloc;
@@ -347,15 +347,17 @@ export function ProjectsPage({ identity }: Props) {
             {/* FULL SCREEN MODAL: New Project */}
             {showNewProject && (
                 <div className="fixed inset-0 z-50 bg-bg-primary flex flex-col" style={{ overflowY: 'auto' }}>
-                    <header className="sticky top-0 bg-nature-900 border-b border-nature-800 p-4 shadow-sm flex items-center justify-between z-10">
-                        <h2 className="text-white font-bold text-lg">Propose Project</h2>
-                        <button onClick={() => setShowNewProject(false)} className="p-2 text-nature-400 hover:text-white bg-nature-800 hover:bg-nature-700 rounded-full" aria-label="Close new project proposal">
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                    <header className="sticky top-0 bg-nature-900 border-b border-nature-800 p-4 shadow-sm z-10">
+                        <div className="max-w-lg sm:max-w-xl mx-auto w-full flex items-center justify-between">
+                            <h2 className="text-white font-bold text-lg">Propose Project</h2>
+                            <button onClick={() => setShowNewProject(false)} className="p-2 text-nature-400 hover:text-white bg-nature-800 hover:bg-nature-700 rounded-full" aria-label="Close new project proposal">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </header>
-                    <div className="p-5 flex flex-col gap-4 flex-1">
+                    <div className="p-5 max-w-lg sm:max-w-xl mx-auto w-full flex flex-col gap-4 flex-1">
                         <p className="text-sm text-nature-500 dark:text-nature-400">
                             Pitch an idea to the community. Beans pledged will be instantly credited to your account to fund the work.
                         </p>
@@ -446,26 +448,28 @@ export function ProjectsPage({ identity }: Props) {
             {/* FULL SCREEN MODAL: Project Detail */}
             {selectedProject && (
                 <div className="fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: 'var(--bg-primary)', overflowY: 'auto' }}>
-                    <header className="sticky top-0 bg-nature-900 border-b border-nature-800 p-3 shadow-md flex items-center gap-3 z-10 transition-colors">
-                        <button onClick={() => { setSelectedProject(null); setIsEditingProject(false); }} className="p-2 text-nature-400 hover:text-white bg-nature-800 hover:bg-nature-700 rounded-full transition-colors" aria-label="Close project details">
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                            </svg>
-                        </button>
-                        <h2 className="text-white font-bold text-lg leading-tight flex-1 tracking-tight truncate">
-                            {isEditingProject ? 'Edit Project' : 'Project Details'}
-                        </h2>
-                        {identity && identity.publicKey === selectedProject.creator_pubkey && !isEditingProject && (
-                            <button onClick={startEditing} className="px-3 py-1.5 bg-nature-800 hover:bg-nature-700 text-nature-300 hover:text-white rounded-lg text-sm font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer ml-auto active:scale-95 z-50 relative pointer-events-auto">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    <header className="sticky top-0 bg-nature-900 border-b border-nature-800 p-3 shadow-md z-10 transition-colors">
+                        <div className="max-w-lg sm:max-w-xl mx-auto w-full flex items-center gap-3">
+                            <button onClick={() => { setSelectedProject(null); setIsEditingProject(false); }} className="p-2 text-nature-400 hover:text-white bg-nature-800 hover:bg-nature-700 rounded-full transition-colors" aria-label="Close project details">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
-                                Edit
                             </button>
-                        )}
+                            <h2 className="text-white font-bold text-lg leading-tight flex-1 tracking-tight truncate">
+                                {isEditingProject ? 'Edit Project' : 'Project Details'}
+                            </h2>
+                            {identity && identity.publicKey === selectedProject.creator_pubkey && !isEditingProject && (
+                                <button onClick={startEditing} className="px-3 py-1.5 bg-nature-800 hover:bg-nature-700 text-nature-300 hover:text-white rounded-lg text-sm font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer ml-auto active:scale-95 z-50 relative pointer-events-auto">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
+                                    Edit
+                                </button>
+                            )}
+                        </div>
                     </header>
                     
-                    <div className="flex-1 pb-24">
+                    <div className="flex-1 pb-24 max-w-lg sm:max-w-xl mx-auto w-full">
                         {isEditingProject ? (
                             <div className="p-5 flex flex-col gap-4">
                                 {selectedProject.current_amount > 0 ? (

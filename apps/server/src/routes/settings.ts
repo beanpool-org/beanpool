@@ -14,8 +14,10 @@ import {
 import {
     getLocalConfig, saveLocalConfig, verifyPassword,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
+    getGatewayConfig,
 } from '../config/local-config.js';
 import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
+import { renderInviteTrampoline } from './invite-trampoline.js';
 import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 
@@ -126,6 +128,19 @@ router.get('/settings.js', async (ctx) => {
 // Redirect root to the PWA app — existing users auto-login via IndexedDB identity
 // Preserve query params (e.g. ?invite=BP-XXXX-XXXX) for invite URL flow
 router.get('/', async (ctx) => {
+    // An invite link opened on a device WITHOUT the app installed lands here (an
+    // installed app intercepts the https link via verified App/Universal Links
+    // first and never reaches the server). Serve the install trampoline instead
+    // of dropping the invitee into the web PWA — which would redeem and burn
+    // their single-use code. This page is plain HTML from THIS server, not the
+    // PWA bundle; it creates no identity and redeems nothing.
+    if (ctx.query.invite) {
+        const webJoin = getGatewayConfig().features?.servePwa !== false;
+        ctx.type = 'html';
+        ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        ctx.body = renderInviteTrampoline({ webJoin });
+        return;
+    }
     const query = ctx.querystring ? `?${ctx.querystring}` : '';
     ctx.redirect(`/app${query}`);
 });

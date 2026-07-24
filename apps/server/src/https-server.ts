@@ -528,7 +528,12 @@ export async function startHttpsServer(port: number): Promise<void> {
             return;
         }
         if (!gwConfig.features?.servePwa && (ctx.path === '/' || ctx.path.startsWith('/app') || ctx.path.endsWith('.html'))) {
-            if (ctx.path !== '/settings' && !ctx.path.startsWith('/api/')) {
+            // The invite trampoline (`/?invite=`) is plain HTML served by this
+            // server (NOT the PWA), and invites must work even on headless nodes
+            // — so exempt it. It renders native-app-only there (no web escape
+            // hatch), since servePwa is off.
+            const isInviteTrampoline = ctx.path === '/' && !!ctx.query.invite;
+            if (ctx.path !== '/settings' && !ctx.path.startsWith('/api/') && !isInviteTrampoline) {
                 ctx.status = 530;
                 ctx.body = { error: 'Headless Mode: PWA hosting is disabled on this node gateway' };
                 return;

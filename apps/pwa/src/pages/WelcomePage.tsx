@@ -210,6 +210,19 @@ export function WelcomePage({ onComplete }: Props) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
 
+    // Cut the PWA out of the invite flow: an invite link only reaches the web
+    // PWA via the trampoline's explicit "continue in browser" escape hatch,
+    // which appends ?webjoin=1. Any OTHER arrival at /app?invite= (a stray or
+    // bookmarked link) is bounced to the install trampoline, so the PWA never
+    // silently redeems and burns a single-use code meant for the native app.
+    React.useEffect(() => {
+        const sp = new URLSearchParams(window.location.search);
+        const invite = sp.get('invite');
+        if (invite && !sp.get('webjoin')) {
+            window.location.replace('/?invite=' + encodeURIComponent(invite));
+        }
+    }, []);
+
 
     async function handleCreate() {
         const trimmedCallsign = callsign.trim();

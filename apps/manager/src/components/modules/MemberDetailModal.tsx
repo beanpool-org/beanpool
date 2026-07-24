@@ -9,6 +9,7 @@ interface MemberDetailModalProps {
     isVoucher?: boolean;
     onToggleFreeze: (pubkey: string) => void;
     onToggleVouch?: (pubkey: string, isCurrentlyVoucher: boolean) => void;
+    onPrune?: (pubkey: string) => void;
     onClose: () => void;
 }
 
@@ -20,10 +21,12 @@ export function MemberDetailModal({
     isVoucher,
     onToggleFreeze,
     onToggleVouch,
+    onPrune,
     onClose
 }: MemberDetailModalProps) {
     const [copiedPubkey, setCopiedPubkey] = useState(false);
     const [revokedVouch, setRevokedVouch] = useState(false);
+    const [showPruneConfirm, setShowPruneConfirm] = useState(false);
 
     const pubkey = member?.publicKey || member?.pubkey || '';
     const displayName = getMemberDisplayName(member, profiles);
@@ -184,31 +187,68 @@ export function MemberDetailModal({
                 )}
 
                 {/* Action Controls */}
-                <div className="flex items-center justify-between gap-3 border-t border-nature-800 pt-4 text-xs">
-                    <button
-                        disabled={isFrozen}
-                        onClick={() => onToggleVouch?.(pubkey, !!isVoucher)}
-                        className={`px-3.5 py-2 rounded-xl font-bold transition-all border ${
-                            isFrozen
-                                ? 'opacity-50 cursor-not-allowed bg-nature-900 text-nature-500 border-nature-800'
-                                : isVoucher
-                                ? 'bg-amber-950/60 text-amber-300 border-amber-800/80 hover:bg-amber-900/80'
-                                : 'bg-emerald-950 text-emerald-300 border-emerald-800 hover:bg-emerald-900'
-                        }`}
-                    >
-                        {isVoucher ? 'Demote to Standard' : '🛡️ Nominate / Promote to Voucher'}
-                    </button>
+                <div className="space-y-3 border-t border-nature-800 pt-4">
+                    {showPruneConfirm ? (
+                        <div className="p-3.5 bg-red-950/90 border border-red-800 rounded-2xl space-y-2 text-xs animate-fade-in">
+                            <span className="font-bold text-red-200 block">⚠️ Confirm Permanent Prune / Delete</span>
+                            <p className="text-[11px] text-red-300 m-0">
+                                This will remove <code className="font-bold">{displayName}</code> from the node roster and settle remaining debt/credit to Commons. This action cannot be undone.
+                            </p>
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                                <button
+                                    onClick={() => setShowPruneConfirm(false)}
+                                    className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-semibold text-[11px]"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        onPrune?.(pubkey);
+                                        setShowPruneConfirm(false);
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-[11px] shadow-lg"
+                                >
+                                    Yes, Prune Account
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                            <button
+                                disabled={isFrozen}
+                                onClick={() => onToggleVouch?.(pubkey, !!isVoucher)}
+                                className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
+                                    isFrozen
+                                        ? 'opacity-50 cursor-not-allowed bg-nature-900 text-nature-500 border-nature-800'
+                                        : isVoucher
+                                        ? 'bg-amber-950/60 text-amber-300 border-amber-800/80 hover:bg-amber-900/80'
+                                        : 'bg-emerald-950 text-emerald-300 border-emerald-800 hover:bg-emerald-900'
+                                }`}
+                            >
+                                {isVoucher ? 'Demote' : '🛡️ Promote'}
+                            </button>
 
-                    <button
-                        onClick={() => onToggleFreeze(pubkey)}
-                        className={`px-4 py-2 rounded-xl font-bold transition-all border shadow-lg flex items-center gap-1.5 ${
-                            isFrozen
-                                ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-emerald-950/50'
-                                : 'bg-red-600 hover:bg-red-500 text-white border-red-500 shadow-red-950/50'
-                        }`}
-                    >
-                        <span>{isFrozen ? '🟢 Unfreeze Account' : '🛑 Freeze Account'}</span>
-                    </button>
+                            <button
+                                onClick={() => onToggleFreeze(pubkey)}
+                                className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
+                                    isFrozen
+                                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
+                                        : 'bg-amber-600 hover:bg-amber-500 text-white border-amber-500'
+                                }`}
+                            >
+                                <span>{isFrozen ? '🟢 Unfreeze' : '🛑 Freeze'}</span>
+                            </button>
+
+                            {onPrune && (
+                                <button
+                                    onClick={() => setShowPruneConfirm(true)}
+                                    className="px-3 py-2 rounded-xl font-bold transition-all border bg-red-950/80 hover:bg-red-900 text-red-300 border-red-800 text-[11px]"
+                                >
+                                    <span>🗑️ Prune Account</span>
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
 
             </div>

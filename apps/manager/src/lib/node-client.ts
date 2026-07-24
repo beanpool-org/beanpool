@@ -161,6 +161,27 @@ export async function freezeNodeUser(
     return res.json();
 }
 
+export async function pruneNodeUser(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string
+): Promise<{ success: boolean }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function generateNodeInvite(
     nodeUrl: string,
     adminPassword?: string,

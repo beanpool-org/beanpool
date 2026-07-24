@@ -7,6 +7,7 @@ interface MembersModuleProps {
     nodeDataLoading: boolean;
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
+    onPruneUser?: (pubkey: string) => Promise<void>;
     onUpdateTier?: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
 }
@@ -59,7 +60,7 @@ export function getMemberTier(m: any): string {
     return 'Citizen';
 }
 
-export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUser, onUpdateTier, onToggleVoucher }: MembersModuleProps) {
+export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUser, onPruneUser, onUpdateTier, onToggleVoucher }: MembersModuleProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeThreat, setActiveThreat] = useState<any | null>(null);
     const [selectedMember, setSelectedMember] = useState<any | null>(null);
@@ -68,6 +69,17 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
     const [isUpdatingTier, setIsUpdatingTier] = useState(false);
     const [frozenPubkeys, setFrozenPubkeys] = useState<Set<string>>(new Set());
     const [customVouchers, setCustomVouchers] = useState<Set<string>>(new Set());
+
+    const handlePruneMember = async (pubkey: string) => {
+        if (!onPruneUser) return;
+        try {
+            await onPruneUser(pubkey);
+            onRefresh();
+            setSelectedMember(null);
+        } catch (e: any) {
+            alert(`Failed to prune member: ${e.message || e}`);
+        }
+    };
 
     const handleApplyTierUpgrade = async () => {
         if (!tierEditMember || !onUpdateTier) return;
@@ -568,6 +580,7 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                     }
                     onToggleFreeze={handleToggleFreezeMember}
                     onToggleVouch={(pk, isV) => handleToggleVouchMember(pk, isV)}
+                    onPrune={(pk) => handlePruneMember(pk)}
                     onClose={() => setSelectedMember(null)}
                 />
             )}

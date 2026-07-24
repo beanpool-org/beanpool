@@ -16,6 +16,7 @@ import {
     fetchNodeData,
     fetchNodeLogs,
     freezeNodeUser,
+    pruneNodeUser,
     updateNodeUserTier,
     updateNodeUserVoucher,
     type DiagnosticsResponse,
@@ -532,6 +533,11 @@ export function App() {
                             onFreezeUser={async (pubkey, freeze) => {
                                 if (activeNode) {
                                     await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword);
+                                }
+                            }}
+                            onPruneUser={async (pubkey) => {
+                                if (activeNode) {
+                                    await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword);
                                 }
                             }}
                             onUpdateTier={async (pubkey, tier) => {

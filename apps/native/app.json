@@ -27,7 +27,8 @@
         "applinks:review.beanpool.org",
         "applinks:melb.beanpool.org",
         "applinks:castlemaine.beanpool.org",
-        "applinks:gippsland.beanpool.org"
+        "applinks:gippsland.beanpool.org",
+        "applinks:eastgippy.beanpool.org"
       ],
       "infoPlist": {
         "UIBackgroundModes": [
@@ -94,6 +95,22 @@
             {
               "scheme": "https",
               "host": "review.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "melb.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "castlemaine.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "gippsland.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "eastgippy.beanpool.org"
             }
           ],
           "category": [

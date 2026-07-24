@@ -861,7 +861,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     const member = getMember(targetPubkey);
     if (!member) return null;
 
-    const { stats, tier } = getMemberTrustProfile(targetPubkey);
+    const { stats, tier, earnedCredit } = getMemberTrustProfile(targetPubkey);
 
     // Completion rate — completed vs cancelled marketplace deals.
     const compRow = db.prepare(`
@@ -972,6 +972,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         joinedAt: member.joinedAt || null,
         lastActiveAt: member.lastActiveAt || null,
         tier,
+        earnedCredit,
         stats,
         completionRate,
         completedTrades,

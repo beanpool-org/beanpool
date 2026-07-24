@@ -58,12 +58,12 @@ export default function PublicProfileScreen() {
 
         // Banner
         banner: {
-            alignItems: 'center', paddingVertical: 28, paddingHorizontal: 24,
+            alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20,
             backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default,
         },
         avatarRing: {
             width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: colors.brand.primary,
-            overflow: 'hidden', marginBottom: 14,
+            overflow: 'hidden', marginBottom: 8,
             shadowColor: colors.brand.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
         },
         nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
@@ -416,14 +416,14 @@ export default function PublicProfileScreen() {
                         <Text style={styles.joinedText} numberOfLines={1}>📅 Joined {new Date(profile.joined_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     )}
                     {/* Visual Reciprocity Health Ring / Badge (#4) — 30% larger */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: colors.brand.tint, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 28, borderWidth: 1.5, borderColor: colors.brand.primary, marginTop: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: colors.brand.tint, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 28, borderWidth: 1.5, borderColor: colors.brand.primary, marginTop: 6 }}>
                         <MaterialCommunityIcons name="circle-outline" size={24} color={colors.brand.primary} />
                         <Text style={{ fontSize: 21, fontWeight: '900', color: colors.brand.primary }}>
                             {trust?.completionRate === null || trust?.completionRate === undefined ? 100 : Math.round(trust.completionRate * 100)}% Reciprocity Health
                         </Text>
                     </View>
-                    {/* Trust Points Raw Score / 1920 Max — line directly below Reciprocity Health (20% larger text) */}
-                    <Text style={{ fontSize: 16, fontWeight: '800', color: colors.brand.primary, marginTop: 8 }}>
+                    {/* Trust Points Raw Score / 1920 Max — line directly below Reciprocity Health */}
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: colors.brand.primary, marginTop: 4 }}>
                         ⭐ {Math.round(trust?.earnedCredit || 0)} / 1920 Trust Points
                     </Text>
                     {profile?.bio && (

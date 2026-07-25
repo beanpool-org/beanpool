@@ -705,21 +705,26 @@ export default function MarketScreen() {
 
     const loadPosts = async () => {
         const queryFilter = filter === 'all' ? undefined : { type: filter === 'needs' ? 'need' : 'offer' };
-        try {
+        const runLoad = async () => {
             const data = await getPosts(queryFilter);
             setPosts(data);
-            
             if (identity) {
                 const txs = await getMarketplaceTransactions(identity.publicKey);
                 setMyTransactions(txs);
             }
+        };
+        try {
+            await runLoad();
         } catch (e: any) {
             if (e?.message?.includes('closed') || String(e).includes('closed')) {
-                // Database was closing or re-initializing during wipe/restore transition.
+                // Database was closing or re-initializing during a wipe/restore transition.
+                // Retry the WHOLE load (posts and transactions) once with a fresh connection —
+                // reloading posts alone left myTransactions / the pending-deals badge stale.
                 try {
-                    const data = await getPosts(queryFilter);
-                    setPosts(data);
-                } catch {}
+                    await runLoad();
+                } catch (retryErr) {
+                    console.error('Failed to reload marketplace after DB reconnect', retryErr);
+                }
             } else {
                 console.error('Failed to query SQLite Posts', e);
             }

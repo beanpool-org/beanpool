@@ -225,12 +225,16 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // return only recently-changed posts and the market would look empty/incomplete.
         // Force a full re-pull in that case so a wiped cache heals in one sync — this also
         // re-enables the fast-first-paint below. Steady state (posts present) stays incremental.
+        // The local count only matters when we already hold a sync cursor; without one it's a
+        // full pull regardless, so skip the extra COUNT query on every cursor-less cycle.
         let localPostsCount = 0;
-        try {
-            const database = await getDb();
-            const postsRow = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM posts');
-            localPostsCount = postsRow?.count || 0;
-        } catch (e) {}
+        if (lastSyncParam) {
+            try {
+                const database = await getDb();
+                const postsRow = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM posts');
+                localPostsCount = postsRow?.count || 0;
+            } catch (e) {}
+        }
         const postsIsIncremental = !!lastSyncParam && localPostsCount > 0;
         const postsSyncParam = postsIsIncremental ? lastSyncParam : '';
 
@@ -519,7 +523,22 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         onProgress?.(5, 5, 'Finalizing Local SQLite Database Cache...');
         // Apply physical updates to local Native device SQLite Matrix
         if (Object.keys(gatedDelta).length > 0) {
-            await applyDelta(gatedDelta, expectedDbName);
+            try {
+                await applyDelta(gatedDelta, expectedDbName);
+            } catch (applyErr) {
+                // parseIfChanged / the stringify gate already recorded these payloads'
+                // fingerprints as "applied". If the write actually failed (e.g. a DB
+                // closing mid wipe/restore), leaving those fingerprints in place makes
+                // the NEXT sync treat the unchanged payload as up-to-date and skip it
+                // forever — the marketplace then stays permanently empty despite the
+                // server having posts. Invalidate the fingerprints for every table we
+                // tried to write so the next sync re-fetches and re-applies.
+                for (const table of Object.keys(gatedDelta)) {
+                    delete _lastAppliedFingerprints[`raw:${anchorUrl}:${table}`];
+                    delete _lastAppliedFingerprints[`${anchorUrl}:${table}`];
+                }
+                throw applyErr;
+            }
         }
 
         // Notify active screens to re-render only when something actually changed —

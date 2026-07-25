@@ -17,7 +17,7 @@ import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
-import { updateMemberProfile } from '../utils/db';
+import { updateMemberProfile, fetchNodeCallsign } from '../utils/db';
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 
@@ -51,7 +51,6 @@ export default function WelcomeScreen() {
     const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>('home');
     const [callsign, setCallsign] = useState('');
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
-    const [recoveryCallsign, setRecoveryCallsign] = useState('');
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
 
@@ -74,7 +73,7 @@ export default function WelcomeScreen() {
     // current account. We force an explicit typed confirmation and offer to back
     // up the outgoing account's 12 words first so it can always be retrieved. ---
     const [outgoingIdentity, setOutgoingIdentity] = useState<BeanPoolIdentity | null>(null);
-    const [pendingRecovery, setPendingRecovery] = useState<{ words: string[]; callsign: string; anchorUrl: string } | null>(null);
+    const [pendingRecovery, setPendingRecovery] = useState<{ words: string[]; anchorUrl: string } | null>(null);
     const [replaceConfirmText, setReplaceConfirmText] = useState('');
     const [showOutgoingSeed, setShowOutgoingSeed] = useState(false);
     const [outgoingSeedCopied, setOutgoingSeedCopied] = useState(false);
@@ -436,10 +435,6 @@ export default function WelcomeScreen() {
     // when this would REPLACE a different identity already on the phone — diverts
     // to the confirm-replace screen so the swap can never happen by accident.
     async function handleRecover() {
-        if (recoveryCallsign.trim().length < 2) {
-            setError('Callsign must be at least 2 characters.');
-            return;
-        }
         const words = recoveryWords.map(w => w.toLowerCase().trim());
         const valid = words.filter(w => w.length > 0).length === 12;
         if (!valid) {
@@ -470,7 +465,7 @@ export default function WelcomeScreen() {
             const existing = await loadIdentity();
             if (existing && existing.publicKey !== publicKeyHex) {
                 // A different account lives here — divert to the guarded screen.
-                setPendingRecovery({ words, callsign: recoveryCallsign.trim(), anchorUrl: finalAnchorUrl });
+                setPendingRecovery({ words, anchorUrl: finalAnchorUrl });
                 setOutgoingIdentity(existing);
                 setReplaceConfirmText('');
                 setShowOutgoingSeed(false);
@@ -480,7 +475,7 @@ export default function WelcomeScreen() {
                 return;
             }
             // Fresh phone, or restoring the SAME account — no overwrite, proceed.
-            await doRecover(words, recoveryCallsign.trim(), finalAnchorUrl);
+            await doRecover(words, finalAnchorUrl);
         } catch (err) {
             setError('Recovery failed. Check words and try again.');
             setLoading(false);
@@ -490,11 +485,21 @@ export default function WelcomeScreen() {
     // Performs the actual identity restore. Only called once we're certain the
     // user intends any overwrite (either no prior identity, the same identity, or
     // an explicit typed WIPE confirmation on the confirm-replace screen).
-    async function doRecover(words: string[], callsign: string, finalAnchorUrl: string) {
+    //
+    // The 12 words ARE the identity. The callsign and avatar are just node-held
+    // profile data that travel with the key, so we pull the callsign from the node
+    // rather than asking for it; the avatar (and everything else) then lands with
+    // the normal members-directory sync. We never write a typed/placeholder name
+    // back to the node. If the node can't be reached the account still restores —
+    // it comes up nameless and adopts its real callsign on the first online sync.
+    async function doRecover(words: string[], finalAnchorUrl: string) {
         setLoading(true);
         setError(null);
         try {
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
+
+            const { publicKeyHex } = await mnemonicToKeypair(words);
+            const callsign = (await fetchNodeCallsign(finalAnchorUrl, publicKeyHex)) || '';
 
             const identity = await createIdentityFromMnemonic(words, callsign);
             // Recovering an existing account supersedes any half-finished join
@@ -521,8 +526,8 @@ export default function WelcomeScreen() {
     // Confirm the overwrite: proceed with the pending recovery, then clear state.
     async function handleConfirmReplace() {
         if (!pendingRecovery) return;
-        const { words, callsign, anchorUrl } = pendingRecovery;
-        await doRecover(words, callsign, anchorUrl);
+        const { words, anchorUrl } = pendingRecovery;
+        await doRecover(words, anchorUrl);
         setPendingRecovery(null);
         setOutgoingIdentity(null);
         setReplaceConfirmText('');
@@ -1240,7 +1245,26 @@ export default function WelcomeScreen() {
                     <ScrollView contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
                         <Text style={styles.title}>🔑 Recover Identity</Text>
-                        <Text style={styles.subtitle}>Enter the 12 recovery words you wrote down.</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <Text style={[styles.subtitle, { flex: 1, marginBottom: 0 }]}>Enter your 12 recovery words.</Text>
+                            <Pressable
+                                style={styles.pasteBtn}
+                                onPress={async () => {
+                                    try {
+                                        const text = await Clipboard.getStringAsync();
+                                        const tokens = (text || '').trim().split(/\s+/).filter(Boolean);
+                                        if (tokens.length === 0) return;
+                                        const updated = Array(12).fill('');
+                                        tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase(); });
+                                        setRecoveryWords(updated);
+                                    } catch { /* clipboard unavailable — user can still type */ }
+                                }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Paste 12 recovery words"
+                            >
+                                <Text style={styles.pasteBtnText}>📋 Paste</Text>
+                            </Pressable>
+                        </View>
 
                         <View style={styles.recoveryGrid}>
                             {recoveryWords.map((word, i) => (
@@ -1250,25 +1274,26 @@ export default function WelcomeScreen() {
                                     style={styles.recoveryInput}
                                     value={word}
                                     onChangeText={(t) => {
-                                        const updated = [...recoveryWords];
-                                        updated[i] = t;
-                                        setRecoveryWords(updated);
+                                        // Pasting the whole space-separated phrase into any box
+                                        // fans it out across all 12; a single word fills its box.
+                                        const tokens = t.trim().split(/\s+/).filter(Boolean);
+                                        if (tokens.length > 1) {
+                                            const updated = Array(12).fill('');
+                                            tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase(); });
+                                            setRecoveryWords(updated);
+                                        } else {
+                                            const updated = [...recoveryWords];
+                                            updated[i] = t.toLowerCase().trim();
+                                            setRecoveryWords(updated);
+                                        }
                                     }}
                                     placeholder={`${i + 1}`}
                                     placeholderTextColor={colors.text.muted}
                                     autoCapitalize="none"
+                                    autoCorrect={false}
                                 />
                             ))}
                         </View>
-
-                        <TextInput
-                            accessibilityLabel="Your callsign"
-                            style={styles.input}
-                            placeholder="Your callsign"
-                            placeholderTextColor={colors.text.muted}
-                            value={recoveryCallsign}
-                            onChangeText={setRecoveryCallsign}
-                        />
 
                         <TextInput
                             accessibilityLabel="Community Node URL"
@@ -1282,7 +1307,7 @@ export default function WelcomeScreen() {
                             keyboardType="url"
                         />
                         <Text style={styles.fieldHint}>
-                            Required — this is the community node that holds your account. Ask whoever invited you if you're unsure.
+                            Required — the community node that holds your account. Your name and picture come back automatically once you're in. Ask whoever invited you if you're unsure.
                         </Text>
 
                         {error && <Text style={styles.error}>{error}</Text>}

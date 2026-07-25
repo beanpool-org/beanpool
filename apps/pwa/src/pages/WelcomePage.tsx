@@ -7,10 +7,10 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { createIdentity, createIdentityFromMnemonic, importIdentity, type BeanPoolIdentity } from '../lib/identity';
+import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
-import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile } from '../lib/api';
+import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 
 
@@ -196,7 +196,6 @@ export function WelcomePage({ onComplete }: Props) {
     const [showRecovery, setShowRecovery] = useState(false);
     const [recoveryMode, setRecoveryMode] = useState<'words' | 'social'>('words');
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
-    const [recoveryCallsign, setRecoveryCallsign] = useState('');
 
     // Social Recovery state
     const [socialStep, setSocialStep] = useState<'lookup' | 'select' | 'guess' | 'waiting'>('lookup');
@@ -471,18 +470,23 @@ export function WelcomePage({ onComplete }: Props) {
             setError('One or more words are not valid. Check your spelling.');
             return;
         }
-        if (recoveryCallsign.trim().length < 2) {
-            setError('Enter your callsign (at least 2 characters).');
-            return;
-        }
         setLoading(true);
         setError(null);
         try {
-            const identity = await createIdentityFromMnemonic(words, recoveryCallsign.trim());
+            // The 12 words ARE the identity. The callsign and avatar are just
+            // node-held profile data that travel with the key, so we pull the
+            // callsign down rather than asking for it (the avatar is read live
+            // from the node on this app). We never push a typed/placeholder name
+            // back up. If the node can't be reached the account still restores and
+            // adopts its real name on the first online membership check.
+            let identity = await createIdentityFromMnemonic(words, '');
             try {
-                await registerMember(identity.publicKey, identity.callsign);
-            } catch { /* offline */ }
-            
+                const mem = await checkMembership(identity.publicKey);
+                if (mem?.callsign) {
+                    identity = (await updateCallsign(mem.callsign)) || identity;
+                }
+            } catch { /* offline — name lands on next boot */ }
+
             // Recovery complete — explicitly ask for location once
             if ('geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
@@ -1128,9 +1132,34 @@ export function WelcomePage({ onComplete }: Props) {
                                 <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', textAlign: 'left' }}>
                                     🔑 Recover with 12 Words
                                 </h3>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5, textAlign: 'left' }}>
-                                    Enter the 12 recovery words you wrote down when you first joined.
-                                </p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, lineHeight: 1.5, textAlign: 'left' }}>
+                                        Enter your 12 recovery words.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            try {
+                                                const text = await navigator.clipboard.readText();
+                                                const tokens = (text || '').trim().split(/\s+/).filter(Boolean);
+                                                if (tokens.length === 0) return;
+                                                const updated = Array(12).fill('');
+                                                tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
+                                                setRecoveryWords(updated);
+                                            } catch {
+                                                alert('Copy your 12 words first, or paste them into the first box.');
+                                            }
+                                        }}
+                                        style={{
+                                            background: 'rgba(37, 99, 235, 0.15)', border: '1px solid #2563eb',
+                                            color: '#60a5fa', fontSize: '0.75rem', fontWeight: 600,
+                                            padding: '0.3rem 0.65rem', borderRadius: '6px', cursor: 'pointer',
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        📋 Paste
+                                    </button>
+                                </div>
 
                                 <div style={{
                                     display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
@@ -1143,10 +1172,27 @@ export function WelcomePage({ onComplete }: Props) {
                                             aria-label={`Recovery word ${i + 1}`}
                                             type="text"
                                             value={word}
+                                            onPaste={(e) => {
+                                                // A whole phrase pasted into any box fans out across all 12.
+                                                const tokens = (e.clipboardData.getData('text') || '').trim().split(/\s+/).filter(Boolean);
+                                                if (tokens.length > 1) {
+                                                    e.preventDefault();
+                                                    const updated = Array(12).fill('');
+                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
+                                                    setRecoveryWords(updated);
+                                                }
+                                            }}
                                             onChange={(e) => {
-                                                const updated = [...recoveryWords];
-                                                updated[i] = e.target.value;
-                                                setRecoveryWords(updated);
+                                                const tokens = e.target.value.trim().split(/\s+/).filter(Boolean);
+                                                if (tokens.length > 1) {
+                                                    const updated = Array(12).fill('');
+                                                    tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
+                                                    setRecoveryWords(updated);
+                                                } else {
+                                                    const updated = [...recoveryWords];
+                                                    updated[i] = e.target.value.toLowerCase().trim();
+                                                    setRecoveryWords(updated);
+                                                }
                                             }}
                                             placeholder={`${i + 1}`}
                                             autoCapitalize="none"
@@ -1166,22 +1212,9 @@ export function WelcomePage({ onComplete }: Props) {
                                     ))}
                                 </div>
 
-                                <label htmlFor="recoveryCallsign" style={{
-                                    display: 'block', textAlign: 'left',
-                                    fontSize: '0.85rem', fontWeight: 600,
-                                    color: 'var(--text-secondary)', marginBottom: '0.5rem',
-                                }}>
-                                    Your Callsign
-                                </label>
-                                <input
-                                    id="recoveryCallsign"
-                                    type="text"
-                                    value={recoveryCallsign}
-                                    onChange={(e) => setRecoveryCallsign(e.target.value)}
-                                    placeholder="Your callsign"
-                                    maxLength={32}
-                                    style={inputStyle}
-                                />
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', margin: '0 0 1rem', lineHeight: 1.5, textAlign: 'left' }}>
+                                    Your name and picture come back automatically — the 12 words are all you need.
+                                </p>
 
                                 {error && (
                                     <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>

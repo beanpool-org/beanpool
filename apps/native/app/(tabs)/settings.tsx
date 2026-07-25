@@ -1018,6 +1018,15 @@ export default function SettingsScreen() {
                 {/* ─── Account & Identity ─── */}
                 <Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>
                 <View style={styles.menuGroup}>
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/profile-setup')} accessibilityRole="button">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>✨</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Re-run Setup</Text>
+                            <Text style={styles.menuSub}>Update your name & photo, and how BeanPool works</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+
                     <Pressable style={styles.menuBtn} onPress={() => { setMode('recovery-requests'); }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                         <View style={{ flex: 1 }}>

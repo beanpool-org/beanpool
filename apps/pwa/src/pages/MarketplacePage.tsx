@@ -11,6 +11,7 @@ import { MARKETPLACE_CATEGORIES, POST_TYPE_COLORS, type PostType } from '../lib/
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
+import { ProfileGateModal } from '../components/ProfileGateModal';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
@@ -29,6 +30,7 @@ import {
 import { type BeanPoolIdentity } from '../lib/identity';
 
 import { matchesExpandedSearch } from '../lib/search';
+import { getProfileStatus, describeMissing } from '../lib/profile-status';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -190,6 +192,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Contribution-first gate: accepting an Offer requires having listed one.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     const [showContributionRequired, setShowContributionRequired] = useState(false);
+    const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [acceptHours, setAcceptHours] = useState('1');
     const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
     const [completeHours, setCompleteHours] = useState('');
@@ -969,7 +972,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </div>
                         ) : (
                             <button
-                                onClick={() => {
+                                onClick={async () => {
+                                    // A name AND a photo are required before you can accept or fulfil.
+                                    const status = await getProfileStatus(identity);
+                                    if (!status.complete) {
+                                        setProfileGateMsg(`Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can accept. It only takes a moment.`);
+                                        return;
+                                    }
                                     // Accepting an Offer extracts value → gated. Fulfilling a Need is a contribution → always allowed.
                                     if (selectedPost.type === 'offer' && blockedFromTrading) {
                                         setShowContributionRequired(true);
@@ -1968,6 +1977,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     setPromptReviewForTx(review);
                 }}
             />
+
+            {profileGateMsg && (
+                <ProfileGateModal
+                    message={profileGateMsg}
+                    onSetup={() => { setProfileGateMsg(null); onNavigate?.('profile-setup'); }}
+                    onClose={() => setProfileGateMsg(null)}
+                />
+            )}
 
             {/* Contribution-first gate: blocks accepting an Offer until the member lists one. */}
             {showContributionRequired && (

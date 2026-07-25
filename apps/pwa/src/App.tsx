@@ -25,6 +25,7 @@ import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
+import { ProfileSetup } from './components/ProfileSetup';
 
 function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
     return (
@@ -91,10 +92,15 @@ export function App() {
     const [pendingDealsCount, setPendingDealsCount] = useState(0);
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [isGuest, setIsGuest] = useState(false);
+    const [showProfileSetup, setShowProfileSetup] = useState(false);
     const [showCommunityStatus, setShowCommunityStatus] = useState(false);
     const [communityHealth, setCommunityHealth] = useState<{ memberCount?: number; postCount?: number; callsign?: string; online?: boolean } | null>(null);
 
     function navigateToTab(tab: string, contextId?: string) {
+        if (tab === 'profile-setup') {
+            setShowProfileSetup(true);
+            return;
+        }
         if (tab === 'map-post') {
             setActiveTab('map');
             setOpenNewPost(true);
@@ -356,6 +362,17 @@ export function App() {
                             theme={theme}
                             onToggleTheme={toggleTheme}
                             initialMode={settingsInitialMode}
+                            onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}
+                        />
+                    </div>
+                )}
+
+                {showProfileSetup && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 70, overflowY: 'auto', background: 'var(--bg-primary)' }}>
+                        <ProfileSetup
+                            identity={identity}
+                            onDone={() => setShowProfileSetup(false)}
+                            onIdentityUpdated={(updated) => setIdentity(updated)}
                         />
                     </div>
                 )}

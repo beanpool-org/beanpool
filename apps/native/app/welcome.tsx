@@ -446,13 +446,17 @@ export default function WelcomeScreen() {
             return;
         }
         const rawAnchor = recoveryAnchorUrl.trim();
-        if (!rawAnchor && !__DEV__) {
+        if (!rawAnchor) {
             setError('Enter your community node address — you need it to reconnect to your community.');
             return;
         }
-        const finalAnchorUrl = normalizeNodeUrl(rawAnchor || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
-        if (finalAnchorUrl && !looksLikeNodeAddress(finalAnchorUrl)) {
+        const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
+        if (!looksLikeNodeAddress(finalAnchorUrl)) {
             setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            return;
+        }
+        if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
+            setError('That node address is insecure (http on a public host). Ask whoever invited you for the https:// address.');
             return;
         }
         setLoading(true);
@@ -981,33 +985,16 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        <View style={styles.inputContainer}>
-                            <TextInput
-                                style={styles.inputFlex}
-                                placeholder="Paste your invite link or code"
-                                placeholderTextColor={colors.text.muted}
-                                value={inviteCode}
-                                onChangeText={setInviteCode}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                accessibilityLabel="Invite link or code"
-                            />
-                            {Clipboard.isPasteButtonAvailable ? (
-                                <Clipboard.ClipboardPasteButton
-                                    onPress={(data) => { if (data.type === 'text') applyInviteContent(data.text, 'join'); }}
-                                    acceptedContentTypes={['plain-text', 'url']}
-                                    displayMode="labelOnly"
-                                    backgroundColor={colors.surface.subtle}
-                                    foregroundColor={palette.blue600}
-                                    cornerStyle="medium"
-                                    style={styles.pasteBtnSystem}
-                                />
-                            ) : (
-                                <Pressable style={styles.pasteBtn} onPress={handlePasteInvite} accessibilityRole="button">
-                                    <Text style={styles.pasteBtnText}>Paste</Text>
-                                </Pressable>
-                            )}
-                        </View>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Paste your invite link or code"
+                            placeholderTextColor={colors.text.muted}
+                            value={inviteCode}
+                            onChangeText={setInviteCode}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            accessibilityLabel="Invite link or code"
+                        />
 
                         {inviteCode && !inviteCode.startsWith('http') && (
                             <>
@@ -1031,7 +1018,7 @@ export default function WelcomeScreen() {
                         <Text style={styles.callsignLabel}>What should we call you?</Text>
                         <TextInput
                             style={styles.callsignInput}
-                            placeholder="Your name or nickname (e.g. Sarah)"
+                            placeholder="Your name or nickname"
                             placeholderTextColor={colors.text.muted}
                             value={callsign}
                             onChangeText={setCallsign}
@@ -1041,7 +1028,7 @@ export default function WelcomeScreen() {
                             accessibilityLabel="Your name or nickname"
                         />
                         <Text style={styles.callsignHelper}>
-                            This is your display name — how the community sees you. You can change it later.
+                            This is your display name — how the community sees you, e.g. Sarah. You can change it later.
                         </Text>
                         <Text style={styles.callsignTip}>
                             💡 Tip: adding your suburb helps locals find you!
@@ -1093,7 +1080,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
-                <View style={{ flex: 1, justifyContent: 'center', padding: 24, alignItems: 'center' }}>
+                <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
                         <Text style={styles.title}>🔑 Restore your account</Text>
                         <Text style={styles.subtitle}>Your account isn't lost — bring it to this device with your 12 recovery words, or with help from your Guardians.</Text>
@@ -1112,7 +1099,7 @@ export default function WelcomeScreen() {
                             <Text style={styles.backBtnText}>← Back</Text>
                         </Pressable>
                     </View>
-                </View>
+                </ScrollView>
             </SafeAreaView>
         );
     }
@@ -1382,7 +1369,7 @@ const styles = StyleSheet.create({
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text.heading, textAlign: 'center', marginBottom: 8 },
     headerSubtitle: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', marginBottom: 32, lineHeight: 24 },
-    card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+    card: { width: '100%', backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
     inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
     inviteVerifiedText: { color: palette.green700 || '#15803d', fontSize: 14, lineHeight: 20 },
     clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
@@ -1391,18 +1378,15 @@ const styles = StyleSheet.create({
     homePasteSystemBtn: { width: 170, height: 44, marginTop: 12 },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
     tosLink: { color: palette.blue600, textDecorationLine: 'underline' },
-    inviteOnlyHint: { fontSize: 13, color: colors.text.secondary, textAlign: 'center', lineHeight: 19, marginTop: 4, paddingHorizontal: 8 },
+    inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
     restoreLink: { marginTop: 28, padding: 8 },
     restoreLinkText: { color: palette.gray600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },
     fieldHint: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 16, lineHeight: 18 },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, marginBottom: 16, overflow: 'hidden' },
-    inputFlex: { flex: 1, padding: 16, color: colors.text.heading, fontSize: 16 },
     pasteBtn: { backgroundColor: colors.surface.subtle, paddingHorizontal: 16, paddingVertical: 12, borderLeftWidth: 1, borderColor: colors.border.strong, justifyContent: 'center' },
     pasteBtnText: { color: palette.gray600, fontSize: 14, fontWeight: '600' },
-    pasteBtnSystem: { width: 80, height: 36, alignSelf: 'center', marginHorizontal: 6 },
     pasteCard: { backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', borderRadius: 12, padding: 14, marginBottom: 16, alignItems: 'center' },
     pasteCardText: { color: colors.text.body, fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 12 },
     pasteCardSystemBtn: { width: 170, height: 44 },
@@ -1411,7 +1395,7 @@ const styles = StyleSheet.create({
 
     // Callsign (Step 1) — larger, labeled input
     callsignLabel: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8, marginTop: 8 },
-    callsignInput: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 18, color: colors.text.heading, fontSize: 18, marginBottom: 8 },
+    callsignInput: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 16, color: colors.text.heading, fontSize: 16, marginBottom: 8 },
     callsignHelper: { fontSize: 13, color: colors.text.secondary, marginBottom: 4, lineHeight: 18 },
     callsignTip: { fontSize: 13, color: colors.text.muted, marginBottom: 20, fontStyle: 'italic' },
 

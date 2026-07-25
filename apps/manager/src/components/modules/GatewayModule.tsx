@@ -317,8 +317,9 @@ export function GatewayModule({
                                         </span>
                                     </div>
 
-                                    {/* Progress Meter */}
-                                    <div className="w-full bg-nature-950 h-3 rounded-full overflow-hidden p-0.5 border border-nature-800 relative">
+                                    {/* Progress Meter with Peak Marker Pin */}
+                                    <div className="w-full bg-nature-950 h-3.5 rounded-full p-0.5 border border-nature-800 relative overflow-visible">
+                                        {/* Live Traffic Bar */}
                                         <div
                                             className={`h-full rounded-full transition-all duration-500 ${
                                                 isCriticalLimit
@@ -327,12 +328,26 @@ export function GatewayModule({
                                                     ? 'bg-amber-500'
                                                     : 'bg-emerald-500'
                                             }`}
-                                            style={{ width: `${Math.min(100, Math.max(5, capacityPct))}%` }}
+                                            style={{ width: `${Math.min(100, Math.max(3, capacityPct))}%` }}
                                         ></div>
+
+                                        {/* Recorded Peak Marker Tick Pin */}
+                                        {recordedPeak > 0 && (
+                                            <div
+                                                className="absolute -top-0.5 -bottom-0.5 w-0.5 bg-amber-400 z-10 shadow-[0_0_6px_rgba(251,191,36,0.9)]"
+                                                style={{ left: `${Math.min(99, Math.max(1, peakCapacityPct))}%` }}
+                                                title={`Recorded Fleet Peak: ${recordedPeak} req/min (${peakCapacityPct}%)`}
+                                            >
+                                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-amber-400 rounded-full border border-nature-950"></div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="flex items-center justify-between text-[10px] font-mono text-nature-400">
-                                        <span>Recorded Fleet Peak: <strong className="text-terra-300">{recordedPeak} req/min</strong> ({peakCapacityPct}% threshold)</span>
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shadow-[0_0_4px_rgba(251,191,36,0.8)]"></span>
+                                            <span>Recorded Fleet Peak: <strong className="text-amber-300">{recordedPeak} req/min</strong> ({peakCapacityPct}% threshold)</span>
+                                        </span>
                                         {isApproachingLimit ? (
                                             <span className="text-amber-400 font-bold animate-pulse">⚠️ Approaching Limit</span>
                                         ) : (
@@ -341,43 +356,61 @@ export function GatewayModule({
                                     </div>
 
                                     {/* SVG Request Rate Trend Sparkline */}
-                                    <div className="pt-2 border-t border-nature-800/60 flex items-center justify-between gap-3">
-                                        <span className="text-[10px] uppercase font-extrabold text-nature-400 shrink-0">
-                                            Request Rate Curve (req/min)
-                                        </span>
-                                        <div className="w-48 h-8 relative">
-                                            <svg className="w-full h-full overflow-visible">
-                                                {/* Threshold line */}
-                                                <line
-                                                    x1="0"
-                                                    y1="2"
-                                                    x2="100%"
-                                                    y2="2"
-                                                    stroke="#f87171"
-                                                    strokeDasharray="2,2"
-                                                    strokeWidth="1.5"
-                                                    opacity="0.8"
-                                                />
-                                                {/* Traffic Polyline */}
-                                                {(() => {
-                                                    const maxVal = Math.max(maxReqLimit * 1.1, recordedPeak * 1.1, 100);
-                                                    const points = reqHistory.map((val, idx) => {
-                                                        const x = (idx / (reqHistory.length - 1)) * 100;
-                                                        const y = Math.max(4, Math.min(28, 30 - (val / maxVal) * 26));
-                                                        return `${x.toFixed(1)},${y.toFixed(1)}`;
-                                                    }).join(' ');
-                                                    return (
-                                                        <polyline
-                                                            fill="none"
-                                                            stroke={isCriticalLimit ? '#ef4444' : '#38bdf8'}
-                                                            strokeWidth="2"
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            points={points}
-                                                        />
-                                                    );
-                                                })()}
-                                            </svg>
+                                    <div className="pt-2.5 border-t border-nature-800/60 space-y-2">
+                                        <div className="flex items-center justify-between text-[10px] uppercase font-extrabold text-nature-400">
+                                            <span>Request Rate Curve (req/min)</span>
+                                            <div className="flex items-center gap-3 font-mono text-[9px] normal-case">
+                                                <span className="flex items-center gap-1 text-red-400">
+                                                    <span className="w-3 border-b border-dashed border-red-400 inline-block"></span> Limit ({maxReqLimit})
+                                                </span>
+                                                <span className="flex items-center gap-1 text-sky-400">
+                                                    <span className="w-3 h-0.5 bg-sky-400 inline-block rounded-full"></span> Live ({currentReqRate})
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="w-full h-10 relative bg-nature-950/80 p-1.5 rounded-lg border border-nature-800/80 flex items-center">
+                                            <div className="text-[9px] font-mono text-nature-500 shrink-0 pr-2 flex flex-col justify-between h-full select-none">
+                                                <span>{maxReqLimit}</span>
+                                                <span>0</span>
+                                            </div>
+                                            <div className="flex-1 h-full relative">
+                                                <svg className="w-full h-full overflow-visible">
+                                                    {(() => {
+                                                        const maxVal = Math.max(maxReqLimit * 1.1, recordedPeak * 1.1, 100);
+                                                        const limitY = Math.max(2, Math.min(28, 30 - (maxReqLimit / maxVal) * 26));
+                                                        const peakY = Math.max(4, Math.min(28, 30 - (recordedPeak / maxVal) * 26));
+                                                        const points = reqHistory.map((val, idx) => {
+                                                            const x = (idx / (reqHistory.length - 1)) * 100;
+                                                            const y = Math.max(4, Math.min(28, 30 - (val / maxVal) * 26));
+                                                            return `${x.toFixed(1)},${y.toFixed(1)}`;
+                                                        }).join(' ');
+                                                        return (
+                                                            <>
+                                                                {/* Threshold line */}
+                                                                <line
+                                                                    x1="0"
+                                                                    y1={limitY.toFixed(1)}
+                                                                    x2="100%"
+                                                                    y2={limitY.toFixed(1)}
+                                                                    stroke="#f87171"
+                                                                    strokeDasharray="3,3"
+                                                                    strokeWidth="1.5"
+                                                                    opacity="0.8"
+                                                                />
+                                                                {/* Traffic Polyline */}
+                                                                <polyline
+                                                                    fill="none"
+                                                                    stroke={isCriticalLimit ? '#ef4444' : '#38bdf8'}
+                                                                    strokeWidth="2"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    points={points}
+                                                                />
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </svg>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -385,8 +418,11 @@ export function GatewayModule({
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
                                         <label className="block text-nature-300 font-bold text-xs">Max Requests / Minute Threshold</label>
-                                        <span className="text-[10px] font-mono text-terra-400 font-bold">Configured Limit: {maxReqLimit}</span>
+                                        <span className="text-[10px] font-mono text-terra-400 font-bold">Configured Limit: {maxReqLimit} req/min</span>
                                     </div>
+                                    <p className="text-[11px] text-nature-400 mb-2">
+                                        Each IP is allowed up to <strong>{maxReqLimit}</strong> requests per minute. Exceeding this triggers an automatic <code>429 Too Many Requests</code> HTTP response block.
+                                    </p>
                                     <input
                                         type="number"
                                         value={gateway.rateLimiting.maxRequestsPerMinute}

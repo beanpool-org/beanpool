@@ -509,7 +509,10 @@ export default function PeopleScreen() {
                 Alert.alert('Success', 'Invite redeemed! You have successfully switched to the new community.');
                 setRedeemCode('');
                 setRedeemNodeUrl('');
-                router.replace('/');
+                // Joined a new community → run the profile wizard for THIS node so the
+                // member picks a name that's unique here (callsigns are per-node) and
+                // confirms their photo. Finishing (or cancelling) drops them into the app.
+                router.replace({ pathname: '/profile-setup', params: { redirect: '/(tabs)' } });
             } catch (err: any) {
                 // Revert DB on failure
                 await closeDB();

@@ -40,6 +40,41 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
 }
 
 /**
+ * Is `callsign` free on THIS node? Uniqueness is per-node and case-insensitive.
+ * `'migrated'` members are excluded (they moved away — their name is reclaimable),
+ * as is the caller's own row via `excludePublicKey` (so re-saving your own name is
+ * never a "collision"). Mirrors the partial UNIQUE index `lower(callsign) WHERE
+ * status != 'migrated'` so the app-level check and the DB constraint agree.
+ */
+export function isCallsignAvailable(callsign: string, excludePublicKey?: string): boolean {
+    const norm = callsign.trim().toLowerCase();
+    if (norm.length < 2) return false;
+    const row = db.prepare(
+        `SELECT 1 FROM members WHERE lower(callsign) = ? AND status != 'migrated' AND public_key != ? LIMIT 1`
+    ).get(norm, excludePublicKey ?? '');
+    return !row;
+}
+
+/**
+ * Return `callsign` if it's free, otherwise the first numbered variant that is
+ * (Sarah → Sarah2 → Sarah3 …). Used at REGISTRATION so a name clash never blocks a
+ * join — the member lands with a guaranteed-unique name and the wizard-on-join then
+ * lets them pick a proper one (with fun suggestions) via the strictly-enforced
+ * rename path. The server variant is deliberately dull (a number); the friendly
+ * suggestions are a client concern.
+ */
+function uniquifyCallsign(callsign: string, excludePublicKey?: string): string {
+    const base = callsign.trim();
+    if (isCallsignAvailable(base, excludePublicKey)) return base;
+    for (let i = 2; i < 1000; i++) {
+        const cand = `${base.slice(0, 28)}${i}`;
+        if (isCallsignAvailable(cand, excludePublicKey)) return cand;
+    }
+    // Pathological fallback — 998 variants all taken. Suffix keeps it unique.
+    return `${base.slice(0, 22)}${Date.now().toString().slice(-8)}`;
+}
+
+/**
  * Internal member registration.
  */
 export function registerMemberInternal(
@@ -57,8 +92,13 @@ export function registerMemberInternal(
 
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     if (existing) {
-        db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
-        broadcast({ type: 'profile_updated', publicKey });
+        // Re-registration for a known key. Only touch the callsign if it actually
+        // changed, and uniquify it (excluding self) so a re-register never collides.
+        if (callsign.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
+            callsign = uniquifyCallsign(callsign, publicKey);
+            db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
+            broadcast({ type: 'profile_updated', publicKey });
+        }
         return getMember(db, publicKey)!;
     }
 
@@ -67,8 +107,12 @@ export function registerMemberInternal(
         return null;
     }
 
+    // Never block a join on a name clash — land on a unique variant; the
+    // wizard-on-join lets the member pick a proper name straight after.
+    callsign = uniquifyCallsign(callsign);
+
     db.transaction(() => {
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) 
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                     VALUES (?, ?, ?, ?, ?)`).run(publicKey, callsign, new Date().toISOString(), invitedBy, inviteCode);
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
     })();
@@ -130,7 +174,19 @@ export function updateProfile(
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     const avatar = update.avatar !== undefined ? update.avatar : existing.avatar_url;
     const bio = typeof update.bio === 'string' ? update.bio.slice(0, 200) : (update.bio === null ? null : existing.bio);
-    const callsign = typeof update.callsign === 'string' ? update.callsign.slice(0, 32) : existing.callsign;
+    // Rename gate: enforce per-node uniqueness, but ONLY when the callsign actually
+    // changes — re-saving your own name (e.g. the background profile push) must not
+    // trip it. A genuine rename to a name held by someone else throws CALLSIGN_TAKEN,
+    // which the route surfaces as 409 so the wizard/settings can offer suggestions.
+    let callsign = existing.callsign;
+    if (typeof update.callsign === 'string') {
+        const requested = update.callsign.trim().slice(0, 32);
+        if (requested.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
+            if (requested.length < 2) throw new Error('CALLSIGN_TOO_SHORT');
+            if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
+            callsign = requested;
+        }
+    }
     let contact_value = existing.contact_value;
     let contact_visibility = existing.contact_visibility;
     if (update.contact !== undefined) {

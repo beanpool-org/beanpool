@@ -436,10 +436,6 @@ export default function WelcomeScreen() {
     // when this would REPLACE a different identity already on the phone — diverts
     // to the confirm-replace screen so the swap can never happen by accident.
     async function handleRecover() {
-        if (recoveryCallsign.trim().length < 2) {
-            setError('Callsign must be at least 2 characters.');
-            return;
-        }
         const words = recoveryWords.map(w => w.toLowerCase().trim());
         const valid = words.filter(w => w.length > 0).length === 12;
         if (!valid) {
@@ -450,27 +446,37 @@ export default function WelcomeScreen() {
             setError("One or more of those words isn't a valid recovery word. Check your spelling — they're all lowercase, single words.");
             return;
         }
-        const rawAnchor = recoveryAnchorUrl.trim();
-        if (!rawAnchor && !__DEV__) {
-            setError('Enter your community node address — you need it to reconnect to your community.');
-            return;
-        }
-        const finalAnchorUrl = normalizeNodeUrl(rawAnchor || (__DEV__ ? 'https://127.0.0.1:8443' : ''));
-        if (finalAnchorUrl && !looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
-            return;
-        }
         setLoading(true);
         setError(null);
         try {
-            // Derive the incoming account's public key WITHOUT saving it, so we can
-            // tell whether recovering would overwrite a DIFFERENT account already
-            // stored on this phone.
             const { publicKeyHex } = await mnemonicToKeypair(words);
+
+            let effectiveAnchor = recoveryAnchorUrl.trim();
+            if (!effectiveAnchor) {
+                effectiveAnchor = __DEV__ ? 'https://127.0.0.1:8443' : 'https://app.beanpool.org';
+            }
+            const finalAnchorUrl = normalizeNodeUrl(effectiveAnchor);
+
+            let effectiveCallsign = recoveryCallsign.trim();
+            if (!effectiveCallsign) {
+                try {
+                    const res = await fetch(`${finalAnchorUrl}/api/members/${publicKeyHex}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data?.callsign) {
+                            effectiveCallsign = data.callsign;
+                        }
+                    }
+                } catch (e) {}
+                if (!effectiveCallsign) {
+                    effectiveCallsign = 'Member';
+                }
+            }
+
             const existing = await loadIdentity();
             if (existing && existing.publicKey !== publicKeyHex) {
                 // A different account lives here — divert to the guarded screen.
-                setPendingRecovery({ words, callsign: recoveryCallsign.trim(), anchorUrl: finalAnchorUrl });
+                setPendingRecovery({ words, callsign: effectiveCallsign, anchorUrl: finalAnchorUrl });
                 setOutgoingIdentity(existing);
                 setReplaceConfirmText('');
                 setShowOutgoingSeed(false);
@@ -480,7 +486,7 @@ export default function WelcomeScreen() {
                 return;
             }
             // Fresh phone, or restoring the SAME account — no overwrite, proceed.
-            await doRecover(words, recoveryCallsign.trim(), finalAnchorUrl);
+            await doRecover(words, effectiveCallsign, finalAnchorUrl);
         } catch (err) {
             setError('Recovery failed. Check words and try again.');
             setLoading(false);
@@ -1239,8 +1245,31 @@ export default function WelcomeScreen() {
                 >
                     <ScrollView contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
-                        <Text style={styles.title}>🔑 Recover Identity</Text>
-                        <Text style={styles.subtitle}>Enter the 12 recovery words you wrote down.</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <Text style={styles.subtitle}>Enter the 12 recovery words you wrote down.</Text>
+                            <Pressable
+                                style={styles.pasteBtn}
+                                onPress={async () => {
+                                    try {
+                                        const text = await Clipboard.getStringAsync();
+                                        if (text) {
+                                            const parts = text.trim().split(/\s+/).filter(Boolean);
+                                            if (parts.length > 0) {
+                                                const updated = [...recoveryWords];
+                                                parts.slice(0, 12).forEach((w, idx) => {
+                                                    updated[idx] = w.toLowerCase();
+                                                });
+                                                setRecoveryWords(updated);
+                                            }
+                                        }
+                                    } catch (e) {}
+                                }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Paste 12 recovery words"
+                            >
+                                <Text style={styles.pasteBtnText}>📋 Paste Words</Text>
+                            </Pressable>
+                        </View>
 
                         <View style={styles.recoveryGrid}>
                             {recoveryWords.map((word, i) => (
@@ -1250,9 +1279,18 @@ export default function WelcomeScreen() {
                                     style={styles.recoveryInput}
                                     value={word}
                                     onChangeText={(t) => {
-                                        const updated = [...recoveryWords];
-                                        updated[i] = t;
-                                        setRecoveryWords(updated);
+                                        const parts = t.trim().split(/\s+/).filter(Boolean);
+                                        if (parts.length > 1) {
+                                            const updated = [...recoveryWords];
+                                            parts.slice(0, 12).forEach((w, idx) => {
+                                                updated[idx] = w.toLowerCase();
+                                            });
+                                            setRecoveryWords(updated);
+                                        } else {
+                                            const updated = [...recoveryWords];
+                                            updated[i] = t.toLowerCase().trim();
+                                            setRecoveryWords(updated);
+                                        }
                                     }}
                                     placeholder={`${i + 1}`}
                                     placeholderTextColor={colors.text.muted}
@@ -1261,15 +1299,17 @@ export default function WelcomeScreen() {
                             ))}
                         </View>
 
+                        <Text style={styles.fieldHint}>Your Callsign / Username (e.g. Sally)</Text>
                         <TextInput
                             accessibilityLabel="Your callsign"
                             style={styles.input}
-                            placeholder="Your callsign"
+                            placeholder="Your callsign (e.g. Sally)"
                             placeholderTextColor={colors.text.muted}
                             value={recoveryCallsign}
                             onChangeText={setRecoveryCallsign}
                         />
 
+                        <Text style={styles.fieldHint}>Community Node Address (e.g. app.beanpool.org)</Text>
                         <TextInput
                             accessibilityLabel="Community Node URL"
                             style={styles.input}

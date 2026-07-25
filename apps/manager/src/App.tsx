@@ -160,7 +160,7 @@ export function App() {
                     const gData = await fetchGatewayConfig(p.url, p.adminPassword);
                     setFleetGateways((prev) => ({ ...prev, [p.id]: gData }));
                     if (p.id === activeNode?.id && gData) {
-                        setGateway(gData);
+                        setGateway((prev) => (prev === null ? gData : prev));
                     }
                 } catch {}
 

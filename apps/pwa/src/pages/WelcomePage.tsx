@@ -471,14 +471,27 @@ export function WelcomePage({ onComplete }: Props) {
             setError('One or more words are not valid. Check your spelling.');
             return;
         }
-        if (recoveryCallsign.trim().length < 2) {
-            setError('Enter your callsign (at least 2 characters).');
-            return;
-        }
         setLoading(true);
         setError(null);
         try {
-            const identity = await createIdentityFromMnemonic(words, recoveryCallsign.trim());
+            const { mnemonicToKeypair } = await import('../lib/mnemonic');
+            const { publicKeyHex } = await mnemonicToKeypair(words);
+
+            let effectiveCallsign = recoveryCallsign.trim();
+            if (!effectiveCallsign) {
+                try {
+                    const { checkMembership } = await import('../lib/api');
+                    const mem = await checkMembership(publicKeyHex);
+                    if (mem?.callsign) {
+                        effectiveCallsign = mem.callsign;
+                    }
+                } catch (e) {}
+                if (!effectiveCallsign) {
+                    effectiveCallsign = 'Member';
+                }
+            }
+
+            const identity = await createIdentityFromMnemonic(words, effectiveCallsign);
             try {
                 await registerMember(identity.publicKey, identity.callsign);
             } catch { /* offline */ }
@@ -1128,9 +1141,36 @@ export function WelcomePage({ onComplete }: Props) {
                                 <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', textAlign: 'left' }}>
                                     🔑 Recover with 12 Words
                                 </h3>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5, textAlign: 'left' }}>
-                                    Enter the 12 recovery words you wrote down when you first joined.
-                                </p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
+                                        Enter your 12 recovery words.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            try {
+                                                const text = await navigator.clipboard.readText();
+                                                const tokens = text.trim().split(/\s+/).filter(Boolean);
+                                                if (tokens.length > 0) {
+                                                    const updated = [...recoveryWords];
+                                                    tokens.slice(0, 12).forEach((w, idx) => {
+                                                        updated[idx] = w.toLowerCase().trim();
+                                                    });
+                                                    setRecoveryWords(updated);
+                                                }
+                                            } catch (err) {
+                                                alert('Copy your 12 words first, or paste into box #1.');
+                                            }
+                                        }}
+                                        style={{
+                                            background: 'rgba(37, 99, 235, 0.15)', border: '1px solid #2563eb',
+                                            color: '#60a5fa', fontSize: '0.75rem', fontWeight: 600,
+                                            padding: '0.25rem 0.6rem', borderRadius: '6px', cursor: 'pointer'
+                                        }}
+                                    >
+                                        📋 Paste 12 Words
+                                    </button>
+                                </div>
 
                                 <div style={{
                                     display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
@@ -1143,10 +1183,32 @@ export function WelcomePage({ onComplete }: Props) {
                                             aria-label={`Recovery word ${i + 1}`}
                                             type="text"
                                             value={word}
+                                            onPaste={(e) => {
+                                                const pasted = e.clipboardData.getData('text');
+                                                const tokens = pasted.trim().split(/\s+/).filter(Boolean);
+                                                if (tokens.length > 1) {
+                                                    e.preventDefault();
+                                                    const updated = [...recoveryWords];
+                                                    tokens.slice(0, 12).forEach((w, idx) => {
+                                                        updated[idx] = w.toLowerCase().trim();
+                                                    });
+                                                    setRecoveryWords(updated);
+                                                }
+                                            }}
                                             onChange={(e) => {
-                                                const updated = [...recoveryWords];
-                                                updated[i] = e.target.value;
-                                                setRecoveryWords(updated);
+                                                const val = e.target.value;
+                                                const tokens = val.trim().split(/\s+/).filter(Boolean);
+                                                if (tokens.length > 1) {
+                                                    const updated = [...recoveryWords];
+                                                    tokens.slice(0, 12).forEach((w, idx) => {
+                                                        updated[idx] = w.toLowerCase().trim();
+                                                    });
+                                                    setRecoveryWords(updated);
+                                                } else {
+                                                    const updated = [...recoveryWords];
+                                                    updated[i] = val.toLowerCase().trim();
+                                                    setRecoveryWords(updated);
+                                                }
                                             }}
                                             placeholder={`${i + 1}`}
                                             autoCapitalize="none"
@@ -1171,7 +1233,7 @@ export function WelcomePage({ onComplete }: Props) {
                                     fontSize: '0.85rem', fontWeight: 600,
                                     color: 'var(--text-secondary)', marginBottom: '0.5rem',
                                 }}>
-                                    Your Callsign
+                                    Your Callsign <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(Display name / Username, e.g. Sally)</span>
                                 </label>
                                 <input
                                     id="recoveryCallsign"

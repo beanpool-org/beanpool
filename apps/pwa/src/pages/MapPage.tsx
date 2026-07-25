@@ -21,6 +21,8 @@ import { haversineDistance } from '../lib/geo';
 import { MARKETPLACE_CATEGORIES, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
+import { ProfileGateModal } from '../components/ProfileGateModal';
+import { getProfileStatus, describeMissing } from '../lib/profile-status';
 
 // Simple deterministic hash for consistent pin placement
 function simpleHash(str: string): number {
@@ -52,6 +54,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
     const [locating, setLocating] = useState(false);
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [showNewPost, setShowNewPost] = useState(false);
+    const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [newPostType, setNewPostType] = useState<'offer' | 'need'>('need');
     const [newPostCategory, setNewPostCategory] = useState('general');
@@ -99,13 +102,24 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         return () => window.removeEventListener('storage', handleStorage);
     }, []);
 
+    // Listing requires a name + photo — checked up front (here and at the FAB) so
+    // nobody fills in a whole post first. Incomplete → a prompt that opens the wizard.
+    const tryOpenComposer = useCallback(async () => {
+        const status = await getProfileStatus(identity);
+        if (!status.complete) {
+            setProfileGateMsg(`Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can post. It only takes a moment.`);
+            return;
+        }
+        setShowNewPost(true);
+    }, [identity]);
+
     // Auto-open post form when navigated from marketplace
     useEffect(() => {
         if (openNewPost) {
-            setShowNewPost(true);
             onOpenNewPostHandled?.();
+            tryOpenComposer();
         }
-    }, [openNewPost, onOpenNewPostHandled]);
+    }, [openNewPost, onOpenNewPostHandled, tryOpenComposer]);
 
     // Initialize map
     useEffect(() => {
@@ -612,13 +626,21 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
             {/* Floating Add Button — bottom right */}
             {!showNewPost && (
                 <button
-                    onClick={() => setShowNewPost(true)}
+                    onClick={tryOpenComposer}
                     aria-label="New Post"
                     className="fixed bottom-[5.5rem] right-3 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
                     title="New Post"
                 >
                     +
                 </button>
+            )}
+
+            {profileGateMsg && (
+                <ProfileGateModal
+                    message={profileGateMsg}
+                    onSetup={() => { setProfileGateMsg(null); onNavigate?.('profile-setup'); }}
+                    onClose={() => setProfileGateMsg(null)}
+                />
             )}
         </div>
 

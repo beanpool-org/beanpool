@@ -23,6 +23,7 @@ interface Props {
     theme: Theme;
     onToggleTheme: () => void;
     initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications';
+    onReRunSetup?: () => void;
 }
 
 function ToggleSwitch({
@@ -61,7 +62,7 @@ function ToggleSwitch({
     );
 }
 
-export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode }: Props) {
+export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode, onReRunSetup }: Props) {
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications'>(initialMode || 'menu');
 
     useEffect(() => {
@@ -400,6 +401,20 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 ACCOUNT & IDENTITY
                             </div>
                             <div className="space-y-2.5">
+                                {onReRunSetup && (
+                                    <button
+                                        onClick={onReRunSetup}
+                                        className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
+                                    >
+                                        <span className="text-xl">✨</span>
+                                        <div className="flex-1">
+                                            <div className="text-[15px] font-bold">Re-run Setup</div>
+                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Update your name & photo, and how BeanPool works</div>
+                                        </div>
+                                        <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    </button>
+                                )}
+
                                 <button
                                     onClick={() => setMode('recovery-requests')}
                                     className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"

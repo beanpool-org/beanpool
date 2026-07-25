@@ -644,13 +644,18 @@ export default function MapScreen() {
     // composes a whole offer only to be blocked at the end) and offer to resume
     // an unfinished draft.
     const openComposer = async () => {
-        if (!(await hasUsableAvatar())) {
+        // A name AND a photo are required before you can post — checked up front
+        // (not after a whole draft) and routed to the setup wizard to fix.
+        const nameOk = (identity?.callsign?.trim().length ?? 0) >= 2;
+        const avatarOk = await hasUsableAvatar();
+        if (!nameOk || !avatarOk) {
+            const need = (!nameOk && !avatarOk) ? 'a name and a photo' : !nameOk ? 'a name' : 'a photo';
             Alert.alert(
-                'Add a profile photo first',
-                "Your community likes to see who they're dealing with, so a photo is needed before you can post. It only takes a moment.",
+                'Finish your profile first',
+                `Your community likes to know who they're dealing with, so you need ${need} before you can post. It only takes a moment.`,
                 [
                     { text: 'Not now', style: 'cancel' },
-                    { text: 'Add photo', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } }) },
+                    { text: 'Set up profile', onPress: () => router.push('/profile-setup') },
                 ]
             );
             return;

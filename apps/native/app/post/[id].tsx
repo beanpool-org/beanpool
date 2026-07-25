@@ -15,6 +15,7 @@ import {
 } from '../../utils/db';
 import { useIdentity } from '../IdentityContext';
 import { loadIdentity } from '../../utils/identity';
+import { getProfileStatus, describeMissing } from '../../utils/profile-status';
 import { ReviewModal } from '../../components/ReviewModal';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -1239,7 +1240,20 @@ export default function PostDetailModal() {
                                 </View>
                             </View>
                         ) : (
-                            <Pressable accessibilityRole="button" style={[styles.acceptBtn, isOffer ? styles.acceptBtnOffer : styles.acceptBtnNeed, (accepting || post.status === 'pending') && { opacity: 0.6 }]} disabled={accepting || post.status === 'pending'} onPress={() => {
+                            <Pressable accessibilityRole="button" style={[styles.acceptBtn, isOffer ? styles.acceptBtnOffer : styles.acceptBtnNeed, (accepting || post.status === 'pending') && { opacity: 0.6 }]} disabled={accepting || post.status === 'pending'} onPress={async () => {
+                                // A name AND a photo are required before you can accept or fulfil — routed to the setup wizard.
+                                const status = await getProfileStatus(identity);
+                                if (!status.complete) {
+                                    Alert.alert(
+                                        'Finish your profile first',
+                                        `Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can accept. It only takes a moment.`,
+                                        [
+                                            { text: 'Not now', style: 'cancel' },
+                                            { text: 'Set up profile', onPress: () => router.push('/profile-setup') },
+                                        ]
+                                    );
+                                    return;
+                                }
                                 // Accepting an Offer extracts value → gated. Fulfilling a Need is a contribution → allowed.
                                 if (isOffer && blockedFromTrading) { setShowContributionRequired(true); } else {
                                     setShowAcceptConfirm(true);

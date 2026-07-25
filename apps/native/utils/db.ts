@@ -76,10 +76,15 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
         try {
             // Force strict database isolation and hot-swap reconnect if matrix url changes
             if (db) {
-                await db.closeAsync();
+                const oldDb = db;
+                db = null;
                 dbInitialized = false;
                 dbInitPromise = null;
-                db = null;
+                try {
+                    await oldDb.closeAsync();
+                } catch (e) {
+                    console.warn('[DB] Reconnect close warning:', e);
+                }
             }
 
             if (url) await addSavedNode(url); // Auto-track nodes we jump into correctly inside the UI Matrix.
@@ -109,10 +114,15 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 
 export async function closeDB() {
     if (db) {
-        await db.closeAsync();
+        const oldDb = db;
         db = null;
         dbInitialized = false;
         dbInitPromise = null;
+        try {
+            await oldDb.closeAsync();
+        } catch (e) {
+            console.warn('[DB] closeDB warning:', e);
+        }
     }
 }
 
@@ -472,7 +482,7 @@ export async function clearDB() {
  * PWA Fetch Equivalents executed cleanly across the Local Disk
  */
 export async function getPosts(filter?: { type?: string; category?: string }) {
-    const database = await waitForInit();
+    let database = await waitForInit();
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at
         FROM posts p
@@ -492,10 +502,24 @@ export async function getPosts(filter?: { type?: string; category?: string }) {
     query += ' ORDER BY p.created_at DESC';
     
     let rows: any[] = [];
-    if (params.length > 0) {
-        rows = await database.getAllAsync(query, params);
-    } else {
-        rows = await database.getAllAsync(query);
+    try {
+        if (params.length > 0) {
+            rows = await database.getAllAsync(query, params);
+        } else {
+            rows = await database.getAllAsync(query);
+        }
+    } catch (err: any) {
+        if (err?.message?.includes('closed') || String(err).includes('closed')) {
+            console.warn('[DB] getPosts caught closed database connection, retrying with fresh connection...');
+            database = await getDb();
+            if (params.length > 0) {
+                rows = await database.getAllAsync(query, params);
+            } else {
+                rows = await database.getAllAsync(query);
+            }
+        } else {
+            throw err;
+        }
     }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
@@ -4125,8 +4149,15 @@ export async function getDatabaseStats() {
     } catch (e) {}
 
     try {
+        // Mirror the server's authoritative count EXACTLY (getActivePostCount:
+        // `active = 1 AND status = 'active'`) so the diagnostics "In Sync" badge is
+        // reliable. Counting anything wider (e.g. including 'pending' deals or
+        // 'paused'/disabled posts) drifts from the node's number and shows a
+        // permanent false "out of sync". There is no `paused` column — paused is a
+        // `status` value — and the old query referenced one, which threw and left
+        // this count silently at 0 (the "0 Active Posts" bug).
         const postsRow = await database.getFirstAsync<{ count: number }>(
-            "SELECT COUNT(*) as count FROM posts WHERE status IN ('active', 'pending') AND (paused IS NULL OR paused = 0 OR paused = 'false')"
+            "SELECT COUNT(*) as count FROM posts WHERE active = 1 AND status = 'active'"
         );
         postsCount = postsRow?.count || 0;
     } catch (e) {}

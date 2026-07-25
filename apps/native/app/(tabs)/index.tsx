@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { getPosts, getMarketplaceTransactions, reportAbuse, getBalance } from '../../utils/db';
-import { getLastSyncTime, requestSync } from '../../services/pillar-sync';
+import { requestSync } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
 import { CategoryPickerSheet } from '../../components/CategoryPickerSheet';
@@ -558,8 +558,8 @@ export default function MarketScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
     const [posts, setPosts] = useState<any[]>([]);
-    // First-run loading: getLastSyncTime() is null until the first successful sync. Until then we
-    // show a loading state rather than the "no items" empty state (which reads as broken/empty).
+    // First-run loading: until posts load or a pillar sync completes THIS session, show a
+    // loading state rather than the "no items" empty state (which reads as broken/empty).
     const [firstSyncDone, setFirstSyncDone] = useState(false);
     const [syncTimedOut, setSyncTimedOut] = useState(false);
     const [searchResults, setSearchResults] = useState<any[] | null>(null);
@@ -603,26 +603,41 @@ export default function MarketScreen() {
     }, [params.tab, params.dealsTab]);
 
     useEffect(() => {
+        // Data changed on SOME sync path (messages, balance, or marketplace) → refresh the
+        // list. This does NOT mean the marketplace itself has finished loading: a fast
+        // messages/balance sync fires this too (and does so even with zero messages), so
+        // flipping the loading gate here was showing a false "No items found" before the
+        // marketplace posts had actually landed.
         const sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
-            setFirstSyncDone(true);
-            setSyncTimedOut(false);
             loadPosts();
         });
-        return () => sub.remove();
+        // Only a COMPLETED pillar sync fetches and writes the marketplace posts, so this is
+        // the signal that dismisses the spinner. If the market is genuinely empty the list
+        // stays empty and now correctly shows "No items found"; if there are posts, the
+        // fast-first-paint 'sync_data_updated' above will already have rendered them.
+        const doneSub = DeviceEventEmitter.addListener('pillar_sync_done', () => {
+            // Load the freshly-synced posts BEFORE flipping the gate, so the empty state can
+            // never flash in the window between "sync completed" and "posts rendered". If the
+            // market has posts they're in state before firstSyncDone turns true; only a truly
+            // empty market then shows "No items found".
+            loadPosts().finally(() => {
+                setSyncTimedOut(false);
+                setFirstSyncDone(true);
+            });
+        });
+        return () => { sub.remove(); doneSub.remove(); };
     }, [filter, identity?.publicKey]);
 
-    // Decide whether the first sync has happened yet (drives the loading vs empty state).
-    // If we've synced before, we're done immediately; otherwise fall back to a retry prompt
-    // after ~12s so a new user on a flaky connection never sees an infinite spinner.
+    // Arm a retry fallback so a flaky connection never leaves an infinite spinner.
+    // We deliberately do NOT dismiss the spinner from a stored last-sync timestamp:
+    // after a recovery/restore the local posts table can be empty while that cursor
+    // still exists (clearDB drops the table but not the AsyncStorage cursor), which
+    // showed a false "No items found". The spinner is dismissed only when posts
+    // actually load (list becomes non-empty) or a pillar sync completes this session.
     useEffect(() => {
         let active = true;
-        let timer: ReturnType<typeof setTimeout>;
-        getLastSyncTime().then(t => {
-            if (!active) return;
-            if (t) { setFirstSyncDone(true); return; }
-            timer = setTimeout(() => { if (active) setSyncTimedOut(true); }, 12000);
-        }).catch(() => {});
-        return () => { active = false; if (timer) clearTimeout(timer); };
+        const timer = setTimeout(() => { if (active) setSyncTimedOut(true); }, 12000);
+        return () => { active = false; clearTimeout(timer); };
     }, []);
 
     // Debounced FTS5 server search
@@ -698,8 +713,16 @@ export default function MarketScreen() {
                 const txs = await getMarketplaceTransactions(identity.publicKey);
                 setMyTransactions(txs);
             }
-        } catch (e) {
-            console.error('Failed to query SQLite Posts', e);
+        } catch (e: any) {
+            if (e?.message?.includes('closed') || String(e).includes('closed')) {
+                // Database was closing or re-initializing during wipe/restore transition.
+                try {
+                    const data = await getPosts(queryFilter);
+                    setPosts(data);
+                } catch {}
+            } else {
+                console.error('Failed to query SQLite Posts', e);
+            }
         }
     };
 

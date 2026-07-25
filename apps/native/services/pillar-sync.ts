@@ -216,9 +216,23 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             console.error('[Pillar Sync] Failed to query local members count', e);
         }
 
-        const shouldFetchMembers = !lastMembersSync || 
+        const shouldFetchMembers = !lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
                                    localMembersCount === 0;
+
+        // If the local posts cache is empty (fresh install, recovery/restore, or a wipe
+        // that left the sync cursor behind), an incremental `updatedAfter` fetch would
+        // return only recently-changed posts and the market would look empty/incomplete.
+        // Force a full re-pull in that case so a wiped cache heals in one sync — this also
+        // re-enables the fast-first-paint below. Steady state (posts present) stays incremental.
+        let localPostsCount = 0;
+        try {
+            const database = await getDb();
+            const postsRow = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM posts');
+            localPostsCount = postsRow?.count || 0;
+        } catch (e) {}
+        const postsIsIncremental = !!lastSyncParam && localPostsCount > 0;
+        const postsSyncParam = postsIsIncremental ? lastSyncParam : '';
 
         const postsController = new AbortController();
         const balanceController = new AbortController();
@@ -231,7 +245,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         let postsData: any;
         try {
-            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${lastSyncParam}&_t=${Date.now()}`, {
+            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${postsSyncParam}&_t=${Date.now()}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: postsController.signal
@@ -262,6 +276,26 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             accounts: []
         };
         if (Array.isArray(postsData)) delta.posts = postsData;
+
+        // Fast first paint: on the FIRST (full) sync for this node the marketplace is
+        // still showing its loading spinner, and the remaining pillars below (balance,
+        // members, crowdfund, transactions, ratings) can add several seconds on a slow
+        // node before the single end-of-cycle applyDelta runs. Write the posts to SQLite
+        // and tell the marketplace to render NOW, then drop them from the batch so we
+        // don't re-write the same rows (the double-apply that historically starved the
+        // sync lock). Runs only on a FULL posts fetch (first sync, or a healed empty cache)
+        // — steady-state incremental cycles keep the single batched apply untouched.
+        if (!postsIsIncremental && Array.isArray(postsData) && postsData.length > 0) {
+            try {
+                await applyDelta({ posts: postsData }, expectedDbName);
+                delete delta.posts;
+                rawGated.delete('posts');
+                const { DeviceEventEmitter } = require('react-native');
+                DeviceEventEmitter.emit('sync_data_updated');
+            } catch (e) {
+                console.warn('[Pillar Sync] Early posts apply failed (will apply in batch):', e);
+            }
+        }
 
         // Fetch balance
         if (pubKey) {
@@ -502,6 +536,17 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const kCheckpoint = await getSyncCursorKey(StorageKeysConfig.SYNC_CHECKPOINT);
         await AsyncStorage.setItem(kLastSync, String(Date.now()));
         await AsyncStorage.removeItem(kCheckpoint);
+
+        // A completed pillar cycle means the marketplace posts have actually been fetched
+        // and written — the true "the market has loaded" signal, as opposed to a fast
+        // messages/balance sync that also fires 'sync_data_updated'. Emitted unconditionally
+        // on success so the marketplace dismisses its spinner even when the market is
+        // genuinely empty. Kept separate from 'sync_data_updated' (which fires only when
+        // data changed and drives list refreshes).
+        try {
+            const { DeviceEventEmitter } = require('react-native');
+            DeviceEventEmitter.emit('pillar_sync_done');
+        } catch (e) {}
 
         result.success = true;
         result.deltaCount = (delta.posts?.length || 0) + (delta.accounts?.length || 0);

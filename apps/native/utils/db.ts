@@ -1197,6 +1197,28 @@ export async function getMemberProfile(pubkey: string) {
 }
 
 /**
+ * Ask a node for the callsign registered to a public key. The key IS the
+ * identity; the callsign is just node-held profile data that travels with it, so
+ * recovery pulls it down rather than asking the user to type it. Best-effort —
+ * returns null when the node is unreachable or doesn't know the key (the full
+ * profile, incl. avatar, then lands with the normal members-directory sync).
+ * Uses the allowlisted pre-membership probe so it works before we're synced in.
+ */
+export async function fetchNodeCallsign(anchorUrl: string, pubkey: string): Promise<string | null> {
+    try {
+        const res = await fetch(`${anchorUrl}/api/community/membership/${pubkey}`, {
+            headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const callsign = data?.callsign;
+        return typeof callsign === 'string' && callsign.trim().length > 0 ? callsign.trim() : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Viewer-aware Trust Profile for another member: tier, track record, completion
  * rate, mutual connections, "vouched in by", and a safety recommendation band.
  * Signed (the server uses the verified signer as the viewer for mutuals).

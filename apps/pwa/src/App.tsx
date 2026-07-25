@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { loadIdentity, type BeanPoolIdentity } from './lib/identity';
+import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
 import { connectToAnchor, onSystemAnnouncement } from './lib/sync';
 import { checkMembership, getConversations, getMarketplacePosts, getMyMarketplaceTransactions, getCommunityHealth } from './lib/api';
 import { useTheme } from './lib/useTheme';
@@ -124,9 +124,18 @@ export function App() {
             import('./lib/api').then(({ registerMember }) =>
                 registerMember(identity.publicKey, identity.callsign).catch(() => { })
             );
-            // Check membership status for guest/member UI
+            // Check membership status for guest/member UI. The node holds the
+            // callsign that travels with your key, so if this device restored the
+            // identity without a name yet (e.g. recovered while briefly offline),
+            // adopt the node's — never overwrite a name the user already has.
             checkMembership(identity.publicKey)
-                .then(r => setIsGuest(!r.isMember))
+                .then(async r => {
+                    setIsGuest(!r.isMember);
+                    if (r.callsign && !identity.callsign?.trim()) {
+                        const updated = await updateCallsign(r.callsign);
+                        if (updated) setIdentity(updated);
+                    }
+                })
                 .catch(() => {});
         }
         return unsub;

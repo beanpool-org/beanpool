@@ -4,15 +4,18 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { MemberAvatar } from '../components/MemberAvatar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lookupRecoveryCallsign, createRecoveryRequest, getRecoveryStatus } from '../utils/db';
 import { createIdentity, wipeIdentity } from '../utils/identity';
-import { colors, palette } from '../constants/colors';
+import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { colors } from '../constants/colors';
 import { useIdentity } from './IdentityContext';
 
 export default function RecoverIdentityScreen() {
     const { identity, setIdentity } = useIdentity();
     const [step, setStep] = useState<'lookup' | 'select' | 'guess' | 'creating' | 'waiting'>('lookup');
     const [callsign, setCallsign] = useState('');
+    const [anchorUrl, setAnchorUrl] = useState('');
     const [lookupResults, setLookupResults] = useState<any[]>([]);
     const [selectedProfile, setSelectedProfile] = useState<any>(null);
     const [guardianGuess, setGuardianGuess] = useState('');
@@ -21,6 +24,15 @@ export default function RecoverIdentityScreen() {
     
     // Status tracking
     const [statusData, setStatusData] = useState<any>(null);
+
+    // Pre-fill the node address if this device has ever been connected to one,
+    // so a returning user needn't retype it. On a genuinely fresh phone (the
+    // real recovery case) it starts empty and the user enters their node.
+    useEffect(() => {
+        AsyncStorage.getItem('beanpool_anchor_url').then((url) => {
+            if (url) setAnchorUrl(url);
+        }).catch(() => {});
+    }, []);
 
     useEffect(() => {
         if (identity?.publicKey) {
@@ -35,9 +47,26 @@ export default function RecoverIdentityScreen() {
 
     const handleLookup = async () => {
         if (!callsign.trim()) return;
+        const rawAnchor = anchorUrl.trim();
+        if (!rawAnchor) {
+            setError('Enter your community node address — we need it to find your account.');
+            return;
+        }
+        const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
+        if (!looksLikeNodeAddress(finalAnchorUrl)) {
+            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            return;
+        }
+        if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
+            setError('That node address is insecure (http on a public host). Ask whoever invited you for the https:// address.');
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
+            // lookupRecoveryCallsign (and every later recovery call) reads the
+            // node from storage, so commit it before we search.
+            await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
             const results = await lookupRecoveryCallsign(callsign.trim());
             if (results.length === 0) {
                 setError('No recovery-eligible accounts found with that callsign.');
@@ -136,7 +165,7 @@ export default function RecoverIdentityScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="light" />
+            <StatusBar style="dark" />
             <KeyboardAvoidingView
                 behavior="padding"
                 style={{ flex: 1 }}
@@ -146,16 +175,30 @@ export default function RecoverIdentityScreen() {
                     {step === 'lookup' && (
                         <>
                             <Text style={styles.title}>🛡️ Social Recovery</Text>
-                            <Text style={styles.subtitle}>Enter your old callsign. We will look up your account on the community node.</Text>
+                            <Text style={styles.subtitle}>Enter your old callsign and your community node. We'll look up your account so your Guardians can approve the transfer to this device.</Text>
                             <TextInput
                                 accessibilityLabel="Your old callsign"
                                 style={styles.input}
                                 placeholder="Your old callsign"
-                                placeholderTextColor={palette.slate500}
+                                placeholderTextColor={colors.text.muted}
                                 value={callsign}
                                 onChangeText={setCallsign}
                                 autoCapitalize="none"
                             />
+                            <TextInput
+                                accessibilityLabel="Community Node URL"
+                                style={styles.input}
+                                placeholder="Community Node URL (e.g. node.yourcommunity.org)"
+                                placeholderTextColor={colors.text.muted}
+                                value={anchorUrl}
+                                onChangeText={setAnchorUrl}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                keyboardType="url"
+                            />
+                            <Text style={styles.fieldHint}>
+                                Required — the community node that holds your account. Ask whoever invited you if you're unsure.
+                            </Text>
                             {error && <Text style={styles.error}>{error}</Text>}
                             <Pressable style={styles.primaryBtn} onPress={handleLookup} disabled={loading} accessibilityRole="button">
                                 {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Find Account</Text>}
@@ -195,7 +238,7 @@ export default function RecoverIdentityScreen() {
                                 accessibilityLabel="A guardian's callsign"
                                 style={styles.input}
                                 placeholder="A guardian's callsign"
-                                placeholderTextColor={palette.slate500}
+                                placeholderTextColor={colors.text.muted}
                                 value={guardianGuess}
                                 onChangeText={setGuardianGuess}
                                 autoCapitalize="none"
@@ -244,27 +287,28 @@ export default function RecoverIdentityScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: palette.neutral950 },
+    container: { flex: 1, backgroundColor: colors.surface.app },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-    card: { backgroundColor: palette.neutral900, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: palette.neutral600 },
-    title: { fontSize: 20, fontWeight: 'bold', color: colors.text.inverse, marginBottom: 8 },
-    subtitle: { fontSize: 14, color: palette.slate400, marginBottom: 24, lineHeight: 20 },
-    input: { backgroundColor: palette.neutral800, borderWidth: 1, borderColor: palette.neutral700, borderRadius: 12, padding: 14, color: colors.text.inverse, fontSize: 16, marginBottom: 16 },
+    card: { width: '100%', backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+    title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
+    subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
+    input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },
+    fieldHint: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 16, lineHeight: 18 },
     primaryBtn: { backgroundColor: colors.brand.primary, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
     backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
-    backBtnText: { color: palette.slate400, fontSize: 14 },
+    backBtnText: { color: colors.text.secondary, fontSize: 14 },
     error: { color: colors.feedback.danger.solid, fontSize: 14, marginBottom: 16, textAlign: 'center' },
-    
-    profileBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: palette.neutral800, padding: 12, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: palette.neutral700 },
-    avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.neutral600, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-    callsign: { color: colors.text.inverse, fontSize: 16, fontWeight: '600' },
-    joinedAt: { color: palette.slate400, fontSize: 12, marginTop: 4 },
-    
-    statusBox: { backgroundColor: palette.neutral800, padding: 24, borderRadius: 16, alignItems: 'center', marginBottom: 24, width: '100%' },
-    statusLabel: { color: palette.slate400, fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+
+    profileBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.subtle, padding: 12, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default },
+    avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    callsign: { color: colors.text.heading, fontSize: 16, fontWeight: '600' },
+    joinedAt: { color: colors.text.secondary, fontSize: 12, marginTop: 4 },
+
+    statusBox: { backgroundColor: colors.surface.subtle, padding: 24, borderRadius: 16, alignItems: 'center', marginBottom: 24, width: '100%' },
+    statusLabel: { color: colors.text.secondary, fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
     statusValue: { color: colors.brand.primary, fontSize: 36, fontWeight: '800' },
-    
+
     infoBanner: { backgroundColor: colors.feedback.success.bg, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.feedback.success.border, marginBottom: 24 },
-    infoText: { color: palette.emerald300, fontSize: 14, lineHeight: 20 }
+    infoText: { color: colors.feedback.success.fg, fontSize: 14, lineHeight: 20 }
 });

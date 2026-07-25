@@ -445,9 +445,13 @@ function RootLayoutNav() {
         if (isLoading) return;
         const root = (segments as string[])[0];
 
-        // If we have no identity and we aren't already on the welcome screen, kick us out
+        // If we have no identity, the only screens that make sense are the
+        // welcome flow and the guardian-recovery screen. Guardian recovery runs
+        // on a fresh device that holds no local identity yet — the screen mints
+        // the new identity itself at the "Submit Request" step — so it must be
+        // reachable without one. Any other route → back to welcome.
         if (!identity) {
-            if (root !== 'welcome') {
+            if (root !== 'welcome' && root !== 'recover-identity') {
                 setTimeout(() => {
                     router.replace('/welcome');
                 }, 50);
@@ -496,7 +500,11 @@ function RootLayoutNav() {
         // identity; they just fix or switch the node. Only 'stranger' acts; 'unknown'
         // (unreachable / not yet checked) is left alone so a flaky network never diverts.
         if (recognition === 'stranger') {
-            if (root !== 'node-mismatch' && root !== 'welcome') {
+            // Don't yank a user off the guardian-recovery screen: right after
+            // they submit, the freshly-minted key probes as a 'stranger' for the
+            // brief window before createRecoveryRequest lands and the node starts
+            // reporting 'recovering'. They're on that screen on purpose.
+            if (root !== 'node-mismatch' && root !== 'welcome' && root !== 'recover-identity') {
                 router.replace('/node-mismatch');
             }
             return;
@@ -518,6 +526,18 @@ function RootLayoutNav() {
     useEffect(() => {
         if (!identity?.publicKey) return;
         registerForPushNotifications(identity.publicKey).catch(console.warn);
+    }, [identity?.publicKey]);
+
+    // Kick a sync whenever the active identity changes. The boot sync
+    // (initDB().then(requestSync) above) is a one-shot mount effect, so a recovery /
+    // login / account-switch that sets the identity LATER never triggered a fetch —
+    // the marketplace then sat empty until the WebSocket connect or the 5-min poll,
+    // long enough to trip the 12s "trouble connecting" retry (confirmed on-device:
+    // ~19s with no sync after a wipe+recover). requestSync is debounced and
+    // single-flighted, so the redundant call at boot collapses harmlessly.
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        requestSync().catch(() => {});
     }, [identity?.publicKey]);
 
     // Set up notification deep-link handler

@@ -289,9 +289,16 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // don't re-write the same rows (the double-apply that historically starved the
         // sync lock). Runs only on a FULL posts fetch (first sync, or a healed empty cache)
         // — steady-state incremental cycles keep the single batched apply untouched.
+        // Tables applied THIS cycle OUTSIDE the batch (the early fast-paint write).
+        // If the batch below fails we must invalidate these fingerprints too —
+        // otherwise a write that recorded its fingerprint but didn't durably land
+        // (e.g. applyDelta's node-switch contamination guard returned early) would be
+        // treated as applied and skipped forever.
+        const earlyApplied = new Set<string>();
         if (!postsIsIncremental && Array.isArray(postsData) && postsData.length > 0) {
             try {
                 await applyDelta({ posts: postsData }, expectedDbName);
+                earlyApplied.add('posts');
                 delete delta.posts;
                 rawGated.delete('posts');
                 const { DeviceEventEmitter } = require('react-native');
@@ -532,8 +539,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 // the NEXT sync treat the unchanged payload as up-to-date and skip it
                 // forever — the marketplace then stays permanently empty despite the
                 // server having posts. Invalidate the fingerprints for every table we
-                // tried to write so the next sync re-fetches and re-applies.
-                for (const table of Object.keys(gatedDelta)) {
+                // tried to write this cycle — the batch AND the early fast-paint apply
+                // — so the next sync re-fetches and re-applies.
+                for (const table of new Set([...Object.keys(gatedDelta), ...earlyApplied])) {
                     delete _lastAppliedFingerprints[`raw:${anchorUrl}:${table}`];
                     delete _lastAppliedFingerprints[`${anchorUrl}:${table}`];
                 }

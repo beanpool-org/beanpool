@@ -619,10 +619,14 @@ export default function MarketScreen() {
             // Load the freshly-synced posts BEFORE flipping the gate, so the empty state can
             // never flash in the window between "sync completed" and "posts rendered". If the
             // market has posts they're in state before firstSyncDone turns true; only a truly
-            // empty market then shows "No items found".
-            loadPosts().finally(() => {
-                setSyncTimedOut(false);
-                setFirstSyncDone(true);
+            // empty market then shows "No items found". Only dismiss the spinner if the load
+            // actually succeeded — a transient failure (e.g. DB closing mid wipe/restore) keeps
+            // the spinner so the 12s fallback retries instead of flashing "No items found".
+            loadPosts().then((ok) => {
+                if (ok) {
+                    setSyncTimedOut(false);
+                    setFirstSyncDone(true);
+                }
             });
         });
         return () => { sub.remove(); doneSub.remove(); };
@@ -703,7 +707,7 @@ export default function MarketScreen() {
         return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
     }, [searchQuery, filter, categoryFilter]);
 
-    const loadPosts = async () => {
+    const loadPosts = async (): Promise<boolean> => {
         const queryFilter = filter === 'all' ? undefined : { type: filter === 'needs' ? 'need' : 'offer' };
         const runLoad = async () => {
             const data = await getPosts(queryFilter);
@@ -715,6 +719,7 @@ export default function MarketScreen() {
         };
         try {
             await runLoad();
+            return true;
         } catch (e: any) {
             if (e?.message?.includes('closed') || String(e).includes('closed')) {
                 // Database was closing or re-initializing during a wipe/restore transition.
@@ -722,11 +727,14 @@ export default function MarketScreen() {
                 // reloading posts alone left myTransactions / the pending-deals badge stale.
                 try {
                     await runLoad();
+                    return true;
                 } catch (retryErr) {
                     console.error('Failed to reload marketplace after DB reconnect', retryErr);
+                    return false;
                 }
             } else {
                 console.error('Failed to query SQLite Posts', e);
+                return false;
             }
         }
     };

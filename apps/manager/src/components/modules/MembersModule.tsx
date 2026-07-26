@@ -2,15 +2,19 @@ import React, { useState } from 'react';
 import { ThreatReviewModal } from './ThreatReviewModal';
 import { MemberDetailModal } from './MemberDetailModal';
 import { resolveAvatarUrl } from '../../lib/avatar';
+import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, type NodeTreasury } from '../../lib/node-client';
 
 interface MembersModuleProps {
     nodeData: any | null;
     nodeDataLoading: boolean;
+    activeNodeUrl?: string;
+    adminPassword?: string;
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
     onPruneUser?: (pubkey: string) => Promise<void>;
     onUpdateTier?: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
+    onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
 }
 
 export function getMemberAvatar(m: any, profiles: any[] = []): string | null {
@@ -87,7 +91,7 @@ export function getMemberTier(m: any): string {
     return 'Citizen';
 }
 
-export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUser, onPruneUser, onUpdateTier, onToggleVoucher }: MembersModuleProps) {
+export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminPassword, onRefresh, onFreezeUser, onPruneUser, onUpdateTier, onToggleVoucher, onToggleOperator }: MembersModuleProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeThreat, setActiveThreat] = useState<any | null>(null);
     const [selectedMember, setSelectedMember] = useState<any | null>(null);
@@ -96,6 +100,33 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
     const [isUpdatingTier, setIsUpdatingTier] = useState(false);
     const [frozenPubkeys, setFrozenPubkeys] = useState<Set<string>>(new Set());
     const [customVouchers, setCustomVouchers] = useState<Set<string>>(new Set());
+    const [customOperators, setCustomOperators] = useState<Set<string>>(new Set());
+
+    const [treasuries, setTreasuries] = useState<NodeTreasury[]>([]);
+    const [showCreateTreasuryModal, setShowCreateTreasuryModal] = useState(false);
+    const [newTreasuryName, setNewTreasuryName] = useState('');
+    const [newTreasuryAvatar, setNewTreasuryAvatar] = useState('🥚');
+    const [newTreasuryCredit, setNewTreasuryCredit] = useState('200');
+    const [creatingTreasury, setCreatingTreasury] = useState(false);
+
+    const [offerTreasury, setOfferTreasury] = useState<NodeTreasury | null>(null);
+    const [offerTitle, setOfferTitle] = useState('');
+    const [offerCategory, setOfferCategory] = useState('food');
+    const [offerCredits, setOfferCredits] = useState('12');
+    const [offerDescription, setOfferDescription] = useState('');
+    const [seedingOffer, setSeedingOffer] = useState(false);
+
+    const reloadTreasuries = React.useCallback(async () => {
+        if (!activeNodeUrl) return;
+        try {
+            const list = await fetchNodeTreasuries(activeNodeUrl);
+            setTreasuries(list);
+        } catch {}
+    }, [activeNodeUrl]);
+
+    React.useEffect(() => {
+        reloadTreasuries();
+    }, [reloadTreasuries]);
 
     const handlePruneMember = async (pubkey: string) => {
         if (!onPruneUser) return;
@@ -142,6 +173,14 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                     .filter(Boolean)
             );
             setCustomVouchers(serverVouchers);
+
+            const serverOperators = new Set<string>(
+                nodeData.members
+                    .filter((m: any) => m.canOperate || m.isOperator || m.can_operate)
+                    .map((m: any) => m.publicKey || m.pubkey)
+                    .filter(Boolean)
+            );
+            setCustomOperators(serverOperators);
         }
     }, [nodeData]);
 
@@ -206,6 +245,72 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
             } catch (e: any) {
                 alert(e?.message || 'Failed to update voucher status on server');
             }
+        }
+    };
+
+    const handleToggleOperatorMember = async (pubkey: string, isCurrentlyOperator: boolean) => {
+        const nextState = !isCurrentlyOperator;
+        setCustomOperators((prev) => {
+            const next = new Set(prev);
+            const matches = Array.from(next).filter(
+                (v) => v === pubkey || (pubkey && v && (pubkey.startsWith(v) || v.startsWith(pubkey)))
+            );
+            if (nextState) {
+                next.add(pubkey);
+            } else {
+                matches.forEach((m) => next.delete(m));
+            }
+            return next;
+        });
+        if (onToggleOperator) {
+            try {
+                await onToggleOperator(pubkey, nextState);
+                onRefresh();
+            } catch (e: any) {
+                alert(e?.message || 'Failed to update operator role on server');
+            }
+        }
+    };
+
+    const handleCreateTreasury = async () => {
+        if (!activeNodeUrl || !newTreasuryName.trim()) return;
+        setCreatingTreasury(true);
+        try {
+            const avatarSvg = newTreasuryAvatar.startsWith('data:')
+                ? newTreasuryAvatar
+                : 'data:image/svg+xml,' + encodeURIComponent(
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" rx="40" fill="#fbbf24"/><text x="40" y="54" font-size="42" text-anchor="middle">${newTreasuryAvatar || '🏛️'}</text></svg>`
+                );
+            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine: Number(newTreasuryCredit) || 0 }, adminPassword);
+            setShowCreateTreasuryModal(false);
+            setNewTreasuryName('');
+            reloadTreasuries();
+        } catch (e: any) {
+            alert(e?.message || 'Failed to create treasury');
+        } finally {
+            setCreatingTreasury(false);
+        }
+    };
+
+    const handleSeedOffer = async () => {
+        if (!activeNodeUrl || !offerTreasury || !offerTitle.trim()) return;
+        setSeedingOffer(true);
+        try {
+            await seedTreasuryOffer(activeNodeUrl, offerTreasury.publicKey, {
+                title: offerTitle.trim(),
+                category: offerCategory,
+                credits: Number(offerCredits) || 0,
+                description: offerDescription.trim(),
+                repeatable: true
+            }, adminPassword);
+            setOfferTreasury(null);
+            setOfferTitle('');
+            setOfferDescription('');
+            reloadTreasuries();
+        } catch (e: any) {
+            alert(e?.message || 'Failed to seed offer');
+        } finally {
+            setSeedingOffer(false);
         }
     };
 
@@ -291,6 +396,69 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                     <span className={nodeDataLoading ? 'animate-spin' : ''}>🔄</span>
                     <span>{nodeDataLoading ? 'Refreshing Data...' : 'Refresh Roster'}</span>
                 </button>
+            </div>
+
+            {/* 🏛️ Community Treasuries & Enterprise Management Card */}
+            <div className="bg-nature-950/80 border border-nature-800 p-5 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h4 className="text-sm font-bold text-white m-0 flex items-center gap-2">
+                            <span>🏛️ Community Treasuries & Enterprises</span>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                {treasuries.length} Active
+                            </span>
+                        </h4>
+                        <p className="text-xs text-nature-400 m-0 mt-0.5">
+                            Manage community enterprise accounts (e.g. Community Eggs), seed offers, and view credit limits.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => setShowCreateTreasuryModal(true)}
+                        className="px-3.5 py-1.5 rounded-xl bg-terra-500/20 hover:bg-terra-500/30 text-terra-300 border border-terra-500/40 font-bold text-xs transition-all flex items-center gap-1.5"
+                    >
+                        <span>➕ Create Treasury</span>
+                    </button>
+                </div>
+
+                {treasuries.length === 0 ? (
+                    <div className="text-xs text-nature-500 italic py-2">
+                        No community treasuries on this node yet. Click "+ Create Treasury" above to add one.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {treasuries.map((t) => (
+                            <div key={t.publicKey} className="bg-nature-900/90 border border-nature-800 p-3.5 rounded-xl flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    {t.avatar ? (
+                                        <img src={t.avatar} alt={t.name} className="w-10 h-10 rounded-full object-cover border border-amber-500/40 shrink-0" />
+                                    ) : (
+                                        <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-lg shrink-0">
+                                            🏛️
+                                        </div>
+                                    )}
+                                    <div className="min-w-0">
+                                        <div className="font-bold text-white text-xs truncate">{t.name}</div>
+                                        <div className="text-[11px] text-nature-400 font-mono">
+                                            {t.balance} 🫘 · Limit: {t.creditLine} 🫘 · {t.liveOffers} offer(s)
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setOfferTreasury(t);
+                                        setOfferTitle('Dozen free-range eggs');
+                                        setOfferCategory('food');
+                                        setOfferCredits('12');
+                                        setOfferDescription('Fresh daily from the community flock');
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-lg bg-terra-600/30 hover:bg-terra-600/50 text-terra-300 border border-terra-500/40 font-bold text-[11px] transition-all shrink-0 ml-2"
+                                >
+                                    + Post Offer
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* 🚨 Active Security & Abuse Detection Radar */}
@@ -696,6 +864,133 @@ export function MembersModule({ nodeData, nodeDataLoading, onRefresh, onFreezeUs
                             >
                                 {isUpdatingTier && <span className="animate-spin">🔄</span>}
                                 <span>{isUpdatingTier ? 'Applying Upgrade...' : 'Apply Tier Upgrade'}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Create Treasury Modal */}
+            {showCreateTreasuryModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                    <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
+                            <h3 className="text-base font-bold text-white m-0">🏛️ Create Community Treasury</h3>
+                            <button onClick={() => setShowCreateTreasuryModal(false)} className="text-nature-500 hover:text-white text-lg">✕</button>
+                        </div>
+
+                        <div className="space-y-3 text-xs">
+                            <div>
+                                <label className="block text-nature-300 font-semibold mb-1">Treasury Name:</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Community Eggs"
+                                    value={newTreasuryName}
+                                    onChange={(e) => setNewTreasuryName(e.target.value)}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-white font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-nature-300 font-semibold mb-1">Icon / Emoji:</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. 🥚 or SVG URI"
+                                    value={newTreasuryAvatar}
+                                    onChange={(e) => setNewTreasuryAvatar(e.target.value)}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-white font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-nature-300 font-semibold mb-1">Deficit Credit Line (Beans):</label>
+                                <input
+                                    type="number"
+                                    placeholder="200"
+                                    value={newTreasuryCredit}
+                                    onChange={(e) => setNewTreasuryCredit(e.target.value)}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-white font-bold"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-nature-800 flex justify-end gap-3">
+                            <button onClick={() => setShowCreateTreasuryModal(false)} className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-white font-bold text-xs">Cancel</button>
+                            <button
+                                onClick={handleCreateTreasury}
+                                disabled={creatingTreasury || !newTreasuryName.trim()}
+                                className="px-5 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 disabled:opacity-50 font-bold text-white text-xs transition-all shadow-md"
+                            >
+                                {creatingTreasury ? 'Creating...' : 'Create Treasury'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Seed Offer Modal */}
+            {offerTreasury && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                    <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
+                            <h3 className="text-base font-bold text-white m-0">🥚 Seed Offer for {offerTreasury.name}</h3>
+                            <button onClick={() => setOfferTreasury(null)} className="text-nature-500 hover:text-white text-lg">✕</button>
+                        </div>
+
+                        <div className="space-y-3 text-xs">
+                            <div>
+                                <label className="block text-nature-300 font-semibold mb-1">Title:</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Dozen free-range eggs"
+                                    value={offerTitle}
+                                    onChange={(e) => setOfferTitle(e.target.value)}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-white font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-nature-300 font-semibold mb-1">Category:</label>
+                                <select
+                                    value={offerCategory}
+                                    onChange={(e) => setOfferCategory(e.target.value)}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-white font-bold"
+                                >
+                                    <option value="food">🥕 Food</option>
+                                    <option value="services">🤝 Services</option>
+                                    <option value="labour">👷 Labour</option>
+                                    <option value="tools">🛠️ Tools</option>
+                                    <option value="goods">📦 Goods</option>
+                                    <option value="garden">🌻 Garden</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-nature-300 font-semibold mb-1">Price (Beans):</label>
+                                <input
+                                    type="number"
+                                    placeholder="12"
+                                    value={offerCredits}
+                                    onChange={(e) => setOfferCredits(e.target.value)}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-white font-bold"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-nature-300 font-semibold mb-1">Description:</label>
+                                <textarea
+                                    rows={2}
+                                    placeholder="e.g. Fresh daily from the community flock"
+                                    value={offerDescription}
+                                    onChange={(e) => setOfferDescription(e.target.value)}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-white font-bold"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-nature-800 flex justify-end gap-3">
+                            <button onClick={() => setOfferTreasury(null)} className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-white font-bold text-xs">Cancel</button>
+                            <button
+                                onClick={handleSeedOffer}
+                                disabled={seedingOffer || !offerTitle.trim()}
+                                className="px-5 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 disabled:opacity-50 font-bold text-white text-xs transition-all shadow-md"
+                            >
+                                {seedingOffer ? 'Posting...' : 'Post Offer to Market'}
                             </button>
                         </div>
                     </div>

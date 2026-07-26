@@ -19,6 +19,10 @@ import {
     pruneNodeUser,
     updateNodeUserTier,
     updateNodeUserVoucher,
+    updateNodeUserOperator,
+    fetchNodeTreasuries,
+    createNodeTreasury,
+    seedTreasuryOffer,
     type DiagnosticsResponse,
     type GatewayConfig,
 } from './lib/node-client';
@@ -529,6 +533,8 @@ export function App() {
                         <MembersModule
                             nodeData={nodeData}
                             nodeDataLoading={nodeDataLoading}
+                            activeNodeUrl={activeNode?.url}
+                            adminPassword={activeNode?.adminPassword}
                             onRefresh={() => loadNodeData()}
                             onFreezeUser={async (pubkey, freeze) => {
                                 if (activeNode) {
@@ -548,6 +554,11 @@ export function App() {
                             onToggleVoucher={async (pubkey, canVouch) => {
                                 if (activeNode) {
                                     await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword);
+                                }
+                            }}
+                            onToggleOperator={async (pubkey, granted) => {
+                                if (activeNode) {
+                                    await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword);
                                 }
                             }}
                         />

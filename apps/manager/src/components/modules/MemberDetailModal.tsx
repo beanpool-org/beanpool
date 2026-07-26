@@ -7,8 +7,10 @@ interface MemberDetailModalProps {
     flags?: any[];
     isFrozen: boolean;
     isVoucher?: boolean;
+    isOperator?: boolean;
     onToggleFreeze: (pubkey: string) => void;
     onToggleVouch?: (pubkey: string, isCurrentlyVoucher: boolean) => void;
+    onToggleOperator?: (pubkey: string, isCurrentlyOperator: boolean) => void;
     onPrune?: (pubkey: string) => void;
     onClose: () => void;
 }
@@ -19,8 +21,10 @@ export function MemberDetailModal({
     flags = [],
     isFrozen,
     isVoucher,
+    isOperator,
     onToggleFreeze,
     onToggleVouch,
+    onToggleOperator,
     onPrune,
     onClose
 }: MemberDetailModalProps) {
@@ -249,6 +253,23 @@ export function MemberDetailModal({
                             >
                                 {isVoucher ? 'Demote' : '🛡️ Promote'}
                             </button>
+
+                            {onToggleOperator && (
+                                <button
+                                    disabled={isFrozen}
+                                    onClick={() => onToggleOperator(pubkey, !!isOperator)}
+                                    className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
+                                        isFrozen
+                                            ? 'opacity-50 cursor-not-allowed bg-nature-900 text-nature-500 border-nature-800'
+                                            : isOperator
+                                            ? 'bg-purple-950/80 text-purple-200 border-purple-700 hover:bg-purple-900'
+                                            : 'bg-nature-900 text-nature-300 border-nature-700 hover:bg-nature-800'
+                                    }`}
+                                    title={isOperator ? 'Revoke Operator role' : 'Grant Operator role (drives Community Treasuries)'}
+                                >
+                                    <span>{isOperator ? '🏛️ Operator ✓' : '🏛️ Grant Operator'}</span>
+                                </button>
+                            )}
 
                             <button
                                 onClick={() => onToggleFreeze(pubkey)}

@@ -247,5 +247,88 @@ export async function updateNodeUserVoucher(
     return res.json();
 }
 
+export async function updateNodeUserOperator(
+    nodeUrl: string,
+    pubkey: string,
+    granted: boolean,
+    adminPassword?: string
+): Promise<{ success: boolean }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/operator`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ granted, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export interface NodeTreasury {
+    publicKey: string;
+    name: string;
+    avatar?: string;
+    balance: number;
+    creditLine: number;
+    liveOffers: number;
+}
+
+export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury[]> {
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/treasuries`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.treasuries || [];
+}
+
+export async function createNodeTreasury(
+    nodeUrl: string,
+    data: { name: string; avatar: string; creditLine?: number },
+    adminPassword?: string
+): Promise<{ success: boolean; publicKey: string }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/treasury`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ...data, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function seedTreasuryOffer(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    offer: { title: string; category: string; credits: number; description?: string; priceType?: string; repeatable?: boolean },
+    adminPassword?: string
+): Promise<{ success: boolean; post: any }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/offer`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ...offer, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+
 
 

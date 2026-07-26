@@ -92,6 +92,12 @@ export default function TreasuryPostScreen() {
 
         submittingRef.current = true;
         setSubmitting(true);
+        if (!params.treasury) {
+            Alert.alert('Error', 'Missing treasury public key');
+            submittingRef.current = false;
+            setSubmitting(false);
+            return;
+        }
         const body = {
             category,
             title: title.trim(),

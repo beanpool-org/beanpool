@@ -489,7 +489,10 @@ export default function ProjectsScreen() {
                                         style={styles.treasuryCard}
                                         accessibilityRole="button"
                                         accessibilityLabel={`Open ${t.name} treasury`}
-                                        onPress={() => router.push({ pathname: '/treasury-detail', params: { publicKey: t.publicKey, name: t.name, avatar: t.avatar } })}
+                                        onPress={() => {
+                                            if (!t.publicKey) return;
+                                            router.push({ pathname: '/treasury-detail', params: { publicKey: t.publicKey, name: t.name, avatar: t.avatar } });
+                                        }}
                                     >
                                         {t.avatar ? (
                                             <Image source={{ uri: t.avatar }} style={styles.treasuryAvatar} />

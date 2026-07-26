@@ -109,7 +109,7 @@ export default function TreasuryDetailScreen() {
 
     const handleSweep = async () => {
         const amt = Number(sweepAmount);
-        if (!amt || amt <= 0) { Alert.alert('Enter an amount', 'Type a positive number of Beans to sweep into the Commons.'); return; }
+        if (isNaN(amt) || amt <= 0) { Alert.alert('Enter an amount', 'Type a positive number of Beans to sweep into the Commons.'); return; }
         if (amt > balance) { Alert.alert('Not enough surplus', `This treasury only holds ${balance} 🫘.`); return; }
         setSweeping(true);
         try {

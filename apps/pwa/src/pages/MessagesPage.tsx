@@ -10,7 +10,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi,
     sendMessageApi, getMessageAttachmentApi, getMembers, sendFederationMessage,
-    markConversationReadApi, getMyMarketplaceTransactions,
+    markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction,
 } from '../lib/api';
 import { encodePlaintext, decodePlaintext, encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from '../lib/e2e-crypto';
@@ -198,6 +198,38 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages.length]);
+
+    const [actionLoading, setActionLoading] = useState(false);
+
+    async function handleReleaseCredits(txId: string, amount: number) {
+        if (!confirm(`Release ${amount} Beans to the provider? This action is final.`)) return;
+        setActionLoading(true);
+        try {
+            await completeMarketplaceTransaction(txId, identity.publicKey);
+            alert('Payment released successfully!');
+            await loadConversations();
+            if (activeConv) await loadMessages(activeConv.id);
+        } catch (e: any) {
+            alert(e?.message || 'Failed to release credits.');
+        } finally {
+            setActionLoading(false);
+        }
+    }
+
+    async function handleCancelCredits(txId: string) {
+        if (!confirm('Cancel this hold and refund the credits?')) return;
+        setActionLoading(true);
+        try {
+            await cancelMarketplaceTransaction(txId, identity.publicKey);
+            alert('Hold cancelled and credits refunded.');
+            await loadConversations();
+            if (activeConv) await loadMessages(activeConv.id);
+        } catch (e: any) {
+            alert(e?.message || 'Failed to cancel hold.');
+        } finally {
+            setActionLoading(false);
+        }
+    }
 
     async function loadConversations() {
         try {
@@ -551,6 +583,78 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         </div>
                     </div>
                 )}
+
+                {/* Active Trust Hold / Escrow Banner */}
+                {(() => {
+                    const peerPubkey = activeConv.participants.find(p => p !== identity.publicKey) || '';
+                    const pendingTx = userTransactions.find(t =>
+                        t.status === 'pending' &&
+                        ((t.buyerPublicKey === identity.publicKey && (t.sellerPublicKey === peerPubkey || !peerPubkey)) ||
+                         (t.postId && t.postId === activeConv.postId && t.buyerPublicKey === identity.publicKey))
+                    );
+
+                    if (!pendingTx) return null;
+                    const isBuyer = pendingTx.buyerPublicKey === identity.publicKey;
+
+                    return (
+                        <div style={{
+                            background: isBuyer ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                            borderBottom: `1px solid ${isBuyer ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                            padding: '0.75rem 1rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '0.75rem'
+                        }}>
+                            <div>
+                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? '#10b981' : '#f59e0b' }}>
+                                    🔒 Trust Hold: {pendingTx.credits} Beans
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    {isBuyer ? 'Release credits once you receive your items.' : 'Awaiting buyer to release credits.'}
+                                </div>
+                            </div>
+                            {isBuyer ? (
+                                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                    <button
+                                        onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
+                                        disabled={actionLoading}
+                                        style={{
+                                            background: '#10b981',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            padding: '0.4rem 0.75rem',
+                                            fontWeight: 'bold',
+                                            fontSize: '0.8rem',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {actionLoading ? '…' : '✅ Release Credits'}
+                                    </button>
+                                    <button
+                                        onClick={() => handleCancelCredits(pendingTx.id)}
+                                        disabled={actionLoading}
+                                        style={{
+                                            background: 'rgba(239, 68, 68, 0.15)',
+                                            color: '#ef4444',
+                                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                                            borderRadius: '8px',
+                                            padding: '0.4rem 0.6rem',
+                                            fontWeight: 'bold',
+                                            fontSize: '0.8rem',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            ) : (
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>⏳ Pending</span>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {/* Messages */}
                 <div style={{

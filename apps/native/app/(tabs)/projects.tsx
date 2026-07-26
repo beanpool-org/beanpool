@@ -484,7 +484,13 @@ export default function ProjectsScreen() {
                             <View style={{ marginBottom: 12 }}>
                                 <Text style={styles.treasuryPanelLabel}>🏛️ Community Treasuries</Text>
                                 {treasuries.map((t: any, index: number) => (
-                                    <View key={t.publicKey || `treasury-${index}`} style={styles.treasuryCard}>
+                                    <Pressable
+                                        key={t.publicKey || `treasury-${index}`}
+                                        style={styles.treasuryCard}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Open ${t.name} treasury`}
+                                        onPress={() => router.push({ pathname: '/treasury-detail', params: { publicKey: t.publicKey, name: t.name, avatar: t.avatar } })}
+                                    >
                                         {t.avatar ? (
                                             <Image source={{ uri: t.avatar }} style={styles.treasuryAvatar} />
                                         ) : (
@@ -495,7 +501,8 @@ export default function ProjectsScreen() {
                                             <Text style={styles.treasuryMeta}>{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</Text>
                                         </View>
                                         <Text style={[styles.treasuryBalance, t.balance < 0 ? styles.treasuryBalanceNeg : styles.treasuryBalancePos]}>{t.balance} 🫘</Text>
-                                    </View>
+                                        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} style={{ marginLeft: 4 }} />
+                                    </Pressable>
                                 ))}
                                 {balanceState.canOperate && (
                                     <View style={styles.operatorBadge}>

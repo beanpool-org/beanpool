@@ -1742,7 +1742,7 @@ export async function getTreasuryDetail(publicKey: string): Promise<any | null> 
 export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string }) {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
 export async function treasuryApprove(treasury: string, transactionId: string) {

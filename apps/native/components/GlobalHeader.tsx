@@ -144,9 +144,28 @@ export function GlobalHeader() {
     const [isGuestOnActive, setIsGuestOnActive] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
     const [hasAnchorUrl, setHasAnchorUrl] = useState(true);
+    // Consecutive failed health pings — see the ping effect below (debounce + recent-sync grace).
+    const healthFailuresRef = useRef(0);
 
     useEffect(() => {
         let isMounted = true;
+        // A single failed health ping shouldn't paint the node "offline": phone radios
+        // wake slowly (a cold TLS handshake can exceed a short timeout) and the JS thread
+        // can be busy applying a sync. Only show offline after 2 consecutive misses AND
+        // when no pillar sync landed recently — a recent sync proves the node is reachable
+        // regardless of what this lightweight ping does.
+        const markHealthFailure = async () => {
+            if (!isMounted) return;
+            healthFailuresRef.current += 1;
+            let syncedRecently = false;
+            try {
+                const st = await getLastSyncTime();
+                syncedRecently = !!st && (Date.now() - st) < 90_000;
+            } catch {}
+            if (isMounted && healthFailuresRef.current >= 2 && !syncedRecently) {
+                setIsOffline(true);
+            }
+        };
         const pingActive = async () => {
             const active = await AsyncStorage.getItem('beanpool_anchor_url');
             if (!active) {
@@ -155,8 +174,9 @@ export function GlobalHeader() {
             }
             if (isMounted) setHasAnchorUrl(true);
             try {
-                const r = await fetchWithTimeout(`${active}/api/community/health`, { timeout: 3000 });
+                const r = await fetchWithTimeout(`${active}/api/community/health`, { timeout: 8000 });
                 if (r.ok) {
+                    healthFailuresRef.current = 0;
                     if (isMounted) setIsOffline(false);
                     const data = await r.json();
                     
@@ -226,10 +246,10 @@ export function GlobalHeader() {
                         }
                     }
                 } else {
-                    if (isMounted) setIsOffline(true);
+                    await markHealthFailure();
                 }
             } catch (e) {
-                if (isMounted) setIsOffline(true);
+                await markHealthFailure();
             }
         };
         pingActive();

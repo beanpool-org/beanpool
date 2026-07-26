@@ -582,9 +582,10 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                         {filteredMembers.length > 0 ? (
                             <div className="bg-nature-950/80 border border-nature-800 rounded-xl overflow-hidden text-xs">
                                 <div className="grid grid-cols-12 bg-nature-900/90 p-3 text-nature-400 font-bold border-b border-nature-800">
-                                    <div className="col-span-5">Member Identity</div>
+                                    <div className="col-span-4">Member Identity</div>
                                     <div className="col-span-3">Standing / Tier</div>
                                     <div className="col-span-2">Can Vouch</div>
+                                    <div className="col-span-1">Operator</div>
                                     <div className="col-span-2 text-right">Actions</div>
                                 </div>
                                 <div className="divide-y divide-nature-800/60">
@@ -600,6 +601,14 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                             m.standing === 'FROZEN' ||
                                             pubkey.startsWith('frozen-');
 
+                                        const isMemberOperator =
+                                            m.canOperate ||
+                                            m.can_operate ||
+                                            m.isOperator ||
+                                            Array.from(customOperators).some(
+                                                (op) => pubkey === op || (pubkey && op && (pubkey.startsWith(op) || op.startsWith(pubkey)))
+                                            );
+
                                         return (
                                             <div
                                                 key={idx}
@@ -610,7 +619,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                                         : 'hover:bg-nature-900/60'
                                                 }`}
                                             >
-                                                <div className="col-span-5 flex items-center gap-2.5">
+                                                <div className="col-span-4 flex items-center gap-2.5">
                                                     {(() => {
                                                         const avatar = getMemberAvatar(m, profiles);
                                                         if (avatar) {
@@ -713,6 +722,31 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                                         </button>
                                                     )}
                                                 </div>
+                                                <div className="col-span-1 flex items-center">
+                                                    {isMemberOperator ? (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleToggleOperatorMember(pubkey, true);
+                                                            }}
+                                                            title="Click to revoke Operator capability"
+                                                            className="px-1.5 py-0.5 rounded-md bg-purple-900/50 hover:bg-purple-800/80 text-purple-300 text-[10px] font-bold border border-purple-700/60 transition-all hover:scale-105 shrink-0"
+                                                        >
+                                                            🏛️ OPERATOR
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleToggleOperatorMember(pubkey, false);
+                                                            }}
+                                                            title="Click to grant Operator capability (drive Community Treasuries)"
+                                                            className="px-1.5 py-0.5 rounded-md bg-nature-900 hover:bg-nature-800 text-nature-400 hover:text-purple-300 text-[10px] font-semibold border border-nature-800 transition-all hover:scale-105 shrink-0"
+                                                        >
+                                                            + Operator
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 <div className="col-span-2 text-right flex items-center justify-end gap-1.5">
                                                     {isMemberFrozen && (
                                                         <button
@@ -788,8 +822,18 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                             return pk === v || (pk && v && (pk.startsWith(v) || v.startsWith(pk)));
                         })
                     }
+                    isOperator={
+                        selectedMember.canOperate ||
+                        selectedMember.can_operate ||
+                        selectedMember.isOperator ||
+                        Array.from(customOperators).some((op) => {
+                            const pk = selectedMember.publicKey || selectedMember.pubkey || '';
+                            return pk === op || (pk && op && (pk.startsWith(op) || op.startsWith(pk)));
+                        })
+                    }
                     onToggleFreeze={handleToggleFreezeMember}
                     onToggleVouch={(pk, isV) => handleToggleVouchMember(pk, isV)}
+                    onToggleOperator={(pk, isOp) => handleToggleOperatorMember(pk, isOp)}
                     onPrune={(pk) => handlePruneMember(pk)}
                     onClose={() => setSelectedMember(null)}
                 />

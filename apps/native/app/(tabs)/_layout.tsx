@@ -154,7 +154,7 @@ export default function TabLayout() {
                 <Tabs.Screen 
                     name="projects" 
                     options={{ 
-                        title: 'Projects',
+                        title: 'Commons',
                         tabBarIcon: ({ focused }) => <Text style={{ fontSize: 24, transform: [{ scale: focused ? 1.3 : 1 }, { translateY: focused ? -4 : 0 }], opacity: 1, textShadowColor: 'rgba(0,0,0,1)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>{Platform.OS === 'ios' ? '🌱' : '🌳'}</Text> 
                     }} 
                 />

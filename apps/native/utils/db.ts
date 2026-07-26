@@ -1028,6 +1028,8 @@ export async function refreshBalanceFromServer(pubkey: string) {
                 isBlockedFromTrading: !!balData.isBlockedFromTrading,
                 elderVouchedBy: balData.elderVouchedBy ?? null,
                 canVouch: !!balData.canVouch,
+                canOperate: !!balData.canOperate,
+                isTreasury: !!balData.isTreasury,
                 activated: !!balData.activated,
                 hasLiveOffer: !!balData.hasLiveOffer,
                 usableFloor: balData.usableFloor ?? balData.floor ?? floor,
@@ -1066,6 +1068,8 @@ export async function getBalance(pubkey: string) {
     let isBlockedFromTrading = false;
     let elderVouchedBy: string | null = null;
     let canVouch = false;      // this account may hand out the -20/-50/-100 vouch floor
+    let canOperate = false;    // this member may drive community treasuries (Commons operator UI)
+    let isTreasury = false;    // this account IS a community treasury, not a person
     let activated = false;     // has a credit line at all (earned/vouched/granted)
     let hasLiveOffer = false;  // has ≥1 live Offer posted (offer covenant)
     let usableFloor: number | undefined = undefined; // v3: offer-gated usable floor (≤ earned floor)
@@ -1092,6 +1096,8 @@ export async function getBalance(pubkey: string) {
             isBlockedFromTrading = !!parsed.isBlockedFromTrading;
             elderVouchedBy = parsed.elderVouchedBy ?? null;
             canVouch = !!parsed.canVouch;
+            canOperate = !!parsed.canOperate;
+            isTreasury = !!parsed.isTreasury;
             activated = !!parsed.activated;
             hasLiveOffer = !!parsed.hasLiveOffer;
             usableFloor = parsed.usableFloor ?? floor;
@@ -1114,6 +1120,8 @@ export async function getBalance(pubkey: string) {
         isBlockedFromTrading,
         elderVouchedBy,
         canVouch,
+        canOperate,
+        isTreasury,
         activated,
         hasLiveOffer,
         usableFloor: usableFloor ?? floor,
@@ -1698,6 +1706,53 @@ export async function getActiveVotingRound(): Promise<{ id: string; status: stri
     } catch {
         return null;
     }
+}
+
+// ===================== COMMUNITY TREASURIES =====================
+export interface TreasurySummary {
+    publicKey: string; name: string; avatar?: string | null;
+    balance: number; creditLine: number; liveOffers: number;
+}
+
+export async function getTreasuries(): Promise<TreasurySummary[]> {
+    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!rawUrl) return [];
+    const anchorUrl = rawUrl.replace(/\/$/, '');
+    try {
+        const res = await fetch(`${anchorUrl}/api/treasuries`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.treasuries || [];
+    } catch { return []; }
+}
+
+export async function getTreasuryDetail(publicKey: string): Promise<any | null> {
+    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!rawUrl) return null;
+    const anchorUrl = rawUrl.replace(/\/$/, '');
+    try {
+        const res = await fetch(`${anchorUrl}/api/treasury/${encodeURIComponent(publicKey)}`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch { return null; }
+}
+
+// Operator actions — signed as the operator; the treasury id rides the URL path (dodges the
+// requireSignature spoof-guard, which pins body *pubkey fields to the signer).
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
+}
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string }) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/need`, body);
+}
+export async function treasuryApprove(treasury: string, transactionId: string) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/approve`, { transactionId });
+}
+export async function treasuryComplete(treasury: string, transactionId: string) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId });
+}
+export async function treasurySweep(treasury: string, amount: number) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }
 
 export async function voteForProjectApi(projectId: string, votes: number) {

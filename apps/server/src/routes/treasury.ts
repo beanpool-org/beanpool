@@ -89,6 +89,35 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed' }; }
     });
 
+    // Admin (password): post an Offer / Need as a treasury — a bootstrap convenience so a community
+    // can be seeded without an operator's signing key on hand. Operators normally use the signed
+    // /api/treasury/:treasury/{offer,need} routes above; these mirror them behind the admin password.
+    router.post('/api/local/admin/treasury/:treasury/offer', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        const b = (ctx as any).requestBody || {};
+        if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        try {
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
+            if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
+            ctx.body = { success: true, post };
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+    });
+
+    router.post('/api/local/admin/treasury/:treasury/need', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        const b = (ctx as any).requestBody || {};
+        if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        try {
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
+            if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
+            ctx.body = { success: true, post };
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+    });
+
     // ---- Operator (signed member with can_operate) --------------------------------------
     // Post the treasury's recurring Offer (e.g. "a dozen eggs"). Defaults repeatable=true.
     router.post('/api/treasury/:treasury/offer', async (ctx) => {
@@ -97,7 +126,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat, b.lng, b.photos, b.repeatable !== false);
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -111,7 +140,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat, b.lng, b.photos, !!b.repeatable);
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }

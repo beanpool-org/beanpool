@@ -362,9 +362,10 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     // Stored in members.earned_credit (legacy column name). It is a credit-*limit* input only —
     // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
     // the floor but never count as "earned" (governance votes use earned/value only, not grants).
-    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by, vouch_credit, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(publicKey) as any;
+    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by, vouch_credit, COALESCE(credit_frozen, 0) as credit_frozen, is_treasury FROM members WHERE public_key = ?").get(publicKey) as any;
     const grantedCredit = memberRow?.earned_credit || 0;
     const elderVouched = !!memberRow?.elder_vouched_by;
+    const isTreasury = memberRow?.is_treasury === 1;
     // The vouch level's credit floor (25/50/100). A vouch recorded before the level system, or
     // with no stored amount, defaults to the light level.
     const vouchCredit = elderVouched ? (memberRow?.vouch_credit > 0 ? memberRow.vouch_credit : PROTOCOL_CONSTANTS.VOUCH_CREDIT_LIGHT) : 0;
@@ -402,9 +403,10 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     // Trust Model v3: a completed real trade (earnedCredit > 0) opens the floor on its own — no
     // vouch required. Restores the documented behaviour (docs/trust-model-shipped.md §1) that the
     // #15 vouch-gating pass dropped, which left earned-trust members showing "no credit line".
-    const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0;
+    const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0 || isTreasury;
+    const effectiveGranted = isTreasury ? Math.max(200, grantedCredit) : grantedCredit;
     const allowance = (activated && !isCreditFrozen)
-        ? Math.min(c.CREDIT_FLOOR_CAP, vouchCredit + earnedCredit + grantedCredit)
+        ? Math.min(c.CREDIT_FLOOR_CAP, vouchCredit + earnedCredit + effectiveGranted)
         : 0;
 
     // Floor = -(voucher + earned + granted) once activated, clamped so the deepest floor is

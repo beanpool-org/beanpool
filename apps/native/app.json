@@ -26,7 +26,9 @@
         "applinks:melb.beanpool.org",
         "applinks:castlemaine.beanpool.org",
         "applinks:gippsland.beanpool.org",
-        "applinks:eastgippy.beanpool.org"
+        "applinks:eastgippy.beanpool.org",
+        "applinks:bindarrabi.beanpool.org"
+
       ],
       "infoPlist": {
         "UIBackgroundModes": [
@@ -97,7 +99,12 @@
             {
               "scheme": "https",
               "host": "eastgippy.beanpool.org"
+            },
+            {
+              "scheme": "https",
+              "host": "bindarrabi.beanpool.org"
             }
+
           ],
           "category": [
             "BROWSABLE",

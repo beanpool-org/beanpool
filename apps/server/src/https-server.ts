@@ -223,6 +223,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
 // GATED; only the E2E-ciphertext attachment binary is public.
 const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member?
+    /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
     /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
     /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up guardians by callsign
     /^\/api\/recovery\/status\/[^/]+$/,                     // pre-membership: recovering user polls status

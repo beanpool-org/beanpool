@@ -27,7 +27,8 @@ import {
     seedGenesisMember,
     registerMember as registerMemberEngine,
     registerVisitor,
-    updateProfile as updateProfileEngine
+    updateProfile as updateProfileEngine,
+    isCallsignAvailable
 } from './engine/members.js';
 import {
     generateInvite,
@@ -700,6 +701,10 @@ export function updateProfile(publicKey: string, update: any): MemberProfile | n
     return updateProfileEngine(broadcast, publicKey, update);
 }
 
+// Per-node callsign availability (case-insensitive). Pure read — re-exported as-is
+// for the /api/members/callsign-available endpoint and any caller that needs it.
+export { isCallsignAvailable };
+
 // ===================== TRUST STATS =====================
 
 /**
@@ -826,6 +831,7 @@ export interface ViewerTrustProfile {
     joinedAt: string | null;
     lastActiveAt: string | null;
     tier: TierInfo;
+    earnedCredit: number; // pre-existing: returned by getTrustProfileForViewer but was missing from this interface
     stats: TrustStats; // tradeCount, uniquePartners, ageDays
     completionRate: number | null;
     completedTrades: number;

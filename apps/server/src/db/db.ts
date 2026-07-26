@@ -174,6 +174,18 @@ export function initSchema() {
     } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at)`).run(); } catch { }
 
+    // Per-node callsign uniqueness: case-insensitive, excluding 'migrated' members
+    // (they moved away — their name is reclaimable). Guarded on purpose: if a node
+    // still has duplicate callsigns the index BUILD fails, and we must NOT crash
+    // startup over it. We log loudly instead — the app-level check in updateProfile
+    // still enforces new renames; the admin de-dupes and the index builds next boot.
+    // Fresh nodes start empty, so it builds cleanly and enforces at the DB level too.
+    try {
+        db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_members_callsign_unique ON members(lower(callsign)) WHERE status != 'migrated'`).run();
+    } catch (e) {
+        console.error(`[DB] ⚠️  Could not build unique callsign index — this node has duplicate callsigns. De-duplicate the members table and restart to enforce uniqueness at the DB level. App-level rename checks remain active.`, e);
+    }
+
     try {
         db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run();
         db.prepare(`UPDATE post_photos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE updated_at IS NULL`).run();

@@ -12,7 +12,7 @@ import {
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
     vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer,
-    updateProfile, getProfile, getAllProfiles,
+    updateProfile, getProfile, getAllProfiles, isCallsignAvailable,
     getCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
@@ -510,7 +510,22 @@ router.post('/api/profile/update', async (ctx) => {
         ctx.body = { error: 'publicKey is required' };
         return;
     }
-    const profile = updateProfile(activeKey, { avatar, bio, contact, callsign });
+    let profile;
+    try {
+        profile = updateProfile(activeKey, { avatar, bio, contact, callsign });
+    } catch (e: any) {
+        if (e?.message === 'CALLSIGN_TAKEN') {
+            ctx.status = 409;
+            ctx.body = { error: 'callsign_taken', message: 'That name is already taken on this community. Try another.' };
+            return;
+        }
+        if (e?.message === 'CALLSIGN_TOO_SHORT') {
+            ctx.status = 400;
+            ctx.body = { error: 'callsign_too_short', message: 'Your name needs at least 2 characters.' };
+            return;
+        }
+        throw e;
+    }
     if (!profile) {
         ctx.status = 404;
         ctx.body = { error: 'Member not found' };
@@ -920,6 +935,18 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
         joinedAt: r.joined_at,
         avatarUrl: r.avatar_url
     }));
+});
+
+// Callsign availability — powers the wizard's live "✓ available / ✗ taken" hint and
+// validates the fun-name suggestions before they're offered. Case-insensitive,
+// per-node. `?exclude=<pubkey>` lets a rename ignore the caller's own current name.
+router.get('/api/members/callsign-available/:callsign', async (ctx) => {
+    if (!rateLimit(ctx)) return; // throttle enumeration, same as recovery lookup
+    const raw = (ctx.params.callsign || '').trim();
+    const exclude = (ctx.query.exclude as string | undefined) || undefined;
+    const available = raw.length >= 2 && isCallsignAvailable(raw, exclude);
+    ctx.status = 200;
+    ctx.body = { callsign: raw, available, tooShort: raw.length < 2 };
 });
 
 // 2. Submit a recovery request (Signed by NEW pubkey)

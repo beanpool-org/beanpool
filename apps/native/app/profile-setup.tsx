@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
@@ -11,6 +11,7 @@ import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
 import { buildSignedHeaders } from '../utils/crypto';
 import { resolveBundledAvatar } from '../utils/bundled-avatars';
+import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
 import { colors, palette } from '../constants/colors';
 
 type Step = 'name' | 'avatar' | 'guide';
@@ -25,6 +26,15 @@ const STEP_ORDER: Step[] = ['name', 'avatar', 'guide'];
  */
 export default function ProfileSetupScreen() {
     const { identity, setIdentity } = useIdentity();
+    // When launched as the wizard-on-join, `redirect` says where to land after
+    // finishing (or cancelling) — the member has already joined, so there's no
+    // sensible screen to router.back() to. Absent (Settings / gate launches) we
+    // just pop back to wherever we came from.
+    const params = useLocalSearchParams<{ redirect?: string }>();
+    const leaveWizard = () => {
+        if (params.redirect) router.replace(params.redirect as any);
+        else router.back();
+    };
 
     const [step, setStep] = useState<Step>('name');
     const [callsign, setCallsign] = useState(identity?.callsign ?? '');
@@ -32,6 +42,12 @@ export default function ProfileSetupScreen() {
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Per-node callsign availability for the name step. 'idle' before the first
+    // check, 'checking' while a lookup is in flight. Suggestions are populated only
+    // when the typed name is taken.
+    const [nameStatus, setNameStatus] = useState<CallsignStatus | 'checking' | 'idle'>('idle');
+    const [suggestions, setSuggestions] = useState<string[]>([]);
 
     // Seed from the existing profile, and open at the first thing that's missing
     // so someone who only needs a photo isn't walked back through their name.
@@ -57,6 +73,33 @@ export default function ProfileSetupScreen() {
     const nameOk = callsign.trim().length >= 2;
     const stepIndex = STEP_ORDER.indexOf(step);
 
+    // Live per-node availability check while editing the name (debounced). Runs only
+    // on the name step. 'unknown' (node unreachable) never blocks — the server still
+    // enforces uniqueness at publish and we handle its 409 in handleFinish.
+    useEffect(() => {
+        if (step !== 'name') return;
+        const c = callsign.trim();
+        if (c.length < 2) { setNameStatus('too_short'); setSuggestions([]); return; }
+        let cancelled = false;
+        setNameStatus('checking');
+        const t = setTimeout(async () => {
+            const status = await checkCallsignAvailable(c, identity?.publicKey);
+            if (cancelled) return;
+            setNameStatus(status);
+            if (status === 'taken') {
+                const sugg = await suggestCallsigns(c, identity?.publicKey);
+                if (!cancelled) setSuggestions(sugg);
+            } else {
+                setSuggestions([]);
+            }
+        }, 400);
+        return () => { cancelled = true; clearTimeout(t); };
+    }, [callsign, identity?.publicKey, step]);
+
+    // Block "Next" on a taken/too-short/checking name; allow 'available' and also
+    // 'unknown' (offline) so an unreachable node never traps the user.
+    const canProceedName = nameOk && (nameStatus === 'available' || nameStatus === 'unknown');
+
     const goBackStep = () => {
         if (stepIndex <= 0) { router.back(); return; }
         setError(null);
@@ -67,22 +110,14 @@ export default function ProfileSetupScreen() {
         if (!identity || !nameOk || !pendingAvatar) return;
         setLoading(true);
         setError(null);
+        const finalCallsign = callsign.trim();
         try {
-            const finalCallsign = callsign.trim();
-
-            // 1. Name → the stored identity (so the app reflects it immediately).
-            if (finalCallsign !== identity.callsign) {
-                const updated = await updateCallsign(finalCallsign);
-                if (updated) setIdentity(updated);
-            }
-
-            // 2. Name + avatar → local SQLite profile.
-            await updateMemberProfile(identity.publicKey, {
-                callsign: finalCallsign,
-                avatar_url: pendingAvatar,
-            });
-
-            // 3. Publish to the node (best-effort; heals on next sync if offline).
+            // 1. Publish to the node FIRST. Committing the name locally before the
+            //    server accepts it risks a local/server split if the name was taken
+            //    between the live check and now — so a 409 sends the user back to the
+            //    name step (where the effect re-checks and offers fresh suggestions)
+            //    without touching local state.
+            let published = false;
             try {
                 const url = await AsyncStorage.getItem('beanpool_anchor_url');
                 if (url) {
@@ -93,14 +128,32 @@ export default function ProfileSetupScreen() {
                     });
                     const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
                     const res = await fetch(`${url}/api/profile/update`, { method: 'POST', headers, body: bodyString });
-                    if (res.ok) await AsyncStorage.removeItem('pending_profile_sync');
-                    else await AsyncStorage.setItem('pending_profile_sync', 'true');
+                    if (res.status === 409) {
+                        setStep('name');
+                        setError('That name was just taken — please pick another.');
+                        return; // finally clears loading; name-step effect refreshes suggestions
+                    }
+                    published = res.ok;
                 }
             } catch {
-                await AsyncStorage.setItem('pending_profile_sync', 'true');
+                published = false; // offline — commit locally and heal on next sync
             }
 
-            router.back();
+            // 2. Server accepted (or we're offline): commit the name to the stored
+            //    identity and the local SQLite profile.
+            if (finalCallsign !== identity.callsign) {
+                const updated = await updateCallsign(finalCallsign);
+                if (updated) setIdentity(updated);
+            }
+            await updateMemberProfile(identity.publicKey, {
+                callsign: finalCallsign,
+                avatar_url: pendingAvatar,
+            });
+
+            if (published) await AsyncStorage.removeItem('pending_profile_sync');
+            else await AsyncStorage.setItem('pending_profile_sync', 'true');
+
+            leaveWizard();
         } catch (err: any) {
             setError(err?.message || 'Could not save your profile. Try again.');
         } finally {
@@ -137,16 +190,47 @@ export default function ProfileSetupScreen() {
                                 maxLength={32}
                                 autoCapitalize="words"
                             />
+                            {nameOk && nameStatus === 'checking' && (
+                                <Text style={styles.hintMuted}>Checking availability…</Text>
+                            )}
+                            {nameOk && nameStatus === 'available' && (
+                                <Text style={styles.hintOk}>✓ Available on this community</Text>
+                            )}
+                            {nameOk && nameStatus === 'unknown' && (
+                                <Text style={styles.hintMuted}>Couldn't check right now — you can still continue.</Text>
+                            )}
+                            {nameOk && nameStatus === 'taken' && (
+                                <>
+                                    <Text style={styles.hintTaken}>
+                                        ✗ That name's taken here. Pick one of these, or edit your own:
+                                    </Text>
+                                    {suggestions.length > 0 && (
+                                        <View style={styles.suggestRow}>
+                                            {suggestions.map((s) => (
+                                                <Pressable
+                                                    key={s}
+                                                    style={styles.suggestChip}
+                                                    onPress={() => { setError(null); setCallsign(s); }}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`Use the name ${s}`}
+                                                >
+                                                    <Text style={styles.suggestChipText}>{s}</Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                    )}
+                                </>
+                            )}
                             {error && <Text style={styles.error}>{error}</Text>}
                             <Pressable
-                                style={[styles.primaryBtn, !nameOk && styles.disabledBtn]}
-                                disabled={!nameOk}
+                                style={[styles.primaryBtn, !canProceedName && styles.disabledBtn]}
+                                disabled={!canProceedName}
                                 onPress={() => { setError(null); setStep('avatar'); }}
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.primaryBtnText}>Next →</Text>
                             </Pressable>
-                            <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Cancel">
+                            <Pressable style={styles.backBtn} onPress={leaveWizard} accessibilityRole="button" accessibilityLabel="Cancel">
                                 <Text style={styles.backBtnText}>Cancel</Text>
                             </Pressable>
                         </>
@@ -258,4 +342,14 @@ const styles = StyleSheet.create({
     backBtn: { padding: 12, alignItems: 'center', marginTop: 4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
     error: { color: palette.red600 || '#dc2626', fontSize: 13, marginBottom: 12, textAlign: 'center' },
+    // Name-step availability hints
+    hintMuted: { color: colors.text.secondary, fontSize: 13, marginTop: -8, marginBottom: 12 },
+    hintOk: { color: palette.green700 || '#15803d', fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 12 },
+    hintTaken: { color: palette.red600 || '#dc2626', fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 10 },
+    suggestRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
+    suggestChip: {
+        backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong,
+        borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8,
+    },
+    suggestChipText: { color: colors.text.body, fontSize: 14, fontWeight: '600' },
 });

@@ -23,6 +23,7 @@ import { colors, palette } from '../constants/colors';
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
 // rejection rather than crash with an unhandled promise warning.
@@ -50,6 +51,8 @@ export default function WelcomeScreen() {
     const { recheck: recheckNodeStatus } = useNodeStatus();
     const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>('home');
     const [callsign, setCallsign] = useState('');
+    // Fun-name suggestions shown when the chosen first-join name is taken on the node.
+    const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
@@ -335,6 +338,22 @@ export default function WelcomeScreen() {
             }
             setInviterName(check?.inviterCallsign || null);
             setInviteCommunityName(check?.communityName || null);
+
+            // Per-node callsign uniqueness: check against the target node BEFORE we
+            // create the identity or register, so a brand-new member picks a name
+            // that's actually free here instead of being silently renamed on the
+            // server. 'unknown' (node unreachable) falls through — the server still
+            // auto-uniquifies as a backstop. Checked against nodeUrl explicitly since
+            // it isn't the stored anchor yet.
+            const availability = await checkCallsignAvailable(callsign.trim(), undefined, nodeUrl);
+            if (availability === 'taken') {
+                const sugg = await suggestCallsigns(callsign.trim(), undefined, 3, nodeUrl);
+                setCallsignSuggestions(sugg);
+                setError(`"${callsign.trim()}" is already taken in this community. Pick one of the suggestions below, or choose another name.`);
+                setLoading(false);
+                return;
+            }
+            setCallsignSuggestions([]);
 
             await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
 
@@ -1021,7 +1040,7 @@ export default function WelcomeScreen() {
                             placeholder="Your name or nickname"
                             placeholderTextColor={colors.text.muted}
                             value={callsign}
-                            onChangeText={setCallsign}
+                            onChangeText={(t) => { setCallsign(t); if (callsignSuggestions.length) setCallsignSuggestions([]); }}
                             maxLength={32}
                             autoFocus={true}
                             autoCapitalize="words"
@@ -1033,6 +1052,22 @@ export default function WelcomeScreen() {
                         <Text style={styles.callsignTip}>
                             💡 Tip: adding your suburb helps locals find you!
                         </Text>
+
+                        {callsignSuggestions.length > 0 && (
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 }}>
+                                {callsignSuggestions.map((s) => (
+                                    <Pressable
+                                        key={s}
+                                        style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8 }}
+                                        onPress={() => { setCallsign(s); setCallsignSuggestions([]); setError(null); }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Use the name ${s}`}
+                                    >
+                                        <Text style={{ color: colors.text.body, fontSize: 14, fontWeight: '600' }}>{s}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        )}
 
                         {error && (
                             <View style={{ marginBottom: 12 }}>

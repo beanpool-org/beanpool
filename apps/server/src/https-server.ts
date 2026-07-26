@@ -99,6 +99,7 @@ import { createBackupRoutes } from './routes/backup.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
+import { createTreasuryRoutes } from './routes/treasury.js';
 import type { RouteDeps } from './routes/types.js';
 
 
@@ -214,6 +215,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/commons/projects',         // community transparency
     '/api/commons/rounds',           // community transparency
     '/api/crowdfund/projects',       // public crowdfund list
+    '/api/treasuries',               // community transparency: list of treasuries
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
@@ -225,6 +227,7 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member?
     /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
     /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
+    /^\/api\/treasury\/[^/]+$/,                             // community transparency: one treasury's detail
     /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up guardians by callsign
     /^\/api\/recovery\/status\/[^/]+$/,                     // pre-membership: recovering user polls status
     // A2-16: /api/recovery/pending/:guardian is deliberately NOT public — it lists a
@@ -819,6 +822,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createMarketplaceRoutes(deps),
         createMessagingRoutes(deps),
         createCommonsRoutes(deps),
+        createTreasuryRoutes(deps),
     ];
     for (const mod of routeModules) {
         router.use(mod.routes());

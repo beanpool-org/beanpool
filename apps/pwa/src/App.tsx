@@ -201,7 +201,7 @@ export function App() {
     const TABS: { id: Tab; label: string; emoji: string }[] = [
         { id: 'marketplace', label: 'Market', emoji: '🤝' },
         { id: 'map', label: 'Map', emoji: '🗺️' },
-        { id: 'projects', label: 'Projects', emoji: '🌱' },
+        { id: 'projects', label: 'Commons', emoji: '🌱' },
         { id: 'messages', label: 'Chat', emoji: '💬' },
         { id: 'people', label: 'People', emoji: '👥' },
         { id: 'ledger', label: 'Ledger', emoji: '📊' },

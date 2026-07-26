@@ -427,6 +427,10 @@ export interface BalanceInfo {
     activated?: boolean;
     /** True if this member holds the appointed-voucher capability (can hand out the vouch floor). */
     canVouch?: boolean;
+    /** True if this member holds the treasury operator capability (drives the Commons operator UI). */
+    canOperate?: boolean;
+    /** True if this account IS a community treasury (the Commons' trading face), not a person. */
+    isTreasury?: boolean;
     /** True if the member has ≥1 live Offer posted (offer covenant, Gate 2). */
     hasLiveOffer?: boolean;
     /** Trust Model v3 — the floor you may actually reach now = shallower of earned limit & what your live Offers unlock. */
@@ -878,6 +882,43 @@ export async function voteForProject(voterPubkey: string, projectId: string, vot
 
 export async function getGovernanceCredits(pubkey: string): Promise<{ totalCredits: number; usedCredits: number; availableCredits: number }> {
     return request('GET', `/api/commons/my-credits/${encodeURIComponent(pubkey)}`);
+}
+
+// ===================== COMMUNITY TREASURIES =====================
+// A treasury is a real member account (the Commons' trading face for an enterprise, e.g. the eggs).
+export interface Treasury {
+    publicKey: string;
+    name: string;
+    avatar?: string | null;
+    balance: number;
+    creditLine: number;
+    liveOffers: number;
+}
+
+export async function getTreasuries(): Promise<{ treasuries: Treasury[] }> {
+    return request('GET', '/api/treasuries');
+}
+
+export async function getTreasury(publicKey: string): Promise<any> {
+    return request('GET', `/api/treasury/${encodeURIComponent(publicKey)}`);
+}
+
+// Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
+// requireSignature spoof-guard, which pins body *pubkey fields to the signer).
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }): Promise<{ success: boolean; post: any }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
+}
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string }): Promise<{ success: boolean; post: any }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/need`, body);
+}
+export async function treasuryApprove(treasury: string, transactionId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/approve`, { transactionId });
+}
+export async function treasuryComplete(treasury: string, transactionId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId });
+}
+export async function treasurySweep(treasury: string, amount: number): Promise<{ success: boolean; swept: number; balance: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }
 
 export async function getVotingRounds(): Promise<{ rounds: VotingRound[]; activeRound: VotingRound | null }> {

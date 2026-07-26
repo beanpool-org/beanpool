@@ -29,6 +29,8 @@ export interface Member {
     updatedAt?: string | null;
     earnedCredit?: number;
     elderVouchedBy?: string | null;
+    /** This account is a community treasury (the Commons' trading face), not a person. */
+    isTreasury?: boolean;
 }
 
 export interface InviteCode {
@@ -90,6 +92,7 @@ export function rowToMember(row: any): Member {
         updatedAt: row.updated_at || null,
         earnedCredit: row.earned_credit ?? 0,
         elderVouchedBy: row.elder_vouched_by || null,
+        isTreasury: !!row.is_treasury,
     };
 }
 

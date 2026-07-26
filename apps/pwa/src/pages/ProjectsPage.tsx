@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { 
-    getCrowdfundProjects, createCrowdfundProject, pledgeToCrowdfundProject, 
-    type CrowdfundProject, getAllMembers, request 
+import {
+    getCrowdfundProjects, createCrowdfundProject, pledgeToCrowdfundProject,
+    type CrowdfundProject, getAllMembers, request,
+    getTreasuries, type Treasury
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -44,6 +45,7 @@ export function ProjectsPage({ identity }: Props) {
     // Profile Cache
     const [profiles, setProfiles] = useState<Record<string, { callsign: string, homeNodeUrl?: string }>>({});
     const [maxExpiryDays, setMaxExpiryDays] = useState<number>(365);
+    const [treasuries, setTreasuries] = useState<Treasury[]>([]);
 
     const maxDateString = useMemo(() => {
         const d = new Date();
@@ -58,11 +60,13 @@ export function ProjectsPage({ identity }: Props) {
     const fetchProjects = async () => {
         try {
             setLoading(true);
-            const [data, members] = await Promise.all([
+            const [data, members, tres] = await Promise.all([
                 getCrowdfundProjects(),
-                getAllMembers()
+                getAllMembers(),
+                getTreasuries().catch(() => ({ treasuries: [] })), // graceful on older nodes
             ]);
             setProjects(data.projects);
+            setTreasuries(tres.treasuries || []);
             if (data.maxProjectExpiryDays) setMaxExpiryDays(data.maxProjectExpiryDays);
             
             const profs: Record<string, { callsign: string, homeNodeUrl?: string }> = {};
@@ -239,6 +243,30 @@ export function ProjectsPage({ identity }: Props) {
                     )}
                 </div>
             </header>
+
+            {treasuries.length > 0 && (
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
+                    <h2 className="text-white font-bold text-sm mb-2 flex items-center gap-2"><span>🏛️</span> Community Treasuries</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {treasuries.map(t => (
+                            <div key={t.publicKey} className="bg-nature-900 border border-nature-800 rounded-xl p-3 flex items-center gap-3">
+                                {t.avatar ? (
+                                    <img src={t.avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
+                                ) : (
+                                    <div className="w-10 h-10 rounded-full bg-nature-800 flex items-center justify-center">🏛️</div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-white font-semibold text-sm truncate">{t.name}</div>
+                                    <div className="text-nature-400 text-xs">{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</div>
+                                </div>
+                                <div className={`font-bold text-sm ${t.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`} title={t.balance < 0 ? 'Running a deficit on its credit line' : 'In surplus'}>
+                                    {t.balance} 🫘
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {loading ? (
                 <div className="p-8 text-center text-nature-500">Loading projects...</div>

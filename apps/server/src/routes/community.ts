@@ -390,7 +390,8 @@ router.get('/api/community/membership/:publicKey', async (ctx) => {
 });
 
 router.get('/api/community/members', async (ctx) => {
-    ctx.body = getMembers();
+    // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
+    ctx.body = getMembers().filter(m => !m.isTreasury);
 });
 
 router.post('/api/community/register', async (ctx) => {
@@ -1073,7 +1074,7 @@ router.get('/api/members', async (ctx) => {
     // /api/community/info — otherwise clients keep pruned members locally and read as
     // permanently "out of sync" against the node's pruned-excluding member count.
     let allMembers = getMembers()
-        .filter(m => !m.publicKey.startsWith('escrow_') && !m.publicKey.startsWith('project_'));
+        .filter(m => !m.publicKey.startsWith('escrow_') && !m.publicKey.startsWith('project_') && !m.isTreasury);
 
     // Incremental delta: when the client passes ?updatedAfter=<ISO>, return only members
     // who joined or changed their profile (avatar/callsign/bio) since that cursor. This lets

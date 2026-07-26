@@ -99,7 +99,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat, b.lng, b.photos, b.repeatable !== false);
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -112,7 +112,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat, b.lng, b.photos, !!b.repeatable);
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -126,7 +126,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat, b.lng, b.photos, b.repeatable !== false);
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -140,7 +140,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat, b.lng, b.photos, !!b.repeatable);
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }

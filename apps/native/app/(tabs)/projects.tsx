@@ -483,8 +483,8 @@ export default function ProjectsScreen() {
                         {treasuries.length > 0 && (
                             <View style={{ marginBottom: 12 }}>
                                 <Text style={styles.treasuryPanelLabel}>🏛️ Community Treasuries</Text>
-                                {treasuries.map((t: any) => (
-                                    <View key={t.publicKey} style={styles.treasuryCard}>
+                                {treasuries.map((t: any, index: number) => (
+                                    <View key={t.publicKey || `treasury-${index}`} style={styles.treasuryCard}>
                                         {t.avatar ? (
                                             <Image source={{ uri: t.avatar }} style={styles.treasuryAvatar} />
                                         ) : (

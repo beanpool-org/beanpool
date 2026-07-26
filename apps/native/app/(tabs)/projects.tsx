@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, SafeAreaView, Image, Alert, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { getProjects, getBalance, voteForProjectApi, getActiveVotingRound } from '../../utils/db';
+import { getProjects, getBalance, voteForProjectApi, getActiveVotingRound, getTreasuries } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
@@ -20,6 +20,7 @@ export default function ProjectsScreen() {
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     const [activeRound, setActiveRound] = useState<any>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
+    const [treasuries, setTreasuries] = useState<any[]>([]);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
@@ -27,6 +28,17 @@ export default function ProjectsScreen() {
         headerInfo: { marginBottom: 16 },
         headerTitle: { fontSize: 24, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.5, marginBottom: 8 },
         headerDesc: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
+        treasuryPanelLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+        treasuryCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 12, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
+        treasuryAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface.subtle },
+        treasuryAvatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+        treasuryName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
+        treasuryMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
+        treasuryBalance: { fontSize: 14, fontWeight: '800' },
+        treasuryBalancePos: { color: colors.brand.primary },
+        treasuryBalanceNeg: { color: colors.feedback.warning.solid },
+        operatorBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand.tint, borderRadius: 10, padding: 8, marginTop: 2 },
+        operatorBadgeText: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', flex: 1 },
         govCreditsBanner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.indigo100, padding: 12, borderRadius: 14, marginBottom: 12, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.indigo200 },
         govCreditsLabel: { fontSize: 13, color: theme === 'dark' ? colors.text.heading : palette.indigo600, fontWeight: '600' },
         govCreditsAmount: { fontSize: 16, color: theme === 'dark' ? colors.brand.primary : palette.indigo800, fontWeight: '800', fontFamily: 'Courier' },
@@ -128,6 +140,7 @@ export default function ProjectsScreen() {
                 setIdentity(id);
                 if (id?.publicKey) {
                     getBalance(id.publicKey).then(setBalanceState).catch(console.error);
+                    getTreasuries().then(setTreasuries).catch(() => {});
                 }
             }
         });
@@ -465,6 +478,33 @@ export default function ProjectsScreen() {
                                 <Text style={styles.statCardAmount} numberOfLines={1}>{balanceState.earnedCredit || 0}</Text>
                             </View>
                         </View>
+
+                        {/* Community Treasuries — the Commons' trading accounts (eggs, etc.) */}
+                        {treasuries.length > 0 && (
+                            <View style={{ marginBottom: 12 }}>
+                                <Text style={styles.treasuryPanelLabel}>🏛️ Community Treasuries</Text>
+                                {treasuries.map((t: any) => (
+                                    <View key={t.publicKey} style={styles.treasuryCard}>
+                                        {t.avatar ? (
+                                            <Image source={{ uri: t.avatar }} style={styles.treasuryAvatar} />
+                                        ) : (
+                                            <View style={[styles.treasuryAvatar, styles.treasuryAvatarPlaceholder]}><Text style={{ fontSize: 18 }}>🏛️</Text></View>
+                                        )}
+                                        <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
+                                            <Text style={styles.treasuryName} numberOfLines={1}>{t.name}</Text>
+                                            <Text style={styles.treasuryMeta}>{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</Text>
+                                        </View>
+                                        <Text style={[styles.treasuryBalance, t.balance < 0 ? styles.treasuryBalanceNeg : styles.treasuryBalancePos]}>{t.balance} 🫘</Text>
+                                    </View>
+                                ))}
+                                {balanceState.canOperate && (
+                                    <View style={styles.operatorBadge}>
+                                        <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
+                                        <Text style={styles.operatorBadgeText}>You can operate treasuries — post their offers & pay tenders</Text>
+                                    </View>
+                                )}
+                            </View>
+                        )}
 
                         {/* Active round banner / no-round note */}
                         {activeRound ? (

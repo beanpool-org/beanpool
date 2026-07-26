@@ -33,11 +33,14 @@ const FUN_WORDS = [
 export async function checkCallsignAvailable(
     callsign: string,
     excludePublicKey?: string,
+    anchorUrlOverride?: string,
 ): Promise<CallsignStatus> {
     const c = callsign.trim();
     if (c.length < 2) return 'too_short';
     try {
-        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        // First-join checks the target node before its URL is stored as the active
+        // anchor, so callers can pass it explicitly; otherwise use the active node.
+        const anchorUrl = anchorUrlOverride || await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return 'unknown';
         const qs = excludePublicKey ? `?exclude=${encodeURIComponent(excludePublicKey)}` : '';
         const res = await fetch(`${anchorUrl}/api/members/callsign-available/${encodeURIComponent(c)}${qs}`);
@@ -59,6 +62,7 @@ export async function suggestCallsigns(
     base: string,
     excludePublicKey?: string,
     count = 3,
+    anchorUrlOverride?: string,
 ): Promise<string[]> {
     const clean = base.trim().replace(/\s+/g, ' ');
     if (clean.length < 1) return [];
@@ -69,7 +73,7 @@ export async function suggestCallsigns(
     const checked = await Promise.all(
         candidates.map(async (cand) => ({
             cand,
-            ok: (await checkCallsignAvailable(cand, excludePublicKey)) === 'available',
+            ok: (await checkCallsignAvailable(cand, excludePublicKey, anchorUrlOverride)) === 'available',
         })),
     );
     return checked.filter((r) => r.ok).map((r) => r.cand).slice(0, count);

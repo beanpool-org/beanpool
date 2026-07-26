@@ -67,11 +67,15 @@ function uniquifyCallsign(callsign: string, excludePublicKey?: string): string {
     const base = callsign.trim();
     if (isCallsignAvailable(base, excludePublicKey)) return base;
     for (let i = 2; i < 1000; i++) {
-        const cand = `${base.slice(0, 28)}${i}`;
+        const suffix = String(i);
+        // Trim AFTER slicing: slicing a long base can land on a space, which would
+        // otherwise produce "Alex Smith 2". Cap so base+suffix never exceeds 32.
+        const cand = `${base.slice(0, 32 - suffix.length).trim()}${suffix}`;
         if (isCallsignAvailable(cand, excludePublicKey)) return cand;
     }
     // Pathological fallback — 998 variants all taken. Suffix keeps it unique.
-    return `${base.slice(0, 22)}${Date.now().toString().slice(-8)}`;
+    const suffix = Date.now().toString().slice(-8);
+    return `${base.slice(0, 32 - suffix.length).trim()}${suffix}`;
 }
 
 /**

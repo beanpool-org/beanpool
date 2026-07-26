@@ -66,15 +66,22 @@ export async function suggestCallsigns(
 ): Promise<string[]> {
     const clean = base.trim().replace(/\s+/g, ' ');
     if (clean.length < 1) return [];
-    // Sample a handful of words (shuffled) and check them concurrently rather than
-    // walking the whole list one round-trip at a time.
-    const sample = [...FUN_WORDS].sort(() => Math.random() - 0.5).slice(0, 8);
-    const candidates = sample.map((w) => `${clean} ${w}`.slice(0, 32));
-    const checked = await Promise.all(
-        candidates.map(async (cand) => ({
-            cand,
-            ok: (await checkCallsignAvailable(cand, excludePublicKey, anchorUrlOverride)) === 'available',
-        })),
-    );
-    return checked.filter((r) => r.ok).map((r) => r.cand).slice(0, count);
+    const candidates = [...FUN_WORDS]
+        .sort(() => Math.random() - 0.5)
+        .map((w) => `${clean} ${w}`.slice(0, 32));
+    // Check in small chunks rather than one wide burst, and stop as soon as we have
+    // enough free names — a single 8-wide Promise.all can trip the node's per-IP
+    // rate limiter (429), especially alongside the live typing check.
+    const available: string[] = [];
+    for (let i = 0; i < candidates.length && available.length < count; i += 3) {
+        const chunk = candidates.slice(i, i + 3);
+        const results = await Promise.all(
+            chunk.map(async (cand) => ({
+                cand,
+                ok: (await checkCallsignAvailable(cand, excludePublicKey, anchorUrlOverride)) === 'available',
+            })),
+        );
+        for (const r of results) if (r.ok) available.push(r.cand);
+    }
+    return available.slice(0, count);
 }

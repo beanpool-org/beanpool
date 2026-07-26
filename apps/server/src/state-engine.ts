@@ -327,6 +327,14 @@ export function initStateEngine(): void {
         console.log(`🏛️ Commons Pool account seeded (starting from 0)`);
     }
 
+    // Community treasuries are real members but, like the Commons pool, are exempt from demurrage.
+    // Re-register their exemptions in the freshly-loaded in-memory ledger on every boot.
+    try {
+        const treasuries = db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as any[];
+        for (const t of treasuries) ledger.setDecayExempt(t.public_key);
+        if (treasuries.length > 0) console.log(`🏛️ Registered ${treasuries.length} treasury account(s) as demurrage-exempt`);
+    } catch (e) { console.warn('[Treasury] Failed to register demurrage exemptions:', e); }
+
     // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes)
     setInterval(() => {
         try { persistDecayEvents(); } catch (e) { console.warn('[Ledger] Failed to persist decay events:', e); }
@@ -995,7 +1003,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; isTreasury: boolean } {
     const account = ledger.getAccount(publicKey);
     const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
     const balance = Math.round(account.balance * 100) / 100;
@@ -1016,6 +1024,10 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         // canVouch: this member holds the appointed-voucher capability (drives the client vouch UI).
         activated,
         canVouch: canVouch(publicKey),
+        // canOperate: this member may drive community treasuries (drives the Commons-tab operator UI).
+        canOperate: canOperate(publicKey),
+        // isTreasury: this account IS a community treasury (the Commons' trading face), not a person.
+        isTreasury: !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury,
     };
 }
 
@@ -1262,6 +1274,18 @@ export function canVouch(publicKey: string): boolean {
     if (publicKey === getAdminPubkey()) return true;
     const row = db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(publicKey) as any;
     return !!row?.can_vouch;
+}
+
+/**
+ * Does this member hold the treasury operator capability? Admin-granted (members.can_operate, set
+ * via adminSetOperator), plus the system admin who always holds it. Lets the member drive a
+ * community treasury — post its offers/needs and approve/release its escrow — from the Commons tab.
+ * Distinct from the 'Steward' tier (a cosmetic badge) and from node role (replication topology).
+ */
+export function canOperate(publicKey: string): boolean {
+    if (publicKey === getAdminPubkey()) return true;
+    const row = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(publicKey) as any;
+    return !!row?.can_operate;
 }
 
 /**
@@ -2287,6 +2311,61 @@ export function adminSetVoucher(publicKey: string, granted: boolean): { ok: true
     db.prepare("UPDATE members SET can_vouch=? WHERE public_key=?").run(granted ? 1 : 0, publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
+}
+
+/**
+ * Grant or revoke the treasury operator capability. Admin-only; mirrors adminSetVoucher.
+ * Toggling can_operate mints no beans and changes no floors. Idempotent.
+ */
+export function adminSetOperator(publicKey: string, granted: boolean): { ok: true } {
+    if (!getMember(publicKey)) throw new Error('Member not found');
+    db.prepare("UPDATE members SET can_operate=? WHERE public_key=?").run(granted ? 1 : 0, publicKey);
+    broadcast({ type: 'profile_updated', publicKey });
+    return { ok: true };
+}
+
+/**
+ * Create a community treasury — a real member account that is the Commons' trading face for an
+ * enterprise: it authors the enterprise's offers/needs and settles escrow, but (unlike a person)
+ * is exempt from demurrage (its held balance doesn't erode), granted a bounded credit line so it
+ * can run the enterprise at a deficit (repaid by income — and only while it keeps ≥1 live Offer,
+ * the "offer covenant"), and flagged is_treasury=1 so it stays out of the member directory.
+ * Balance-safe: mints no beans (creditLine is a borrowing *limit*, capped at CREDIT_FLOOR_CAP). A
+ * keypair is generated so an operator can load the treasury identity onto a device later; day to
+ * day it is driven server-side through operator-authenticated routes.
+ */
+export function createTreasury(name: string, avatar: string, creditLine = 0): { publicKey: string } {
+    const trimmed = (name || '').trim();
+    if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
+    if (!avatar) throw new Error('Treasury needs an avatar image');
+    if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status!='migrated'").get(trimmed)) {
+        throw new Error('That name is already taken');
+    }
+    const line = Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.round(creditLine)));
+
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
+        publicKeyEncoding: { type: 'spki', format: 'pem' },
+        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    const pubKeyHex = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    const privKeyHex = crypto.createPrivateKey(privateKey).export({ type: 'pkcs8', format: 'der' }).subarray(-32).toString('hex');
+
+    db.transaction(() => {
+        // invited_by/invite_code left NULL: a treasury is system-created, it has no inviter
+        // (and invited_by is an FK to members — 'genesis' is not itself a member row).
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit)
+                    VALUES (?, ?, ?, ?, 'active', 1, ?)`)
+            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line);
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)`).run(`treasury_privkey_${pubKeyHex}`, privKeyHex);
+    })();
+
+    ledger.initializeGenesisAccount(pubKeyHex);
+    ledger.setDecayExempt(pubKeyHex);
+    broadcast({ type: 'member_joined', member: getMember(pubKeyHex) });
+    broadcast({ type: 'treasury_created', publicKey: pubKeyHex, name: trimmed });
+    console.log(`🏛️ Treasury created: "${trimmed}" (${pubKeyHex.substring(0, 12)}…) creditLine=${line}`);
+    return { publicKey: pubKeyHex };
 }
 
 export function adminDeletePost(postId: string) {

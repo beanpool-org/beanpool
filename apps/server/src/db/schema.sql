@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS members (
     vouch_credit REAL DEFAULT 0,
     -- Hard credit freeze: forced 0 floor when set by admin.
     credit_frozen INTEGER DEFAULT 0,
+    -- Community treasury: this "member" is a community-owned account (the Commons' trading
+    -- face) — it authors an enterprise's offers/needs and settles escrow, but is exempt from
+    -- demurrage and kept out of the member directory. Set once by createTreasury.
+    is_treasury INTEGER DEFAULT 0,
+    -- Operator capability (treasury steward). Admin-granted like can_vouch: lets this member
+    -- drive a treasury (post its offers/needs, approve/release its escrow) from the Commons tab.
+    -- Named 'operate' to dodge the 'Steward' tier and 'node role' (topology) name collisions.
+    can_operate INTEGER DEFAULT 0,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -357,7 +365,7 @@ CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
-    elder_vouched_by, can_vouch, vouch_credit, credit_frozen, joined_at, public_key
+    elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

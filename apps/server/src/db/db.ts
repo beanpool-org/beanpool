@@ -99,6 +99,10 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN vouch_credit REAL DEFAULT 0`).run(); } catch { }
     // Hard credit freeze: forced 0 floor when set by admin. Also added before schema.sql for the trigger whitelist.
     try { db.prepare(`ALTER TABLE members ADD COLUMN credit_frozen INTEGER DEFAULT 0`).run(); } catch { }
+    // Community treasury + operator capability. Added BEFORE schema.sql exec so the re-created
+    // members_touch_updated_at trigger (which now whitelists them) compiles on already-live DBs.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN is_treasury INTEGER DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN can_operate INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run(); } catch { }

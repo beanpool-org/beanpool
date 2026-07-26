@@ -37,6 +37,10 @@ export class LedgerManager {
     private readonly DEFAULT_CREDIT_LIMIT = -100; // Legacy fallback — callers should pass dynamic floor
     private readonly EPOCH_MS = 24 * 60 * 60 * 1000; // 24 hours
     private readonly MAX_PENDING_DECAY_EVENTS = 10_000; // backstop if the host never drains
+    // Community treasury accounts are real members (so they can trade in the marketplace)
+    // but, like COMMONS_POOL, are exempt from demurrage so their working balance doesn't
+    // erode. Populated by the host at boot from `members WHERE is_treasury=1`, and on create.
+    private readonly decayExemptIds = new Set<string>();
 
     constructor(initialAccounts?: LedgerAccount[]) {
         this.accounts = new Map();
@@ -80,6 +84,17 @@ export class LedgerManager {
     }
 
     /**
+     * Mark an account as exempt from demurrage decay (in addition to the synthetic
+     * escrow_/project_/COMMONS_POOL wallets). Used for community treasury members —
+     * they trade as normal members but their held balance must not erode. Idempotent.
+     * Survives loadState() (exemptions are host-owned, not part of ledger snapshots).
+     */
+    setDecayExempt(id: string, exempt = true): void {
+        if (exempt) this.decayExemptIds.add(id);
+        else this.decayExemptIds.delete(id);
+    }
+
+    /**
      * Formal Genesis implementation for a new account.
      * Ensures an account starts with 0 balance and the Mutual Credit architecture.
      */
@@ -114,7 +129,7 @@ export class LedgerManager {
         const epochsPassed = currentEpoch - account.lastDemurrageEpoch;
 
         // Exempt synthetic wallets (escrow, project, commons pool) from demurrage decay
-        const isExempt = account.id.startsWith('escrow_') || account.id.startsWith('project_') || account.id === 'COMMONS_POOL';
+        const isExempt = this.decayExemptIds.has(account.id) || account.id.startsWith('escrow_') || account.id.startsWith('project_') || account.id === 'COMMONS_POOL';
 
         if (epochsPassed <= 0 || account.balance <= 0 || isExempt) {
             // Only positive, non-exempt balances decay

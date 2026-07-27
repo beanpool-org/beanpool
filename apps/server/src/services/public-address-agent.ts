@@ -20,8 +20,11 @@ import { claimAddress, addressStatus } from './registrar-client.js';
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const TOKEN_FILE = path.join(DATA_DIR, 'tunnel-token'); // the cloudflared sidecar reads this
 
-const slug = (s: string | null): string =>
-    (s || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+const slug = (s: string | null): string => {
+    const cleaned = (s || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+    if (!cleaned) return '';                                   // empty → desiredName() warns to set a name
+    return cleaned.length < 3 ? `${cleaned}-node` : cleaned;   // NAME_RE requires ≥3 chars
+};
 
 const desiredName = (): string =>
     (process.env.PUBLIC_ADDRESS_NAME || '').toLowerCase().trim() || slug(getLocalConfig().communityName);

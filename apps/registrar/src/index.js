@@ -58,6 +58,9 @@ async function handleClaim(request, env, bodyText) {
     const existing = await db.getAllocation(env, name);
     if (existing && existing.status !== 'revoked' && existing.node_pubkey !== pubkey)
         return json({ error: 'name taken' }, 409);
+    // Re-claim (same node re-registering, or a revoked name being re-taken): tear down any old CF
+    // resources first, else provision() orphans them and collides on the duplicate tunnel name.
+    if (existing && (existing.tunnel_id || existing.dns_record_id)) await deprovision(env, existing);
 
     const now = nowS();
     const hostname = `${name}.${env.BASE_DOMAIN}`;
@@ -179,24 +182,29 @@ async function attestOne(env, a) {
     return 'mismatch';
 }
 
+async function handleAttest(env, a, limit) {
+    const r = await attestOne(env, a);
+    if (r === 'ok') {
+        await db.updateAllocation(env, a.name, { attest_fails: 0, last_attest_at: nowS() });
+    } else if (r === 'mismatch') {
+        const fails = (a.attest_fails || 0) + 1;
+        if (fails >= limit) {
+            await deprovision(env, a);
+            await db.updateAllocation(env, a.name, { status: 'revoked', attest_fails: fails });
+        } else {
+            await db.updateAllocation(env, a.name, { attest_fails: fails });
+        }
+    }
+    // 'unverified' (offline/ambiguous): do nothing — never auto-revoke a node just for being down.
+    // last_attest_at stays old, which the admin console surfaces as "unverified since …" for review.
+}
+
 async function attestSweep(env) {
     const limit = parseInt(env.ATTEST_FAIL_LIMIT || '2', 10);   // consecutive MISMATCHES before revoke
     const live = await db.listByStatus(env, 'live');
-    for (const a of live) {
-        const r = await attestOne(env, a);
-        if (r === 'ok') {
-            await db.updateAllocation(env, a.name, { attest_fails: 0, last_attest_at: nowS() });
-        } else if (r === 'mismatch') {
-            const fails = (a.attest_fails || 0) + 1;
-            if (fails >= limit) {
-                await deprovision(env, a);
-                await db.updateAllocation(env, a.name, { status: 'revoked', attest_fails: fails });
-            } else {
-                await db.updateAllocation(env, a.name, { attest_fails: fails });
-            }
-        }
-        // 'unverified' (offline/ambiguous): do nothing — never auto-revoke a node just for being down.
-        // last_attest_at stays old, which the admin console surfaces as "unverified since …" for review.
+    const BATCH = 10;                                           // bounded concurrency — don't hit the cron's wall-clock/subrequest limits at scale
+    for (let i = 0; i < live.length; i += BATCH) {
+        await Promise.all(live.slice(i, i + BATCH).map((a) => handleAttest(env, a, limit)));
     }
 }
 

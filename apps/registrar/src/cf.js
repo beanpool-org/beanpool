@@ -40,8 +40,9 @@ export const routeHostname = (env, label, tunnelId) =>
         type: 'CNAME', name: label, content: `${tunnelId}.cfargotunnel.com`, proxied: true,
     });
 
+// cascade=true also tears down active connections/configs — a live tunnel won't delete otherwise.
 export const deleteTunnel = (env, id) =>
-    cf(env, 'DELETE', `/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel/${id}`);
+    cf(env, 'DELETE', `/accounts/${env.CF_ACCOUNT_ID}/cfd_tunnel/${id}?cascade=true`);
 
 // --- Direct mode (Case B) ---
 export const createARecord = (env, label, ip, proxied = true) =>

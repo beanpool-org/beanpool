@@ -65,6 +65,7 @@
             if (tabName === 'network') {
                 loadGatewayConfig();
                 loadNodeConfig();
+                loadPublicAddress();
             }
             if (tabName === 'system') {
                 loadVersionInfo();
@@ -113,6 +114,91 @@
 
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        // ======================== PUBLIC ADDRESS (node DNS registrar) ========================
+        async function loadPublicAddress() {
+            if (!document.getElementById('pubaddr-display')) return;
+            try {
+                const res = await fetch(`${API}/admin/public-address/status?password=${encodeURIComponent(authToken)}`, {
+                    headers: { 'X-Admin-Password': authToken }
+                });
+                const d = await res.json().catch(() => ({}));
+                renderPublicAddress(res.ok ? d : { status: 'error', error: d.error });
+            } catch (e) {
+                renderPublicAddress({ status: 'error', error: 'offline' });
+            }
+        }
+
+        function renderPublicAddress(d) {
+            const display = document.getElementById('pubaddr-display');
+            const tokenRow = document.getElementById('pubaddr-token-row');
+            const claimForm = document.getElementById('pubaddr-claim-form');
+            const offlineBtn = document.getElementById('pubaddr-offline-btn');
+            if (!display) return;
+            tokenRow.style.display = 'none';
+            claimForm.style.display = 'none';
+            offlineBtn.style.display = 'none';
+
+            if (d.status === 'live') {
+                display.innerHTML = `🟢 <strong style="color:#34d399;">Live</strong> at <a href="https://${esc(d.hostname)}" target="_blank" style="color:#38bdf8;">${esc(d.hostname)}</a> <span style="color:#64748b;">(${esc(d.mode || 'tunnel')})</span>`;
+                offlineBtn.style.display = '';
+                if (d.tunnelToken) {
+                    tokenRow.style.display = '';
+                    document.getElementById('pubaddr-token').value = d.tunnelToken;
+                }
+            } else if (d.status === 'pending') {
+                display.innerHTML = `⏳ <strong style="color:#fbbf24;">Awaiting approval</strong> for <strong>${esc(d.name || '')}.beanpool.org</strong>`;
+                offlineBtn.style.display = '';
+            } else if (d.status === 'none') {
+                display.innerHTML = `<span style="color:#94a3b8;">No public address yet. Set <code>PUBLIC_ADDRESS_NAME</code> on the node, or claim one below.</span>`;
+                claimForm.style.display = '';
+            } else {
+                display.innerHTML = `<span style="color:#f87171;">Couldn't reach the registrar${d.error ? ' — ' + esc(d.error) : ''}.</span>`;
+                claimForm.style.display = '';
+            }
+        }
+
+        document.getElementById('pubaddr-claim-btn')?.addEventListener('click', async () => {
+            const name = document.getElementById('pubaddr-name').value.trim().toLowerCase();
+            const mode = document.getElementById('pubaddr-mode').value;
+            if (!name) { showStatus('pubaddr-status', 'Enter a name', 'error'); return; }
+            showStatus('pubaddr-status', 'Claiming…', 'info');
+            try {
+                const res = await fetch(`${API}/admin/public-address/claim`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: authToken, name, mode })
+                });
+                const d = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    showStatus('pubaddr-status', d.status === 'live' ? '🟢 Live!' : '⏳ Claimed — awaiting approval', 'success');
+                    loadPublicAddress();
+                } else showStatus('pubaddr-status', d.error || 'Claim failed', 'error');
+            } catch (e) { showStatus('pubaddr-status', 'Claim failed', 'error'); }
+        });
+
+        document.getElementById('pubaddr-offline-btn')?.addEventListener('click', async () => {
+            if (!confirm('Release this node’s public address and take it offline?')) return;
+            showStatus('pubaddr-status', 'Releasing…', 'info');
+            try {
+                const res = await fetch(`${API}/admin/public-address/offline`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: authToken })
+                });
+                const d = await res.json().catch(() => ({}));
+                if (res.ok) { showStatus('pubaddr-status', 'Released.', 'success'); loadPublicAddress(); }
+                else showStatus('pubaddr-status', d.error || 'Failed', 'error');
+            } catch (e) { showStatus('pubaddr-status', 'Failed', 'error'); }
+        });
+
+        document.getElementById('pubaddr-token-eye')?.addEventListener('click', () => {
+            const inp = document.getElementById('pubaddr-token');
+            inp.type = inp.type === 'password' ? 'text' : 'password';
+        });
+        document.getElementById('pubaddr-token-copy')?.addEventListener('click', () => {
+            const inp = document.getElementById('pubaddr-token');
+            navigator.clipboard?.writeText(inp.value);
+            showStatus('pubaddr-status', 'Token copied', 'success');
         });
 
         // Apply initial tab (default: identity)

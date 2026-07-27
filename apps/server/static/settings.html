@@ -937,6 +937,51 @@
                 </div>
             </div>
 
+            <!-- Public Address (node DNS registrar) -->
+            <div class="glass" data-tab="network" style="margin-top: 1rem;">
+                <h3>🌐 Public Address</h3>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+                    A memorable <code>&lt;name&gt;.beanpool.org</code> address so invites deep-link and members can find this node.
+                    Usually set once with the <code>PUBLIC_ADDRESS_NAME</code> env var — this panel shows the result.
+                </p>
+
+                <div id="pubaddr-display" style="font-size: 0.85rem; color:#94a3b8; margin-bottom: 1rem;">Loading…</div>
+
+                <!-- token reveal (only when live via tunnel) -->
+                <div id="pubaddr-token-row" class="field" style="display:none; margin-bottom:1rem;">
+                    <label>Tunnel token <span style="color:#64748b; font-weight:normal;">— keep secret; the connector uses this</span></label>
+                    <div class="row" style="gap:0.5rem;">
+                        <input type="password" id="pubaddr-token" readonly style="flex:1; font-family:monospace; font-size:0.72rem;">
+                        <button class="btn" id="pubaddr-token-eye" type="button" style="padding:0.4rem 0.7rem;">👁️ Reveal</button>
+                        <button class="btn" id="pubaddr-token-copy" type="button" style="padding:0.4rem 0.7rem;">📋 Copy</button>
+                    </div>
+                </div>
+
+                <!-- manual claim (fallback when not set via env) -->
+                <div id="pubaddr-claim-form" style="display:none;">
+                    <hr>
+                    <h3 style="font-size:0.85rem;">Claim an address</h3>
+                    <div class="row">
+                        <div class="field" style="margin-bottom:0; flex:1;">
+                            <label>Name</label>
+                            <input type="text" id="pubaddr-name" placeholder="e.g. cairns" maxlength="32">
+                        </div>
+                        <div class="field" style="margin-bottom:0;">
+                            <label>Reach via</label>
+                            <select id="pubaddr-mode">
+                                <option value="tunnel" selected>🛡️ Tunnel (recommended)</option>
+                                <option value="direct">🌐 Direct (public IP)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" id="pubaddr-claim-btn" style="margin-top:0.75rem;">Go public</button>
+                </div>
+
+                <button class="btn" id="pubaddr-offline-btn" type="button" style="display:none; margin-top:0.5rem; color:#f87171; border-color:rgba(239,68,68,0.2); background:rgba(239,68,68,0.05);">Take offline</button>
+
+                <div class="status-msg" id="pubaddr-status"></div>
+            </div>
+
             <!-- Gateway Self-Protection -->
             <div class="glass" data-tab="network" style="margin-top: 1rem;">
                 <h3>🛡️ Gateway Configuration (Self-Protection)</h3>
@@ -1793,7 +1838,7 @@
         </div>
     </div>
 
-    <script src="settings.js?v=1.0.37"></script>
+    <script src="settings.js?v=1.0.38"></script>
 </body>
 
 </html>

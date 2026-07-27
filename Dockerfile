@@ -16,6 +16,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/beanpool-core/package.json ./packages/beanpool-core/
 COPY packages/beanpool-engine/package.json ./packages/beanpool-engine/
 COPY apps/pwa/package.json ./apps/pwa/
+COPY apps/manager/package.json ./apps/manager/
 COPY apps/server/package.json ./apps/server/
 
 # Copy patches needed by pnpm install
@@ -31,12 +32,14 @@ COPY . .
 #   1. Core protocol library (shared by both PWA and server)
 #   2. Engine (db-backed shared node logic; depends on core, used by server)
 #   3. PWA (Vite → outputs to apps/server/public/)
-#   4. Server (tsc → outputs to apps/server/dist/)
+#   4. Manager (Vite → outputs to apps/server/public/manager/)
+#   5. Server (tsc → outputs to apps/server/dist/)
 RUN cd packages/beanpool-core && pnpm run build
 RUN cd packages/beanpool-engine && pnpm run build
 RUN cd apps/pwa && pnpm run build
 # PWA build clears apps/server/public/ (emptyOutDir), so copy settings files from static/
 COPY apps/server/static/* /app/apps/server/public/
+RUN cd apps/manager && pnpm run build
 RUN cd apps/server && pnpm run build
 
 # Multi-stage Docker build for BeanPool node

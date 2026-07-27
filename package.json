@@ -5,6 +5,7 @@
   "scripts": {
     "build": "dotenv -- turbo run build",
     "dev": "dotenv -- turbo run dev",
+    "manager": "pnpm --filter @beanpool/manager dev",
     "lint": "turbo run lint",
     "clean": "turbo run clean"
   },

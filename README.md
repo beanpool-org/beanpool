@@ -263,14 +263,16 @@ docker compose up -d
 
 - **PWA:** `https://localhost:8443/` — community map, marketplace, messaging, ledger
 - **Landing Page:** `http://localhost:8080/` — community welcome hub (3 paths: join, transfer, recover)
+- **Fleet Manager:** `http://localhost:5173/` — multi-node control plane & operator dashboard (`pnpm manager`)
 - **P2P Mesh:** TCP `:4001` / WS `:4002`
 
 > 📖 For detailed setup instructions (including Let's Encrypt, no-domain options, and High-Availability mirrors), see [apps/server/README.md](apps/server/README.md).
 
-### Development
+### Development & Fleet Management
 
 ```bash
 pnpm install
+pnpm manager                               # Launch Fleet Manager Dashboard (http://localhost:5173)
 cd packages/beanpool-core && pnpm build   # Build shared core first
 cd apps/pwa && pnpm build                 # Build PWA → apps/server/public/
 cd apps/server && pnpm dev                # Start BeanPool Node with hot reload

@@ -1,0 +1,16 @@
+{
+  "name": "beanpool-registrar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker that leases <name>.beanpool.org to community nodes (tunnel/direct), with attestation.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create beanpool-registrar",
+    "db:init": "wrangler d1 execute beanpool-registrar --file schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3"
+  }
+}

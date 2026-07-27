@@ -42,6 +42,7 @@ import { registerHandshakeHandler } from './handshake.js';
 import { registerFederationHandler } from './federation-protocol.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, promotionSanityCheck } from './state-engine.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
+import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 
@@ -113,6 +114,9 @@ async function main() {
     // public listing of its own; it mirrors the primary, it isn't a joinable node).
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
+        // Step 10.5: Auto public-address (opt-in via PUBLIC_ADDRESS_* env). Claims <name>.beanpool.org
+        // from the registrar on boot and writes the tunnel token for the cloudflared sidecar. No-op unless enabled.
+        initPublicAddress();
     }
 
     const hostname = process.env.CF_RECORD_NAME ?? 'beanpool.local';

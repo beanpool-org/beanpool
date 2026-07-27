@@ -120,7 +120,7 @@
         async function loadPublicAddress() {
             if (!document.getElementById('pubaddr-display')) return;
             try {
-                const res = await fetch(`${API}/admin/public-address/status?password=${encodeURIComponent(authToken)}`, {
+                const res = await fetch(`${API}/admin/public-address/status`, {
                     headers: { 'X-Admin-Password': authToken }
                 });
                 const d = await res.json().catch(() => ({}));
@@ -163,6 +163,10 @@
             const name = document.getElementById('pubaddr-name').value.trim().toLowerCase();
             const mode = document.getElementById('pubaddr-mode').value;
             if (!name) { showStatus('pubaddr-status', 'Enter a name', 'error'); return; }
+            if (!/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/.test(name)) {
+                showStatus('pubaddr-status', 'Invalid name (3–32 chars: a–z 0–9 -, no leading/trailing hyphen)', 'error');
+                return;
+            }
             showStatus('pubaddr-status', 'Claiming…', 'info');
             try {
                 const res = await fetch(`${API}/admin/public-address/claim`, {
@@ -191,14 +195,22 @@
             } catch (e) { showStatus('pubaddr-status', 'Failed', 'error'); }
         });
 
-        document.getElementById('pubaddr-token-eye')?.addEventListener('click', () => {
+        document.getElementById('pubaddr-token-eye')?.addEventListener('click', (e) => {
             const inp = document.getElementById('pubaddr-token');
-            inp.type = inp.type === 'password' ? 'text' : 'password';
+            const isPass = inp.type === 'password';
+            inp.type = isPass ? 'text' : 'password';
+            e.currentTarget.textContent = isPass ? '🙈 Hide' : '👁️ Reveal';
         });
-        document.getElementById('pubaddr-token-copy')?.addEventListener('click', () => {
+        document.getElementById('pubaddr-token-copy')?.addEventListener('click', async () => {
             const inp = document.getElementById('pubaddr-token');
-            navigator.clipboard?.writeText(inp.value);
-            showStatus('pubaddr-status', 'Token copied', 'success');
+            if (navigator.clipboard?.writeText) {
+                try { await navigator.clipboard.writeText(inp.value); showStatus('pubaddr-status', 'Token copied', 'success'); }
+                catch { showStatus('pubaddr-status', 'Copy failed', 'error'); }
+            } else {
+                inp.select();
+                document.execCommand('copy');
+                showStatus('pubaddr-status', 'Token copied', 'success');
+            }
         });
 
         // Apply initial tab (default: identity)

@@ -100,6 +100,7 @@ import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
+import { createPublicAddressRoutes } from './routes/public-address.js';
 import type { RouteDeps } from './routes/types.js';
 
 
@@ -217,6 +218,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/crowdfund/projects',       // public crowdfund list
     '/api/treasuries',               // community transparency: list of treasuries
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
+    '/api/attest',                   // registrar attestation: signed proof this node holds its identity
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -823,6 +825,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createMessagingRoutes(deps),
         createCommonsRoutes(deps),
         createTreasuryRoutes(deps),
+        createPublicAddressRoutes(deps),
     ];
     for (const mod of routeModules) {
         router.use(mod.routes());

@@ -174,6 +174,14 @@ export default function WelcomeScreen() {
     };
 
     React.useEffect(() => {
+        AsyncStorage.getAllKeys().then(async keys => {
+            console.log('[DEBUG STORAGE] All AsyncStorage keys:', keys);
+            const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+            console.log('[DEBUG STORAGE] Anchor URL:', anchor);
+            const sec = await SecureStore.getItemAsync('sovereign-identity');
+            console.log('[DEBUG STORAGE] SecureStore sovereign-identity:', sec);
+        }).catch(err => console.log('[DEBUG STORAGE] Err:', err));
+
         AsyncStorage.getItem('beanpool_anchor_url').then(val => {
             if (val) {
                 setCreateAnchorUrl(val);

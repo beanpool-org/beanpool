@@ -1,0 +1,35 @@
+# cloudflared sidecar for a self-hosted beanpool node.  See docs/node-dns-registrar.md.
+#
+# How it fits together (config-driven — the operator sets ONE thing and runs `docker compose up`):
+#   1. Operator sets PUBLIC_ADDRESS_NAME=cairns (or PUBLIC_ADDRESS_AUTO=1) on the node service.
+#   2. On boot the node claims cairns.beanpool.org from the registrar and writes the connector token
+#      to <data>/tunnel-token (mode 0600).
+#   3. This sidecar waits for that file, then runs the tunnel. Cloudflare terminates TLS at the edge
+#      and proxies to the node's HTTPS origin (PUBLIC_ADDRESS_ORIGIN, default https://localhost:8443).
+#
+# Merge the `cloudflared` service into your node's docker-compose.yml; it must share the node's data dir.
+
+services:
+  # --- your existing node service, shown for reference ---
+  node:
+    # image: ghcr.io/beanpool-org/beanpool:latest   # (your node image)
+    environment:
+      PUBLIC_ADDRESS_NAME: cairns          # desired <name>.beanpool.org  (or set PUBLIC_ADDRESS_AUTO=1 to use the community name)
+      PUBLIC_ADDRESS_MODE: tunnel          # tunnel (default) | direct
+      REGISTRAR_URL: https://beanpool.org
+    volumes:
+      - ./data:/app/data                   # the node writes ./data/tunnel-token here
+
+  # --- the tunnel connector ---
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on: [node]
+    volumes:
+      - ./data:/data:ro                    # SAME data dir; read the token the node wrote
+    command:
+      - sh
+      - -c
+      - |
+        until [ -s /data/tunnel-token ]; do echo "waiting for tunnel token…"; sleep 5; done
+        exec cloudflared tunnel run --token "$(cat /data/tunnel-token)"

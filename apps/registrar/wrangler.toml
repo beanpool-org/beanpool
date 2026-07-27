@@ -1,0 +1,38 @@
+# Beanpool node-address registrar — Cloudflare Worker (fetch + scheduled).
+# Deploy: `wrangler deploy`. First-time D1 setup: `wrangler d1 create beanpool-registrar`
+# then paste the returned database_id below and `wrangler d1 execute beanpool-registrar --file schema.sql`.
+
+name = "beanpool-registrar"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+# Attestation sweep — every 5 minutes.
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Public, non-secret config.
+[vars]
+BASE_DOMAIN = "beanpool.org"
+ATTEST_FAIL_LIMIT = "2"     # consecutive MIS-attestations (wrong identity) before auto-revoke.
+                            # Offline/unreachable nodes are NEVER auto-revoked (solar-node safe).
+
+# D1 binding — set database_id after `wrangler d1 create`.
+[[d1_databases]]
+binding = "DB"
+database_name = "beanpool-registrar"
+database_id = "REPLACE_AFTER_D1_CREATE"
+
+# Routes on the beanpool.org zone. The Worker intercepts these paths; the Pages static
+# site continues to serve everything else. Uncomment + set zone_id at deploy time.
+# [[routes]]
+# pattern = "beanpool.org/api/registrar/*"
+# zone_name = "beanpool.org"
+# [[routes]]
+# pattern = "beanpool.org/i/*"
+# zone_name = "beanpool.org"
+
+# Secrets (NOT here — set with `wrangler secret put <NAME>`):
+#   CF_API_TOKEN     scoped token: Account·Cloudflare Tunnel·Edit + Zone·DNS·Edit
+#   CF_ACCOUNT_ID    151a28c4fd1e6ee09768f4226be76b4d
+#   CF_ZONE_ID       060a99ae34e53b26dcf3be6578722b31
+#   ADMIN_SECRET     shared secret for the admin approve/revoke endpoints

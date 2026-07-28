@@ -47,9 +47,10 @@ services:
     command: tunnel --no-autoupdate run --token-file /data/tunnel-token
     volumes:
       - ./data:/data:ro
-    networks:
-      - default
-      - beanpool-shared
+    # NOTE: cloudflared must NOT join beanpool-shared — all node stacks use the
+    # same service name "beanpool-node", so Docker DNS round-robins across them.
+    # Keeping cloudflared on the project-default network ensures it always routes
+    # to this stack's node only.
     restart: unless-stopped
 
 networks:

@@ -51,7 +51,7 @@ export async function restartSidecar(): Promise<void> {
             req.end();
         });
 
-        let target: string = 'beanpool-test-cloudflared-1';
+        let target: string = process.env.CLOUDFLARED_CONTAINER_NAME || '';
         try {
             const list = JSON.parse(containersJson);
             if (Array.isArray(list)) {
@@ -65,6 +65,11 @@ export async function restartSidecar(): Promise<void> {
                 }
             }
         } catch { /* parse err */ }
+
+        if (!target) {
+            console.warn('[PublicAddr] ⚠️ No cloudflared sidecar container detected to restart.');
+            return;
+        }
 
         const result = await new Promise<{ ok: boolean; status: number; body: string }>((resolve) => {
             const req = http.request({

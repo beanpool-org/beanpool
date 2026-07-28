@@ -182,9 +182,12 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             ctx.set('Content-Disposition', `attachment; filename="identity-bundle-${nodeId}.tar.gz"`);
             ctx.body = fs.createReadStream(tmpTar);
 
-            ctx.res.on('finish', () => {
+            const cleanup = () => {
                 try { if (fs.existsSync(tmpTar)) fs.unlinkSync(tmpTar); } catch {}
-            });
+            };
+            ctx.res.on('finish', cleanup);
+            ctx.res.on('close', cleanup);
+            ctx.res.on('error', cleanup);
         } catch (e: any) {
             ctx.status = 500;
             ctx.body = { error: 'Failed to create identity tarball: ' + e.message };

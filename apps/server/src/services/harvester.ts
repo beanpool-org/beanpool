@@ -10,6 +10,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 export interface FleetNodeConfig {
     id: string;
@@ -166,12 +168,13 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<{ dbSize
     if (fs.existsSync(tmpExtract)) fs.rmSync(tmpExtract, { recursive: true });
     fs.mkdirSync(tmpExtract, { recursive: true });
 
-    // Download stream to temp file
-    const arrayBuffer = await res.arrayBuffer();
-    fs.writeFileSync(tmpTar, Buffer.from(arrayBuffer));
+    // Download stream to temp file directly without buffering in RAM
+    if (!res.body) throw new Error('Response body is empty');
+    const fileStream = fs.createWriteStream(tmpTar);
+    await pipeline(Readable.fromWeb(res.body as any), fileStream);
 
-    // Extract tar.gz
-    execFileSync('tar', ['-xzf', tmpTar, '-C', tmpExtract]);
+    // Extract tar.gz with security flags
+    execFileSync('tar', ['-xzf', tmpTar, '-C', tmpExtract, '--no-same-owner', '--no-same-permissions']);
 
     // Move extracted state.db to node backup directory
     const extractedDb = path.join(tmpExtract, 'state.db');
@@ -213,11 +216,12 @@ export async function pullIdentityForNode(node: FleetNodeConfig): Promise<string
 
     fs.mkdirSync(identityDir, { recursive: true });
 
-    const arrayBuffer = await res.arrayBuffer();
-    fs.writeFileSync(tmpTar, Buffer.from(arrayBuffer));
+    if (!res.body) throw new Error('Response body is empty');
+    const fileStream = fs.createWriteStream(tmpTar);
+    await pipeline(Readable.fromWeb(res.body as any), fileStream);
 
-    // Extract identity tar
-    execFileSync('tar', ['-xzf', tmpTar, '-C', identityDir]);
+    // Extract identity tar with security flags
+    execFileSync('tar', ['-xzf', tmpTar, '-C', identityDir, '--no-same-owner', '--no-same-permissions']);
     fs.unlinkSync(tmpTar);
 
     // List collected files

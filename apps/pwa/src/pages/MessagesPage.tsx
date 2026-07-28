@@ -467,7 +467,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // New DM / Group overlays
     if (showNewDm || showNewGroup) {
         return (
-            <div style={{ padding: '1rem', maxWidth: '500px', margin: '0 auto' }}>
+            <div className="p-4 max-w-xl mx-auto w-full">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                     <button
                         onClick={() => { setShowNewDm(false); setShowNewGroup(false); }}
@@ -540,10 +540,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // Chat view
     if (activeConv) {
         return (
-            <div style={{
-                display: 'flex', flexDirection: 'column',
-                height: '100%', maxWidth: '500px', margin: '0 auto',
-            }}>
+            <div className="h-full max-w-4xl mx-auto w-full flex flex-col">
                 {/* Chat header */}
                 <div style={{
                     display: 'flex', alignItems: 'center', gap: '0.75rem',
@@ -997,9 +994,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         );
     }
 
-    // Conversations list
     return (
-        <div style={{ padding: '1rem', maxWidth: '500px', margin: '0 auto' }}>
+        <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <h2 style={{ fontSize: '1.3rem', margin: 0 }}>💬 Messages</h2>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>

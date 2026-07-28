@@ -1432,7 +1432,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // =================== LIST VIEW ===================
     return (
-        <div className="px-3 pt-2 pb-24 max-w-lg mx-auto">
+        <div className="px-3 md:px-6 pt-4 pb-24 max-w-7xl mx-auto w-full">
             {/* Radius Picker Full Screen */}
             {showRadiusPicker && (
                 <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading Location Services...</div>}>
@@ -1766,7 +1766,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         ) : (() => {
                             if (viewMode === 'grid') {
                                 return (
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                                         {filtered.map((post) => (
                                             <div
                                                 key={post.id}

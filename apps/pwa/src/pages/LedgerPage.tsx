@@ -192,7 +192,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
 
     return (
-        <div className="p-4 max-w-[600px] mx-auto min-h-full pb-24">
+        <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24">
             {/* Identity & Balance Overview */}
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between p-6 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mb-4">
                 <div className="flex items-center gap-3">

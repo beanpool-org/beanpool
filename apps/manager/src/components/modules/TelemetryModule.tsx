@@ -447,16 +447,22 @@ export function TelemetryModule({
 
                                     {/* Compact Metrics Row */}
                                     {error ? (
-                                        <div className="px-2.5 py-1.5 rounded-xl bg-red-950/40 border border-red-800/80 text-red-300 text-[11px] font-mono truncate flex items-center justify-between">
-                                            <span>❌ Unreachable</span>
+                                        <div className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono truncate flex items-center justify-between ${
+                                            error.includes('401')
+                                                ? 'bg-amber-950/40 border border-amber-800/80 text-amber-300'
+                                                : 'bg-red-950/40 border border-red-800/80 text-red-300'
+                                        }`}>
+                                            <span>{error.includes('401') ? '🔒 Auth Required' : '❌ Unreachable'}</span>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     onEditNode(profile);
                                                 }}
-                                                className="text-[10px] underline font-sans text-red-200"
+                                                className={`text-[10px] underline font-sans ${
+                                                    error.includes('401') ? 'text-amber-200' : 'text-red-200'
+                                                }`}
                                             >
-                                                Fix
+                                                {error.includes('401') ? 'Set Password' : 'Fix'}
                                             </button>
                                         </div>
                                     ) : loading && !diag ? (
@@ -588,18 +594,26 @@ export function TelemetryModule({
                                     </div>
 
                                     {/* Node Telemetry Grid */}
-                                    {error ? (
-                                        <div className="p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-xs flex items-center justify-between gap-3 font-mono">
-                                            <div className="flex items-center gap-2">
-                                                <span>❌ Unreachable: {error}</span>
-                                            </div>
-                                            <button
-                                                onClick={() => onEditNode(profile)}
-                                                className="px-2.5 py-1 rounded bg-red-900/40 hover:bg-red-900/60 text-red-200 text-[11px] font-sans font-bold border border-red-800 transition-all"
-                                            >
-                                                ⚙️ Update Password
-                                            </button>
-                                        </div>
+                                     {error ? (
+                                         <div className={`p-4 rounded-xl text-xs flex items-center justify-between gap-3 font-mono ${
+                                             error.includes('401')
+                                                 ? 'bg-amber-950/40 border border-amber-800 text-amber-300'
+                                                 : 'bg-red-950/40 border border-red-800 text-red-300'
+                                         }`}>
+                                             <div className="flex items-center gap-2">
+                                                 <span>{error.includes('401') ? '🔒 Auth Required: Enter admin password to view node telemetry' : `❌ Unreachable: ${error}`}</span>
+                                             </div>
+                                             <button
+                                                 onClick={() => onEditNode(profile)}
+                                                 className={`px-2.5 py-1 rounded text-[11px] font-sans font-bold border transition-all ${
+                                                     error.includes('401')
+                                                         ? 'bg-amber-900/40 hover:bg-amber-900/60 text-amber-200 border-amber-800'
+                                                         : 'bg-red-900/40 hover:bg-red-900/60 text-red-200 border-red-800'
+                                                 }`}
+                                             >
+                                                 {error.includes('401') ? '🔑 Set Password' : '⚙️ Update Settings'}
+                                             </button>
+                                         </div>
                                     ) : loading && !diag ? (
                                         <div className="p-6 text-center text-nature-400 text-xs italic">
                                             Connecting and fetching telemetry...

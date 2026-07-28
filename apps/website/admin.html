@@ -177,9 +177,10 @@
                 const active = allocs.filter(a => a.status !== 'pending' && a.status !== 'revoked');
 
                 renderPending(pending);
-                renderActive(active);
             } catch (err) {
                 console.error(err);
+                document.getElementById('pendingTableContainer').innerHTML = `<p style="color: #f87171; font-size: 0.85rem;">Registrar Worker API unreachable (HTTP ${err.message || 'error'}). Ensure the <code>beanpool-registrar</code> Worker is deployed to Cloudflare with <code>wrangler deploy</code>.</p>`;
+                document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Registrar Worker API unreachable.</p>';
             }
         }
 

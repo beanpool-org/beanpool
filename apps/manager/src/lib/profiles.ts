@@ -12,11 +12,12 @@ export interface NodeProfile {
 const PROFILES_KEY = 'bp_fleet_profiles';
 
 export function loadNodeProfiles(): NodeProfile[] {
+    const localUrl = normalizeNodeUrl(window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin);
     const defaultProfiles: NodeProfile[] = [
         {
             id: 'local-node',
             name: 'Local Sovereign Node',
-            url: window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin,
+            url: localUrl,
             isPrimary: true,
         },
         {
@@ -26,23 +27,36 @@ export function loadNodeProfiles(): NodeProfile[] {
         }
     ];
 
+    let profilesToUse = defaultProfiles;
     try {
         const raw = localStorage.getItem(PROFILES_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 const normalized = parsed.map((p: NodeProfile) => ({ ...p, url: normalizeNodeUrl(p.url) }));
-                const hasLocal = normalized.some((p: NodeProfile) => p.id === 'local-node' || p.url.includes('localhost:8443'));
+                const hasLocal = normalized.some((p: NodeProfile) => p.id === 'local-node' || p.url === localUrl);
                 if (!hasLocal) {
-                    return [defaultProfiles[0], ...normalized];
+                    profilesToUse = [defaultProfiles[0], ...normalized];
+                } else {
+                    profilesToUse = normalized;
                 }
-                return normalized;
             }
         }
     } catch { /* ignore */ }
-    
-    saveNodeProfiles(defaultProfiles);
-    return defaultProfiles;
+
+    // Deduplicate profiles by normalized URL so local node is never listed twice when hosted on a domain
+    const seenUrls = new Set<string>();
+    const deduplicated: NodeProfile[] = [];
+    for (const p of profilesToUse) {
+        const norm = normalizeNodeUrl(p.url);
+        if (!seenUrls.has(norm)) {
+            seenUrls.add(norm);
+            deduplicated.push(p);
+        }
+    }
+
+    saveNodeProfiles(deduplicated);
+    return deduplicated;
 }
 
 const ACTIVE_PROFILE_KEY = 'bp_fleet_active_id';

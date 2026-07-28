@@ -95,8 +95,14 @@ export async function writeToken(token?: string): Promise<void> {
     if (!token) return;
     try {
         fs.mkdirSync(DATA_DIR, { recursive: true });
-        fs.writeFileSync(TOKEN_FILE, token.trim());
+        const trimmed = token.trim();
+        // Skip restart if token hasn't changed (reconcile runs every 5 min)
+        let existing = '';
+        try { existing = fs.readFileSync(TOKEN_FILE, 'utf-8').trim(); } catch {}
+        if (existing === trimmed) return;
+        fs.writeFileSync(TOKEN_FILE, trimmed);
         try { fs.chmodSync(TOKEN_FILE, 0o666); } catch {}
+        console.log('[PublicAddr] Token changed — restarting sidecar in 5s...');
         // Brief pause for Cloudflare edge to register the new tunnel secret
         await new Promise(resolve => setTimeout(resolve, 5000));
         await restartSidecar();

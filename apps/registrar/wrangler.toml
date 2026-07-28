@@ -27,9 +27,9 @@ database_id = "165d8b11-fee8-4788-8ece-c632851e47d9"
 [[routes]]
 pattern = "beanpool.org/api/registrar/*"
 zone_name = "beanpool.org"
-# [[routes]]
-# pattern = "beanpool.org/i/*"
-# zone_name = "beanpool.org"
+[[routes]]
+pattern = "beanpool.org/i/*"
+zone_name = "beanpool.org"
 
 # Secrets (NOT here — set with `wrangler secret put <NAME>`):
 #   CF_API_TOKEN     scoped token: Account·Cloudflare Tunnel·Edit + Zone·DNS·Edit

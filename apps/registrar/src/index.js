@@ -135,11 +135,59 @@ async function handleAdminRevoke(env, name) {
     return json({ status: 'revoked', name });
 }
 
-// --- Switchboard (Phase 1a: reflect ?n=<host> into a trampoline; full code→node lookup in 1b) ---
-function handleSwitchboard(url) {
-    const code = decodeURIComponent(url.pathname.replace(/^\/i\//, '')) || '';
-    const node = (url.searchParams.get('n') || '').replace(/[^a-z0-9.\-:/]/gi, '');
-    const scheme = `beanpool://join?node=${encodeURIComponent(node)}&code=${encodeURIComponent(code)}`;
+// --- Switchboard (Invite resolution / trampoline) ---
+async function resolveNodeHostname(env, code, queryN) {
+    if (queryN) {
+        const cleanN = queryN.trim().toLowerCase();
+        if (cleanN) {
+            return cleanN.includes('.') ? cleanN : `${cleanN}.${env.BASE_DOMAIN || 'beanpool.org'}`;
+        }
+    }
+    if (!code) return null;
+
+    if (env.DB) {
+        try {
+            const invite = await db.getInvite(env, code);
+            if (invite && invite.node_name) {
+                const alloc = await db.getAllocation(env, invite.node_name);
+                if (alloc && alloc.status !== 'revoked') {
+                    if (alloc.hostname) return alloc.hostname;
+                    return `${invite.node_name}.${env.BASE_DOMAIN || 'beanpool.org'}`;
+                }
+            }
+        } catch { /* ignore */ }
+
+        try {
+            const alloc = await db.getAllocation(env, code.toLowerCase());
+            if (alloc && alloc.status !== 'revoked' && alloc.hostname) {
+                return alloc.hostname;
+            }
+        } catch { /* ignore */ }
+    }
+    return null;
+}
+
+async function handleSwitchboard(url, env) {
+    const code = decodeURIComponent(url.pathname.replace(/^\/i\//, '')).trim();
+    const queryN = (url.searchParams.get('n') || '').replace(/[^a-z0-9.\-]/gi, '');
+
+    const hostname = await resolveNodeHostname(env, code, queryN);
+    if (!hostname) {
+        const errHtml = `<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>Invite Not Found</title>
+<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.25rem;text-align:center;color:#1f2937}
+.card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:.75rem;padding:2rem;margin-top:2rem}
+h1{font-size:1.5rem;color:#dc2626}</style></head><body>
+<h1>🫘 Invite code not found</h1>
+<div class=card>
+<p>The invite code you followed is invalid, expired, or unmapped.</p>
+<p>Please check your link or ask the node operator for a fresh invite.</p>
+</div>
+</body></html>`;
+        return new Response(errHtml, { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } });
+    }
+
+    const scheme = `beanpool://join?node=${encodeURIComponent(hostname)}&code=${encodeURIComponent(code)}`;
     const html = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>Join on beanpool</title>
 <style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.25rem;text-align:center;color:#1f2937}
@@ -150,7 +198,7 @@ function handleSwitchboard(url) {
 <a class=btn href="${scheme}">Open in beanpool</a>
 <a class=btn href="https://apps.apple.com/app/beanpool">Get it on the App Store</a>
 <a class=btn href="https://play.google.com/store/apps/details?id=org.beanpool">Get it on Google Play</a>
-<p class=muted>${node ? 'Community node: ' + node : ''}</p>
+<p class=muted>${hostname ? 'Community node: ' + hostname : ''}</p>
 </body></html>`;
     return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
@@ -162,7 +210,7 @@ function handleSwitchboard(url) {
 //   'mismatch'   — the origin answered (2xx) but it isn't our node (wrong key / not JSON / stale) →
 //                  someone swapped the origin → ABUSE → revoke fast.
 //   'unverified' — unreachable / non-2xx / CF has no connector → node is just DOWN → benign, never revoke.
-async function attestOne(env, a) {
+export async function attestOne(env, a) {
     const nonce = crypto.randomUUID();
     let res;
     try {
@@ -200,7 +248,7 @@ async function handleAttest(env, a, limit) {
     // last_attest_at stays old, which the admin console surfaces as "unverified since …" for review.
 }
 
-async function attestSweep(env) {
+export async function attestSweep(env) {
     const limit = parseInt(env.ATTEST_FAIL_LIMIT || '2', 10);   // consecutive MISMATCHES before revoke
     const live = await db.listByStatus(env, 'live');
     const BATCH = 10;                                           // bounded concurrency — don't hit the cron's wall-clock/subrequest limits at scale
@@ -215,6 +263,7 @@ export default {
         const p = url.pathname;
         const method = request.method;
         try {
+            if (method === 'GET' && p === '/api/registrar/health') return json({ status: 'ok' });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
             if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, await request.text());
             if (method === 'GET' && p === '/api/registrar/status') return await handleStatus(request, env);
@@ -230,7 +279,7 @@ export default {
                 return m[2] === 'approve' ? await handleAdminApprove(env, m[1]) : await handleAdminRevoke(env, m[1]);
             }
 
-            if (method === 'GET' && p.startsWith('/i/')) return handleSwitchboard(url);
+            if (method === 'GET' && p.startsWith('/i/')) return await handleSwitchboard(url, env);
 
             return json({ error: 'not found' }, 404);
         } catch (e) {

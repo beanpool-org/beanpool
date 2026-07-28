@@ -39,16 +39,70 @@ export function FleetSidebar({
 }: FleetSidebarProps) {
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-    const navItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
+    const activeNode = profiles.find((p) => p.id === activeProfileId) || profiles[0];
+
+    const multiServerItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
         { id: 'overview', label: 'Fleet Telemetry', icon: '📊' },
         { id: 'analytics', label: 'Peak Analytics', icon: '📈' },
+        { id: 'topology', label: 'Replication & Backups', icon: '🗄️' },
+    ];
+
+    const nodeScopedItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
         { id: 'gateway', label: 'Gateway Security', icon: '🛡️' },
         { id: 'members', label: 'Trust & Members', icon: '👥' },
-        { id: 'topology', label: 'Replication & Backups', icon: '🗄️' },
         { id: 'invites', label: 'Invites & Onboarding', icon: '🎫' },
         { id: 'logs', label: 'System Streamer', icon: '📜' },
         { id: 'ai', label: 'Sovereign AI Copilot', icon: '🤖', badge: 'PRO' },
     ];
+
+    const renderNavItem = (item: { id: TabId; label: string; icon: string; badge?: string }) => {
+        const isActive = activeTab === item.id;
+        const counts = tabAlertCounts[item.id] || { critical: 0, warning: 0 };
+        const hasCounts = counts.critical > 0 || counts.warning > 0;
+
+        return (
+            <button
+                key={item.id}
+                onClick={() => onSelectTab(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                    isActive
+                        ? 'bg-terra-500/15 text-white border border-terra-500/40 shadow-sm font-bold'
+                        : 'text-nature-300 hover:text-white hover:bg-nature-800/50 border border-transparent'
+                }`}
+            >
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-sm shrink-0">{item.icon}</span>
+                    <span className="truncate">{item.label}</span>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                    {counts.critical > 0 && (
+                        <span
+                            className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-mono font-bold animate-pulse shadow-sm flex items-center gap-0.5"
+                            title={`${counts.critical} Critical Alerts`}
+                        >
+                            <span>🚨</span>
+                            <span>{counts.critical}</span>
+                        </span>
+                    )}
+                    {counts.warning > 0 && (
+                        <span
+                            className="px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[9px] font-mono font-bold shadow-sm flex items-center gap-0.5"
+                            title={`${counts.warning} Warnings`}
+                        >
+                            <span>⚠️</span>
+                            <span>{counts.warning}</span>
+                        </span>
+                    )}
+                    {item.badge && !hasCounts && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-terra-500/20 text-terra-300 border border-terra-500/30">
+                            {item.badge}
+                        </span>
+                    )}
+                </div>
+            </button>
+        );
+    };
 
     return (
         <aside className="w-72 bg-nature-900 border-r border-nature-800 flex flex-col shrink-0 h-screen sticky top-0 font-sans z-30 select-none">
@@ -68,58 +122,24 @@ export function FleetSidebar({
             </div>
 
             {/* Navigation Tabs */}
-            <div className="px-3 py-4 space-y-1">
-                <div className="px-3 pb-2 text-[10px] font-extrabold uppercase tracking-wider text-nature-400">
-                    Control Plane Navigation
+            <div className="px-3 py-3 space-y-1 overflow-y-auto custom-scrollbar">
+                {/* Multi-Server Control Plane */}
+                <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-nature-400">
+                    Multi-Server Control Plane
                 </div>
-                {navItems.map((item) => {
-                    const isActive = activeTab === item.id;
-                    const counts = tabAlertCounts[item.id] || { critical: 0, warning: 0 };
-                    const hasCounts = counts.critical > 0 || counts.warning > 0;
+                {multiServerItems.map(renderNavItem)}
 
-                    return (
-                        <button
-                            key={item.id}
-                            onClick={() => onSelectTab(item.id)}
-                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                                isActive
-                                    ? 'bg-terra-500/15 text-white border border-terra-500/40 shadow-sm font-bold'
-                                    : 'text-nature-300 hover:text-white hover:bg-nature-800/50 border border-transparent'
-                            }`}
-                        >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                                <span className="text-sm shrink-0">{item.icon}</span>
-                                <span className="truncate">{item.label}</span>
-                            </div>
+                {/* Divider Line */}
+                <div className="my-3 border-t border-nature-800/80 mx-2" />
 
-                            <div className="flex items-center gap-1 shrink-0">
-                                {counts.critical > 0 && (
-                                    <span
-                                        className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-mono font-bold animate-pulse shadow-sm flex items-center gap-0.5"
-                                        title={`${counts.critical} Critical Fleet Alerts`}
-                                    >
-                                        <span>🚨</span>
-                                        <span>{counts.critical}</span>
-                                    </span>
-                                )}
-                                {counts.warning > 0 && (
-                                    <span
-                                        className="px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[9px] font-mono font-bold shadow-sm flex items-center gap-0.5"
-                                        title={`${counts.warning} Fleet Warnings`}
-                                    >
-                                        <span>⚠️</span>
-                                        <span>{counts.warning}</span>
-                                    </span>
-                                )}
-                                {item.badge && !hasCounts && (
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-terra-500/20 text-terra-300 border border-terra-500/30">
-                                        {item.badge}
-                                    </span>
-                                )}
-                            </div>
-                        </button>
-                    );
-                })}
+                {/* Selected Node Operations */}
+                <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-terra-400 flex items-center justify-between">
+                    <span>Node Controls</span>
+                    <span className="text-[9px] font-mono text-sky-400 truncate max-w-[110px]" title={activeNode?.name}>
+                        {activeNode?.name || 'Selected'}
+                    </span>
+                </div>
+                {nodeScopedItems.map(renderNavItem)}
             </div>
 
             {/* Connected Fleet Panel (All Nodes Visible) */}

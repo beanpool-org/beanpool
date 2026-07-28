@@ -381,38 +381,26 @@ export function App() {
         if (saved) globalDismissed = new Set(JSON.parse(saved));
     } catch {}
 
-    const totalMemberCritical = Object.values(fleetNodeData).reduce((acc, nData: any) => {
-        if (!nData) return acc;
-        const flags = (nData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description));
-        const reports = (nData.reports || []).filter((r: any) => !globalDismissed.has(r.id || r.targetPubkey || r.reason));
-        const crit = flags.filter((f: any) => f.severity === 'critical' || f.severity === 'alert').length;
-        return acc + crit + reports.length;
-    }, 0);
+    // Node-scoped alerts for active selected node
+    const activeNodeData = activeProfileId ? fleetNodeData[activeProfileId] : null;
+    const activeMemberCritical = activeNodeData ? (
+        ((activeNodeData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description) && (f.severity === 'critical' || f.severity === 'alert')).length) +
+        ((activeNodeData.reports || []).filter((r: any) => !globalDismissed.has(r.id || r.targetPubkey || r.reason)).length)
+    ) : 0;
 
-    const totalMemberWarning = Object.values(fleetNodeData).reduce((acc, nData: any) => {
-        if (!nData) return acc;
-        const flags = (nData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description));
-        const warn = flags.filter((f: any) => f.severity === 'warning').length;
-        return acc + warn;
-    }, 0);
+    const activeMemberWarning = activeNodeData ? (
+        (activeNodeData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description) && f.severity === 'warning').length
+    ) : 0;
 
     const logErrorsCount = nodeLogs.filter((l: any) => (l.level || '').toUpperCase() === 'ERROR').length;
     const logWarningsCount = nodeLogs.filter((l: any) => (l.level || '').toUpperCase() === 'WARN' || (l.level || '').toUpperCase() === 'WARNING').length;
 
-    const loadedGateways = Object.keys(fleetGateways).length > 0 ? Object.values(fleetGateways) : (gateway ? [gateway] : []);
-
-    const totalGatewayCritical = loadedGateways.reduce((acc, gData: any) => {
-        if (!gData) return acc;
-        const rateLimitOff = gData.rateLimiting?.enabled === false ? 1 : 0;
-        return acc + rateLimitOff;
-    }, 0);
-
-    const totalGatewayWarning = loadedGateways.reduce((acc, gData: any) => {
-        if (!gData) return acc;
-        const wildcardCors = (gData.corsAllowedOrigins || []).includes('*') ? 1 : 0;
-        const disabledFeatures = Object.values(gData.features || {}).filter((v) => v === false).length;
-        return acc + wildcardCors + disabledFeatures;
-    }, 0);
+    const activeGatewayData = activeProfileId ? fleetGateways[activeProfileId] || gateway : gateway;
+    const activeGatewayCritical = activeGatewayData?.rateLimiting?.enabled === false ? 1 : 0;
+    const activeGatewayWarning = activeGatewayData ? (
+        ((activeGatewayData.corsAllowedOrigins || []).includes('*') ? 1 : 0) +
+        (Object.values(activeGatewayData.features || {}).filter((v) => v === false).length)
+    ) : 0;
 
     // Aggregate analytics peak alerts across all connected nodes
     let analyticsCritical = 0;
@@ -437,9 +425,9 @@ export function App() {
     const tabAlertCounts: Partial<Record<TabId, AlertCounts>> = {
         overview: { critical: offlineNodesCount, warning: telemetryWalWarnings },
         analytics: { critical: analyticsCritical, warning: analyticsWarning },
-        gateway: { critical: totalGatewayCritical, warning: totalGatewayWarning },
-        members: { critical: totalMemberCritical, warning: totalMemberWarning },
         topology: { critical: 0, warning: 0 },
+        gateway: { critical: activeGatewayCritical, warning: activeGatewayWarning },
+        members: { critical: activeMemberCritical, warning: activeMemberWarning },
         invites: { critical: 0, warning: 0 },
         logs: { critical: logErrorsCount, warning: logWarningsCount },
         ai: { critical: 0, warning: 0 },

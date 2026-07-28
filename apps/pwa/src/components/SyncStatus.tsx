@@ -34,11 +34,11 @@ export function SyncStatus() {
         return unsub;
     }, []);
 
-    // Membership probe — check once on mount and when connection state changes
+    // Membership probe — check on mount, when connection state changes, and periodically
     useEffect(() => {
         if (!sync.connected) return;
         let cancelled = false;
-        (async () => {
+        const probe = async () => {
             try {
                 const identity = await loadIdentity();
                 if (!identity || cancelled) return;
@@ -47,8 +47,10 @@ export function SyncStatus() {
             } catch {
                 // Network error — don't change state
             }
-        })();
-        return () => { cancelled = true; };
+        };
+        probe();
+        const interval = setInterval(probe, 5000);
+        return () => { cancelled = true; clearInterval(interval); };
     }, [sync.connected]);
 
     // Auto-update the "time ago" label

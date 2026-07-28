@@ -94,7 +94,7 @@ export function App() {
     const [isGuest, setIsGuest] = useState(false);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
     const [showCommunityStatus, setShowCommunityStatus] = useState(false);
-    const [communityHealth, setCommunityHealth] = useState<{ memberCount?: number; postCount?: number; callsign?: string; online?: boolean } | null>(null);
+    const [communityHealth, setCommunityHealth] = useState<any | null>(null);
 
     function navigateToTab(tab: string, contextId?: string) {
         if (tab === 'profile-setup') {
@@ -380,15 +380,15 @@ export function App() {
                                 <div className="space-y-1.5 text-xs text-nature-600 dark:text-nature-300">
                                     <div className="flex justify-between">
                                         <span>Node:</span>
-                                        <span className="font-mono font-semibold">{communityHealth.callsign || 'Local'}</span>
+                                        <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || 'Local'}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span>Members:</span>
-                                        <span className="font-mono font-semibold">{communityHealth.memberCount ?? 0}</span>
+                                        <span className="font-mono font-semibold">{communityHealth.memberCount ?? communityHealth.tree?.totalMembers ?? 0}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span>Active Posts:</span>
-                                        <span className="font-mono font-semibold">{communityHealth.postCount ?? 0}</span>
+                                        <span className="font-mono font-semibold">{communityHealth.postCount ?? communityHealth.activity?.totalPosts ?? 0}</span>
                                     </div>
                                 </div>
                                 <button

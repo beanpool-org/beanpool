@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
-    loadHarvestState, harvestNode, harvestAllNodes, getNodes, type FleetNodeConfig
+    loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, type FleetNodeConfig
 } from '../services/harvester.js';
 import type { RouteDeps } from './types.js';
 
@@ -78,15 +78,16 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const dbPath = path.join(BACKUPS_DIR, nodeId, 'state.db');
+        const slug = nodeSlug(nodeId);
+        const dbPath = path.join(BACKUPS_DIR, slug, 'state.db');
         if (!fs.existsSync(dbPath)) {
-            ctx.status = 444;
-            ctx.body = { error: 'Backup DB not found for this node' };
+            ctx.status = 404;
+            ctx.body = { error: `Backup DB not found for node (${slug})` };
             return;
         }
 
         ctx.set('Content-Type', 'application/x-sqlite3');
-        ctx.set('Content-Disposition', `attachment; filename="beanpool-backup-${nodeId}.db"`);
+        ctx.set('Content-Disposition', `attachment; filename="beanpool-backup-${slug}.db"`);
         ctx.body = fs.createReadStream(dbPath);
     });
 
@@ -100,7 +101,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const historyDir = path.join(BACKUPS_DIR, nodeId, 'history');
+        const slug = nodeSlug(nodeId);
+        const historyDir = path.join(BACKUPS_DIR, slug, 'history');
         if (!fs.existsSync(historyDir)) {
             ctx.body = { history: [] };
             return;
@@ -135,7 +137,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const filePath = path.join(BACKUPS_DIR, nodeId, 'history', filename);
+        const slug = nodeSlug(nodeId);
+        const filePath = path.join(BACKUPS_DIR, slug, 'history', filename);
         if (!fs.existsSync(filePath)) {
             ctx.status = 404;
             ctx.body = { error: 'Archive file not found' };
@@ -157,14 +160,15 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const identityDir = path.join(BACKUPS_DIR, nodeId, 'identity');
+        const slug = nodeSlug(nodeId);
+        const identityDir = path.join(BACKUPS_DIR, slug, 'identity');
         if (!fs.existsSync(identityDir)) {
             ctx.status = 404;
-            ctx.body = { error: 'Identity bundle not found' };
+            ctx.body = { error: `Identity bundle not found for node (${slug})` };
             return;
         }
 
-        const tmpTar = path.join(BACKUPS_DIR, nodeId, `.identity-export-${Date.now()}.tar.gz`);
+        const tmpTar = path.join(BACKUPS_DIR, slug, `.identity-export-${Date.now()}.tar.gz`);
         try {
             execFileSync('tar', ['-czf', tmpTar, '-C', identityDir, '.']);
             ctx.set('Content-Type', 'application/gzip');

@@ -45,22 +45,41 @@ let harvesterTimer: NodeJS.Timeout | null = null;
 
 // Default starter nodes if manager-nodes.json doesn't exist yet
 const DEFAULT_NODES: FleetNodeConfig[] = [
-    {
-        id: 'test',
-        name: 'Test Staging Node',
-        url: 'https://test.beanpool.org',
-    },
-    {
-        id: 'mullum',
-        name: 'Mullumbimby',
-        url: 'https://mullum.beanpool.org',
-    },
-    {
-        id: 'bris',
-        name: 'Brisbane',
-        url: 'https://bris.beanpool.org',
-    },
+    { id: 'test', name: 'Test Staging Node', url: 'https://test.beanpool.org' },
+    { id: 'mullum', name: 'Mullumbimby', url: 'https://mullum.beanpool.org' },
+    { id: 'bris', name: 'Brisbane', url: 'https://bris.beanpool.org' },
+    { id: 'bindarrabi', name: 'Bindarrabi', url: 'https://bindarrabi.beanpool.org' },
+    { id: 'eastgippy', name: 'East Gippsland', url: 'https://eastgippy.beanpool.org' },
+    { id: 'gippsland', name: 'Gippsland', url: 'https://gippsland.beanpool.org' },
+    { id: 'castlemaine', name: 'Castlemaine', url: 'https://castlemaine.beanpool.org' },
+    { id: 'melb', name: 'Melbourne', url: 'https://melb.beanpool.org' },
+    { id: 'review', name: 'Review Node', url: 'https://review.beanpool.org' },
 ];
+
+export function nodeSlug(target: string | { id: string; url?: string; name?: string }): string {
+    if (!target) return 'unknown';
+    const id = typeof target === 'string' ? target : target.id;
+    const url = typeof target === 'object' ? target.url : '';
+    const name = typeof target === 'object' ? target.name : '';
+
+    if (['test', 'mullum', 'bris', 'bindarrabi', 'eastgippy', 'gippsland', 'castlemaine', 'melb', 'review', 'local-node'].includes(id)) {
+        return id;
+    }
+
+    const str = `${id} ${url} ${name}`.toLowerCase();
+    if (str.includes('test')) return 'test';
+    if (str.includes('mullum')) return 'mullum';
+    if (str.includes('bris')) return 'bris';
+    if (str.includes('bindarrabi')) return 'bindarrabi';
+    if (str.includes('eastgippy') || str.includes('east-gippsland')) return 'eastgippy';
+    if (str.includes('gippsland')) return 'gippsland';
+    if (str.includes('castlemaine')) return 'castlemaine';
+    if (str.includes('melb') || str.includes('melbourne')) return 'melb';
+    if (str.includes('review')) return 'review';
+    if (str.includes('localhost') || str.includes('127.0.0.1')) return 'local-node';
+
+    return id.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
 
 export function getNodes(): FleetNodeConfig[] {
     try {
@@ -138,7 +157,8 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<{ dbSize
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
 
-    const nodeDir = path.join(BACKUPS_DIR, node.id);
+    const slug = nodeSlug(node);
+    const nodeDir = path.join(BACKUPS_DIR, slug);
     const tmpTar = path.join(nodeDir, '.tmp-backup.tar.gz');
     const tmpExtract = path.join(nodeDir, '.tmp-extract');
 
@@ -187,7 +207,8 @@ export async function pullIdentityForNode(node: FleetNodeConfig): Promise<string
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
 
-    const identityDir = path.join(BACKUPS_DIR, node.id, 'identity');
+    const slug = nodeSlug(node);
+    const identityDir = path.join(BACKUPS_DIR, slug, 'identity');
     const tmpTar = path.join(identityDir, '.tmp-identity.tar.gz');
 
     fs.mkdirSync(identityDir, { recursive: true });
@@ -205,8 +226,9 @@ export async function pullIdentityForNode(node: FleetNodeConfig): Promise<string
 }
 
 /** Create daily snapshot archive in history/ */
-function createDailyArchive(nodeId: string): void {
-    const nodeDir = path.join(BACKUPS_DIR, nodeId);
+function createDailyArchive(target: string | FleetNodeConfig): void {
+    const slug = nodeSlug(target);
+    const nodeDir = path.join(BACKUPS_DIR, slug);
     const dbPath = path.join(nodeDir, 'state.db');
     if (!fs.existsSync(dbPath)) return;
 
@@ -219,7 +241,7 @@ function createDailyArchive(nodeId: string): void {
     // Copy if not already archived today
     if (!fs.existsSync(archivePath)) {
         fs.copyFileSync(dbPath, archivePath);
-        console.log(`[Harvester] Created daily archive for ${nodeId}: beanpool-${todayStr}.db`);
+        console.log(`[Harvester] Created daily archive for ${slug}: beanpool-${todayStr}.db`);
     }
 
     // Prune historical archives older than 30 days
@@ -233,7 +255,7 @@ function createDailyArchive(nodeId: string): void {
             const stat = fs.statSync(filePath);
             if (nowMs - stat.mtimeMs > maxAgeMs) {
                 fs.unlinkSync(filePath);
-                console.log(`[Harvester] Pruned old snapshot archive for ${nodeId}: ${file}`);
+                console.log(`[Harvester] Pruned old snapshot archive for ${slug}: ${file}`);
             }
         } catch {}
     }
@@ -241,8 +263,9 @@ function createDailyArchive(nodeId: string): void {
 
 /** Harvest a single node: check drift, pull backup if needed, pull identity, update history */
 export async function harvestNode(node: FleetNodeConfig, force = false): Promise<NodeHarvestState> {
+    const slug = nodeSlug(node);
     const stateMap = loadHarvestState();
-    const prev = stateMap[node.id] || {
+    const prev = stateMap[node.id] || stateMap[slug] || {
         nodeId: node.id,
         nodeName: node.name,
         nodeUrl: node.url,
@@ -258,9 +281,13 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
         historyCount: 0,
     };
 
+    prev.nodeId = node.id;
+    prev.nodeName = node.name;
+    prev.nodeUrl = node.url;
     prev.status = 'harvesting';
     prev.lastHarvestAt = new Date().toISOString();
     stateMap[node.id] = prev;
+    stateMap[slug] = prev;
     saveHarvestState(stateMap);
 
     try {
@@ -268,7 +295,7 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
         const hasDrift = force || !counts || counts.members !== prev.memberCount || counts.posts !== prev.postCount || prev.dbSizeBytes === 0;
 
         if (hasDrift) {
-            console.log(`[Harvester] Pulling backup for ${node.name} (${node.id}) [drift: ${hasDrift}, force: ${force}]`);
+            console.log(`[Harvester] Pulling backup for ${node.name} (${slug}) [drift: ${hasDrift}, force: ${force}]`);
             const { dbSize } = await pullBackupForNode(node);
             prev.dbSizeBytes = dbSize;
 
@@ -286,7 +313,7 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
             }
 
             // Create daily snapshot archive
-            createDailyArchive(node.id);
+            createDailyArchive(node);
         }
 
         if (counts) {
@@ -295,7 +322,7 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
         }
 
         // Count history files
-        const historyDir = path.join(BACKUPS_DIR, node.id, 'history');
+        const historyDir = path.join(BACKUPS_DIR, slug, 'history');
         if (fs.existsSync(historyDir)) {
             prev.historyCount = fs.readdirSync(historyDir).filter(f => f.startsWith('beanpool-') && f.endsWith('.db')).length;
         }

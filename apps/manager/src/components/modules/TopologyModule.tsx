@@ -191,6 +191,31 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         return `${Math.floor(hrs / 24)}d ago`;
     };
 
+    const getSlug = (node: NodeProfile | string): string => {
+        if (!node) return 'unknown';
+        const id = typeof node === 'string' ? node : node.id;
+        const url = typeof node === 'object' ? node.url || '' : '';
+        const name = typeof node === 'object' ? node.name || '' : '';
+
+        if (['test', 'mullum', 'bris', 'bindarrabi', 'eastgippy', 'gippsland', 'castlemaine', 'melb', 'review', 'local-node'].includes(id)) {
+            return id;
+        }
+
+        const str = `${id} ${url} ${name}`.toLowerCase();
+        if (str.includes('test')) return 'test';
+        if (str.includes('mullum')) return 'mullum';
+        if (str.includes('bris')) return 'bris';
+        if (str.includes('bindarrabi')) return 'bindarrabi';
+        if (str.includes('eastgippy') || str.includes('east-gippsland')) return 'eastgippy';
+        if (str.includes('gippsland')) return 'gippsland';
+        if (str.includes('castlemaine')) return 'castlemaine';
+        if (str.includes('melb') || str.includes('melbourne')) return 'melb';
+        if (str.includes('review')) return 'review';
+        if (str.includes('localhost') || str.includes('127.0.0.1')) return 'local-node';
+
+        return id;
+    };
+
     const fleetNodesList = profiles.length > 0 ? profiles : [activeNode];
     const totalFleetBackupBytes = Object.values(harvesterState).reduce((acc, curr) => acc + (curr.dbSizeBytes || 0), 0);
 
@@ -322,8 +347,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                 </thead>
                                 <tbody className="divide-y divide-nature-800/60">
                                     {fleetNodesList.map((node) => {
-                                        const state = harvesterState[node.id];
-                                        const isSyncing = harvestingNodeId === node.id;
+                                        const slug = getSlug(node);
+                                        const state = harvesterState[node.id] || harvesterState[slug];
+                                        const isSyncing = harvestingNodeId === node.id || harvestingNodeId === slug;
+
                                         return (
                                             <tr key={node.id} className="hover:bg-nature-900/30 transition-colors">
                                                 <td className="px-4 py-3">
@@ -386,14 +413,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         <button
-                                                            onClick={() => handleTriggerSync(node.id)}
+                                                            onClick={() => handleTriggerSync(slug)}
                                                             disabled={isSyncing}
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-bold text-[11px] transition-all"
                                                         >
                                                             {isSyncing ? '...' : '🔄 Sync'}
                                                         </button>
                                                         <a
-                                                            href={`/api/manager/backups/download-db?nodeId=${node.id}`}
+                                                            href={`/api/manager/backups/download-db?nodeId=${slug}${node.adminPassword ? `&password=${encodeURIComponent(node.adminPassword)}` : ''}`}
                                                             target="_blank"
                                                             rel="noreferrer"
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-sky-400 font-bold text-[11px] transition-all inline-block"
@@ -401,13 +428,13 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                             ⬇ DB
                                                         </a>
                                                         <button
-                                                            onClick={() => handleOpenHistory(node.id, node.name)}
+                                                            onClick={() => handleOpenHistory(slug, node.name)}
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-amber-400 font-bold text-[11px] transition-all"
                                                         >
                                                             📅 History
                                                         </button>
                                                         <a
-                                                            href={`/api/manager/backups/download-identity?nodeId=${node.id}`}
+                                                            href={`/api/manager/backups/download-identity?nodeId=${slug}${node.adminPassword ? `&password=${encodeURIComponent(node.adminPassword)}` : ''}`}
                                                             target="_blank"
                                                             rel="noreferrer"
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-emerald-400 font-bold text-[11px] transition-all inline-block"

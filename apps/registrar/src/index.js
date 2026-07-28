@@ -6,6 +6,7 @@
 import * as cf from './cf.js';
 import * as db from './db.js';
 import { verifySignedRequest, verifyEd25519 } from './sign.js';
+import { ADMIN_HTML } from './admin-html.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
 const json = (obj, status = 200) =>
@@ -277,6 +278,10 @@ export default {
             if (m && method === 'POST') {
                 if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
                 return m[2] === 'approve' ? await handleAdminApprove(env, m[1]) : await handleAdminRevoke(env, m[1]);
+            }
+
+            if (method === 'GET' && (p === '/admin' || p === '/admin/' || p === '/admin.html')) {
+                return new Response(ADMIN_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });
             }
 
             if (method === 'GET' && p.startsWith('/i/')) return await handleSwitchboard(url, env);

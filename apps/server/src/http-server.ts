@@ -19,7 +19,7 @@ export async function startHttpServer(port: number): Promise<void> {
     const app = new Koa();
     const router = new Router();
 
-    // Cloudflare Tunnel delegation & direct IP access for Settings/API
+    // Cloudflare Tunnel delegation & direct IP access for Settings/API/PWA
     app.use(async (ctx, next) => {
         const koaApp = getKoaApp();
         if (koaApp && (
@@ -27,7 +27,13 @@ export async function startHttpServer(port: number): Promise<void> {
             ctx.path.startsWith('/api') || 
             ctx.path.startsWith('/settings') || 
             ctx.path.startsWith('/app') || 
-            ctx.path.startsWith('/static')
+            ctx.path.startsWith('/static') ||
+            ctx.path.startsWith('/avatars') ||
+            ctx.path.startsWith('/assets') ||
+            ctx.path.startsWith('/favicon') ||
+            ctx.path.startsWith('/bean') ||
+            ctx.path.startsWith('/manifest') ||
+            ctx.path.startsWith('/registerSW')
         )) {
             ctx.respond = false;
             await koaApp.callback()(ctx.req, ctx.res);
@@ -37,7 +43,18 @@ export async function startHttpServer(port: number): Promise<void> {
     });
 
     router.get('/(.*)', async (ctx, next) => {
-        if (ctx.path.startsWith('/settings') || ctx.path.startsWith('/api') || ctx.path.startsWith('/app') || ctx.path.startsWith('/static')) {
+        if (
+            ctx.path.startsWith('/settings') || 
+            ctx.path.startsWith('/api') || 
+            ctx.path.startsWith('/app') || 
+            ctx.path.startsWith('/static') ||
+            ctx.path.startsWith('/avatars') ||
+            ctx.path.startsWith('/assets') ||
+            ctx.path.startsWith('/favicon') ||
+            ctx.path.startsWith('/bean') ||
+            ctx.path.startsWith('/manifest') ||
+            ctx.path.startsWith('/registerSW')
+        ) {
             await next();
             return;
         }

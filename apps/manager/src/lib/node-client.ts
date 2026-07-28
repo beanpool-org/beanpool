@@ -472,6 +472,132 @@ export async function forceNodeResync(nodeUrl: string, adminPassword?: string): 
     }
 }
 
+// ======================== REGISTRAR HELPERS ========================
+
+export interface RegistrarAllocation {
+    name: string;
+    node_pubkey: string;
+    hostname: string;
+    mode: 'tunnel' | 'direct' | string;
+    status: 'pending' | 'live' | 'revoked' | string;
+    tunnel_id?: string | null;
+    dns_record_id?: string | null;
+    origin?: string | null;
+    public_ip?: string | null;
+    contact?: string | null;
+    attest_fails?: number;
+    last_attest_at?: number | null;
+    requested_at: number;
+    decided_at?: number | null;
+    decided_by?: string | null;
+    tier?: 'auto' | 'gated' | 'blocked' | string;
+}
+
+export interface RegistrarPendingResponse {
+    allocations: RegistrarAllocation[];
+}
+
+export async function getRegistrarPending(
+    nodeUrl?: string,
+    adminPassword?: string
+): Promise<RegistrarAllocation[]> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
+    const endpoint = cleanUrl ? `${cleanUrl}/api/local/admin/registrar/pending` : '/api/local/admin/registrar/pending';
+    const url = new URL(endpoint, typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost');
+    if (adminPassword) {
+        url.searchParams.set('password', adminPassword);
+    }
+    const res = await fetch(url.toString(), {
+        headers,
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data.allocations || [];
+}
+
+export const getRegistralPending = getRegistrarPending;
+
+export async function approveRegistrarClaim(
+    nodeUrlOrName: string,
+    nameOrPassword?: string,
+    adminPassword?: string
+): Promise<{ status: string; name: string }> {
+    let nodeUrl = nodeUrlOrName;
+    let name = nameOrPassword;
+    let pwd = adminPassword;
+
+    if (!name) {
+        name = nodeUrlOrName;
+        nodeUrl = '';
+        pwd = undefined;
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (pwd) {
+        headers['X-Admin-Password'] = pwd;
+        headers['x-admin-secret'] = pwd;
+    }
+    const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
+    const endpoint = cleanUrl
+        ? `${cleanUrl}/api/local/admin/registrar/${encodeURIComponent(name)}/approve`
+        : `/api/local/admin/registrar/${encodeURIComponent(name)}/approve`;
+
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: pwd }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function revokeRegistrarClaim(
+    nodeUrlOrName: string,
+    nameOrPassword?: string,
+    adminPassword?: string
+): Promise<{ status: string; name: string }> {
+    let nodeUrl = nodeUrlOrName;
+    let name = nameOrPassword;
+    let pwd = adminPassword;
+
+    if (!name) {
+        name = nodeUrlOrName;
+        nodeUrl = '';
+        pwd = undefined;
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (pwd) {
+        headers['X-Admin-Password'] = pwd;
+        headers['x-admin-secret'] = pwd;
+    }
+    const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
+    const endpoint = cleanUrl
+        ? `${cleanUrl}/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`
+        : `/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`;
+
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: pwd }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+
 
 
 

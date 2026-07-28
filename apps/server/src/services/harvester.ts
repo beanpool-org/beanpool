@@ -213,26 +213,37 @@ export async function pullIdentityForNode(node: FleetNodeConfig): Promise<string
     const slug = nodeSlug(node);
     const identityDir = path.join(BACKUPS_DIR, slug, 'identity');
     const tmpTar = path.join(identityDir, '.tmp-identity.tar.gz');
+    const tmpExtract = path.join(identityDir, '.tmp-extract');
 
     fs.mkdirSync(identityDir, { recursive: true });
 
-    if (!res.body) throw new Error('Response body is empty');
-    const fileStream = fs.createWriteStream(tmpTar);
-    await pipeline(Readable.fromWeb(res.body as any), fileStream);
+    try {
+        if (!res.body) throw new Error('Response body is empty');
+        const fileStream = fs.createWriteStream(tmpTar);
+        await pipeline(Readable.fromWeb(res.body as any), fileStream);
 
-    // Validate tar entry paths prior to extraction to prevent path traversal (Zip-Slip)
-    const entryList = execFileSync('tar', ['-tf', tmpTar], { encoding: 'utf-8' });
-    const entries = entryList.split('\n').map(s => s.trim()).filter(Boolean);
-    for (const entry of entries) {
-        if (entry.startsWith('/') || entry.includes('..')) {
-            fs.unlinkSync(tmpTar);
-            throw new Error(`Insecure identity bundle entry path detected: ${entry}`);
+        // Validate tar entry paths prior to extraction to prevent path traversal (Zip-Slip)
+        const entryList = execFileSync('tar', ['-tf', tmpTar], { encoding: 'utf-8' });
+        const entries = entryList.split('\n').map(s => s.trim()).filter(Boolean);
+        for (const entry of entries) {
+            if (entry.startsWith('/') || entry.includes('..')) {
+                throw new Error(`Insecure identity bundle entry path detected: ${entry}`);
+            }
         }
-    }
 
-    // Extract identity tar with security flags
-    execFileSync('tar', ['-xzf', tmpTar, '-C', identityDir, '--no-same-owner', '--no-same-permissions']);
-    fs.unlinkSync(tmpTar);
+        if (fs.existsSync(tmpExtract)) fs.rmSync(tmpExtract, { recursive: true, force: true });
+        fs.mkdirSync(tmpExtract, { recursive: true });
+
+        // Extract identity tar with security flags
+        execFileSync('tar', ['-xzf', tmpTar, '-C', tmpExtract, '--no-same-owner', '--no-same-permissions']);
+
+        for (const f of fs.readdirSync(tmpExtract)) {
+            fs.copyFileSync(path.join(tmpExtract, f), path.join(identityDir, f));
+        }
+    } finally {
+        if (fs.existsSync(tmpExtract)) fs.rmSync(tmpExtract, { recursive: true, force: true });
+        if (fs.existsSync(tmpTar)) try { fs.unlinkSync(tmpTar); } catch {}
+    }
 
     // List collected files
     const files = fs.readdirSync(identityDir).filter(f => !f.startsWith('.'));

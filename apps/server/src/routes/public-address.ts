@@ -141,7 +141,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             if (localPa && localPa.hostname) {
                 ctx.body = {
-                    success: true,
+                    success: false,
                     pubkey: nodePubkeyHex(),
                     ...localPa,
                     cached: true,

@@ -36,6 +36,7 @@ COPY . .
 #   5. Server (tsc → outputs to apps/server/dist/)
 RUN cd packages/beanpool-core && pnpm run build
 RUN cd packages/beanpool-engine && pnpm run build
+# Force PWA rebuild 2026-07-28-v3 (responsive sidebar layout)
 RUN cd apps/pwa && pnpm run build
 # PWA build clears apps/server/public/ (emptyOutDir), so copy settings files from static/
 COPY apps/server/static/* /app/apps/server/public/

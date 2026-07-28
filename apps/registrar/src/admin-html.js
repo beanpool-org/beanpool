@@ -140,6 +140,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         refreshBtn.addEventListener('click', function() { loadRegistrarData(); });
 
+        document.addEventListener('click', function(e) {
+            const approveTarget = e.target.closest('.btn-act-approve');
+            if (approveTarget) {
+                approveClaim(approveTarget.getAttribute('data-name'));
+                return;
+            }
+            const revokeTarget = e.target.closest('.btn-act-revoke');
+            if (revokeTarget) {
+                revokeClaim(revokeTarget.getAttribute('data-name'));
+                return;
+            }
+        });
+
         async function loadRegistrarData() {
             const secret = secretInput.value.trim();
             if (!secret) {
@@ -194,8 +207,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     '<td><span class="badge-mode ' + modeClass + '">' + (claim.mode || 'tunnel') + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + date + '</td>' +
                     '<td style="text-align: right;">' +
-                        '<button onclick="approveClaim(\'' + claim.name + '\')" class="btn-approve">Approve</button>' +
-                        '<button onclick="revokeClaim(\'' + claim.name + '\')" class="btn-revoke" style="margin-left: 0.4rem;">Reject</button>' +
+                        '<button data-name="' + claim.name + '" class="btn-approve btn-act-approve">Approve</button>' +
+                        '<button data-name="' + claim.name + '" class="btn-revoke btn-act-revoke" style="margin-left: 0.4rem;">Reject</button>' +
                     '</td>' +
                 '</tr>';
             });
@@ -224,7 +237,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     '<td><span class="badge-mode ' + modeClass + '">' + (alloc.mode || 'tunnel') + '</span></td>' +
                     '<td><span style="color: #10b981; font-weight: 600; font-size: 0.75rem; font-family: monospace;">🟢 ' + alloc.status + '</span></td>' +
                     '<td style="text-align: right;">' +
-                        '<button onclick="revokeClaim(\'' + alloc.name + '\')" class="btn-revoke">Revoke</button>' +
+                        '<button data-name="' + alloc.name + '" class="btn-revoke btn-act-revoke">Revoke</button>' +
                     '</td>' +
                 '</tr>';
             });

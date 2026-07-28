@@ -28,6 +28,12 @@ database_id = "165d8b11-fee8-4788-8ece-c632851e47d9"
 pattern = "beanpool.org/api/registrar/*"
 zone_name = "beanpool.org"
 [[routes]]
+pattern = "beanpool.org/api/local/admin/registrar/*"
+zone_name = "beanpool.org"
+[[routes]]
+pattern = "beanpool.org/admin*"
+zone_name = "beanpool.org"
+[[routes]]
 pattern = "beanpool.org/i/*"
 zone_name = "beanpool.org"
 

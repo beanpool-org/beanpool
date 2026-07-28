@@ -24,12 +24,4 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    depends_on: [node]
-    volumes:
-      - ./data:/data:ro                    # SAME data dir; read the token the node wrote
-    command:
-      - sh
-      - -c
-      - |
-        until [ -s /data/tunnel-token ]; do echo "waiting for tunnel token…"; sleep 5; done
-        exec cloudflared tunnel run --token "$(cat /data/tunnel-token)"
+    command: tunnel --no-autoupdate run --token-file /data/tunnel-token

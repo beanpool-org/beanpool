@@ -40,6 +40,7 @@ RUN cd apps/pwa && pnpm run build
 # PWA build clears apps/server/public/ (emptyOutDir), so copy settings files from static/
 COPY apps/server/static/* /app/apps/server/public/
 RUN cd apps/manager && pnpm run build
+# Force server rebuild 2026-07-28-v2
 RUN cd apps/server && pnpm run build
 
 # Multi-stage Docker build for BeanPool node

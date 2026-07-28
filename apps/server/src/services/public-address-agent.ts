@@ -31,12 +31,101 @@ const desiredName = (): string =>
 
 const isEnabled = (): boolean => process.env.PUBLIC_ADDRESS_AUTO === '1' || !!process.env.PUBLIC_ADDRESS_NAME;
 
-function writeToken(token?: string): void {
+import http from 'node:http';
+
+export async function restartSidecar(): Promise<void> {
+    if (!fs.existsSync('/var/run/docker.sock')) return;
+    try {
+        const containersJson = await new Promise<string>((resolve) => {
+            const req = http.request({
+                socketPath: '/var/run/docker.sock',
+                path: '/containers/json?all=true',
+                method: 'GET',
+            }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => resolve(data));
+            });
+            req.on('error', () => resolve('[]'));
+            req.setTimeout(5000, () => { req.destroy(); resolve('[]'); });
+            req.end();
+        });
+
+        let target: string | null = null;
+        try {
+            const list = JSON.parse(containersJson);
+            if (Array.isArray(list)) {
+                for (const c of list) {
+                    const names = (c.Names || []).map((n: string) => String(n));
+                    const image = String(c.Image || '');
+                    if (names.some((n: string) => n.includes('cloudflared')) || image.includes('cloudflared')) {
+                        target = c.Id || names[0]?.replace(/^\//, '') || null;
+                        if (target) break;
+                    }
+                }
+            }
+        } catch { /* parse err */ }
+
+        if (!target) {
+            console.warn('[PublicAddr] ⚠️ Sidecar restart skipped: no cloudflared container found.');
+            return;
+        }
+
+        const result = await new Promise<{ ok: boolean; status: number; body: string }>((resolve) => {
+            const req = http.request({
+                socketPath: '/var/run/docker.sock',
+                path: `/containers/${target}/restart?t=0`,
+                method: 'POST',
+            }, (res) => {
+                let body = '';
+                res.on('data', chunk => body += chunk);
+                res.on('end', () => resolve({ ok: res.statusCode === 204 || res.statusCode === 200 || res.statusCode === 304, status: res.statusCode || 0, body }));
+            });
+            req.on('error', (e) => resolve({ ok: false, status: 0, body: e.message }));
+            req.setTimeout(15000, () => { req.destroy(); resolve({ ok: false, status: 0, body: 'timeout' }); });
+            req.end();
+        });
+
+        if (result.ok) {
+            console.log(`[PublicAddr] ✅ restarted sidecar (HTTP ${result.status})`);
+        } else {
+            console.warn(`[PublicAddr] ❌ sidecar restart failed: HTTP ${result.status} — ${result.body}`);
+        }
+    } catch (e: any) {
+        console.warn('[PublicAddr] restartSidecar error:', e.message);
+    }
+}
+
+export async function writeToken(token?: string): Promise<void> {
     if (!token) return;
     try {
         fs.mkdirSync(DATA_DIR, { recursive: true });
-        fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
-    } catch (e: any) { console.warn('[PublicAddr] could not write tunnel token:', e.message); }
+        const trimmed = token.trim();
+        // Skip restart if token hasn't changed (reconcile runs every 5 min)
+        let existing = '';
+        try { existing = fs.readFileSync(TOKEN_FILE, 'utf-8').trim(); } catch {}
+        if (existing === trimmed) return;
+        fs.writeFileSync(TOKEN_FILE, trimmed, { mode: 0o600 });
+        try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
+        console.log('[PublicAddr] Token changed — restarting sidecar in 5s...');
+        // Brief pause for Cloudflare edge to register the new tunnel secret
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        await restartSidecar();
+    } catch (e: any) {
+        console.warn('[PublicAddr] could not write tunnel token:', e.message);
+    }
+}
+
+export async function removeToken(): Promise<void> {
+    try {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+        // Write empty token so cloudflared process exits cleanly without missing file crash
+        fs.writeFileSync(TOKEN_FILE, '', { mode: 0o600 });
+        try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
+        await restartSidecar();
+    } catch (e: any) {
+        console.warn('[PublicAddr] could not remove tunnel token:', e.message);
+    }
 }
 
 const persist = (pa: any) => updateNodeConfig({ publicAddress: pa } as any);

@@ -12,17 +12,65 @@
 import Koa from 'koa';
 import Router from '@koa/router';
 import { getCaCertPem, isUsingLetsEncrypt } from './services/tls.js';
+import { getKoaApp } from './https-server.js';
 import QRCode from 'qrcode';
 
 export async function startHttpServer(port: number): Promise<void> {
     const app = new Koa();
     const router = new Router();
 
+    // Cache compiled callback handler for delegating HTTP requests to HTTPS Koa app
+    let cachedKoaCallback: ((req: any, res: any) => void) | null = null;
+    let lastKoaAppRef: Koa | null = null;
+
+    // Cloudflare Tunnel delegation & direct IP access for Settings/API/PWA
+    app.use(async (ctx, next) => {
+        const koaApp = getKoaApp();
+        if (koaApp && (
+            ctx.get('cf-connecting-ip') || 
+            ctx.path.startsWith('/api') || 
+            ctx.path.startsWith('/settings') || 
+            ctx.path.startsWith('/app') || 
+            ctx.path.startsWith('/static') ||
+            ctx.path.startsWith('/avatars') ||
+            ctx.path.startsWith('/assets') ||
+            ctx.path.startsWith('/favicon') ||
+            ctx.path.startsWith('/bean') ||
+            ctx.path.startsWith('/manifest') ||
+            ctx.path.startsWith('/registerSW')
+        )) {
+            ctx.respond = false;
+            if (!cachedKoaCallback || lastKoaAppRef !== koaApp) {
+                cachedKoaCallback = koaApp.callback();
+                lastKoaAppRef = koaApp;
+            }
+            await cachedKoaCallback(ctx.req, ctx.res);
+            return;
+        }
+        await next();
+    });
+
     router.get('/(.*)', async (ctx, next) => {
+        if (
+            ctx.path.startsWith('/settings') || 
+            ctx.path.startsWith('/api') || 
+            ctx.path.startsWith('/app') || 
+            ctx.path.startsWith('/static') ||
+            ctx.path.startsWith('/avatars') ||
+            ctx.path.startsWith('/assets') ||
+            ctx.path.startsWith('/favicon') ||
+            ctx.path.startsWith('/bean') ||
+            ctx.path.startsWith('/manifest') ||
+            ctx.path.startsWith('/registerSW')
+        ) {
+            await next();
+            return;
+        }
+
         const publicDomain = process.env.CF_RECORD_NAME;
 
         if (publicDomain) {
-            // Public node — 301 redirect everything to HTTPS /welcome
+            // Non-tunnel browser requests — 301 redirect to HTTPS as before
             ctx.status = 301;
             ctx.redirect(`https://${publicDomain}/`);
             return;

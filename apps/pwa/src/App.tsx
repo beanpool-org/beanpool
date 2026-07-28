@@ -208,340 +208,396 @@ export function App() {
     ];
 
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100vh',
-            overflow: 'hidden',
-            background: 'var(--bg-primary)',
-            color: 'var(--text-primary)',
-        }}>
-            {/* Header with Premium Dynamic AI Banner */}
-            <header className="relative shadow-md" style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0.3rem 0.75rem',
-                borderBottom: (activeTab === 'map' && !showSettings) ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                position: (activeTab === 'map' && !showSettings) ? 'absolute' : 'sticky',
-                top: 0,
-                left: 0,
-                right: 0,
-                zIndex: 100,
-                backgroundImage: "url('/assets/neon-vines-banner.png')",
-                backgroundSize: '150% auto',
-                backgroundPosition: 'center',
-            }}>
-                {/* Subtle dark overlay to ensure text/buttons pop against the complex glowing mesh */}
-                <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
-
-                <div className="relative z-10" style={{ marginTop: '12px' }}>
-                    <SyncStatus />
-                </div>
-
-                {/* Dynamic Page Title or Map Banner (Absolutely Centered) */}
-                <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
-                    {activeTab !== 'map' || showSettings ? (
-                        <span 
-                            className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer" 
-                            style={{ marginTop: '8px' }}
-                            onClick={() => {
-                                if (!communityHealth) {
-                                    getCommunityHealth()
-                                        .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
-                                        .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
-                                } else {
-                                    setShowCommunityStatus(!showCommunityStatus);
-                                }
-                            }}
-                        >
-                            {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label}
-                        </span>
-                    ) : (
-                        <div 
-                            className="relative flex items-center gap-1.5 pointer-events-auto cursor-pointer" 
-                            style={{ transform: 'translateX(-12px) translateY(-2px)' }}
-                            onClick={() => {
-                                if (!communityHealth) {
-                                    getCommunityHealth()
-                                        .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
-                                        .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
-                                } else {
-                                    setShowCommunityStatus(!showCommunityStatus);
-                                }
-                            }}
-                        >
-                            <img src="/bean.png" alt="BeanPool Icon" style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
-                            <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">BeanPool</span>
-                            <span className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider">v{pkg.version}</span>
-                        </div>
-                    )}
-
-                    {/* Community Status Popover */}
-                    {showCommunityStatus && communityHealth && (
-                        <div 
-                            className="absolute top-full mt-2 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl p-4 min-w-[220px] z-50 pointer-events-auto"
-                            onClick={e => e.stopPropagation()}
-                        >
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className={`w-2.5 h-2.5 rounded-full ${communityHealth.online ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'}`} />
-                                <span className="font-bold text-sm text-nature-900 dark:text-white">
-                                    {communityHealth.online ? 'Online' : 'Offline'}
-                                </span>
-                            </div>
-                            <div className="space-y-1.5 text-[12px]">
-                                <div className="flex justify-between">
-                                    <span className="text-nature-500 dark:text-nature-400">Node</span>
-                                    <span className="font-semibold text-nature-800 dark:text-nature-200">{window.location.hostname}</span>
-                                </div>
-                                {communityHealth.memberCount !== undefined && (
-                                    <div className="flex justify-between">
-                                        <span className="text-nature-500 dark:text-nature-400">Members</span>
-                                        <span className="font-semibold text-nature-800 dark:text-nature-200">{communityHealth.memberCount}</span>
-                                    </div>
-                                )}
-                                {communityHealth.postCount !== undefined && (
-                                    <div className="flex justify-between">
-                                        <span className="text-nature-500 dark:text-nature-400">Posts</span>
-                                        <span className="font-semibold text-nature-800 dark:text-nature-200">{communityHealth.postCount}</span>
-                                    </div>
-                                )}
-                                <div className="flex justify-between">
-                                    <span className="text-nature-500 dark:text-nature-400">Status</span>
-                                    <span className={`font-bold ${isGuest ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                        {isGuest ? '👤 Guest' : '✅ Member'}
-                                    </span>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => setShowCommunityStatus(false)}
-                                className="mt-3 w-full text-center text-[11px] font-semibold text-nature-400 hover:text-nature-600 dark:hover:text-nature-300 cursor-pointer bg-transparent border-none"
-                            >
-                                Dismiss
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                <div className="relative z-10" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '12px' }}>
-                    <button
-                        onClick={() => { setActiveTab('people'); setPeopleSubView('invites'); setShowSettings(false); }}
-                        className={`flex items-center justify-center gap-1 px-3 border rounded-full shadow-sm cursor-pointer transition-transform hover:scale-105 ${
-                            isGuest 
-                                ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700' 
-                                : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700'
-                        }`}
-                        style={{ height: '26px' }}
-                    >
-                        {isGuest ? (
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-                        ) : (
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
-                            </svg>
-                        )}
-                        <span className={`font-semibold text-[11px] tracking-wide uppercase ${
-                            isGuest 
-                                ? 'text-amber-600 dark:text-amber-400' 
-                                : 'text-nature-900 dark:text-white'
-                        }`}>
-                            {isGuest ? 'Join' : 'Invite'}
-                        </span>
-                    </button>
-                    <HeaderControls showSettings={showSettings} setShowSettings={(v) => { setSettingsInitialMode('menu'); setShowSettings(v); }} identityPubkey={identity?.publicKey} onOpenProfile={(pk) => setOpenProfilePubkey(pk)} />
-                </div>
-            </header>
-
-            {/* Content */}
-            <main style={{
-                flex: 1,
-                minHeight: 0,
-                overflowY: (activeTab === 'map' && !showSettings) ? 'hidden' : 'auto',
-                paddingBottom: (activeTab === 'map' && !showSettings) ? '0' : '4rem',
-                position: 'relative',
-            }}>
-                {showSettings && (
-                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60, overflowY: 'auto' }}>
-                        <SettingsPage
-                            identity={identity}
-                            onIdentityUpdated={(updated) => { setIdentity(updated); setShowSettings(false); }}
-                            onBack={() => setShowSettings(false)}
-                            theme={theme}
-                            onToggleTheme={toggleTheme}
-                            initialMode={settingsInitialMode}
-                            onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}
-                        />
-                    </div>
-                )}
-
-                {showProfileSetup && (
-                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 70, overflowY: 'auto', background: 'var(--bg-primary)' }}>
-                        <ProfileSetup
-                            identity={identity}
-                            onDone={() => setShowProfileSetup(false)}
-                            onIdentityUpdated={(updated) => setIdentity(updated)}
-                        />
-                    </div>
-                )}
-
-                {/* Tab content — always mounted when not in settings (preserves scroll/state) */}
-                {!showSettings && (
-                    <>
-                        {activeTab === 'map' && <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}><MapPage identity={identity} openNewPost={openNewPost} onOpenNewPostHandled={() => setOpenNewPost(false)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} /></Suspense>}
-                        {activeTab === 'marketplace' && <MarketplacePage identity={identity} marketClickCount={marketClickCount} openPostId={openMarketPostId} onPostOpened={() => setOpenMarketPostId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
-                        {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
-                        {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
-                        {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} />}
-                        {activeTab === 'projects' && <ProjectsPage identity={identity} />}
-                    </>
-                )}
-
-                {/* Public Profile Overlay — layers on top of preserved tab content */}
-                {openProfilePubkey && (
-                    <PublicProfilePage
-                        identity={identity}
-                        pubkey={openProfilePubkey}
-                        onBack={() => setOpenProfilePubkey(null)}
-                        onMessage={(pubkey) => {
-                            setOpenProfilePubkey(null);
-                            navigateToTab('messages', pubkey);
-                        }}
-                        onNavigatePost={(postId) => {
-                            setOpenProfilePubkey(null);
-                            navigateToTab('marketplace', postId);
-                        }}
-                        onEditProfile={() => {
-                            setOpenProfilePubkey(null);
-                            setSettingsInitialMode('profile');
-                            setShowSettings(true);
-                        }}
-                        onNavigateTab={(tab, subView) => {
-                            setOpenProfilePubkey(null);
-                            if (tab === 'people' && subView) {
-                                setPeopleSubView(subView as any);
-                            }
-                            setActiveTab(tab as any);
-                            setShowSettings(false);
-                        }}
-                    />
-                )}
-            </main>
-
-            {/* Bottom nav — hidden when profile overlay is active */}
-            <nav className="relative" style={{
-                display: openProfilePubkey ? 'none' : 'flex',
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                backgroundImage: "url('/assets/neon-vines-banner.png')",
-                backgroundSize: '150% auto',
-                backgroundPosition: 'center',
-                borderTop: '1px solid #111',
-                zIndex: 100,
-                padding: '0.2rem 4px',
-            }}>
-                <div className="absolute inset-0 bg-black/30 pointer-events-none" />
-                <div className="relative z-10 w-full flex gap-1">
-                {TABS.map((tab) => {
-                    const isActive = activeTab === tab.id && !showSettings;
-                    return (
-                    <button
-                        key={tab.id}
+        <div className="flex h-screen overflow-hidden bg-bg-primary text-text-primary">
+            {/* Desktop Left Sidebar (Visible on md and larger) */}
+            <aside className="hidden md:flex flex-col w-64 shrink-0 bg-nature-50 dark:bg-nature-950 border-r border-nature-200 dark:border-nature-800 z-50">
+                {/* Brand Logo Header */}
+                <div className="p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between">
+                    <div 
+                        className="flex items-center gap-2 cursor-pointer"
                         onClick={() => {
-                            if (tab.id === 'marketplace') {
-                                setMarketClickCount(c => c + 1);
-                            }
-                            if (tab.id === 'people' && activeTab !== 'people') {
-                                setPeopleSubView('friends');
-                            }
-                            setActiveTab(tab.id);
+                            setActiveTab('marketplace');
                             setShowSettings(false);
                             setOpenProfilePubkey(null);
                         }}
-                        style={{
-                            flex: 1,
-                            padding: 0,
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                        }}
                     >
-                        <div style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            margin: '0 auto',
-                            gap: '0.1rem',
-                            padding: '0.15rem 0.5rem',
-                            borderRadius: '10px',
-                            background: 'rgba(0,0,0,0.45)',
-                            border: '1px solid rgba(255,255,255,0.05)',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                            color: isActive ? undefined : '#fefefe',
-                            transition: 'all 0.2s',
-                        }}>
-                            <span className="text-dark-aura" style={{ fontSize: '1.5rem', position: 'relative' }}>
-                                {tab.emoji}
+                        <img src="/bean.png" alt="BeanPool Icon" className="w-9 h-9 object-contain drop-shadow-sm" />
+                        <div className="flex flex-col">
+                            <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 tracking-wider">v{pkg.version}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Navigation Tab Links */}
+                <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
+                    {TABS.map((tab) => {
+                        const isActive = activeTab === tab.id && !showSettings;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => {
+                                    if (tab.id === 'marketplace') setMarketClickCount(c => c + 1);
+                                    if (tab.id === 'people' && activeTab !== 'people') setPeopleSubView('friends');
+                                    setActiveTab(tab.id);
+                                    setShowSettings(false);
+                                    setOpenProfilePubkey(null);
+                                }}
+                                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer ${
+                                    isActive
+                                        ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white shadow-sm'
+                                        : 'text-nature-600 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-900 hover:text-nature-900 dark:hover:text-nature-200'
+                                }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xl">{tab.emoji}</span>
+                                    <span>{tab.label}</span>
+                                </div>
                                 {tab.id === 'messages' && totalUnread > 0 && (
-                                    <span style={{
-                                        position: 'absolute',
-                                        top: '-6px',
-                                        right: '-10px',
-                                        background: 'var(--danger)',
-                                        color: '#fff',
-                                        fontSize: '0.6rem',
-                                        fontWeight: 700,
-                                        minWidth: '16px',
-                                        height: '16px',
-                                        borderRadius: '8px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        padding: '0 3px',
-                                        lineHeight: 1,
-                                        boxShadow: '0 0 6px var(--danger)',
-                                        textShadow: 'none', // Reset shadow for badge readability
-                                    }}>
+                                    <span className="bg-terra-600 text-white text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
                                         {totalUnread > 99 ? '99+' : totalUnread}
                                     </span>
                                 )}
                                 {tab.id === 'marketplace' && pendingDealsCount > 0 && (
-                                    <span style={{
-                                        position: 'absolute',
-                                        top: '-6px',
-                                        right: '-10px',
-                                        background: 'var(--danger)',
-                                        color: '#fff',
-                                        fontSize: '0.6rem',
-                                        fontWeight: 700,
-                                        minWidth: '16px',
-                                        height: '16px',
-                                        borderRadius: '8px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        padding: '0 3px',
-                                        lineHeight: 1,
-                                        boxShadow: '0 0 6px var(--danger)',
-                                        textShadow: 'none',
-                                    }}>
+                                    <span className="bg-terra-600 text-white text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
                                         {pendingDealsCount}
                                     </span>
                                 )}
-                            </span>
-                            <span className={isActive ? 'text-rainbow text-dark-aura' : 'text-dark-aura'} style={{ fontSize: '0.65rem', fontWeight: isActive ? 800 : 600 }}>
-                                {tab.label}
-                            </span>
-                        </div>
-                    </button>
-                    );
-                })}
+                            </button>
+                        );
+                    })}
+                </nav>
+
+                {/* Sidebar Footer Controls */}
+                <div className="p-3 border-t border-nature-200 dark:border-nature-800 space-y-2 bg-nature-100/50 dark:bg-nature-900/50">
+                    <div className="flex items-center justify-between px-2 py-1">
+                        <SyncStatus />
+                        <button
+                            onClick={() => setShowSettings(!showSettings)}
+                            aria-label="Settings"
+                            aria-pressed={showSettings}
+                            className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                                showSettings ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-400 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
+                            }`}
+                            title="Settings"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.281Z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {identity && (
+                        <button
+                            onClick={() => setOpenProfilePubkey(identity.publicKey)}
+                            className="w-full flex items-center gap-2.5 p-2 rounded-xl bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 hover:border-nature-400 dark:hover:border-nature-600 transition-colors cursor-pointer text-left"
+                        >
+                            <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center font-bold text-xs text-nature-800 dark:text-nature-200 shrink-0">
+                                {identity.callsign ? identity.callsign.substring(0, 2).toUpperCase() : 'ME'}
+                            </div>
+                            <div className="flex flex-col truncate">
+                                <span className="font-bold text-xs truncate text-nature-900 dark:text-white">{identity.callsign || 'Anonymous'}</span>
+                                <span className="text-[10px] text-nature-500 dark:text-nature-400">View Profile</span>
+                            </div>
+                        </button>
+                    )}
                 </div>
-            </nav>
+            </aside>
+
+            {/* Main Content Viewport */}
+            <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+                {/* Header with Premium Dynamic AI Banner (Mobile only) */}
+                <header className="relative shadow-md md:hidden" style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.3rem 0.75rem',
+                    borderBottom: (activeTab === 'map' && !showSettings) ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                    position: (activeTab === 'map' && !showSettings) ? 'absolute' : 'sticky',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 100,
+                    backgroundImage: "url('/assets/neon-vines-banner.png')",
+                    backgroundSize: '150% auto',
+                    backgroundPosition: 'center',
+                }}>
+                    <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
+
+                    <div className="relative z-10" style={{ marginTop: '12px' }}>
+                        <SyncStatus />
+                    </div>
+
+                    <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
+                        {activeTab !== 'map' || showSettings ? (
+                            <span 
+                                className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer" 
+                                style={{ marginTop: '8px' }}
+                                onClick={() => {
+                                    if (!communityHealth) {
+                                        getCommunityHealth()
+                                            .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
+                                            .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
+                                    } else {
+                                        setShowCommunityStatus(!showCommunityStatus);
+                                    }
+                                }}
+                            >
+                                {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label}
+                            </span>
+                        ) : (
+                            <div 
+                                className="relative flex items-center gap-1.5 pointer-events-auto cursor-pointer" 
+                                style={{ transform: 'translateX(-12px) translateY(-2px)' }}
+                                onClick={() => {
+                                    if (!communityHealth) {
+                                        getCommunityHealth()
+                                            .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
+                                            .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
+                                    } else {
+                                        setShowCommunityStatus(!showCommunityStatus);
+                                    }
+                                }}
+                            >
+                                <img src="/bean.png" alt="BeanPool Icon" style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
+                                <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">BeanPool</span>
+                                <span className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider">v{pkg.version}</span>
+                            </div>
+                        )}
+
+                        {showCommunityStatus && communityHealth && (
+                            <div 
+                                className="absolute top-full mt-2 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl p-4 min-w-[220px] z-50 pointer-events-auto"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className={`w-2.5 h-2.5 rounded-full ${communityHealth.online ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'}`} />
+                                    <span className="font-bold text-sm text-nature-900 dark:text-white">
+                                        {communityHealth.online ? 'Online' : 'Offline'}
+                                    </span>
+                                </div>
+                                <div className="space-y-1.5 text-xs text-nature-600 dark:text-nature-300">
+                                    <div className="flex justify-between">
+                                        <span>Node:</span>
+                                        <span className="font-mono font-semibold">{communityHealth.callsign || 'Local'}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Members:</span>
+                                        <span className="font-mono font-semibold">{communityHealth.memberCount ?? 0}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Active Posts:</span>
+                                        <span className="font-mono font-semibold">{communityHealth.postCount ?? 0}</span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowCommunityStatus(false)}
+                                    className="mt-3 w-full py-1 text-xs font-semibold text-center text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <HeaderControls
+                        showSettings={showSettings}
+                        setShowSettings={setShowSettings}
+                        identityPubkey={identity?.publicKey}
+                        onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                    />
+                </header>
+
+                {/* Main Scrollable Canvas */}
+                <main style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: (activeTab === 'map' && !showSettings) ? 'hidden' : 'auto',
+                    paddingBottom: (activeTab === 'map' && !showSettings) ? '0' : '4rem',
+                    position: 'relative',
+                }} className="md:pb-0">
+                    {showSettings && (
+                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60, overflowY: 'auto' }}>
+                            <SettingsPage
+                                identity={identity}
+                                onIdentityUpdated={(updated) => { setIdentity(updated); setShowSettings(false); }}
+                                onBack={() => setShowSettings(false)}
+                                theme={theme}
+                                onToggleTheme={toggleTheme}
+                                initialMode={settingsInitialMode}
+                                onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}
+                            />
+                        </div>
+                    )}
+
+                    {showProfileSetup && (
+                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 70, overflowY: 'auto', background: 'var(--bg-primary)' }}>
+                            <ProfileSetup
+                                identity={identity}
+                                onDone={() => setShowProfileSetup(false)}
+                                onIdentityUpdated={(updated) => setIdentity(updated)}
+                            />
+                        </div>
+                    )}
+
+                    {/* Tab content — always mounted when not in settings */}
+                    {!showSettings && (
+                        <>
+                            {activeTab === 'map' && <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}><MapPage identity={identity} openNewPost={openNewPost} onOpenNewPostHandled={() => setOpenNewPost(false)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} /></Suspense>}
+                            {activeTab === 'marketplace' && <MarketplacePage identity={identity} marketClickCount={marketClickCount} openPostId={openMarketPostId} onPostOpened={() => setOpenMarketPostId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
+                            {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} />}
+                            {activeTab === 'projects' && <ProjectsPage identity={identity} />}
+                        </>
+                    )}
+
+                    {/* Public Profile Overlay */}
+                    {openProfilePubkey && (
+                        <PublicProfilePage
+                            identity={identity}
+                            pubkey={openProfilePubkey}
+                            onBack={() => setOpenProfilePubkey(null)}
+                            onMessage={(pubkey) => {
+                                setOpenProfilePubkey(null);
+                                navigateToTab('messages', pubkey);
+                            }}
+                            onNavigatePost={(postId) => {
+                                setOpenProfilePubkey(null);
+                                navigateToTab('marketplace', postId);
+                            }}
+                            onEditProfile={() => {
+                                setOpenProfilePubkey(null);
+                                setSettingsInitialMode('profile');
+                                setShowSettings(true);
+                            }}
+                            onNavigateTab={(tab, subView) => {
+                                setOpenProfilePubkey(null);
+                                if (tab === 'people' && subView) {
+                                    setPeopleSubView(subView as any);
+                                }
+                                setActiveTab(tab as any);
+                                setShowSettings(false);
+                            }}
+                        />
+                    )}
+                </main>
+
+                {/* Bottom nav — mobile only */}
+                <nav className="relative md:hidden" style={{
+                    display: openProfilePubkey ? 'none' : 'flex',
+                    position: 'fixed',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    backgroundImage: "url('/assets/neon-vines-banner.png')",
+                    backgroundSize: '150% auto',
+                    backgroundPosition: 'center',
+                    borderTop: '1px solid #111',
+                    zIndex: 100,
+                    padding: '0.2rem 4px',
+                }}>
+                    <div className="absolute inset-0 bg-black/30 pointer-events-none" />
+                    <div className="relative z-10 w-full flex gap-1">
+                    {TABS.map((tab) => {
+                        const isActive = activeTab === tab.id && !showSettings;
+                        return (
+                        <button
+                            key={tab.id}
+                            onClick={() => {
+                                if (tab.id === 'marketplace') {
+                                    setMarketClickCount(c => c + 1);
+                                }
+                                if (tab.id === 'people' && activeTab !== 'people') {
+                                    setPeopleSubView('friends');
+                                }
+                                setActiveTab(tab.id);
+                                setShowSettings(false);
+                                setOpenProfilePubkey(null);
+                            }}
+                            style={{
+                                flex: 1,
+                                padding: 0,
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            <div style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                margin: '0 auto',
+                                gap: '0.1rem',
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '10px',
+                                background: 'rgba(0,0,0,0.45)',
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                                color: isActive ? undefined : '#fefefe',
+                                transition: 'all 0.2s',
+                            }}>
+                                <span className="text-dark-aura" style={{ fontSize: '1.5rem', position: 'relative' }}>
+                                    {tab.emoji}
+                                    {tab.id === 'messages' && totalUnread > 0 && (
+                                        <span style={{
+                                            position: 'absolute',
+                                            top: '-6px',
+                                            right: '-10px',
+                                            background: 'var(--danger)',
+                                            color: '#fff',
+                                            fontSize: '0.6rem',
+                                            fontWeight: 700,
+                                            minWidth: '16px',
+                                            height: '16px',
+                                            borderRadius: '8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            padding: '0 3px',
+                                            lineHeight: 1,
+                                            boxShadow: '0 0 6px var(--danger)',
+                                            textShadow: 'none',
+                                        }}>
+                                            {totalUnread > 99 ? '99+' : totalUnread}
+                                        </span>
+                                    )}
+                                    {tab.id === 'marketplace' && pendingDealsCount > 0 && (
+                                        <span style={{
+                                            position: 'absolute',
+                                            top: '-6px',
+                                            right: '-10px',
+                                            background: 'var(--danger)',
+                                            color: '#fff',
+                                            fontSize: '0.6rem',
+                                            fontWeight: 700,
+                                            minWidth: '16px',
+                                            height: '16px',
+                                            borderRadius: '8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            padding: '0 3px',
+                                            lineHeight: 1,
+                                            boxShadow: '0 0 6px var(--danger)',
+                                            textShadow: 'none',
+                                        }}>
+                                            {pendingDealsCount}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className={isActive ? 'text-rainbow text-dark-aura' : 'text-dark-aura'} style={{ fontSize: '0.65rem', fontWeight: isActive ? 800 : 600 }}>
+                                    {tab.label}
+                                </span>
+                            </div>
+                        </button>
+                        );
+                    })}
+                    </div>
+                </nav>
+            </div>
 
             {/* System Announcement Modal */}
             {sysAnnouncement && (

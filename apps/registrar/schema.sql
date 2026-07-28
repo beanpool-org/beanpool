@@ -42,3 +42,10 @@ INSERT OR IGNORE INTO name_policy (pattern, tier) VALUES
   ('cairns','gated'),('darwin','gated'),('hobart','gated'),('canberra','gated'),
   ('newcastle','gated'),('wollongong','gated'),('goldcoast','gated'),('townsville','gated'),
   ('geelong','gated'),('ballarat','gated'),('bendigo','gated'),('launceston','gated');
+
+CREATE TABLE IF NOT EXISTS invites (
+    code        TEXT PRIMARY KEY,
+    node_name   TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+);
+

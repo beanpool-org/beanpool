@@ -1,5 +1,5 @@
 {
-  "name": "beanpool-registrar",
+  "name": "@beanpool/registrar",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "build": "node -e \"console.log('registrar build ok')\"",
+    "test": "node --test test/registrar.test.js test/adversarial.test.js",
     "db:create": "wrangler d1 create beanpool-registrar",
     "db:init": "wrangler d1 execute beanpool-registrar --file schema.sql"
   },

@@ -4,9 +4,12 @@
 const API = 'https://api.cloudflare.com/client/v4';
 
 async function cf(env, method, path, body) {
+    const headers = (env.CF_EMAIL && env.CF_API_KEY)
+        ? { 'X-Auth-Email': env.CF_EMAIL, 'X-Auth-Key': env.CF_API_KEY, 'Content-Type': 'application/json' }
+        : { Authorization: `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' };
     const res = await fetch(`${API}${path}`, {
         method,
-        headers: { Authorization: `Bearer ${env.CF_API_TOKEN}`, 'Content-Type': 'application/json' },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
     });
     let data;

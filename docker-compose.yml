@@ -36,6 +36,7 @@ services:
       - NODE_OPTIONS=--max-old-space-size=128 --report-on-signal --report-directory=/data --report-uncaught-exception
     volumes:
       - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - default
       - beanpool-shared
@@ -43,14 +44,13 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
-    networks:
-      - default
-      - beanpool-shared
-    profiles:
-      - tunnel
+    command: tunnel --no-autoupdate run --token-file /data/tunnel-token
+    volumes:
+      - ./data:/data:ro
+    # NOTE: cloudflared must NOT join beanpool-shared — all node stacks use the
+    # same service name "beanpool-node", so Docker DNS round-robins across them.
+    # Keeping cloudflared on the project-default network ensures it always routes
+    # to this stack's node only.
     restart: unless-stopped
 
 networks:

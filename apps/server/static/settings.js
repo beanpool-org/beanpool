@@ -120,6 +120,7 @@
         async function loadPublicAddress() {
             if (!document.getElementById('pubaddr-display')) return;
             try {
+                pollLiveLogs();
                 const res = await fetch(`${API}/admin/public-address/status`, {
                     headers: { 'X-Admin-Password': authToken }
                 });
@@ -159,6 +160,70 @@
             }
         }
 
+        let pubaddrCountdownTimer = null;
+
+        let liveMonitorInterval = null;
+
+        function renderLiveLogEntry(entry) {
+            const colorMap = {
+                info: '#94a3b8',
+                success: '#34d399',
+                warning: '#f87171',
+                error: '#ef4444'
+            };
+            const col = colorMap[entry.type] || '#cbd5e1';
+            return `<div style="margin-bottom: 0.25rem; word-break: break-all;">
+                <span style="color:#64748b; font-size: 0.68rem;">[${esc(entry.timestamp)}]</span>
+                <span style="color:#60a5fa; font-weight:600; font-size: 0.68rem;">[${esc(entry.step)}]</span>
+                <span style="color:${col};">${esc(entry.message)}</span>
+            </div>`;
+        }
+
+        async function pollLiveLogs() {
+            try {
+                const res = await fetch(`${API}/admin/public-address/logs`, {
+                    headers: { 'X-Admin-Password': authToken }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.logs && Array.isArray(data.logs)) {
+                        const terminal = document.getElementById('pubaddr-live-terminal');
+                        const container = document.getElementById('pubaddr-live-logs');
+                        const stepSpan = document.getElementById('pubaddr-live-step');
+                        if (terminal) terminal.style.display = 'block';
+                        if (container) {
+                            container.innerHTML = data.logs.map(renderLiveLogEntry).join('');
+                            container.parentElement.scrollTop = container.parentElement.scrollHeight;
+                        }
+                        if (data.logs.length > 0 && stepSpan) {
+                            const last = data.logs[data.logs.length - 1];
+                            stepSpan.textContent = `Step ${last.step}`;
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
+        function startLiveMonitor() {
+            const terminal = document.getElementById('pubaddr-live-terminal');
+            const container = document.getElementById('pubaddr-live-logs');
+            if (terminal) terminal.style.display = 'block';
+            if (container) container.innerHTML = '<div style="color:#64748b;">Initializing real-time monitor...</div>';
+            if (liveMonitorInterval) clearInterval(liveMonitorInterval);
+            pollLiveLogs();
+            liveMonitorInterval = setInterval(pollLiveLogs, 500);
+        }
+
+        function stopLiveMonitor() {
+            setTimeout(() => {
+                pollLiveLogs();
+                if (liveMonitorInterval) {
+                    clearInterval(liveMonitorInterval);
+                    liveMonitorInterval = null;
+                }
+            }, 5000);
+        }
+
         document.getElementById('pubaddr-claim-btn')?.addEventListener('click', async () => {
             const name = document.getElementById('pubaddr-name').value.trim().toLowerCase();
             const mode = document.getElementById('pubaddr-mode').value;
@@ -167,32 +232,60 @@
                 showStatus('pubaddr-status', 'Invalid name (3–32 chars: a–z 0–9 -, no leading/trailing hyphen)', 'error');
                 return;
             }
-            showStatus('pubaddr-status', 'Claiming…', 'info');
+            showStatus('pubaddr-status', '⏳ Claiming & verifying Cloudflare edge connection…', 'info');
+            startLiveMonitor();
             try {
                 const res = await fetch(`${API}/admin/public-address/claim`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': authToken },
                     body: JSON.stringify({ password: authToken, name, mode })
                 });
                 const d = await res.json().catch(() => ({}));
-                if (res.ok) {
-                    showStatus('pubaddr-status', d.status === 'live' ? '🟢 Live!' : '⏳ Claimed — awaiting approval', 'success');
+                if (res.ok && d.status === 'live') {
+                    if (d.warning) {
+                        showStatus('pubaddr-status', '⏳ Address claimed! It can take a few minutes for the Cloudflare Tunnel to connect globally.', 'warning');
+                    } else {
+                        showStatus('pubaddr-status', '🟢 Address Live & Verified!', 'success');
+                    }
+                    loadPublicAddress();
+                } else if (res.ok) {
+                    showStatus('pubaddr-status', '⏳ Claimed — awaiting approval', 'success');
                     loadPublicAddress();
                 } else showStatus('pubaddr-status', d.error || 'Claim failed', 'error');
             } catch (e) { showStatus('pubaddr-status', 'Claim failed', 'error'); }
+            finally { stopLiveMonitor(); }
+        });
+
+        document.getElementById('pubaddr-restart-btn')?.addEventListener('click', async () => {
+            showStatus('pubaddr-status', '⚡ Force-restarting sidecar container…', 'info');
+            startLiveMonitor();
+            try {
+                const res = await fetch(`${API}/admin/public-address/restart-sidecar`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': authToken },
+                    body: JSON.stringify({ password: authToken })
+                });
+                const d = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    showStatus('pubaddr-status', '⚡ Tunnel Sidecar restarted cleanly!', 'success');
+                    loadPublicAddress();
+                } else showStatus('pubaddr-status', d.error || 'Restart failed', 'error');
+            } catch (e) { showStatus('pubaddr-status', 'Restart failed', 'error'); }
+            finally { stopLiveMonitor(); }
         });
 
         document.getElementById('pubaddr-offline-btn')?.addEventListener('click', async () => {
             if (!confirm('Release this node’s public address and take it offline?')) return;
-            showStatus('pubaddr-status', 'Releasing…', 'info');
+            showStatus('pubaddr-status', '⏳ Taking offline & verifying teardown…', 'info');
+            startLiveMonitor();
             try {
                 const res = await fetch(`${API}/admin/public-address/offline`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': authToken },
                     body: JSON.stringify({ password: authToken })
                 });
                 const d = await res.json().catch(() => ({}));
-                if (res.ok) { showStatus('pubaddr-status', 'Released.', 'success'); loadPublicAddress(); }
+                if (res.ok) { showStatus('pubaddr-status', 'Released.', 'success'); renderPublicAddress({ status: 'none' }); }
                 else showStatus('pubaddr-status', d.error || 'Failed', 'error');
             } catch (e) { showStatus('pubaddr-status', 'Failed', 'error'); }
+            finally { stopLiveMonitor(); }
         });
 
         document.getElementById('pubaddr-token-eye')?.addEventListener('click', (e) => {

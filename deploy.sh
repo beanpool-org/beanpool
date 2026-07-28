@@ -84,7 +84,7 @@ for NODE in "${TARGETS[@]}"; do
     HOME_DIR="/home/$USER"
   fi
   PROJECT_DIR="$HOME_DIR/$DIR"
-  PROJ_NAME=$(echo "beanpool-$DIR" | tr '[:upper:]' '[:lower:]')
+  PROJ_NAME=$(echo "$DIR" | tr '[:upper:]' '[:lower:]')
 
   # Azure nodes use the lattice SSH key; others use default
   if [ "$USER" = "azureuser" ]; then
@@ -102,7 +102,7 @@ for NODE in "${TARGETS[@]}"; do
 
   # Stop, preserve data, extract, pull image, start
   ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF
-    cd $PROJECT_DIR 2>/dev/null && sudo docker compose -p \$PROJ_NAME down 2>/dev/null
+    cd $PROJECT_DIR 2>/dev/null && (sudo docker compose -p \$PROJ_NAME down --remove-orphans 2>/dev/null || true; sleep 1)
     sudo mv $PROJECT_DIR/data $HOME_DIR/beanpool-data-backup-$DIR 2>/dev/null || true
     sudo mv $PROJECT_DIR/.env $HOME_DIR/beanpool-env-backup-$DIR 2>/dev/null || true
     sudo rm -rf $PROJECT_DIR
@@ -177,7 +177,7 @@ for NODE in "${TARGETS[@]}"; do
     fi
     if [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ]; then
       echo "🔨 Local build enabled for target: $NAME"
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build
+      sudo -E docker compose -p $PROJ_NAME up -d --build
     else
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d

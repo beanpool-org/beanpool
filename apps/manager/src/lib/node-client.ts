@@ -329,6 +329,276 @@ export async function seedTreasuryOffer(
     return res.json();
 }
 
+// ======================== BACKUP & REPLICATION HELPERS ========================
+
+export interface HarvesterNodeState {
+    nodeId: string;
+    nodeName: string;
+    nodeUrl: string;
+    lastHarvestAt: string | null;
+    lastSuccessAt: string | null;
+    status: 'idle' | 'harvesting' | 'ok' | 'error';
+    error: string | null;
+    dbSizeBytes: number;
+    memberCount: number;
+    postCount: number;
+    identityStatus: 'secured' | 'partial' | 'missing';
+    identityFiles: string[];
+    historyCount: number;
+}
+
+export interface HarvesterStatusResponse {
+    nodes: Array<{ id: string; name: string; url: string }>;
+    harvestState: Record<string, HarvesterNodeState>;
+}
+
+export async function fetchHarvesterStatus(): Promise<HarvesterStatusResponse> {
+    const res = await fetch('/api/manager/backups/status');
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function triggerHarvesterSync(nodeId: string, url?: string, adminPassword?: string): Promise<any> {
+    const res = await fetch('/api/manager/backups/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodeId, url, adminPassword, password: adminPassword }),
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${res.statusText} ${text ? `— ${text}` : ''}`);
+    }
+    return res.json();
+}
+
+export interface HistoryFileItem {
+    filename: string;
+    date: string;
+    sizeBytes: number;
+    modifiedAt: string;
+}
+
+export async function fetchNodeHistory(nodeId: string): Promise<HistoryFileItem[]> {
+    const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`);
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data.history || [];
+}
+
+export interface SnapshotItem {
+    name: string;
+    sizeBytes: number;
+    createdAt: string;
+}
+
+export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string): Promise<SnapshotItem[]> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/snapshots/list`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.snapshots || [];
+}
+
+export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string): Promise<SnapshotItem> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/snapshots/create`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data.snapshot;
+}
+
+export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPassword?: string): Promise<void> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/snapshots/delete`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+}
+
+export async function updateNodeReplicationCadence(
+    nodeUrl: string,
+    pullSeconds: number,
+    reconcileMinutes: number,
+    adminPassword?: string
+): Promise<void> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/backup-config`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ pullSeconds, reconcileMinutes, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+}
+
+export async function forceNodeResync(nodeUrl: string, adminPassword?: string): Promise<void> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/local/admin/replication-resync`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+}
+
+// ======================== REGISTRAR HELPERS ========================
+
+export interface RegistrarAllocation {
+    name: string;
+    node_pubkey: string;
+    hostname: string;
+    mode: 'tunnel' | 'direct' | string;
+    status: 'pending' | 'live' | 'revoked' | string;
+    tunnel_id?: string | null;
+    dns_record_id?: string | null;
+    origin?: string | null;
+    public_ip?: string | null;
+    contact?: string | null;
+    attest_fails?: number;
+    last_attest_at?: number | null;
+    requested_at: number;
+    decided_at?: number | null;
+    decided_by?: string | null;
+    tier?: 'auto' | 'gated' | 'blocked' | string;
+}
+
+export interface RegistrarPendingResponse {
+    allocations: RegistrarAllocation[];
+}
+
+export async function getRegistrarPending(
+    nodeUrl?: string,
+    adminPassword?: string
+): Promise<RegistrarAllocation[]> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
+    const endpoint = cleanUrl ? `${cleanUrl}/api/local/admin/registrar/pending` : '/api/local/admin/registrar/pending';
+    const url = new URL(endpoint, typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost');
+    if (adminPassword) {
+        url.searchParams.set('password', adminPassword);
+    }
+    const res = await fetch(url.toString(), {
+        headers,
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data.allocations || [];
+}
+
+export const getRegistralPending = getRegistrarPending;
+
+export async function approveRegistrarClaim(
+    nodeUrlOrName: string,
+    nameOrPassword?: string,
+    adminPassword?: string
+): Promise<{ status: string; name: string }> {
+    let nodeUrl = nodeUrlOrName;
+    let name = nameOrPassword;
+    let pwd = adminPassword;
+
+    if (!name) {
+        name = nodeUrlOrName;
+        nodeUrl = '';
+        pwd = undefined;
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (pwd) {
+        headers['X-Admin-Password'] = pwd;
+        headers['x-admin-secret'] = pwd;
+    }
+    const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
+    const endpoint = cleanUrl
+        ? `${cleanUrl}/api/local/admin/registrar/${encodeURIComponent(name)}/approve`
+        : `/api/local/admin/registrar/${encodeURIComponent(name)}/approve`;
+
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: pwd }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function revokeRegistrarClaim(
+    nodeUrlOrName: string,
+    nameOrPassword?: string,
+    adminPassword?: string
+): Promise<{ status: string; name: string }> {
+    let nodeUrl = nodeUrlOrName;
+    let name = nameOrPassword;
+    let pwd = adminPassword;
+
+    if (!name) {
+        name = nodeUrlOrName;
+        nodeUrl = '';
+        pwd = undefined;
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (pwd) {
+        headers['X-Admin-Password'] = pwd;
+        headers['x-admin-secret'] = pwd;
+    }
+    const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
+    const endpoint = cleanUrl
+        ? `${cleanUrl}/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`
+        : `/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`;
+
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ password: pwd }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+
+
 
 
 

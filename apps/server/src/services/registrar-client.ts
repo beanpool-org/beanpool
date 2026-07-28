@@ -48,7 +48,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
     if (body) headers['content-type'] = 'application/json';
     const res = await fetch(`${REGISTRAR_URL}${path}`, { method, headers, body: bodyText || undefined });
     const data = await res.json().catch(() => ({} as any));
-    if (!res.ok) throw new Error(data.error || `Registrar returned ${res.status}`);
+    if (!res.ok) throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`));
     return data;
 }
 

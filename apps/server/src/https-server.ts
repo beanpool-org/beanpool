@@ -101,6 +101,7 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
+import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import type { RouteDeps } from './routes/types.js';
 
 
@@ -452,8 +453,14 @@ function untrackConnection(ws: any) {
     }
 }
 
+// Module-level reference so the HTTP server can reuse the same Koa app for
+// plain-HTTP tunnel ingress (avoids TLS handshake overhead from cloudflared).
+let _koaApp: Koa | null = null;
+export function getKoaApp(): Koa | null { return _koaApp; }
+
 export async function startHttpsServer(port: number): Promise<void> {
     const app = new Koa();
+    _koaApp = app;
     const router = new Router();
 
     // Federation CORS middleware (must be before body parser for fast OPTIONS handling)
@@ -644,6 +651,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         const isBypassed =
             ctx.path.startsWith('/api/local/') ||
             ctx.path.startsWith('/api/admin/') ||
+            ctx.path.startsWith('/api/manager/') ||
             ctx.path === '/api/invite/redeem' ||
             ctx.path === '/api/invite/redeem-offline';
 
@@ -826,6 +834,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createCommonsRoutes(deps),
         createTreasuryRoutes(deps),
         createPublicAddressRoutes(deps),
+        createManagerBackupsRoutes(deps),
     ];
     for (const mod of routeModules) {
         router.use(mod.routes());
@@ -844,13 +853,24 @@ export async function startHttpsServer(port: number): Promise<void> {
         gzip: true,
     }));
 
-    // SPA fallback — return index.html for /app/* routes only
+    // SPA fallback — return index.html for /manager/* and /app/* routes
     app.use(async (ctx) => {
-        if (ctx.method === 'GET' && ctx.path.startsWith('/app')) {
-            const indexPath = path.join(PUBLIC_DIR, 'index.html');
-            if (fs.existsSync(indexPath)) {
-                ctx.type = 'html';
-                ctx.body = fs.createReadStream(indexPath);
+        if (ctx.method === 'GET') {
+            if (ctx.path.startsWith('/manager')) {
+                const managerIndexPath = path.join(PUBLIC_DIR, 'manager', 'index.html');
+                if (fs.existsSync(managerIndexPath)) {
+                    ctx.type = 'html';
+                    ctx.body = fs.createReadStream(managerIndexPath);
+                    return;
+                }
+            }
+            if (ctx.path.startsWith('/app')) {
+                const indexPath = path.join(PUBLIC_DIR, 'index.html');
+                if (fs.existsSync(indexPath)) {
+                    ctx.type = 'html';
+                    ctx.body = fs.createReadStream(indexPath);
+                    return;
+                }
             }
         }
     });

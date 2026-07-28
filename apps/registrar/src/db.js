@@ -42,3 +42,10 @@ export const updateAllocation = async (env, name, fields) => {
 
 export const deleteAllocation = (env, name) =>
     env.DB.prepare('DELETE FROM name_allocations WHERE name=?').bind(name).run();
+
+export const getInvite = (env, code) =>
+    env.DB.prepare('SELECT * FROM invites WHERE code=?').bind(code).first();
+
+export const insertInvite = (env, code, nodeName, createdAt = Math.floor(Date.now() / 1000)) =>
+    env.DB.prepare('INSERT INTO invites (code, node_name, created_at) VALUES (?,?,?)').bind(code, nodeName, createdAt).run();
+

@@ -101,6 +101,7 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
+import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import type { RouteDeps } from './routes/types.js';
 
 
@@ -650,6 +651,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         const isBypassed =
             ctx.path.startsWith('/api/local/') ||
             ctx.path.startsWith('/api/admin/') ||
+            ctx.path.startsWith('/api/manager/') ||
             ctx.path === '/api/invite/redeem' ||
             ctx.path === '/api/invite/redeem-offline';
 
@@ -832,6 +834,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createCommonsRoutes(deps),
         createTreasuryRoutes(deps),
         createPublicAddressRoutes(deps),
+        createManagerBackupsRoutes(deps),
     ];
     for (const mod of routeModules) {
         router.use(mod.routes());

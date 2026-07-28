@@ -568,6 +568,7 @@ export function App() {
                         <TopologyModule
                             activeNode={activeNode}
                             diag={diag}
+                            profiles={profiles}
                             onRefresh={() => loadDiagnostics()}
                         />
                     )}

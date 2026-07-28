@@ -45,6 +45,7 @@ import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
+import { initHarvester } from './services/harvester.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
 const PORT_HTTPS = Number(process.env.PORT_HTTPS ?? 8443);
@@ -106,6 +107,9 @@ async function main() {
     // after the connector manager so the primary's `mirror` connector — the
     // trust anchor the import signature gate checks — is already loaded.
     initBackupPuller();
+
+    // Step 8.6: Automated Fleet Harvester (drift-triggered backups + 30-day archiving)
+    initHarvester();
 
     // Step 9: Start cert renewal scheduler (checks every 24h)
     startRenewalScheduler();

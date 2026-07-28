@@ -20,13 +20,13 @@ ATTEST_FAIL_LIMIT = "2"     # consecutive MIS-attestations (wrong identity) befo
 [[d1_databases]]
 binding = "DB"
 database_name = "beanpool-registrar"
-database_id = "REPLACE_AFTER_D1_CREATE"
+database_id = "165d8b11-fee8-4788-8ece-c632851e47d9"
 
 # Routes on the beanpool.org zone. The Worker intercepts these paths; the Pages static
 # site continues to serve everything else. Uncomment + set zone_id at deploy time.
-# [[routes]]
-# pattern = "beanpool.org/api/registrar/*"
-# zone_name = "beanpool.org"
+[[routes]]
+pattern = "beanpool.org/api/registrar/*"
+zone_name = "beanpool.org"
 # [[routes]]
 # pattern = "beanpool.org/i/*"
 # zone_name = "beanpool.org"

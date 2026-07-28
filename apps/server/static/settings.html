@@ -947,6 +947,15 @@
 
                 <div id="pubaddr-display" style="font-size: 0.85rem; color:#94a3b8; margin-bottom: 1rem;">Loading…</div>
 
+                <!-- Live terminal output box for real-time propagation monitor -->
+                <div id="pubaddr-live-terminal" style="display:none; margin-bottom: 1rem; background: #090d16; border: 1px solid #1e293b; border-radius: 8px; padding: 0.75rem; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.75rem; max-height: 200px; overflow-y: auto;">
+                    <div style="color: #64748b; font-size: 0.7rem; font-weight: 600; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between;">
+                        <span>📡 Real-time Propagation Monitor</span>
+                        <span id="pubaddr-live-step" style="color: #60a5fa;">Step 0/4</span>
+                    </div>
+                    <div id="pubaddr-live-logs" style="line-height: 1.5; color: #cbd5e1;"></div>
+                </div>
+
                 <!-- token reveal (only when live via tunnel) -->
                 <div id="pubaddr-token-row" class="field" style="display:none; margin-bottom:1rem;">
                     <label>Tunnel token <span style="color:#64748b; font-weight:normal;">— keep secret; the connector uses this</span></label>
@@ -977,7 +986,10 @@
                     <button class="btn btn-primary" id="pubaddr-claim-btn" style="margin-top:0.75rem;">Go public</button>
                 </div>
 
-                <button class="btn" id="pubaddr-offline-btn" type="button" style="display:none; margin-top:0.5rem; color:#f87171; border-color:rgba(239,68,68,0.2); background:rgba(239,68,68,0.05);">Take offline</button>
+                <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                    <button class="btn" id="pubaddr-restart-btn" type="button" style="color:#60a5fa; border-color:rgba(96,165,250,0.3); background:rgba(96,165,250,0.08);">⚡ Reset Tunnel</button>
+                    <button class="btn" id="pubaddr-offline-btn" type="button" style="display:none; color:#f87171; border-color:rgba(239,68,68,0.2); background:rgba(239,68,68,0.05);">Take offline</button>
+                </div>
 
                 <div class="status-msg" id="pubaddr-status"></div>
             </div>

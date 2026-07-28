@@ -16,7 +16,7 @@ const nowS = () => Math.floor(Date.now() / 1000);
 async function provision(env, alloc) {
     if (alloc.mode === 'tunnel') {
         const tunnel = await cf.createTunnel(env, `bp-${alloc.name}`);
-        await cf.setTunnelIngress(env, tunnel.id, alloc.hostname, alloc.origin || 'http://localhost:3000');
+        await cf.setTunnelIngress(env, tunnel.id, alloc.hostname, alloc.origin || 'http://beanpool-node:8080');
         const rec = await cf.routeHostname(env, alloc.name, tunnel.id);
         return { tunnel_id: tunnel.id, dns_record_id: rec.id };
     }
@@ -84,6 +84,7 @@ async function handleClaim(request, env, bodyText) {
             if (mode === 'tunnel') out.tunnelToken = await cf.getTunnelToken(env, ids.tunnel_id);
             return json(out);
         } catch (e) {
+            console.error('[PROVISION_FAIL]', e.stack || e.message || e);
             await db.updateAllocation(env, name, { status: 'pending' });
             return json({ error: 'provisioning failed', detail: String(e.message || e) }, 502);
         }

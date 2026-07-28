@@ -12,17 +12,40 @@
 import Koa from 'koa';
 import Router from '@koa/router';
 import { getCaCertPem, isUsingLetsEncrypt } from './services/tls.js';
+import { getKoaApp } from './https-server.js';
 import QRCode from 'qrcode';
 
 export async function startHttpServer(port: number): Promise<void> {
     const app = new Koa();
     const router = new Router();
 
+    // Cloudflare Tunnel delegation & direct IP access for Settings/API
+    app.use(async (ctx, next) => {
+        const koaApp = getKoaApp();
+        if (koaApp && (
+            ctx.get('cf-connecting-ip') || 
+            ctx.path.startsWith('/api') || 
+            ctx.path.startsWith('/settings') || 
+            ctx.path.startsWith('/app') || 
+            ctx.path.startsWith('/static')
+        )) {
+            ctx.respond = false;
+            await koaApp.callback()(ctx.req, ctx.res);
+            return;
+        }
+        await next();
+    });
+
     router.get('/(.*)', async (ctx, next) => {
+        if (ctx.path.startsWith('/settings') || ctx.path.startsWith('/api') || ctx.path.startsWith('/app') || ctx.path.startsWith('/static')) {
+            await next();
+            return;
+        }
+
         const publicDomain = process.env.CF_RECORD_NAME;
 
         if (publicDomain) {
-            // Public node — 301 redirect everything to HTTPS /welcome
+            // Non-tunnel browser requests — 301 redirect to HTTPS as before
             ctx.status = 301;
             ctx.redirect(`https://${publicDomain}/`);
             return;

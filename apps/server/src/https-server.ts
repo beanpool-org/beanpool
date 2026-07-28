@@ -452,8 +452,14 @@ function untrackConnection(ws: any) {
     }
 }
 
+// Module-level reference so the HTTP server can reuse the same Koa app for
+// plain-HTTP tunnel ingress (avoids TLS handshake overhead from cloudflared).
+let _koaApp: Koa | null = null;
+export function getKoaApp(): Koa | null { return _koaApp; }
+
 export async function startHttpsServer(port: number): Promise<void> {
     const app = new Koa();
+    _koaApp = app;
     const router = new Router();
 
     // Federation CORS middleware (must be before body parser for fast OPTIONS handling)

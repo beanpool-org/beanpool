@@ -109,11 +109,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 addProbeLog('2/4', `🔒 Writing tunnel token...`, 'info');
                 await writeToken(result.tunnelToken);
                 addProbeLog('3/4', `⚡ Sidecar restarted`, 'success');
-                const verified = await verifyEdgeStatus(result.hostname, 'live');
-                if (!verified) {
-                    ctx.body = { success: true, ...result, warning: 'Cloudflare edge sync is taking longer than usual. Please wait a few seconds before clicking your link.' };
-                    return;
-                }
+                // Run edge status probe asynchronously in background to prevent HTTP request timeouts
+                verifyEdgeStatus(result.hostname, 'live').catch(err => {
+                    console.warn('[PublicAddr] Edge status probe error:', err?.message || err);
+                });
             }
             ctx.body = { success: true, ...result };
         } catch (e: any) {
@@ -183,7 +182,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             await removeToken();
             addProbeLog('3/4', `⚡ Sidecar container force-restarted (t=0)`, 'success');
             if (hostname) {
-                await verifyEdgeStatus(hostname, 'offline', 10);
+                verifyEdgeStatus(hostname, 'offline', 10).catch(err => {
+                    console.warn('[PublicAddr] Edge offline probe error:', err?.message || err);
+                });
             }
             ctx.body = { success: true, status: 'none', ...result };
         } catch (e: any) {

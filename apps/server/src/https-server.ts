@@ -460,6 +460,7 @@ export function getKoaApp(): Koa | null { return _koaApp; }
 
 export async function startHttpsServer(port: number): Promise<void> {
     const app = new Koa();
+    app.proxy = true;
     _koaApp = app;
     const router = new Router();
 
@@ -579,22 +580,26 @@ export async function startHttpsServer(port: number): Promise<void> {
     const adminRateLimits = new Map<string, number[]>();
     app.use(async (ctx, next) => {
         if (ctx.path.startsWith('/api/local/') || ctx.path.startsWith('/api/admin/')) {
-            const ip = ctx.ip;
-            const now = Date.now();
-            const windowMs = 60 * 1000; // 1 minute
-            const limit = 60; // max 60 requests per minute
+            // Exempt read-only telemetry / polling endpoints so dashboard polling doesn't burn administrative mutation rate limits
+            const isPollingEndpoint = ctx.path.endsWith('/diagnostics') || ctx.path.endsWith('/ws-connections') || ctx.path.endsWith('/system-stats');
+            if (!isPollingEndpoint) {
+                const ip = ctx.ip || 'unknown';
+                const now = Date.now();
+                const windowMs = 60 * 1000; // 1 minute
+                const limit = 300; // max 300 administrative requests per minute
 
-            let timestamps = adminRateLimits.get(ip) || [];
-            timestamps = timestamps.filter(t => now - t < windowMs);
+                let timestamps = adminRateLimits.get(ip) || [];
+                timestamps = timestamps.filter(t => now - t < windowMs);
 
-            if (timestamps.length >= limit) {
-                ctx.status = 429;
-                ctx.body = { error: 'Too many administrative requests. Please try again in 1 minute.' };
-                return;
+                if (timestamps.length >= limit) {
+                    ctx.status = 429;
+                    ctx.body = { error: 'Too many administrative requests. Please try again in 1 minute.' };
+                    return;
+                }
+
+                timestamps.push(now);
+                adminRateLimits.set(ip, timestamps);
             }
-
-            timestamps.push(now);
-            adminRateLimits.set(ip, timestamps);
         }
         await next();
     });

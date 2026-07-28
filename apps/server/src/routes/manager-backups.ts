@@ -56,12 +56,19 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
 
+        const slug = nodeSlug(nodeId);
         const nodes = getNodes();
-        const node = nodes.find(n => n.id === nodeId) || {
-            id: nodeId,
-            name: body.name || nodeId,
+        const found = nodes.find(n => n.id === nodeId || n.id === slug || nodeSlug(n) === slug);
+
+        const node: FleetNodeConfig = found ? {
+            ...found,
+            url: body.url || found.url,
+            adminPassword: body.adminPassword || body.password || found.adminPassword,
+        } : {
+            id: slug,
+            name: body.name || slug,
             url: body.url || '',
-            adminPassword: body.adminPassword,
+            adminPassword: body.adminPassword || body.password,
         };
 
         const result = await harvestNode(node, true);

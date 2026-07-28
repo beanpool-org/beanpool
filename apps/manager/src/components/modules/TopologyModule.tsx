@@ -92,10 +92,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     }, [activeTab, snapshotNodeId]);
 
     // Manual Sync Trigger
-    const handleTriggerSync = async (nodeId: string) => {
+    const handleTriggerSync = async (nodeId: string, node?: NodeProfile) => {
         setHarvestingNodeId(nodeId);
         try {
-            await triggerHarvesterSync(nodeId);
+            await triggerHarvesterSync(nodeId, node?.url, node?.adminPassword);
             await loadHarvester();
         } catch (e: any) {
             alert(`Harvest sync failed: ${e.message}`);
@@ -413,7 +413,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         <button
-                                                            onClick={() => handleTriggerSync(slug)}
+                                                            onClick={() => handleTriggerSync(slug, node)}
                                                             disabled={isSyncing}
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-bold text-[11px] transition-all"
                                                         >

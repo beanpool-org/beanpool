@@ -360,14 +360,15 @@ export async function fetchHarvesterStatus(): Promise<HarvesterStatusResponse> {
     return res.json();
 }
 
-export async function triggerHarvesterSync(nodeId: string): Promise<any> {
+export async function triggerHarvesterSync(nodeId: string, url?: string, adminPassword?: string): Promise<any> {
     const res = await fetch('/api/manager/backups/trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId }),
+        body: JSON.stringify({ nodeId, url, adminPassword, password: adminPassword }),
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${res.statusText} ${text ? `— ${text}` : ''}`);
     }
     return res.json();
 }

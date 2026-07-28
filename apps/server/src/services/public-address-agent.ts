@@ -51,20 +51,22 @@ export async function restartSidecar(): Promise<void> {
             req.end();
         });
 
-        let target: string | null = null;
-        try {
-            const list = JSON.parse(containersJson);
-            if (Array.isArray(list)) {
-                for (const c of list) {
-                    const names = (c.Names || []).map((n: string) => String(n));
-                    const image = String(c.Image || '');
-                    if (names.some((n: string) => n.includes('cloudflared')) || image.includes('cloudflared')) {
-                        target = c.Id || names[0]?.replace(/^\//, '') || null;
-                        if (target) break;
+        let target: string = process.env.CLOUDFLARED_CONTAINER_NAME || '';
+        if (!target) {
+            try {
+                const list = JSON.parse(containersJson);
+                if (Array.isArray(list)) {
+                    for (const c of list) {
+                        const names = (c.Names || []).map((n: string) => String(n));
+                        const image = String(c.Image || '');
+                        if (names.some((n: string) => n.includes('cloudflared')) || image.includes('cloudflared')) {
+                            target = c.Id || names[0]?.replace(/^\//, '') || '';
+                            if (target) break;
+                        }
                     }
                 }
-            }
-        } catch { /* parse err */ }
+            } catch { /* parse err */ }
+        }
 
         if (!target) {
             console.warn('[PublicAddr] ⚠️ Sidecar restart skipped: no cloudflared container found.');

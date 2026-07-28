@@ -9,9 +9,10 @@ if [ "$(id -u)" = "0" ]; then
   # Ensure the data directory is owned by the requested user
   chown -R $PUID:$PGID /data
 
-  # Allow the unprivileged process to restart the cloudflared sidecar via Docker API
+  # Allow the unprivileged process group to access the Docker API socket
   if [ -S /var/run/docker.sock ]; then
-    chown root:$PGID /var/run/docker.sock && chmod 660 /var/run/docker.sock
+    chown root:$PGID /var/run/docker.sock || true
+    chmod 660 /var/run/docker.sock || true
   fi
   
   # Drop privileges and execute the main process

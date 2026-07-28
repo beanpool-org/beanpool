@@ -142,7 +142,11 @@
             offlineBtn.style.display = 'none';
 
             if (d.status === 'live') {
-                display.innerHTML = `🟢 <strong style="color:#34d399;">Live</strong> at <a href="https://${esc(d.hostname)}" target="_blank" style="color:#38bdf8;">${esc(d.hostname)}</a> <span style="color:#64748b;">(${esc(d.mode || 'tunnel')})</span>`;
+                const badge = d.cached
+                    ? `🟢 <strong style="color:#34d399;">Live</strong> <span style="color:#fbbf24; font-size:0.75rem;">(cached status)</span>`
+                    : `🟢 <strong style="color:#34d399;">Live</strong>`;
+                const errorNote = d.error ? `<div style="color:#f87171; font-size:0.8rem; margin-top:4px;">Couldn't refresh registrar status — ${esc(d.error)}</div>` : '';
+                display.innerHTML = `${badge} at <a href="https://${esc(d.hostname)}" target="_blank" style="color:#38bdf8;">${esc(d.hostname)}</a> <span style="color:#64748b;">(${esc(d.mode || 'tunnel')})</span>${errorNote}`;
                 offlineBtn.style.display = '';
                 if (d.tunnelToken) {
                     tokenRow.style.display = '';

@@ -124,6 +124,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
 
     router.get('/api/local/admin/public-address/status', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
+        const localPa = (getNodeConfig() as any).publicAddress || null;
         try {
             const result = await addressStatus();
             if (result.status === 'live') {
@@ -137,7 +138,20 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 await removeToken();
             }
             ctx.body = { success: true, pubkey: nodePubkeyHex(), ...result };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            if (localPa && localPa.hostname) {
+                ctx.body = {
+                    success: false,
+                    pubkey: nodePubkeyHex(),
+                    ...localPa,
+                    cached: true,
+                    error: e.message
+                };
+            } else {
+                ctx.status = 400;
+                ctx.body = { error: e.message };
+            }
+        }
     });
 
     router.post('/api/local/admin/public-address/restart-sidecar', async (ctx) => {

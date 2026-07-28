@@ -285,6 +285,13 @@ export interface NodeConfig {
     publishHealth?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
+    publicAddress?: {
+        name?: string;
+        mode?: 'tunnel' | 'direct';
+        hostname?: string;
+        status?: string;
+        tunnelToken?: string;
+    } | null;
 }
 
 const wsClients: Set<any> = new Set();
@@ -2454,7 +2461,8 @@ export function getNodeConfig(): NodeConfig {
         publishContacts: config.publishContacts !== false,
         publishHealth: config.publishHealth !== false,
         directoryPushIntervalHours: typeof config.directoryPushIntervalHours === 'number' ? config.directoryPushIntervalHours : 12,
-        lastDirectoryPush: config.lastDirectoryPush
+        lastDirectoryPush: config.lastDirectoryPush,
+        publicAddress: config.publicAddress ?? null
     };
 
     if (migrated) {

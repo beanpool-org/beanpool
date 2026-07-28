@@ -27,31 +27,34 @@ export function SyncStatus() {
         merkleRoot: null,
         accountCount: 0,
     });
-    const [isGuest, setIsGuest] = useState(false);
+    const [isHttpOnline, setIsHttpOnline] = useState<boolean | null>(null);
+    const [isMember, setIsMember] = useState<boolean | null>(null);
 
     useEffect(() => {
         const unsub = onSyncChange(setSync);
         return unsub;
     }, []);
 
-    // Membership probe — check on mount, when connection state changes, and periodically
+    // Membership probe — probe HTTP API continuously regardless of WebSocket state
     useEffect(() => {
-        if (!sync.connected) return;
         let cancelled = false;
         const probe = async () => {
             try {
                 const identity = await loadIdentity();
                 if (!identity || cancelled) return;
                 const result = await checkMembership(identity.publicKey);
-                if (!cancelled) setIsGuest(!result.isMember);
+                if (!cancelled) {
+                    setIsHttpOnline(true);
+                    setIsMember(result.isMember);
+                }
             } catch {
-                // Network error — don't change state
+                if (!cancelled) setIsHttpOnline(false);
             }
         };
         probe();
         const interval = setInterval(probe, 5000);
         return () => { cancelled = true; clearInterval(interval); };
-    }, [sync.connected]);
+    }, []);
 
     // Auto-update the "time ago" label
     const [, setTick] = useState(0);
@@ -61,8 +64,12 @@ export function SyncStatus() {
     }, []);
 
     // Resolve display state
-    const isOnline = sync.connected && !isGuest;
-    const isGuestMode = sync.connected && isGuest;
+    // Online if either WebSocket or HTTP probe confirms connectivity and membership
+    const isMemberConfirmed = isMember === true;
+    const isReachable = sync.connected || isHttpOnline === true;
+
+    const isOnline = isReachable && isMemberConfirmed;
+    const isGuestMode = isReachable && isMember === false;
     const borderColor = isOnline ? 'rgba(16, 185, 129, 0.3)' 
         : isGuestMode ? 'rgba(217, 119, 6, 0.4)' 
         : 'rgba(239, 68, 68, 0.3)';

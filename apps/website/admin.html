@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+export const ADMIN_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -8,8 +8,22 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css">
     <style>
+        :root {
+            --bg-primary: #030712;
+            --bg-surface: #0b0f19;
+            --bg-card: rgba(17, 24, 39, 0.45);
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+            --accent: #f59e0b;
+            --radius-lg: 24px;
+            --radius-sm: 10px;
+            --font-header: 'Outfit', 'Space Grotesk', -apple-system, sans-serif;
+            --font-body: 'Inter', -apple-system, sans-serif;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-body); background-color: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
         .admin-card {
             background: rgba(11, 15, 25, 0.75);
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -49,35 +63,20 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.04);
             color: var(--text-secondary);
         }
-        .btn-approve {
-            background: #10b981;
-            color: white;
-            padding: 0.4rem 0.9rem;
-            border-radius: 8px;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-            transition: var(--transition);
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 0.5rem 1rem; border-radius: var(--radius-sm); font-weight: 600;
+            cursor: pointer; text-decoration: none; transition: all 0.2s;
         }
+        .btn-approve { background: #10b981; color: white; border: none; }
         .btn-approve:hover { background: #059669; }
-        .btn-revoke {
-            background: #ef4444;
-            color: white;
-            padding: 0.4rem 0.9rem;
-            border-radius: 8px;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-            transition: var(--transition);
-        }
+        .btn-revoke { background: #ef4444; color: white; border: none; }
         .btn-revoke:hover { background: #dc2626; }
+        .btn-logout { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .btn-logout:hover { background: rgba(239, 68, 68, 0.25); }
         .badge-mode {
-            padding: 0.2rem 0.6rem;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            font-family: monospace;
-            text-transform: uppercase;
+            padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem;
+            font-weight: 700; font-family: monospace; text-transform: uppercase;
         }
         .badge-tunnel { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
         .badge-direct { background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.3); }
@@ -87,69 +86,99 @@
     <div style="max-width: 1000px; margin: 0 auto; padding: 2rem 1.5rem;">
         <header style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem;">
             <div style="display: flex; align-items: center; gap: 1rem;">
-                <img src="/bean.png" alt="BeanPool Logo" style="width: 48px; height: 48px; object-fit: contain;">
+                <img src="https://beanpool.org/bean.png" alt="BeanPool Logo" style="width: 48px; height: 48px; object-fit: contain;">
                 <div>
                     <h1 style="font-family: var(--font-header); font-size: 1.5rem; color: #fff;">Super Admin — Registrar Control</h1>
                     <p style="font-size: 0.85rem; color: var(--text-muted);">Manage DNS subdomains & Cloudflare Tunnels for beanpool.org</p>
                 </div>
             </div>
-            <a href="/" class="btn" style="padding: 0.5rem 1rem; border-radius: 9999px; text-decoration: none; color: var(--text-secondary); background: rgba(255,255,255,0.05);">← Back to site</a>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button id="headerLogoutBtn" class="btn btn-logout" style="display: none; padding: 0.5rem 1rem; border-radius: 9999px;">🔒 Logout</button>
+                <a href="/" class="btn" style="padding: 0.5rem 1rem; border-radius: 9999px; text-decoration: none; color: var(--text-secondary); background: rgba(255,255,255,0.05);">← Back to site</a>
+            </div>
         </header>
 
-        <!-- Admin Auth Card -->
         <div class="admin-card">
             <h2 style="font-size: 1rem; font-family: var(--font-header); margin-bottom: 0.75rem; color: var(--accent);">🔑 Super Admin Credentials</h2>
             <div style="display: flex; gap: 0.75rem; align-items: center;">
                 <input type="password" id="adminSecretInput" class="admin-input" placeholder="Enter ADMIN_SECRET key..." style="flex: 1;">
                 <button id="saveSecretBtn" class="btn btn-approve" style="white-space: nowrap;">Save & Connect</button>
+                <button id="logoutSecretBtn" class="btn btn-logout" style="white-space: nowrap; display: none;">Logout</button>
             </div>
             <p id="secretStatus" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;"></p>
         </div>
 
-        <!-- Pending Claims Card -->
         <div class="admin-card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #fbbf24;">⏳ Pending Name Claims (Awaiting Your Approval)</h2>
                 <button id="refreshBtn" class="btn" style="padding: 0.35rem 0.8rem; font-size: 0.8rem; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; cursor: pointer;">🔄 Refresh</button>
             </div>
-
-            <div id="pendingTableContainer">
-                <p style="color: var(--text-muted); font-size: 0.85rem;">Loading claims...</p>
-            </div>
+            <div id="pendingTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading claims...</p></div>
         </div>
 
-        <!-- Active Allocations Card -->
         <div class="admin-card">
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #10b981; margin-bottom: 1rem;">🌐 Active Subdomain & Tunnel Allocations</h2>
-            <div id="activeTableContainer">
-                <p style="color: var(--text-muted); font-size: 0.85rem;">Loading active allocations...</p>
-            </div>
+            <div id="activeTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading active allocations...</p></div>
         </div>
     </div>
 
     <script>
         const secretInput = document.getElementById('adminSecretInput');
         const saveBtn = document.getElementById('saveSecretBtn');
+        const logoutBtn = document.getElementById('logoutSecretBtn');
+        const headerLogoutBtn = document.getElementById('headerLogoutBtn');
         const statusText = document.getElementById('secretStatus');
         const refreshBtn = document.getElementById('refreshBtn');
 
-        const savedSecret = localStorage.getItem('bp_registrar_admin_secret');
-        if (savedSecret) {
-            secretInput.value = savedSecret;
-            statusText.textContent = 'Key loaded from browser storage.';
+        function updateAuthUI() {
+            const savedSecret = localStorage.getItem('bp_registrar_admin_secret');
+            if (savedSecret) {
+                secretInput.value = savedSecret;
+                statusText.textContent = 'Key connected.';
+                statusText.style.color = '#10b981';
+                logoutBtn.style.display = 'inline-flex';
+                headerLogoutBtn.style.display = 'inline-flex';
+            } else {
+                secretInput.value = '';
+                statusText.textContent = 'Disconnected / Logged out.';
+                statusText.style.color = 'var(--text-muted)';
+                logoutBtn.style.display = 'none';
+                headerLogoutBtn.style.display = 'none';
+            }
         }
 
-        saveBtn.addEventListener('click', () => {
+        saveBtn.addEventListener('click', function() {
             const val = secretInput.value.trim();
             if (val) {
                 localStorage.setItem('bp_registrar_admin_secret', val);
-                statusText.textContent = 'Saved!';
-                statusText.style.color = '#10b981';
+                updateAuthUI();
                 loadRegistrarData();
             }
         });
 
-        refreshBtn.addEventListener('click', () => loadRegistrarData());
+        function performLogout() {
+            localStorage.removeItem('bp_registrar_admin_secret');
+            updateAuthUI();
+            document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171;">Logged out. Please enter your ADMIN_SECRET key above.</p>';
+            document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
+        }
+
+        logoutBtn.addEventListener('click', performLogout);
+        headerLogoutBtn.addEventListener('click', performLogout);
+        refreshBtn.addEventListener('click', function() { loadRegistrarData(); });
+
+        document.addEventListener('click', function(e) {
+            const approveTarget = e.target.closest('.btn-act-approve');
+            if (approveTarget) {
+                approveClaim(approveTarget.getAttribute('data-name'));
+                return;
+            }
+            const revokeTarget = e.target.closest('.btn-act-revoke');
+            if (revokeTarget) {
+                revokeClaim(revokeTarget.getAttribute('data-name'));
+                return;
+            }
+        });
 
         async function loadRegistrarData() {
             const secret = secretInput.value.trim();
@@ -173,14 +202,14 @@
                 const data = await res.json();
                 const allocs = data.allocations || [];
 
-                const pending = allocs.filter(a => a.status === 'pending');
-                const active = allocs.filter(a => a.status !== 'pending' && a.status !== 'revoked');
+                const pending = allocs.filter(function(a) { return a.status === 'pending'; });
+                const active = allocs.filter(function(a) { return a.status !== 'pending' && a.status !== 'revoked'; });
 
                 renderPending(pending);
+                renderActive(active);
             } catch (err) {
                 console.error(err);
-                document.getElementById('pendingTableContainer').innerHTML = `<p style="color: #f87171; font-size: 0.85rem;">Registrar Worker API unreachable (HTTP ${err.message || 'error'}). Ensure the <code>beanpool-registrar</code> Worker is deployed to Cloudflare with <code>wrangler deploy</code>.</p>`;
-                document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Registrar Worker API unreachable.</p>';
+                document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading allocations.</p>';
             }
         }
 
@@ -191,37 +220,24 @@
                 return;
             }
 
-            let html = `
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>Domain Name</th>
-                            <th>Node Pubkey</th>
-                            <th>Mode</th>
-                            <th>Requested</th>
-                            <th style="text-align: right;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
+            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Node Pubkey</th><th>Mode</th><th>Requested</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
 
-            pending.forEach(claim => {
+            pending.forEach(function(claim) {
                 const domain = claim.name + '.beanpool.org';
                 const date = claim.requested_at ? new Date(claim.requested_at * 1000).toLocaleString() : '—';
                 const pubkeyShort = claim.node_pubkey ? claim.node_pubkey.slice(0, 12) + '...' + claim.node_pubkey.slice(-8) : '—';
+                const modeClass = claim.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
 
-                html += `
-                    <tr>
-                        <td style="font-weight: 700; color: #fbbf24; font-family: monospace;">${domain}</td>
-                        <td style="font-family: monospace; font-size: 0.75rem;">${pubkeyShort}</td>
-                        <td><span class="badge-mode ${claim.mode === 'direct' ? 'badge-direct' : 'badge-tunnel'}">${claim.mode || 'tunnel'}</span></td>
-                        <td style="font-family: monospace; font-size: 0.75rem;">${date}</td>
-                        <td style="text-align: right;">
-                            <button onclick="approveClaim('${claim.name}')" class="btn-approve">Approve</button>
-                            <button onclick="revokeClaim('${claim.name}')" class="btn-revoke" style="margin-left: 0.4rem;">Reject</button>
-                        </td>
-                    </tr>
-                `;
+                html += '<tr>' +
+                    '<td style="font-weight: 700; color: #fbbf24; font-family: monospace;">' + domain + '</td>' +
+                    '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
+                    '<td><span class="badge-mode ' + modeClass + '">' + (claim.mode || 'tunnel') + '</span></td>' +
+                    '<td style="font-family: monospace; font-size: 0.75rem;">' + date + '</td>' +
+                    '<td style="text-align: right;">' +
+                        '<button data-name="' + claim.name + '" class="btn-approve btn-act-approve">Approve</button>' +
+                        '<button data-name="' + claim.name + '" class="btn-revoke btn-act-revoke" style="margin-left: 0.4rem;">Reject</button>' +
+                    '</td>' +
+                '</tr>';
             });
 
             html += '</tbody></table>';
@@ -235,35 +251,22 @@
                 return;
             }
 
-            let html = `
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>Domain Name</th>
-                            <th>Node Pubkey</th>
-                            <th>Mode</th>
-                            <th>Status</th>
-                            <th style="text-align: right;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
+            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Node Pubkey</th><th>Mode</th><th>Status</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
 
-            active.forEach(alloc => {
+            active.forEach(function(alloc) {
                 const domain = alloc.name + '.beanpool.org';
                 const pubkeyShort = alloc.node_pubkey ? alloc.node_pubkey.slice(0, 12) + '...' + alloc.node_pubkey.slice(-8) : '—';
+                const modeClass = alloc.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
 
-                html += `
-                    <tr>
-                        <td style="font-weight: 700; color: #10b981; font-family: monospace;">${domain}</td>
-                        <td style="font-family: monospace; font-size: 0.75rem;">${pubkeyShort}</td>
-                        <td><span class="badge-mode ${alloc.mode === 'direct' ? 'badge-direct' : 'badge-tunnel'}">${alloc.mode || 'tunnel'}</span></td>
-                        <td><span style="color: #10b981; font-weight: 600; font-size: 0.75rem; font-family: monospace;">🟢 ${alloc.status}</span></td>
-                        <td style="text-align: right;">
-                            <button onclick="revokeClaim('${alloc.name}')" class="btn-revoke">Revoke</button>
-                        </td>
-                    </tr>
-                `;
+                html += '<tr>' +
+                    '<td style="font-weight: 700; color: #10b981; font-family: monospace;">' + domain + '</td>' +
+                    '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
+                    '<td><span class="badge-mode ' + modeClass + '">' + (alloc.mode || 'tunnel') + '</span></td>' +
+                    '<td><span style="color: #10b981; font-weight: 600; font-size: 0.75rem; font-family: monospace;">🟢 ' + alloc.status + '</span></td>' +
+                    '<td style="text-align: right;">' +
+                        '<button data-name="' + alloc.name + '" class="btn-revoke btn-act-revoke">Revoke</button>' +
+                    '</td>' +
+                '</tr>';
             });
 
             html += '</tbody></table>';
@@ -272,47 +275,48 @@
 
         async function approveClaim(name) {
             const secret = secretInput.value.trim();
-            if (!confirm(`Approve ${name}.beanpool.org?`)) return;
+            if (!confirm('Approve ' + name + '.beanpool.org?')) return;
 
             try {
-                const res = await fetch(`/api/local/admin/registrar/${encodeURIComponent(name)}/approve`, {
+                const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/approve', {
                     method: 'POST',
                     headers: { 'x-admin-secret': secret }
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    alert(`Approved ${name}.beanpool.org successfully!`);
+                    alert('Approved ' + name + '.beanpool.org successfully!');
                     loadRegistrarData();
                 } else {
-                    alert(`Approval failed: ${data.error || data.detail}`);
+                    alert('Approval failed: ' + (data.error || data.detail));
                 }
             } catch (err) {
-                alert(`Network error: ${err.message}`);
+                alert('Network error: ' + err.message);
             }
         }
 
         async function revokeClaim(name) {
             const secret = secretInput.value.trim();
-            if (!confirm(`Revoke/Reject ${name}.beanpool.org?`)) return;
+            if (!confirm('Revoke/Reject ' + name + '.beanpool.org?')) return;
 
             try {
-                const res = await fetch(`/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`, {
+                const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/revoke', {
                     method: 'POST',
                     headers: { 'x-admin-secret': secret }
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    alert(`Revoked ${name}.beanpool.org successfully.`);
+                    alert('Revoked ' + name + '.beanpool.org successfully.');
                     loadRegistrarData();
                 } else {
-                    alert(`Revocation failed: ${data.error || data.detail}`);
+                    alert('Revocation failed: ' + (data.error || data.detail));
                 }
             } catch (err) {
-                alert(`Network error: ${err.message}`);
+                alert('Network error: ' + err.message);
             }
         }
 
-        if (savedSecret) loadRegistrarData();
+        updateAuthUI();
+        if (localStorage.getItem('bp_registrar_admin_secret')) loadRegistrarData();
     </script>
 </body>
-</html>
+</html>`;

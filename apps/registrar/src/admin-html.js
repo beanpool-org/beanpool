@@ -72,6 +72,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         .btn-approve:hover { background: #059669; }
         .btn-revoke { background: #ef4444; color: white; border: none; }
         .btn-revoke:hover { background: #dc2626; }
+        .btn-logout { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .btn-logout:hover { background: rgba(239, 68, 68, 0.25); }
         .badge-mode {
             padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem;
             font-weight: 700; font-family: monospace; text-transform: uppercase;
@@ -90,7 +92,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     <p style="font-size: 0.85rem; color: var(--text-muted);">Manage DNS subdomains & Cloudflare Tunnels for beanpool.org</p>
                 </div>
             </div>
-            <a href="/" class="btn" style="padding: 0.5rem 1rem; border-radius: 9999px; text-decoration: none; color: var(--text-secondary); background: rgba(255,255,255,0.05);">← Back to site</a>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button id="headerLogoutBtn" class="btn btn-logout" style="display: none; padding: 0.5rem 1rem; border-radius: 9999px;">🔒 Logout</button>
+                <a href="/" class="btn" style="padding: 0.5rem 1rem; border-radius: 9999px; text-decoration: none; color: var(--text-secondary); background: rgba(255,255,255,0.05);">← Back to site</a>
+            </div>
         </header>
 
         <div class="admin-card">
@@ -98,6 +103,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             <div style="display: flex; gap: 0.75rem; align-items: center;">
                 <input type="password" id="adminSecretInput" class="admin-input" placeholder="Enter ADMIN_SECRET key..." style="flex: 1;">
                 <button id="saveSecretBtn" class="btn btn-approve" style="white-space: nowrap;">Save & Connect</button>
+                <button id="logoutSecretBtn" class="btn btn-logout" style="white-space: nowrap; display: none;">Logout</button>
             </div>
             <p id="secretStatus" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;"></p>
         </div>
@@ -119,25 +125,46 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     <script>
         const secretInput = document.getElementById('adminSecretInput');
         const saveBtn = document.getElementById('saveSecretBtn');
+        const logoutBtn = document.getElementById('logoutSecretBtn');
+        const headerLogoutBtn = document.getElementById('headerLogoutBtn');
         const statusText = document.getElementById('secretStatus');
         const refreshBtn = document.getElementById('refreshBtn');
 
-        const savedSecret = localStorage.getItem('bp_registrar_admin_secret');
-        if (savedSecret) {
-            secretInput.value = savedSecret;
-            statusText.textContent = 'Key loaded from browser storage.';
+        function updateAuthUI() {
+            const savedSecret = localStorage.getItem('bp_registrar_admin_secret');
+            if (savedSecret) {
+                secretInput.value = savedSecret;
+                statusText.textContent = 'Key connected.';
+                statusText.style.color = '#10b981';
+                logoutBtn.style.display = 'inline-flex';
+                headerLogoutBtn.style.display = 'inline-flex';
+            } else {
+                secretInput.value = '';
+                statusText.textContent = 'Disconnected / Logged out.';
+                statusText.style.color = 'var(--text-muted)';
+                logoutBtn.style.display = 'none';
+                headerLogoutBtn.style.display = 'none';
+            }
         }
 
         saveBtn.addEventListener('click', function() {
             const val = secretInput.value.trim();
             if (val) {
                 localStorage.setItem('bp_registrar_admin_secret', val);
-                statusText.textContent = 'Saved!';
-                statusText.style.color = '#10b981';
+                updateAuthUI();
                 loadRegistrarData();
             }
         });
 
+        function performLogout() {
+            localStorage.removeItem('bp_registrar_admin_secret');
+            updateAuthUI();
+            document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171;">Logged out. Please enter your ADMIN_SECRET key above.</p>';
+            document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
+        }
+
+        logoutBtn.addEventListener('click', performLogout);
+        headerLogoutBtn.addEventListener('click', performLogout);
         refreshBtn.addEventListener('click', function() { loadRegistrarData(); });
 
         document.addEventListener('click', function(e) {
@@ -288,7 +315,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             }
         }
 
-        if (savedSecret) loadRegistrarData();
+        updateAuthUI();
+        if (localStorage.getItem('bp_registrar_admin_secret')) loadRegistrarData();
     </script>
 </body>
 </html>`;

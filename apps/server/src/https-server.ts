@@ -864,14 +864,20 @@ export async function startHttpsServer(port: number): Promise<void> {
             if (ctx.path.startsWith('/manager')) {
                 const managerIndexPath = path.join(PUBLIC_DIR, 'manager', 'index.html');
                 if (fs.existsSync(managerIndexPath)) {
+                    ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    ctx.set('Pragma', 'no-cache');
+                    ctx.set('Expires', '0');
                     ctx.type = 'html';
                     ctx.body = fs.createReadStream(managerIndexPath);
                     return;
                 }
             }
-            if (ctx.path.startsWith('/app')) {
+            if (ctx.path.startsWith('/app') || ctx.path === '/') {
                 const indexPath = path.join(PUBLIC_DIR, 'index.html');
                 if (fs.existsSync(indexPath)) {
+                    ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    ctx.set('Pragma', 'no-cache');
+                    ctx.set('Expires', '0');
                     ctx.type = 'html';
                     ctx.body = fs.createReadStream(indexPath);
                     return;

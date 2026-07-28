@@ -19,6 +19,10 @@ export async function startHttpServer(port: number): Promise<void> {
     const app = new Koa();
     const router = new Router();
 
+    // Cache compiled callback handler for delegating HTTP requests to HTTPS Koa app
+    let cachedKoaCallback: ((req: any, res: any) => void) | null = null;
+    let lastKoaAppRef: Koa | null = null;
+
     // Cloudflare Tunnel delegation & direct IP access for Settings/API/PWA
     app.use(async (ctx, next) => {
         const koaApp = getKoaApp();
@@ -36,7 +40,11 @@ export async function startHttpServer(port: number): Promise<void> {
             ctx.path.startsWith('/registerSW')
         )) {
             ctx.respond = false;
-            await koaApp.callback()(ctx.req, ctx.res);
+            if (!cachedKoaCallback || lastKoaAppRef !== koaApp) {
+                cachedKoaCallback = koaApp.callback();
+                lastKoaAppRef = koaApp;
+            }
+            await cachedKoaCallback(ctx.req, ctx.res);
             return;
         }
         await next();

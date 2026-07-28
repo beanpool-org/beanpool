@@ -216,6 +216,16 @@ export async function pullIdentityForNode(node: FleetNodeConfig): Promise<string
     const arrayBuffer = await res.arrayBuffer();
     fs.writeFileSync(tmpTar, Buffer.from(arrayBuffer));
 
+    // Validate tar entry paths prior to extraction to prevent path traversal (Zip-Slip)
+    const entryList = execFileSync('tar', ['-tf', tmpTar], { encoding: 'utf-8' });
+    const entries = entryList.split('\n').map(s => s.trim()).filter(Boolean);
+    for (const entry of entries) {
+        if (entry.startsWith('/') || entry.includes('..')) {
+            fs.unlinkSync(tmpTar);
+            throw new Error(`Insecure identity bundle entry path detected: ${entry}`);
+        }
+    }
+
     // Extract identity tar
     execFileSync('tar', ['-xzf', tmpTar, '-C', identityDir]);
     fs.unlinkSync(tmpTar);

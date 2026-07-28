@@ -11,7 +11,7 @@ if [ "$(id -u)" = "0" ]; then
 
   # Allow the unprivileged process to restart the cloudflared sidecar via Docker API
   if [ -S /var/run/docker.sock ]; then
-    chmod 666 /var/run/docker.sock
+    chown root:$PGID /var/run/docker.sock && chmod 660 /var/run/docker.sock
   fi
   
   # Drop privileges and execute the main process

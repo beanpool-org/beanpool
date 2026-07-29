@@ -228,6 +228,14 @@
             }, 5000);
         }
 
+        window.updatePubAddrPreview = function() {
+            const raw = (document.getElementById('pubaddr-name')?.value || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '');
+            const urlEl = document.getElementById('pubaddr-preview-url');
+            if (urlEl) {
+                urlEl.textContent = `https://${raw || 'cairns'}.beanpool.org`;
+            }
+        };
+
         document.getElementById('pubaddr-claim-btn')?.addEventListener('click', async () => {
             const name = document.getElementById('pubaddr-name').value.trim().toLowerCase();
             const mode = document.getElementById('pubaddr-mode').value;

@@ -969,24 +969,30 @@
                 <!-- manual claim (fallback when not set via env) -->
                 <div id="pubaddr-claim-form" style="display:none;">
                     <hr>
-                    <h3 style="font-size:0.85rem;">Claim an address</h3>
+                    <h3 style="font-size:0.85rem; margin-bottom:0.25rem;">🌐 Claim a Public Web Address (.beanpool.org)</h3>
+                    <p style="font-size:0.75rem; color:#94a3b8; margin-bottom:0.85rem;">
+                        Register a custom <strong>.beanpool.org</strong> subdomain for your node so members can access your community securely from any browser.
+                    </p>
                     <div class="row" style="gap:0.5rem;">
                         <div class="field" style="margin-bottom:0; flex:1;">
-                            <label>Name</label>
-                            <input type="text" id="pubaddr-name" placeholder="e.g. cairns" maxlength="32">
+                            <label>SUBDOMAIN PREFIX (DNS TUNNEL NAME)</label>
+                            <input type="text" id="pubaddr-name" placeholder="e.g. cairns (creates cairns.beanpool.org)" maxlength="32" oninput="updatePubAddrPreview()">
+                            <div id="pubaddr-preview-bar" style="font-size:0.72rem; color:#34d399; margin-top:0.35rem; font-family:monospace; background:rgba(16,185,129,0.08); padding:0.3rem 0.5rem; border-radius:6px; border:1px solid rgba(16,185,129,0.2);">
+                                🌐 Public URL: <strong id="pubaddr-preview-url" style="color:#6ee7b7;">https://cairns.beanpool.org</strong>
+                            </div>
                         </div>
                         <div class="field" style="margin-bottom:0; flex:1;">
-                            <label>Community Name</label>
+                            <label>COMMUNITY / POOL NAME</label>
                             <input type="text" id="pubaddr-community-name" placeholder="e.g. Cairns Solar Microgrid">
                         </div>
                     </div>
                     <div class="row" style="gap:0.5rem; margin-top:0.5rem;">
                         <div class="field" style="margin-bottom:0; flex:1;">
-                            <label>Operator Contact (Email / Handle)</label>
+                            <label>OPERATOR CONTACT (EMAIL OR HANDLE)</label>
                             <input type="text" id="pubaddr-contact" placeholder="e.g. admin@cairnsbean.org">
                         </div>
                         <div class="field" style="margin-bottom:0;">
-                            <label>Reach via</label>
+                            <label>CONNECTION METHOD</label>
                             <select id="pubaddr-mode">
                                 <option value="tunnel" selected>🛡️ Tunnel (recommended)</option>
                                 <option value="direct">🌐 Direct (public IP)</option>

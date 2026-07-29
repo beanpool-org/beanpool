@@ -67,6 +67,7 @@ async function handleClaim(request, env, bodyText) {
     const hostname = `${name}.${env.BASE_DOMAIN}`;
     const fields = {
         node_pubkey: pubkey, hostname, mode, status: 'pending',
+        community_name: b.community_name || b.communityName || null,
         origin: b.origin || null, public_ip: b.public_ip || null, contact: b.contact || null,
         tunnel_id: null, dns_record_id: null, attest_fails: 0, requested_at: now, decided_at: null, decided_by: null,
     };
@@ -81,7 +82,7 @@ async function handleClaim(request, env, bodyText) {
         try {
             const ids = await provision(env, { name, ...fields });
             await db.updateAllocation(env, name, { ...ids, status: 'live', decided_at: now, decided_by: 'auto' });
-            const out = { status: 'live', hostname };
+            const out = { status: 'live', hostname, community_name: fields.community_name, contact: fields.contact };
             if (mode === 'tunnel') out.tunnelToken = await cf.getTunnelToken(env, ids.tunnel_id);
             return json(out);
         } catch (e) {
@@ -98,11 +99,31 @@ async function handleStatus(request, env) {
     if (!pubkey) return json({ error: 'bad signature' }, 401);
     const a = await db.getAllocationByPubkey(env, pubkey);
     if (!a) return json({ status: 'none' });
-    const out = { status: a.status, name: a.name, hostname: a.hostname, mode: a.mode };
+    const out = { status: a.status, name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact };
     if (a.status === 'live' && a.mode === 'tunnel' && a.tunnel_id) {
         try { out.tunnelToken = await cf.getTunnelToken(env, a.tunnel_id); } catch { /* transient */ }
     }
     return json(out);
+}
+
+async function handleUpdate(request, env, bodyText) {
+    const pubkey = await verifySignedRequest(request, bodyText);
+    if (!pubkey) return json({ error: 'bad signature' }, 401);
+    const a = await db.getAllocationByPubkey(env, pubkey);
+    if (!a) return json({ error: 'allocation not found' }, 404);
+    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    const updates = {};
+    const commVal = b.community_name !== undefined ? b.community_name : b.communityName;
+    if (commVal !== undefined) {
+        updates.community_name = typeof commVal === 'string' && commVal.trim() ? commVal.trim() : null;
+    }
+    if (b.contact !== undefined) {
+        updates.contact = typeof b.contact === 'string' && b.contact.trim() ? b.contact.trim() : null;
+    }
+    if (Object.keys(updates).length > 0) {
+        await db.updateAllocation(env, a.name, updates);
+    }
+    return json({ status: 'ok', name: a.name, ...updates });
 }
 
 async function handleOffline(request, env, bodyText) {
@@ -268,6 +289,7 @@ export default {
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
             if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, await request.text());
             if (method === 'GET' && p === '/api/registrar/status') return await handleStatus(request, env);
+            if (method === 'POST' && p === '/api/registrar/update') return await handleUpdate(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/offline') return await handleOffline(request, env, await request.text());
 
             if (method === 'GET' && p === '/api/local/admin/registrar/pending') {

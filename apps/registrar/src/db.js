@@ -27,10 +27,10 @@ export const listActive = async (env) =>
 export const insertAllocation = (env, a) =>
     env.DB.prepare(
         `INSERT INTO name_allocations
-           (name, node_pubkey, hostname, mode, status, origin, public_ip, contact, attest_fails, requested_at)
-         VALUES (?,?,?,?,?,?,?,?,0,?)`
+           (name, node_pubkey, hostname, mode, status, community_name, origin, public_ip, contact, attest_fails, requested_at)
+         VALUES (?,?,?,?,?,?,?,?,?,0,?)`
     ).bind(a.name, a.node_pubkey, a.hostname, a.mode, a.status,
-           a.origin || null, a.public_ip || null, a.contact || null, a.requested_at).run();
+           a.community_name || null, a.origin || null, a.public_ip || null, a.contact || null, a.requested_at).run();
 
 export const updateAllocation = async (env, name, fields) => {
     const keys = Object.keys(fields);

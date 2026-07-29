@@ -52,7 +52,9 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
     return data;
 }
 
-export const claimAddress = (name: string, mode: 'tunnel' | 'direct', origin?: string, contact?: string) =>
-    signedFetch('POST', '/api/registrar/claim', { name, mode, origin, contact });
+export const claimAddress = (name: string, mode: 'tunnel' | 'direct', origin?: string, contact?: string, communityName?: string) =>
+    signedFetch('POST', '/api/registrar/claim', { name, mode, origin, contact, community_name: communityName });
+export const updateAddressMetadata = (communityName?: string, contact?: string) =>
+    signedFetch('POST', '/api/registrar/update', { community_name: communityName, contact });
 export const addressStatus = () => signedFetch('GET', '/api/registrar/status');
 export const releaseAddress = () => signedFetch('POST', '/api/registrar/offline', {});

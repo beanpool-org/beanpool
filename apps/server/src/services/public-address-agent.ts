@@ -145,9 +145,12 @@ async function reconcile(): Promise<void> {
     if (st.status === 'pending') { console.log(`[PublicAddr] ⏳ "${st.name || name}" awaiting approval`); persist(st); return; }
 
     // status 'none' → claim it
+    const contact = process.env.PUBLIC_ADDRESS_CONTACT || undefined;
+    const communityName = process.env.PUBLIC_ADDRESS_COMMUNITY_NAME || getLocalConfig().communityName || undefined;
+
     try {
-        const res = await claimAddress(name, mode, origin);
-        persist({ name, mode, ...res });
+        const res = await claimAddress(name, mode, origin, contact, communityName);
+        persist({ name, mode, communityName, contact, ...res });
         if (res.status === 'live') { writeToken(res.tunnelToken); console.log(`[PublicAddr] 🟢 live at ${res.hostname}`); }
         else console.log(`[PublicAddr] ⏳ "${name}" claimed — awaiting approval`);
     } catch (e: any) { console.warn('[PublicAddr] claim failed:', e.message); }

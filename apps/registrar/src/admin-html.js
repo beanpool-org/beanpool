@@ -220,16 +220,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 return;
             }
 
-            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Node Pubkey</th><th>Mode</th><th>Requested</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
+            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Community / Operator</th><th>Node Pubkey</th><th>Mode</th><th>Requested</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
 
             pending.forEach(function(claim) {
                 const domain = claim.name + '.beanpool.org';
                 const date = claim.requested_at ? new Date(claim.requested_at * 1000).toLocaleString() : '—';
                 const pubkeyShort = claim.node_pubkey ? claim.node_pubkey.slice(0, 12) + '...' + claim.node_pubkey.slice(-8) : '—';
                 const modeClass = claim.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
+                const comm = claim.community_name ? claim.community_name : '—';
+                const contactInfo = claim.contact ? ' (' + claim.contact + ')' : '';
 
                 html += '<tr>' +
                     '<td style="font-weight: 700; color: #fbbf24; font-family: monospace;">' + domain + '</td>' +
+                    '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
                     '<td><span class="badge-mode ' + modeClass + '">' + (claim.mode || 'tunnel') + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + date + '</td>' +
@@ -251,15 +254,18 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 return;
             }
 
-            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Node Pubkey</th><th>Mode</th><th>Status</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
+            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Community / Operator</th><th>Node Pubkey</th><th>Mode</th><th>Status</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
 
             active.forEach(function(alloc) {
                 const domain = alloc.name + '.beanpool.org';
                 const pubkeyShort = alloc.node_pubkey ? alloc.node_pubkey.slice(0, 12) + '...' + alloc.node_pubkey.slice(-8) : '—';
                 const modeClass = alloc.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
+                const comm = alloc.community_name ? alloc.community_name : '—';
+                const contactInfo = alloc.contact ? ' (' + alloc.contact + ')' : '';
 
                 html += '<tr>' +
                     '<td style="font-weight: 700; color: #10b981; font-family: monospace;">' + domain + '</td>' +
+                    '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
                     '<td><span class="badge-mode ' + modeClass + '">' + (alloc.mode || 'tunnel') + '</span></td>' +
                     '<td><span style="color: #10b981; font-weight: 600; font-size: 0.75rem; font-family: monospace;">🟢 ' + alloc.status + '</span></td>' +

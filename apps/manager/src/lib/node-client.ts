@@ -480,6 +480,7 @@ export interface RegistrarAllocation {
     hostname: string;
     mode: 'tunnel' | 'direct' | string;
     status: 'pending' | 'live' | 'revoked' | string;
+    community_name?: string | null;
     tunnel_id?: string | null;
     dns_record_id?: string | null;
     origin?: string | null;

@@ -7,11 +7,12 @@ CREATE TABLE IF NOT EXISTS name_allocations (
     hostname       TEXT NOT NULL,             -- FQDN we attest against, e.g. cairns.beanpool.org
     mode           TEXT NOT NULL,             -- 'tunnel' | 'direct'  ('byo' in Phase 2)
     status         TEXT NOT NULL,             -- 'pending' | 'live' | 'revoked'
+    community_name TEXT,                       -- display name of the community / node
     tunnel_id      TEXT,                       -- CF tunnel id (tunnel mode)
     dns_record_id  TEXT,                       -- CF DNS record id (both modes)
     origin         TEXT,                       -- tunnel ingress origin, e.g. http://node:3000
     public_ip      TEXT,                       -- A-record target (direct mode)
-    contact        TEXT,                       -- optional operator contact
+    contact        TEXT,                       -- optional operator contact email / handle
     attest_fails   INTEGER NOT NULL DEFAULT 0, -- consecutive *mismatches* (wrong identity) — NOT offline misses
     last_attest_at INTEGER,                    -- unix seconds of last successful attest (old = unverified/offline)
     requested_at   INTEGER NOT NULL,

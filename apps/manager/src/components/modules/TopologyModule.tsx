@@ -860,6 +860,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                     <thead>
                                         <tr className="border-b border-nature-800 bg-nature-900/50 text-nature-400 text-[10px] uppercase font-bold tracking-wider">
                                             <th className="px-4 py-3">Domain Name</th>
+                                            <th className="px-4 py-3">Community / Contact</th>
                                             <th className="px-4 py-3">Claimant Node Public Key</th>
                                             <th className="px-4 py-3">Mode</th>
                                             <th className="px-4 py-3">Requested Date</th>
@@ -879,6 +880,12 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         <div className="text-[10px] text-nature-400 font-sans">
                                                             {claim.tier === 'gated' ? '🔒 Gated Name' : '🕒 Awaiting Admin Review'}
                                                         </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 font-sans text-nature-200">
+                                                        <div className="font-bold text-white text-xs">{claim.community_name || '—'}</div>
+                                                        {claim.contact && (
+                                                            <div className="text-[10px] text-nature-400 font-mono">{claim.contact}</div>
+                                                        )}
                                                     </td>
                                                     <td className="px-4 py-3 font-mono text-nature-300">
                                                         <span className="bg-nature-900 px-2 py-1 rounded border border-nature-800 select-all" title={claim.node_pubkey}>
@@ -975,6 +982,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                     <thead>
                                         <tr className="border-b border-nature-800 bg-nature-900/50 text-nature-400 text-[10px] uppercase font-bold tracking-wider">
                                             <th className="px-4 py-3">Domain Name</th>
+                                            <th className="px-4 py-3">Community / Contact</th>
                                             <th className="px-4 py-3">Status</th>
                                             <th className="px-4 py-3">Mode</th>
                                             <th className="px-4 py-3">Public IP / Ingress</th>
@@ -995,6 +1003,12 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         <div className="text-[10px] text-nature-400 font-sans truncate max-w-[200px]" title={alloc.node_pubkey}>
                                                             Key: {alloc.node_pubkey ? alloc.node_pubkey.slice(0, 12) + '…' : '—'}
                                                         </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 font-sans text-nature-200">
+                                                        <div className="font-bold text-white text-xs">{alloc.community_name || '—'}</div>
+                                                        {alloc.contact && (
+                                                            <div className="text-[10px] text-nature-400 font-mono">{alloc.contact}</div>
+                                                        )}
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         {alloc.status === 'live' && (

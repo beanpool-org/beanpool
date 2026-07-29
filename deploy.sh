@@ -38,13 +38,15 @@ else
 fi
 
 # Package docker-compose.yml + data-preserving deploy config
+PKG_PATH="$SCRIPT_DIR/.deploy-package.tar.gz"
 echo "📦 Packaging deploy config..."
-tar -czf /tmp/beanpool-deploy.tar.gz \
+tar -czf "$PKG_PATH" \
     --exclude='node_modules' --exclude='.git' --exclude='dist' --exclude='.turbo' \
     --exclude='.next' --exclude='out' --exclude='archive' --exclude='apps/native' --exclude='apps/native.bak' \
     --exclude='*.apk' --exclude='data' --exclude='.env' --exclude='.env.*' --exclude='builds' \
+    --exclude='.deploy-package.tar.gz' \
     -C "$SCRIPT_DIR" .
-echo "✅ Package ready: $(du -h /tmp/beanpool-deploy.tar.gz | cut -f1)"
+echo "✅ Package ready: $(du -h "$PKG_PATH" | cut -f1)"
 
 # Determine which nodes to deploy
 TARGETS=()
@@ -98,7 +100,7 @@ for NODE in "${TARGETS[@]}"; do
   echo "====================================="
 
   # Upload
-  scp $SSH_OPTS /tmp/beanpool-deploy.tar.gz $USER@$IP:$HOME_DIR/
+  scp $SSH_OPTS "$PKG_PATH" $USER@$IP:$HOME_DIR/beanpool-deploy.tar.gz
 
   # Stop, preserve data, extract, pull image, start
   ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF
@@ -120,7 +122,7 @@ for NODE in "${TARGETS[@]}"; do
     sudo mkdir -p $PROJECT_DIR/data
     if [ -n "\$CF_TUNNEL_TOKEN" ]; then
       echo "\$CF_TUNNEL_TOKEN" | sudo tee $PROJECT_DIR/data/tunnel-token > /dev/null
-      sudo chmod 600 $PROJECT_DIR/data/tunnel-token
+      sudo chmod 644 $PROJECT_DIR/data/tunnel-token
     fi
     if [ "$DIR" = "BeanPool-Review" ]; then
       # Review node (VIC): tunnel-only HTTPS on 8447
@@ -129,9 +131,9 @@ for NODE in "${TARGETS[@]}"; do
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Castlemaine" ]; then
-      # Castlemaine node (VIC): HTTP 8087, HTTPS 8449
-      sed -i 's/"80:8080"/"8087:8080"/g' docker-compose.yml
-      sed -i 's/"443:8443"/"8449:8443"/g' docker-compose.yml
+      # Castlemaine node (VIC host tunnel): HTTP 8081, HTTPS 8445
+      sed -i 's/"80:8080"/"8081:8080"/g' docker-compose.yml
+      sed -i 's/"443:8443"/"8445:8443"/g' docker-compose.yml
       sed -i '/"8080:8080"/d' docker-compose.yml
       sed -i '/"8443:8443"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Bris" ]; then
@@ -178,12 +180,12 @@ for NODE in "${TARGETS[@]}"; do
     sudo docker image prune -f 2>/dev/null || true
     sudo docker network create beanpool-shared 2>/dev/null || true
     COMPOSE_FLAGS=()
-    if [ -n "\$CF_TUNNEL_TOKEN" ] && [ "\$NAME" = "mullum1" ]; then
+    if [ -n "\$CF_TUNNEL_TOKEN" ]; then
       COMPOSE_FLAGS=(--profile tunnel)
     fi
     if [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ]; then
       echo "🔨 Local build enabled for target: $NAME"
-      sudo -E docker compose -p $PROJ_NAME up -d --build
+      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build
     else
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d

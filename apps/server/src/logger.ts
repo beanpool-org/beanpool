@@ -80,11 +80,13 @@ export function writeLog(
         const result = stmt.run(level, category, sanitizedMessage, sanitizedMetadata);
         const insertId = result.lastInsertRowid;
 
-        // Bounded database: prune items older than 2500 entries
-        db.prepare(`
-            DELETE FROM system_logs
-            WHERE id < (SELECT id FROM system_logs ORDER BY id DESC LIMIT 1 OFFSET 2499)
-        `).run();
+        // Bounded database: prune items older than 2500 entries (every 100 insertions)
+        if (typeof insertId === 'number' && insertId % 100 === 0) {
+            db.prepare(`
+                DELETE FROM system_logs
+                WHERE id < (SELECT id FROM system_logs ORDER BY id DESC LIMIT 1 OFFSET 2499)
+            `).run();
+        }
 
         // Get the newly written log (so timestamp matches SQLite's default)
         const logEntry = db.prepare('SELECT * FROM system_logs WHERE id = ?').get(insertId) as any;

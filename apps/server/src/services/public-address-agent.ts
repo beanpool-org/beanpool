@@ -121,10 +121,9 @@ export async function writeToken(token?: string): Promise<void> {
 export async function removeToken(): Promise<void> {
     try {
         fs.mkdirSync(DATA_DIR, { recursive: true });
-        // Write empty token so cloudflared process exits cleanly without missing file crash
-        fs.writeFileSync(TOKEN_FILE, '', { mode: 0o600 });
-        try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
-        await restartSidecar();
+        if (fs.existsSync(TOKEN_FILE)) {
+            fs.unlinkSync(TOKEN_FILE);
+        }
     } catch (e: any) {
         console.warn('[PublicAddr] could not remove tunnel token:', e.message);
     }

@@ -144,6 +144,10 @@ async function fetchRemoteCounts(node: FleetNodeConfig): Promise<{ members: numb
 
 /** Pull backup stream tar.gz from node and extract state.db */
 export async function pullBackupForNode(node: FleetNodeConfig): Promise<{ dbSize: number }> {
+    if (!node.adminPassword && !node.replicationToken) {
+        throw new Error('No admin credentials (adminPassword / replicationToken) configured');
+    }
+
     const baseUrl = normalizeUrl(node.url);
     const headers: Record<string, string> = {};
     if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
@@ -195,6 +199,10 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<{ dbSize
 
 /** Pull identity bundle tar.gz from node */
 export async function pullIdentityForNode(node: FleetNodeConfig): Promise<string[]> {
+    if (!node.adminPassword && !node.replicationToken) {
+        throw new Error('No admin credentials (adminPassword / replicationToken) configured');
+    }
+
     const baseUrl = normalizeUrl(node.url);
     const headers: Record<string, string> = {};
     if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
@@ -378,6 +386,10 @@ export async function harvestAllNodes(force = false): Promise<Record<string, Nod
 /** Initialize background harvester timer */
 export function initHarvester(): void {
     if (harvesterTimer) clearInterval(harvesterTimer);
+
+    if (process.env.ENABLE_HARVESTER !== 'true') {
+        return;
+    }
 
     console.log('[Harvester] Starting automated background harvester loop (60s interval)...');
     

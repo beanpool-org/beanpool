@@ -110,6 +110,11 @@ const authAttempts = new Map<string, { count: number; resetAt: number }>();
 function rateLimit(ctx: Koa.Context): boolean {
     const ip = ctx.ip || 'unknown';
     const now = Date.now();
+    if (authAttempts.size > 200) {
+        for (const [k, v] of authAttempts) {
+            if (now >= v.resetAt) authAttempts.delete(k);
+        }
+    }
     const entry = authAttempts.get(ip);
     if (entry && now < entry.resetAt) {
         if (entry.count >= 15) {
@@ -603,6 +608,29 @@ export async function startHttpsServer(port: number): Promise<void> {
         }
         await next();
     });
+
+    // Periodic unref'd garbage collection for rate-limiting maps to prevent memory leaks
+    const rateLimitCleaner = setInterval(() => {
+        const now = Date.now();
+        const windowMs = 60 * 1000;
+        for (const [ip, timestamps] of gatewayRateLimits) {
+            const valid = timestamps.filter(t => now - t < windowMs);
+            if (valid.length === 0) gatewayRateLimits.delete(ip);
+            else gatewayRateLimits.set(ip, valid);
+        }
+        for (const [ip, timestamps] of adminRateLimits) {
+            const valid = timestamps.filter(t => now - t < windowMs);
+            if (valid.length === 0) adminRateLimits.delete(ip);
+            else adminRateLimits.set(ip, valid);
+        }
+        for (const [ip, entry] of authAttempts) {
+            if (now >= entry.resetAt) authAttempts.delete(ip);
+        }
+        for (const [nonce, exp] of seenNonces) {
+            if (exp <= now) seenNonces.delete(nonce);
+        }
+    }, 60 * 1000);
+    if (rateLimitCleaner.unref) rateLimitCleaner.unref();
 
     // JSON body parser middleware
     app.use(async (ctx, next) => {

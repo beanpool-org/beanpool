@@ -1,6 +1,6 @@
 services:
   beanpool-node:
-    image: ghcr.io/martyinspace/beanpool-node:latest
+    image: ghcr.io/beanpool-org/beanpool-node:latest
     build:
       context: .
       network: host
@@ -16,6 +16,8 @@ services:
       - CF_API_TOKEN=${CF_API_TOKEN}
       - CF_ZONE_ID=${CF_ZONE_ID}
       - CF_RECORD_NAME=${CF_RECORD_NAME}
+      - PUBLIC_ADDRESS_AUTO=${PUBLIC_ADDRESS_AUTO:-0}
+      - PUBLIC_ADDRESS_NAME=${PUBLIC_ADDRESS_NAME:-}
       # Cutover: role / backup / enforcement (Phase 1 + SRV-20). Empty defaults =
       # primary role, backup puller off, all enforcement flags off — the safe
       # dormant state. Set per node via the node-local .env (preserved across
@@ -33,7 +35,7 @@ services:
       # stack — to /data (persisted), so a freeze like 2026-07-18 is diagnosable
       # instead of erased by the restart. Also dumps a report on any uncaught
       # exception. No effect on normal operation. See ops/watchdog/.
-      - NODE_OPTIONS=--max-old-space-size=128 --report-on-signal --report-directory=/data --report-uncaught-exception
+      - NODE_OPTIONS=--max-old-space-size=512 --report-on-signal --report-directory=/data --report-uncaught-exception
     volumes:
       - ./data:/data
       - /var/run/docker.sock:/var/run/docker.sock
@@ -43,6 +45,8 @@ services:
     restart: unless-stopped
 
   cloudflared:
+    profiles:
+      - tunnel
     image: cloudflare/cloudflared:latest
     command: tunnel --no-autoupdate run --token-file /data/tunnel-token
     volumes:

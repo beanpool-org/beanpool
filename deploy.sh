@@ -117,6 +117,11 @@ for NODE in "${TARGETS[@]}"; do
     export CF_RECORD_NAME='${DNS}'
     export ADMIN_PASSWORD='${ADMIN_PASSWORD}'
     export CF_TUNNEL_TOKEN='${CF_TUNNEL_TOKEN}'
+    sudo mkdir -p $PROJECT_DIR/data
+    if [ -n "\$CF_TUNNEL_TOKEN" ]; then
+      echo "\$CF_TUNNEL_TOKEN" | sudo tee $PROJECT_DIR/data/tunnel-token > /dev/null
+      sudo chmod 600 $PROJECT_DIR/data/tunnel-token
+    fi
     if [ "$DIR" = "BeanPool-Review" ]; then
       # Review node (VIC): tunnel-only HTTPS on 8447
       sed -i 's/\"80:8080\"/\"8083:8080\"/g' docker-compose.yml
@@ -124,10 +129,11 @@ for NODE in "${TARGETS[@]}"; do
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Castlemaine" ]; then
-      sed -i 's/\"80:8080\"/\"8081:8080\"/g' docker-compose.yml
-      sed -i 's/\"443:8443\"/\"8445:8443\"/g' docker-compose.yml
-      sed -i 's/\"8080:8080\"/\"8082:8080\"/g' docker-compose.yml
-      sed -i 's/\"8443:8443\"/\"8446:8443\"/g' docker-compose.yml
+      # Castlemaine node (VIC): HTTP 8087, HTTPS 8449
+      sed -i 's/"80:8080"/"8087:8080"/g' docker-compose.yml
+      sed -i 's/"443:8443"/"8449:8443"/g' docker-compose.yml
+      sed -i '/"8080:8080"/d' docker-compose.yml
+      sed -i '/"8443:8443"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Bris" ]; then
       # Bris node (QLD): tunnel-only HTTPS on 8443
       sed -i '/\"8443:8443\"/d' docker-compose.yml

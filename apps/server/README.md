@@ -97,7 +97,7 @@ mkdir -p ~/BeanPool && cd ~/BeanPool
 ```yaml
 services:
   beanpool-node:
-    image: ghcr.io/martyinspace/beanpool-node:latest
+    image: ghcr.io/beanpool-org/beanpool-node:latest
     ports:
       - "80:8080"
       - "443:8443"
@@ -169,7 +169,7 @@ mkdir -p ~/BeanPool && cd ~/BeanPool
 ```yaml
 services:
   beanpool-node:
-    image: ghcr.io/martyinspace/beanpool-node:latest
+    image: ghcr.io/beanpool-org/beanpool-node:latest
     ports:
       - "80:8080"
       - "443:8443"
@@ -226,7 +226,7 @@ Configure the `cloudflared` agent container to run alongside your BeanPool node:
 ```yaml
 services:
   beanpool-node:
-    image: ghcr.io/martyinspace/beanpool-node:latest
+    image: ghcr.io/beanpool-org/beanpool-node:latest
     ports:
       - "8443:8443"
       - "4001:4001"

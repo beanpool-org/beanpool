@@ -465,6 +465,11 @@ const inviteCheckAttempts = new Map<string, { count: number; resetAt: number }>(
 router.get('/api/invite/check', async (ctx) => {
     const ip = ctx.ip || 'unknown';
     const now = Date.now();
+    if (inviteCheckAttempts.size > 200) {
+        for (const [k, v] of inviteCheckAttempts) {
+            if (now >= v.resetAt) inviteCheckAttempts.delete(k);
+        }
+    }
     const entry = inviteCheckAttempts.get(ip);
     if (entry && now < entry.resetAt) {
         if (entry.count >= 30) {
@@ -474,7 +479,6 @@ router.get('/api/invite/check', async (ctx) => {
         }
         entry.count++;
     } else {
-        if (inviteCheckAttempts.size > 10_000) inviteCheckAttempts.clear();
         inviteCheckAttempts.set(ip, { count: 1, resetAt: now + 60_000 });
     }
     const code = ((ctx.query.code as string) || '').trim();

@@ -173,10 +173,15 @@ for NODE in "${TARGETS[@]}"; do
       sed -i '/\"8080:8080\"/d' docker-compose.yml
       sed -i '/\"8443:8443\"/d' docker-compose.yml
     elif [ "$DIR" = "BeanPool-Bindarrabi" ]; then
-      sed -i 's/\"80:8080\"/\"8086:8080\"/g' docker-compose.yml
-      sed -i 's/\"443:8443\"/\"8451:8443\"/g' docker-compose.yml
-      sed -i '/\"8080:8080\"/d' docker-compose.yml
-      sed -i '/\"8443:8443\"/d' docker-compose.yml
+      sed -i 's/"80:8080"/"8086:8080"/g' docker-compose.yml
+      sed -i 's/"443:8443"/"8451:8443"/g' docker-compose.yml
+      sed -i '/"8080:8080"/d' docker-compose.yml
+      sed -i '/"8443:8443"/d' docker-compose.yml
+    elif [ "$DIR" = "BeanPool-YarraValley" ]; then
+      sed -i 's/"80:8080"/"8087:8080"/g' docker-compose.yml
+      sed -i 's/"443:8443"/"8452:8443"/g' docker-compose.yml
+      sed -i '/"8080:8080"/d' docker-compose.yml
+      sed -i '/"8443:8443"/d' docker-compose.yml
     fi
     if [ "$NAME" = "mullum1" ]; then
       sed -i '/"80:8080"/d' docker-compose.yml
@@ -184,15 +189,15 @@ for NODE in "${TARGETS[@]}"; do
       sed -i '/"8080:8080"/d' docker-compose.yml
       sed -i '/"8443:8443"/d' docker-compose.yml
     fi
-    echo \"Public IP: \$PUBLIC_IP\"
-    echo \"DNS Record: \$CF_RECORD_NAME\"
+    echo "Public IP: $PUBLIC_IP"
+    echo "DNS Record: $CF_RECORD_NAME"
     sudo docker image prune -f 2>/dev/null || true
     sudo docker network create beanpool-shared 2>/dev/null || true
     COMPOSE_FLAGS=()
-    if [ "$NAME" = "test" ]; then
+    if [ "$NAME" = "test" ] || [ "$NAME" = "yarravalley" ]; then
       COMPOSE_FLAGS=(--profile tunnel)
     fi
-    if [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ]; then
+    if [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ] || [ "$NAME" = "yarravalley" ]; then
       echo "🔨 Local build enabled for target: $NAME"
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build
     else

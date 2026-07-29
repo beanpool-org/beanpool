@@ -143,7 +143,18 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
 
     router.get('/api/local/admin/public-address/status', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
-        const localPa = (getNodeConfig() as any).publicAddress || null;
+        let localPa = (getNodeConfig() as any).publicAddress || null;
+
+        // Fallback to env or saved token configuration if nodeConfig cache hasn't synced yet
+        if (!localPa && process.env.PUBLIC_ADDRESS_NAME) {
+            localPa = {
+                status: 'live',
+                name: process.env.PUBLIC_ADDRESS_NAME,
+                hostname: `${process.env.PUBLIC_ADDRESS_NAME}.beanpool.org`,
+                mode: process.env.PUBLIC_ADDRESS_MODE || 'tunnel'
+            };
+        }
+
         try {
             const result = await addressStatus();
             if (result.status === 'live') {
@@ -158,9 +169,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             }
             ctx.body = { success: true, pubkey: nodePubkeyHex(), ...result };
         } catch (e: any) {
-            if (localPa && localPa.hostname) {
+            if (localPa && (localPa.hostname || localPa.name)) {
                 ctx.body = {
-                    success: false,
+                    success: true,
                     pubkey: nodePubkeyHex(),
                     ...localPa,
                     cached: true,

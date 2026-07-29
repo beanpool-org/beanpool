@@ -117,17 +117,31 @@
         });
 
         // ======================== PUBLIC ADDRESS (node DNS registrar) ========================
-        async function loadPublicAddress() {
+        async function loadPublicAddress(retryCount = 0) {
             if (!document.getElementById('pubaddr-display')) return;
+            const display = document.getElementById('pubaddr-display');
+            if (retryCount === 0 && display && !display.innerHTML.includes('Live')) {
+                display.innerHTML = `<span style="color:#94a3b8;">⏳ Checking registrar status…</span>`;
+            }
             try {
                 pollLiveLogs();
                 const res = await fetch(`${API}/admin/public-address/status`, {
                     headers: { 'X-Admin-Password': authToken }
                 });
                 const d = await res.json().catch(() => ({}));
-                renderPublicAddress(res.ok ? d : { status: 'error', error: d.error });
+                if (res.ok && (d.status === 'live' || d.status === 'pending' || d.status === 'none')) {
+                    renderPublicAddress(d);
+                } else if (retryCount < 2) {
+                    setTimeout(() => loadPublicAddress(retryCount + 1), 1200);
+                } else {
+                    renderPublicAddress(res.ok ? d : { status: 'error', error: d.error });
+                }
             } catch (e) {
-                renderPublicAddress({ status: 'error', error: 'offline' });
+                if (retryCount < 2) {
+                    setTimeout(() => loadPublicAddress(retryCount + 1), 1200);
+                } else {
+                    renderPublicAddress({ status: 'error', error: 'offline' });
+                }
             }
         }
 

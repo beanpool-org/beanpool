@@ -46,10 +46,19 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
         'x-bp-signature': await signHex(`${method}\n${path}\n${ts}\n${bodyText}`),
     };
     if (body) headers['content-type'] = 'application/json';
-    const res = await fetch(`${REGISTRAR_URL}${path}`, { method, headers, body: bodyText || undefined });
-    const data = await res.json().catch(() => ({} as any));
-    if (!res.ok) throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`));
-    return data;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+        const res = await fetch(`${REGISTRAR_URL}${path}`, { method, headers, body: bodyText || undefined, signal: controller.signal });
+        clearTimeout(timer);
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok) throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`));
+        return data;
+    } catch (err: any) {
+        clearTimeout(timer);
+        if (err.name === 'AbortError') throw new Error('Registrar request timed out after 5s');
+        throw err;
+    }
 }
 
 export const claimAddress = (name: string, mode: 'tunnel' | 'direct', origin?: string, contact?: string, communityName?: string) =>

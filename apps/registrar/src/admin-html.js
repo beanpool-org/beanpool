@@ -68,10 +68,24 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             padding: 0.5rem 1rem; border-radius: var(--radius-sm); font-weight: 600;
             cursor: pointer; text-decoration: none; transition: all 0.2s;
         }
-        .btn-approve { background: #10b981; color: white; border: none; }
+        .btn-approve { background: #10b981; color: white; border: none; padding: 0.4rem 0.85rem; font-size: 0.8rem; border-radius: var(--radius-sm); cursor: pointer; }
         .btn-approve:hover { background: #059669; }
-        .btn-revoke { background: #ef4444; color: white; border: none; }
-        .btn-revoke:hover { background: #dc2626; }
+        .btn-revoke {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            padding: 0.4rem 0.85rem;
+            font-size: 0.8rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        .btn-revoke:hover {
+            background: rgba(239, 68, 68, 0.9);
+            color: #ffffff;
+            border-color: #ef4444;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+        }
         .btn-logout { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
         .btn-logout:hover { background: rgba(239, 68, 68, 0.25); }
         .badge-mode {
@@ -270,7 +284,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     '<td><span class="badge-mode ' + modeClass + '">' + (alloc.mode || 'tunnel') + '</span></td>' +
                     '<td><span style="color: #10b981; font-weight: 600; font-size: 0.75rem; font-family: monospace;">🟢 ' + alloc.status + '</span></td>' +
                     '<td style="text-align: right;">' +
-                        '<button data-name="' + alloc.name + '" class="btn-revoke btn-act-revoke">Revoke</button>' +
+                        '<button data-name="' + alloc.name + '" class="btn btn-revoke btn-act-revoke">🗑️ Revoke</button>' +
                     '</td>' +
                 '</tr>';
             });
@@ -302,7 +316,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         async function revokeClaim(name) {
             const secret = secretInput.value.trim();
-            if (!confirm('Revoke/Reject ' + name + '.beanpool.org?')) return;
+            if (!confirm('⚠️ Are you sure you want to REVOKE ' + name + '.beanpool.org?\n\nThis will delete the Cloudflare Tunnel, remove the DNS record, and release the subdomain.')) return;
 
             try {
                 const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/revoke', {

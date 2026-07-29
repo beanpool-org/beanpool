@@ -105,6 +105,9 @@ for NODE in "${TARGETS[@]}"; do
   # Stop, preserve data, extract, pull image, start
   ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF
     cd $PROJECT_DIR 2>/dev/null && (
+      sudo docker rm -f $PROJ_NAME-beanpool-node-1 2>/dev/null || true
+      sudo docker rm -f beanpool-$PROJ_NAME-beanpool-node-1 2>/dev/null || true
+      sudo docker rm -f beanpool-beanpool-$NAME-beanpool-node-1 2>/dev/null || true
       sudo docker compose --profile tunnel -p \$PROJ_NAME down --remove-orphans 2>/dev/null || true
       sudo docker compose --profile tunnel -p beanpool-\$PROJ_NAME down --remove-orphans 2>/dev/null || true
       sleep 1

@@ -180,9 +180,6 @@ for NODE in "${TARGETS[@]}"; do
     sudo docker image prune -f 2>/dev/null || true
     sudo docker network create beanpool-shared 2>/dev/null || true
     COMPOSE_FLAGS=()
-    if [ -n "\$CF_TUNNEL_TOKEN" ]; then
-      COMPOSE_FLAGS=(--profile tunnel)
-    fi
     if [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ]; then
       echo "🔨 Local build enabled for target: $NAME"
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build

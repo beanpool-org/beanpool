@@ -107,8 +107,8 @@ export async function writeToken(token?: string): Promise<void> {
         let existing = '';
         try { existing = fs.readFileSync(TOKEN_FILE, 'utf-8').trim(); } catch {}
         if (existing === trimmed) return;
-        fs.writeFileSync(TOKEN_FILE, trimmed, { mode: 0o600 });
-        try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
+        fs.writeFileSync(TOKEN_FILE, trimmed, { mode: 0o644 });
+        try { fs.chmodSync(TOKEN_FILE, 0o644); } catch {}
         console.log('[PublicAddr] Token changed — restarting sidecar in 5s...');
         // Brief pause for Cloudflare edge to register the new tunnel secret
         await new Promise(resolve => setTimeout(resolve, 5000));

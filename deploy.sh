@@ -129,6 +129,8 @@ for NODE in "${TARGETS[@]}"; do
     sudo mkdir -p $PROJECT_DIR/data
     if [ -n "\$CF_TUNNEL_TOKEN" ]; then
       echo "\$CF_TUNNEL_TOKEN" | sudo tee $PROJECT_DIR/data/tunnel-token > /dev/null
+    fi
+    if [ -f "$PROJECT_DIR/data/tunnel-token" ]; then
       sudo chmod 644 $PROJECT_DIR/data/tunnel-token
     fi
     if [ "$DIR" = "BeanPool-Review" ]; then

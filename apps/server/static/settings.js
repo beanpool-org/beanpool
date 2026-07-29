@@ -231,6 +231,8 @@
         document.getElementById('pubaddr-claim-btn')?.addEventListener('click', async () => {
             const name = document.getElementById('pubaddr-name').value.trim().toLowerCase();
             const mode = document.getElementById('pubaddr-mode').value;
+            const communityName = document.getElementById('pubaddr-community-name')?.value.trim() || undefined;
+            const contact = document.getElementById('pubaddr-contact')?.value.trim() || undefined;
             if (!name) { showStatus('pubaddr-status', 'Enter a name', 'error'); return; }
             if (!/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/.test(name)) {
                 showStatus('pubaddr-status', 'Invalid name (3–32 chars: a–z 0–9 -, no leading/trailing hyphen)', 'error');
@@ -241,7 +243,7 @@
             try {
                 const res = await fetch(`${API}/admin/public-address/claim`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': authToken },
-                    body: JSON.stringify({ password: authToken, name, mode })
+                    body: JSON.stringify({ password: authToken, name, mode, communityName, contact })
                 });
                 const d = await res.json().catch(() => ({}));
                 if (res.ok && d.status === 'live') {

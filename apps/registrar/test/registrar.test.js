@@ -53,12 +53,12 @@ function createMockD1() {
                 },
                 async run() {
                     if (sql.startsWith('INSERT INTO name_allocations')) {
-                        const [name, node_pubkey, hostname, mode, status, origin, public_ip, contact, requested_at] = boundArgs;
+                        const [name, node_pubkey, hostname, mode, status, community_name, origin, public_ip, contact, requested_at] = boundArgs;
                         if (allocations.has(name) && allocations.get(name).status !== 'revoked') {
                             throw new Error('UNIQUE constraint failed: name_allocations.name');
                         }
                         allocations.set(name, {
-                            name, node_pubkey, hostname, mode, status, origin, public_ip, contact,
+                            name, node_pubkey, hostname, mode, status, community_name, origin, public_ip, contact,
                             attest_fails: 0, requested_at, last_attest_at: null, decided_at: null, decided_by: null
                         });
                         return { success: true };
@@ -295,4 +295,45 @@ test('Attestation sweep logic: mismatch revokes vs unverified preserves', async 
     } finally {
         globalThis.fetch = originalFetch;
     }
+});
+
+test('Metadata: claim with community_name and update via signed POST /api/registrar/update', async () => {
+    const env = mockEnv();
+    const { keyPair, pubHex } = await generateKeypair();
+
+    // 1. Claim with community_name & contact
+    const claimReq = await makeSignedRequest(
+        'https://beanpool.org/api/registrar/claim',
+        'POST', keyPair, pubHex, {
+            name: 'cairns',
+            mode: 'tunnel',
+            community_name: 'Cairns Solar Grid',
+            contact: 'cairns@beanpool.org'
+        }
+    );
+    const claimRes = await worker.fetch(claimReq, env);
+    assert.equal(claimRes.status, 200);
+
+    // Verify stored in D1
+    const alloc1 = await db.getAllocation(env, 'cairns');
+    assert.equal(alloc1.community_name, 'Cairns Solar Grid');
+    assert.equal(alloc1.contact, 'cairns@beanpool.org');
+
+    // 2. Signed metadata update via /api/registrar/update
+    const updateReq = await makeSignedRequest(
+        'https://beanpool.org/api/registrar/update',
+        'POST', keyPair, pubHex, {
+            community_name: 'Cairns Eco Village',
+            contact: 'admin@cairnseca.org'
+        }
+    );
+    const updateRes = await worker.fetch(updateReq, env);
+    assert.equal(updateRes.status, 200);
+    const updateBody = await updateRes.json();
+    assert.equal(updateBody.status, 'ok');
+
+    // Verify updated values in D1
+    const alloc2 = await db.getAllocation(env, 'cairns');
+    assert.equal(alloc2.community_name, 'Cairns Eco Village');
+    assert.equal(alloc2.contact, 'admin@cairnseca.org');
 });

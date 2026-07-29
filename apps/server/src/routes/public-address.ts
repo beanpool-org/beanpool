@@ -8,7 +8,7 @@
 
 import Router from '@koa/router';
 import http from 'node:http';
-import { buildAttestation, claimAddress, addressStatus, releaseAddress, nodePubkeyHex } from '../services/registrar-client.js';
+import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, nodePubkeyHex } from '../services/registrar-client.js';
 import { writeToken, removeToken, restartSidecar } from '../services/public-address-agent.js';
 import { getNodeConfig, updateNodeConfig } from '../state-engine.js';
 import type { RouteDeps } from './types.js';
@@ -101,10 +101,11 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             probeLogs.length = 0;
             addProbeLog('1/4', `⏳ Requesting tunnel allocation for "${name}.beanpool.org"...`, 'info');
             const origin = b.origin || process.env.PUBLIC_ADDRESS_ORIGIN || 'http://beanpool-node:8080';
-            const result = await claimAddress(name, mode, origin, b.contact);
+            const communityName = b.communityName || b.community_name;
+            const result = await claimAddress(name, mode, origin, b.contact, communityName);
             addProbeLog('1/4', `✅ Registrar granted claim for ${result.hostname}`, 'success');
 
-            updateNodeConfig({ publicAddress: { name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken } } as any);
+            updateNodeConfig({ publicAddress: { name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken, communityName, contact: b.contact } } as any);
             if (result.tunnelToken) {
                 addProbeLog('2/4', `🔒 Writing tunnel token...`, 'info');
                 await writeToken(result.tunnelToken);
@@ -117,6 +118,21 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, ...result };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Claim failed: ${e.message}`, 'error');
+            ctx.status = 400;
+            ctx.body = { error: e.message };
+        }
+    });
+
+    router.post('/api/local/admin/public-address/update', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        const b = (ctx.request as any).body || (ctx as any).requestBody || {};
+        try {
+            const communityName = b.communityName || b.community_name;
+            const result = await updateAddressMetadata(communityName, b.contact);
+            const prev = (getNodeConfig() as any).publicAddress || {};
+            updateNodeConfig({ publicAddress: { ...prev, communityName, contact: b.contact } } as any);
+            ctx.body = { success: true, ...result };
+        } catch (e: any) {
             ctx.status = 400;
             ctx.body = { error: e.message };
         }

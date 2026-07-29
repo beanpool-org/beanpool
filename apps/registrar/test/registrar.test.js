@@ -319,11 +319,11 @@ test('Metadata: claim with community_name and update via signed POST /api/regist
     assert.equal(alloc1.community_name, 'Cairns Solar Grid');
     assert.equal(alloc1.contact, 'cairns@beanpool.org');
 
-    // 2. Signed metadata update via /api/registrar/update
+    // 2. Signed metadata update via /api/registrar/update using camelCase communityName
     const updateReq = await makeSignedRequest(
         'https://beanpool.org/api/registrar/update',
         'POST', keyPair, pubHex, {
-            community_name: 'Cairns Eco Village',
+            communityName: 'Cairns Eco Village',
             contact: 'admin@cairnseca.org'
         }
     );
@@ -336,4 +336,17 @@ test('Metadata: claim with community_name and update via signed POST /api/regist
     const alloc2 = await db.getAllocation(env, 'cairns');
     assert.equal(alloc2.community_name, 'Cairns Eco Village');
     assert.equal(alloc2.contact, 'admin@cairnseca.org');
+
+    // 3. Clear contact by passing empty string
+    const clearReq = await makeSignedRequest(
+        'https://beanpool.org/api/registrar/update',
+        'POST', keyPair, pubHex, {
+            contact: ''
+        }
+    );
+    const clearRes = await worker.fetch(clearReq, env);
+    assert.equal(clearRes.status, 200);
+    const alloc3 = await db.getAllocation(env, 'cairns');
+    assert.equal(alloc3.community_name, 'Cairns Eco Village');
+    assert.equal(alloc3.contact, null);
 });

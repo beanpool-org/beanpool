@@ -127,10 +127,13 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         const b = (ctx.request as any).body || (ctx as any).requestBody || {};
         try {
-            const communityName = b.communityName || b.community_name;
+            const communityName = b.communityName !== undefined ? b.communityName : b.community_name;
             const result = await updateAddressMetadata(communityName, b.contact);
             const prev = (getNodeConfig() as any).publicAddress || {};
-            updateNodeConfig({ publicAddress: { ...prev, communityName, contact: b.contact } } as any);
+            const updatedPa = { ...prev };
+            if (communityName !== undefined) updatedPa.communityName = communityName;
+            if (b.contact !== undefined) updatedPa.contact = b.contact;
+            updateNodeConfig({ publicAddress: updatedPa } as any);
             ctx.body = { success: true, ...result };
         } catch (e: any) {
             ctx.status = 400;

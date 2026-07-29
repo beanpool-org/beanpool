@@ -113,8 +113,13 @@ async function handleUpdate(request, env, bodyText) {
     if (!a) return json({ error: 'allocation not found' }, 404);
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
     const updates = {};
-    if (typeof b.community_name === 'string') updates.community_name = b.community_name.trim();
-    if (typeof b.contact === 'string') updates.contact = b.contact.trim();
+    const commVal = b.community_name !== undefined ? b.community_name : b.communityName;
+    if (commVal !== undefined) {
+        updates.community_name = typeof commVal === 'string' && commVal.trim() ? commVal.trim() : null;
+    }
+    if (b.contact !== undefined) {
+        updates.contact = typeof b.contact === 'string' && b.contact.trim() ? b.contact.trim() : null;
+    }
     if (Object.keys(updates).length > 0) {
         await db.updateAllocation(env, a.name, updates);
     }

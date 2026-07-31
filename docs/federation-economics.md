@@ -17,7 +17,7 @@ the section that implements it — read the section for the mechanism, this tabl
 
 | Question | Decision | Why this one |
 |---|---|---|
-| Where does the tab live? | A dedicated **`bridge_<peer>`** account per peer, not `COMMONS_POOL` — [§2.3](#23-bridge-accounts-are-not-the-commons) | Keeps "how much of the Commons is actually ours to spend?" answerable, and keeps two peers' tabs from blending into one number. One source of truth, in the ledger. |
+| Where does the tab live? | A dedicated **`bridge_<peer>`** account per peer, not `COMMONS_POOL` — [§2.4](#24-bridge-accounts-are-not-the-commons) | Keeps "how much of the Commons is actually ours to spend?" answerable, and keeps two peers' tabs from blending into one number. One source of truth, in the ledger. |
 | Where does a visitor's spending power abroad come from? | **Carved out of their existing home `usableFloor`** — [§3.1](#31-a-members-total-foreign-exposure--capped-by-their-home-node) | Creates no new credit at the boundary, which is the thing Rule 1 exists to prevent. Also inherits the offer covenant free: you can only run up foreign exposure while actively offering at home. |
 | How is a node's credit cap on a peer set? | **No default. The operator sets an explicit number before credit-enabled federation works** — [§3.2](#32-a-nodes-credit-to-each-peer--capped-by-each-node-independently) | A default that suits a 200-member town quietly overexposes a 15-member one, and small communities are both the most vulnerable to being drained and the least able to absorb a bad tab. Fails safe, and forces the decision while the operator is actually thinking about that peer. |
 | Who receives the 1.5% transaction fee on a cross-node purchase? | The **buyer's home node's Commons** — worked into the entries in [§2.1](#21-the-entries) | It holds the resulting debt, so it carries the write-off if that member is later pruned. Put the fee where the solvency risk sits. **Consequence:** the buyer pays the fee *on top*, rather than the seller absorbing it as they would locally — that's the only arrangement where both nodes balance and the reserve lands on the node with the exposure. See §2.1. |
@@ -109,7 +109,53 @@ divergence from the local convention, and arguably the more honest presentation 
 — but it *is* a divergence, and it follows from Decision 4 rather than standing on its own. If the fee
 should instead follow the local convention, Decision 4 is the thing to revisit, not this table.
 
-### 2.2 Sign convention
+### 2.2 What the bridge entry actually is: an energy balance
+
+Nothing is transferred between the two nodes. Each makes purely local entries, and the two bridge rows
+mirror each other as a **shared record of who owes whom work**. So the number is not beans sitting in an
+account — it records that **Byron has delivered N beans' worth of real work to Brisbane's members and has
+not yet received equivalent work back.** Energy delivered, not yet reciprocated.
+
+That is a genuinely different *kind* of ledger row from a member balance, even though it lives in the same
+`accounts` table:
+
+|  | A member balance | A bridge row |
+|---|---|---|
+| What it mirrors | a specific member's live negative | nothing at member level — no member is at −N because of it |
+| Can it be spent? | yes | **no** — no member is ever paid out of it |
+| Can it be transferred? | yes | **no** — it is a claim on *one* community's future work, not a bearer instrument |
+| Does it decay? | yes, above the green zone | **no** — decaying a debt is silent forgiveness |
+
+Three rules elsewhere in this document follow from that single fact rather than standing on their own:
+bridge accounts are prefix-reserved and rejected on public routes (§2.4), credit is never routed through
+an intermediary (Rule 6), and bridge accounts are demurrage-exempt (§2.4). If the row were beans, each of
+those would be an arbitrary restriction. Because it is an obligation marker, each is necessary.
+
+**Terminology.** The unit is **beans**, always — there is exactly one currency and no second kind of bean
+(§7). What needs a name is the *position*, and that is an **energy balance** with a named community:
+
+> Our energy balance with Byron: **−480**
+
+`bridge_<peer>` stays the internal account name; "energy balance" is what it's called in prose and to
+members.
+
+#### Present it as a scale centred on zero, not as a debt
+
+The canonical presentation is a slider or gauge with **zero in the middle and each node's cap at one
+end** — not a debt figure. That is not decoration; it encodes three things this document argues for
+separately:
+
+- **Both ends are unhealthy.** Being owed too much is as much a problem as owing too much. That is
+  Keynes' symmetry of adjustment (§6), and it is the correction to the first instinct — which was to cap
+  only the deficit side.
+- **The two caps are literally the two ends.** Byron's cap at one extreme, Brisbane's at the other. The
+  one-way valve (§3.2) then stops being an odd rule and becomes obvious: you may always move *toward* the
+  middle.
+- **Zero is the target, not a maximum.** A community's health is not how much it has stored, it is how
+  well the energy keeps moving — so the healthy state is a balance that breathes around zero, not one
+  that accumulates in either direction.
+
+### 2.3 Sign convention
 
 This is the part implementations get wrong, so it is stated as a rule:
 
@@ -128,7 +174,7 @@ Consequences that follow directly:
 - Flow in the other direction nets the tab toward zero. If Byron later buys 3 beans of work from
   Brisbane, the same four entries apply with the roles swapped, leaving the tab at 2.
 
-### 2.3 Bridge accounts are not the Commons
+### 2.4 Bridge accounts are not the Commons
 
 **Decided.** A bridge position is held in a **dedicated per-peer synthetic account**, alongside the
 existing `escrow_*` / `project_*` / `COMMONS_POOL` synthetics — never folded into `COMMONS_POOL`.
@@ -162,7 +208,7 @@ Bridge accounts are:
 > 2.5% above 2000, with only the 0–200 green zone at zero. So #107 is not "dialling up" an existing
 > charge: it is adding a genuinely new, *imbalance-keyed* charge alongside one that already runs.
 
-### 2.4 The settlement exchange
+### 2.5 The settlement exchange
 
 Read-only verification is not sufficient — the home node must perform an actual **debit** and say so in
 a way the destination can rely on. This needs a new authenticated libp2p action alongside
@@ -256,7 +302,7 @@ effectiveUsableFloor = usableFloor
                      − live, unexpired reservations
 ```
 
-This is the local counterpart of the re-validation rule in §2.4: a reservation reduces headroom the moment
+This is the local counterpart of the re-validation rule in §2.5: a reservation reduces headroom the moment
 it is granted, and stops doing so the moment it expires or commits.
 
 Why this and not a separate foreign allowance: an allowance *on top* of the home floor is new credit
@@ -506,7 +552,7 @@ must surface real needs sooner — never manufacture them.
 
 Where a community's surplus is real, unspendable, and it has exhausted what it wants to buy, the claim
 may be allowed to decay or be forgiven. This must be **deliberate and visible** — never a silent
-by-product of applying the circulation charge to a bridge account (§2.3).
+by-product of applying the circulation charge to a bridge account (§2.4).
 
 This is what resolves the forgiveness question, and the resolution turns on a distinction the demurrage
 brackets already draw. Gifting beans that could still buy something real is a genuine sacrifice, and
@@ -582,6 +628,32 @@ are not quietly reintroduced later.
 name: to be useful the token must be acquirable with beans, which strands the matching negative exactly
 as before. It also creates something with an exchange rate, and therefore something to speculate on and
 arbitrage between nodes.
+
+### A distinct kind of bean — "traveller beans", "clearance beans", "inter beans"
+
+**Rejected.** Naming the cross-boundary position as its own *kind of bean* is the settlement token above
+wearing friendlier clothes. Anything with its own noun becomes a thing to hold, price, compare and
+arbitrage, and a bean called a "traveller bean" quietly asserts the one thing Rule 1 denies — that beans
+travel.
+
+There is exactly **one** unit: beans. What needed a name was never the unit but the *position*, and that
+is the **energy balance** (§2.2). Keeping one currency and naming the position costs nothing and removes
+an entire class of misunderstanding.
+
+### Routing the surplus charge to a supra-community pool
+
+**Rejected, and worth recording because it will come up again** once a cluster has more than two nodes.
+Charging idle surpluses into a shared, higher-level fund is not a bad idea in itself — it is *literally*
+Keynes' design, where the charge accrued to the union's own reserve rather than to the deficit country.
+
+It is also exactly where the ICU died. The reason its failure mode doesn't transfer to beanpool (§6) is
+that there is **no outside body**: the charge is applied automatically by a protocol both nodes already
+run, consented to once when they federate. Create a supra-community pool with a claim on a community's
+surplus and you have rebuilt the precise thing the United States refused in 1944 — an external entity to
+defect from. Somebody eventually will.
+
+So the charge stays **local**: to the pair, or funding the clearing work itself (#107). Revisit only if a
+real multi-community cluster makes the case, and never by quietly widening the scope of #107.
 
 ### Persistent per-node visitor accounts
 
@@ -674,9 +746,10 @@ the trade, so a fee there would accumulate against an exposure it doesn't have.
 3. **Reservation timeout value**, and whether it should scale with peer latency. The test pair is a
    1 CPU / 1 GB VM specifically because its added latency exposes races a local run hides — tune against
    that, not against localhost.
-4. **How is the tab surfaced to members**, if at all? The bridge-equality check is the most useful
-   federation health signal, and Commons transparency argues for showing it. But "our community is owed
-   40 by Byron" is a governance-grade fact and may belong in the Commons tab rather than a status page.
+4. **Where is the energy balance surfaced**, and to whom? The *form* is settled — a scale centred on zero
+   with each cap at an end, denominated in beans (§2.2). What's open is placement: the bridge-equality
+   check is the most useful federation health signal for an operator, while "our energy balance with Byron
+   is −480" is a governance-grade fact that probably belongs in the Commons tab rather than a status page.
 5. **Are stewards of a community enterprise appointed by an admin or nominated by the community?** Carried
    here from #106, because the answer determines whether an `appoint` Decision becomes the grantor. #106
    builds admin-appointed and keeps the schema open; this is the decision it defers.
@@ -684,6 +757,7 @@ the trade, so a fee there would accumulate against an exposure it doesn't have.
 ### Deliberately not in scope
 
 Recorded so they are not mistaken for oversights: multi-community netting (§7), routed credit (§7, Rule 6),
-any tradeable settlement token (§7), and per-activity accounting across enterprises — one treasury per
+any tradeable settlement token or distinct kind of bean (§7), routing the surplus charge to a
+supra-community pool (§7), and per-activity accounting across enterprises — one treasury per
 enterprise, its balance is its books, and consolidated reporting waits until a second and third enterprise
 actually exist.

@@ -101,10 +101,17 @@ Bridge accounts are:
 
 - **Reserved by prefix** the way `escrow_` and `project_` are, and added to the synthetic-recipient
   rejection list on public routes, so no member can address one directly.
-- **Exempt from the ordinary circulation charge** (§8). A tab is not an idle hoard, and decaying it
-  would silently forgive a debt — see [§5](#5-rebalancing-a-tab) for why forgiveness must be deliberate.
-  #107 later adds a *distinct* charge keyed to imbalance; that is not the same mechanism and must not be
-  conflated with it.
+- **Exempt from the circulation charge.** A tab is not an idle hoard, and decaying it would silently
+  forgive a debt — see [§5](#5-rebalancing-a-tab) for why forgiveness must be deliberate. Reuse the
+  existing mechanism: `ledger.setDecayExempt()`, which already covers `COMMONS_POOL`, `escrow_*`,
+  `project_*` and every `is_treasury=1` account at boot. No new exemption concept is needed.
+
+> **Note on the circulation charge, because the design notes say otherwise.** The surplus charge is
+> **live, not dormant.** `PROTOCOL_CONSTANTS.CIRCULATION_RATE` is `0.000`, but it is a vestigial
+> constant with no consumers; the real rates are hardcoded in `_calculateProgressiveDecay`
+> (`beanpool-core/src/ledger.ts`) and applied on every account read — 1.0% per month above 200 rising to
+> 2.5% above 2000, with only the 0–200 green zone at zero. So #107 is not "dialling up" an existing
+> charge: it is adding a genuinely new, *imbalance-keyed* charge alongside one that already runs.
 
 ### 2.4 The settlement exchange
 
@@ -178,6 +185,24 @@ configuration. A compromised peer must not be able to raise the limit that const
 Both refusals surface at the point of sale and must be **clear and non-alarming**. Hitting a cap is a
 throttle working as designed, not an error the member did something wrong to cause.
 
+### 3.3 Credit is never routed; knowledge is
+
+Credit and information have opposite risk profiles, and the topology must reflect that.
+
+> **Rule 6 — A node extends credit only to peers it has directly chosen and set a limit for. Credit is
+> never routed through an intermediary. Discovery propagates freely.**
+
+If Byron owes Brisbane and Brisbane owes Gold Coast, Byron must not end up carrying Gold Coast's risk
+through a community it never vetted. That is precisely how contagion works in correspondent banking: one
+cap breach on one link cascades across the mesh. Bilateral tabs keep every failure local to one pair
+(and see [§7](#7-rejected-alternatives) on multi-hop netting).
+
+Information carries no such risk, so listings and needs can propagate across the whole network. The
+resulting rule of thumb is worth stating in the UI, not just the spec:
+
+**You can see everywhere, but you can only trade with your direct partners.** Spotting something from an
+unconnected community is not an error state — the answer is to go and connect.
+
 ### Two kinds of trust
 
 #96 and this document both use the phrase "trust matrix", for two different things. Keeping them
@@ -205,6 +230,13 @@ neighbouring communities with identical skill mixes have little to settle with.
 
 This is guidance for how operators choose peers, not a rule the protocol can enforce.
 
+**Size asymmetry helps rather than hurts.** The instinct is that a big community will drain a small one.
+In practice the two dominant flows run in opposite directions and partly cancel: physical visiting flows
+*toward* the scenic or rural community, while demand for skills, depth and specialist services flows
+*toward* the larger one. Byron sells place and experience; Brisbane sells depth and talent. A
+coast/hinterland or town/farm pairing is therefore a better credit partner than two towns of equal size
+and identical skill mix.
+
 ### The failure mode, stated plainly
 
 Under chronic one-way flow, the tab walks to the cap and then **throttles**: further cross-node
@@ -215,13 +247,51 @@ That is a **controlled stop, not a collapse.** Both ledgers stay balanced, local
 communities is entirely unaffected, and nothing is lost — the boundary simply stops passing value until
 someone acts. Designing for a clean throttle instead of an unbounded tab is the point of the caps.
 
+Note also *who* suffers versus who can act, because it is the whole design problem in one sentence: under
+one-way flow the surplus community is perfectly comfortable — visitor demand puts otherwise-idle people to
+work, members hold more beans, the commons swells, and nothing looks wrong from where it sits. The drained
+community is the one whose members drift toward their floor until trade grinds. **The community that
+suffers is not the one with the power to fix it.** Everything in §5 exists to answer that asymmetry.
+
+### The case this model cannot solve
+
+A genuinely self-sufficient community that wants nothing from anyone. There, the tab simply stops at the
+cap and stays there. The honest answers are cash or deliberate generosity, and it is worth saying plainly:
+**mutual credit can fund reciprocal exchange; it cannot manufacture value to fund one-way consumption.**
+No mechanism in this document should be extended to pretend otherwise.
+
 ---
 
 ## 5. Rebalancing a tab
 
-Two mechanisms, in strict order of preference.
+Two mechanisms, in strict order of preference. First, though, it matters *which* channel a rebalancing
+flow can travel down.
 
-### 5.1 The surplus community buys work from the drained one — trade, not charity
+### 5.1 The four channels
+
+Value crosses a border in four economically distinct ways, depending on who pays and who earns:
+
+| Channel | What it is | Can a community *decide* to do it? |
+|---|---|---|
+| **Person → Person** | A Byron member buys directly from a Brisbane member | No — organic, happens only where real demand exists |
+| **Person → Commons** | A Byron member buys something Brisbane's commons offers | No — organic |
+| **Commons → Person** | Byron's commons hires a Brisbane member | **Yes — the main deliberate lever** |
+| **Commons → Commons** | The two treasuries trade directly, institution to institution | Yes |
+
+The distinction that matters: the first two breathe on their own and cannot be willed into happening, so
+a community with a surplus cannot fix an imbalance through them. **The commons rows are the only ones it
+can act on deliberately** — which is exactly why #105 is the mechanism that makes this model rebalance
+rather than merely account.
+
+Two things follow, and both prevent building something more complicated than needed:
+
+- **Offer vs request is only a question of who spoke first.** The beans move identically. Reach controls
+  and the needs board are the same primitive seen from two ends, not two systems.
+- **"Correcting the imbalance" is not a special transaction type.** It is simply whatever happens to flow
+  the right way. There is nothing to implement called a settlement or a correction — the tab nets down as
+  a side effect of ordinary trade.
+
+### 5.2 The surplus community buys work from the drained one — trade, not charity
 
 The community holding the claim commissions work from its partner, redeeming the tab through real
 exchange. Individual cross-boundary demand is organic and happens only where it happens; the
@@ -229,17 +299,43 @@ exchange. Individual cross-boundary demand is organic and happens only where it 
 cross-node needs board) is the mechanism that makes this model actually rebalance rather than merely
 account.
 
+The worked example from the design session: **Byron hires Brisbane musicians to play at a Byron
+festival.** Beans flow Byron → Brisbane, talent flows Brisbane → Byron, the tab nets down, Brisbane
+members earn their way off the floor — and Byron gets a festival instead of getting nothing. The people
+filling those needs are being *hired*, not bailed out, which matters for a project built on mutual aid.
+
 This is strongly preferred because it settles the tab *and* produces something both sides wanted.
 
-### 5.2 Only where surplus is genuinely saturated: let it decay or forgive
+**The reciprocity covenant already applies, and #105 inherits it.** `createPost` refuses a `need` from any
+author with no listed offer (`engine/posts.ts:72`, `CONTRIBUTION_REQUIRED_ERROR`). A treasury is an
+ordinary `members` row posting through the same path, so a community treasury must already be offering
+something before it can post a Need — including a cross-node one. That is the right behaviour and needs no
+exemption; it does mean a surplus community cannot commission its way out of a tab while offering nothing
+itself.
+
+> **Rule 7 — An imbalance may decide what gets *prioritised*. It may never decide whether a need is
+> genuine.**
+
+Rule 7 is the guard rail on the whole mechanism. Paying people to dig holes and fill them in would settle
+a tab beautifully and destroy the thing that makes a bean mean anything. A needs board fed by imbalance
+must surface real needs sooner — never manufacture them.
+
+### 5.3 Only where surplus is genuinely saturated: let it decay or forgive
 
 Where a community's surplus is real, unspendable, and it has exhausted what it wants to buy, the claim
 may be allowed to decay or be forgiven. This must be **deliberate and visible** — never a silent
-by-product of applying the ordinary circulation charge to a bridge account (§2.3).
+by-product of applying the circulation charge to a bridge account (§2.3).
+
+This is what resolves the forgiveness question, and the resolution turns on a distinction the demurrage
+brackets already draw. Gifting beans that could still buy something real is a genuine sacrifice, and
+automating it is a subsidy for one-way flow (§7). But once a community is saturated — everyone flush,
+nothing left it wants — those excess beans have **stopped being claims on anything**. Shedding *those*
+costs nothing and helps everyone. Normal, active holdings sit in the green zone untouched; only
+pathological idle piles feel the charge. The brackets are the mechanism that tells the two apart.
 
 ### The fairness rule
 
-> **Rule 6 — Pressure may only fall on a party that has the power to act.**
+> **Rule 8 — Pressure may only fall on a party that has the power to act.**
 
 - Charging an **idle surplus** is fair: the holder can spend it, buy work, or forgive it. They have
   agency.
@@ -248,6 +344,12 @@ by-product of applying the ordinary circulation charge to a bridge account (§2.
 
 This rule is what separates a rebalancing mechanism from austerity, and it is the test any future
 adjustment lever (#107 included) must pass before it ships.
+
+It also fixes the *direction* of #107's clearance fund. Proceeds from the charge on an idle surplus become
+a **carrot that makes the clearing work more attractive to take on — never a stick applied to the drained
+community.** A community whose offers nobody took up did exactly what was asked of it and controls none
+of the demand; charging it for that outcome fails Rule 8. Funding a premium on the work that would
+rebalance the tab passes.
 
 ---
 
@@ -269,8 +371,12 @@ Two things it supplies directly:
 
 **Symmetry of adjustment.** Keynes' central argument was that pressure to correct an imbalance must fall
 on *both* sides. Capping only the deficit side is the austerity answer: it is unfair, and it is
-unstable, because the surplus side has no reason to ever act. Rule 6 is the same principle expressed as
+unstable, because the surplus side has no reason to ever act. Rule 8 is the same principle expressed as
 a fairness test rather than a symmetry claim, and §5 is the mechanism.
+
+It also corrected the design session's own first instinct, which was to cap the *deficit* community —
+i.e. to cap Brisbane. That is the austerity answer. The surplus side is equally responsible for the
+imbalance and is the side that can actually afford to move.
 
 **Why the ICU failed, and why that objection doesn't transfer.** It failed because sovereign creditors —
 the United States, in 1944 — refused to accept a charge on their surpluses. That refusal was available
@@ -312,9 +418,13 @@ held to.
 ### Routed or multi-hop credit
 
 **Rejected for now.** Clearing A→C through B means B underwrites a relationship it is not party to, and
-turns a cap breach on one link into a cascade across the mesh. Bilateral tabs keep every failure local
-to one pair. Revisit only if a real cluster demonstrates the need, and never before the bilateral case
-is proven in production.
+turns a cap breach on one link into a cascade across the mesh — see Rule 6. Bilateral tabs keep every
+failure local to one pair. Revisit only if a real cluster demonstrates the need, and never before the
+bilateral case is proven in production.
+
+Multi-community **netting** — where a closed *loop* of debts cancels itself out — is the genuinely
+attractive version of this, and is firmly a later problem. It is also strictly safer than routed credit,
+because netting a loop moves no credit outside pairs that already chose each other.
 
 ---
 
@@ -328,10 +438,30 @@ Cross-node trade is **beans-only**, and in practice **services and remote delive
 - **Physical goods cannot be delivered across a boundary.** You cannot collect a couch you are not
   standing next to.
 
+### What beans are for, and the cash test
+
+Beans do not work for things that cost money, and were never meant to. A café cannot accept beans for a
+coffee, because its beans, milk, rent and wages are all in dollars — beans don't pay its suppliers. That
+is the boundary, not a flaw. Beans work for the economy that runs on **spare time, skills and surplus**:
+a free Saturday fixing a fence, guitar lessons, a lift into town, a logo, too many eggs. Nobody bought
+those inputs.
+
+Two rules follow, and they belong here because they are the reason cross-node trade is beans-only:
+
+> **Beans cannot be bought.** You earn them, or you are given a starting credit line. If dollars could
+> buy in, a price would form and the system collapses back into the thing it routes around. Buying
+> something with cash and then *offering* it for beans is fine — that is earning by another route.
+
+> **Cash covers fuel and consumables. Your time and your tools are beans.** (#108)
+
+The test is whether you bought it with money **and** used it up doing the job. Petrol: yes. Timber, paint,
+ingredients: yes. Your drill: no — you still own it afterwards, so it's beans. Your labour: always beans.
+The app never touches the money, so it must not pretend to: a single flag on the listing, details in chat.
+
 The useful consequence: **physicality is self-enforcing.** A remote member browsing a "help move a
 shed" offer simply cannot fulfil it, and no rule needed to be written to stop them.
 
-> **Rule 7 — Remote reach is a discovery filter, not an access control.**
+> **Rule 9 — Remote reach is a discovery filter, not an access control.**
 
 Per-listing reach (#105) exists so members don't wade through offers they can't use, and so a poster can
 say "this one travels" about remote tutoring or design work. It is not a permission system, and should
@@ -360,3 +490,17 @@ Deliberately unresolved. Each needs a decision before or during #104; none block
 5. **How is the tab surfaced to members**, if at all? The bridge-equality check is the most useful
    federation health signal, and Commons transparency argues for showing it. But "our community is owed
    40 by Byron" is a governance-grade fact and may belong in the Commons tab rather than a status page.
+6. **How does the per-peer cap scale with community size?** A flat default is wrong in the direction that
+   matters: a small community is the most vulnerable to being drained by a large one, and is the least
+   able to absorb a bad tab. Scaling the cap by something like active member count or total earned credit
+   is the obvious move, but it needs a decision before #104 ships a default.
+7. **Are stewards of a community enterprise appointed by an admin or nominated by the community?** Carried
+   here from #106, because the answer determines whether an `appoint` Decision becomes the grantor. #106
+   builds admin-appointed and keeps the schema open; this is the decision it defers.
+
+### Deliberately not in scope
+
+Recorded so they are not mistaken for oversights: multi-community netting (§7), routed credit (§7, Rule 6),
+any tradeable settlement token (§7), and per-activity accounting across enterprises — one treasury per
+enterprise, its balance is its books, and consolidated reporting waits until a second and third enterprise
+actually exist.

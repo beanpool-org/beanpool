@@ -20,7 +20,7 @@ import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     getMemberProfile, createConversationApi, sendTransfer,
     submitRating, getMemberRatings, reportAbuse, getRatingsGiven,
-    getNodeInfo, getRemotePosts, sendRemoteTransfer, sendFederationMessage,
+    getNodeInfo, getRemotePosts, sendRemoteTransfer,
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
@@ -400,18 +400,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         try {
             const remoteNode = (selectedPost as any)._remoteNode;
             if (remoteNode) {
-                // Remote post — relay via federation
-                const result = await sendFederationMessage(
-                    remoteNode,
-                    identity.publicKey,
-                    identity.callsign || 'Anonymous',
-                    selectedPost.authorPublicKey,
-                    `Hi! I'm interested in your post: "${selectedPost.title}"`,
-                    'plaintext',  // nonce placeholder for unencrypted federation msgs
-                );
-                if (result.conversationId && onNavigate) {
-                    onNavigate('messages', result.conversationId);
-                }
+                // #109: this used to call sendFederationMessage(), which posted to
+                // /api/federation/relay-message — a route the server keeps commented out, so
+                // it could only fail. Creating a local conversation instead would be worse:
+                // the remote author is registered as a visitor without a home_node_url, so
+                // the server-side relay can't resolve their node and the message would sit
+                // here undelivered while looking sent. Say so plainly until cross-community
+                // messaging is real.
+                setError('This post is hosted by another community. Messaging across communities isn\'t available yet.');
+                return;
             } else {
                 // Local post — existing flow
                 const result = await createConversationApi(
@@ -444,7 +441,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const postedDate = new Date(selectedPost.createdAt);
         const ago = getTimeAgo(postedDate);
         const isOwnPost = identity?.publicKey === selectedPost.authorPublicKey;
-        
+        // #109: a cross-browsed post lives on another node, and cross-community messaging
+        // has no working path yet — don't offer a button that can't deliver.
+        const isRemotePost = !!(selectedPost as any)._remoteNode;
+
         const activeTx = selectedTxId 
             ? myTransactions.find(t => t.id === selectedTxId)
             : myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
@@ -939,6 +939,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                                 const remoteNode = (selectedPost as any)._remoteNode;
                                                 if (remoteNode) {
+                                                    // Unreachable while the confirm button is disabled for
+                                                    // remote posts (below). Kept as a defensive branch, but
+                                                    // sendRemoteTransfer() posts UNSIGNED to the peer's
+                                                    // /api/ledger/transfer, which requireSignature rejects
+                                                    // with 401 — and PR #112 refuses a visitor's settlement
+                                                    // there regardless. Cross-node trade needs #104.
                                                     const isOffer = selectedPost.type === 'offer';
                                                     if (totalCredits > 0) {
                                                         const from = isOffer ? identity.publicKey : selectedPost.authorPublicKey;
@@ -963,16 +969,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setAccepting(false);
                                             }
                                         }}
-                                        disabled={accepting || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
+                                        disabled={accepting || isRemotePost || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
                                         className={`flex-1 py-2.5 rounded-lg font-bold text-white text-sm transition-all shadow-sm ${
-                                            accepting 
-                                                ? 'bg-emerald-400 cursor-not-allowed opacity-60' 
+                                            accepting || isRemotePost
+                                                ? 'bg-emerald-400 cursor-not-allowed opacity-60'
                                                 : 'bg-emerald-600 hover:bg-emerald-700'
                                         }`}
                                     >
                                         {accepting ? 'Processing...' : 'Confirm'}
                                     </button>
                                 </div>
+                                {isRemotePost && (
+                                    <p className="mt-2 text-xs text-nature-600 text-center">
+                                        This post is from another community — trading across communities isn't available yet.
+                                    </p>
+                                )}
                             </div>
                         ) : (
                             <button
@@ -1010,14 +1021,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <div className="mt-2">
                         <button
                             onClick={handleMessageAuthor}
-                            disabled={messaging}
+                            disabled={messaging || isRemotePost}
                             className={`w-full py-3.5 mt-1 rounded-xl font-bold text-white text-[15px] transition-all shadow-md ${
-                                messaging ? 'bg-nature-500 cursor-not-allowed opacity-60' : 'bg-nature-800 hover:bg-nature-900'
+                                messaging || isRemotePost ? 'bg-nature-500 cursor-not-allowed opacity-60' : 'bg-nature-800 hover:bg-nature-900'
                             }`}
                         >
                             {messaging ? 'Opening chat...' : '💬 Message'}
                         </button>
-                        
+                        {isRemotePost && (
+                            <p className="mt-1.5 text-xs text-nature-600 text-center">
+                                This post is from another community — messaging across communities isn't available yet.
+                            </p>
+                        )}
+
                         {/* Transaction-gated rating — only show on completed posts where user was a participant */}
                         {identity && selectedPost.status === 'completed' && selectedPost.pendingTransactionId && (
                             identity.publicKey === selectedPost.authorPublicKey || 

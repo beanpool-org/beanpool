@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi,
-    sendMessageApi, getMessageAttachmentApi, getMembers, sendFederationMessage,
+    sendMessageApi, getMessageAttachmentApi, getMembers,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction,
 } from '../lib/api';

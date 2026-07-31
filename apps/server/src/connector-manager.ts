@@ -519,7 +519,11 @@ export function setConnectorCreditCap(address: string, cap: number | null | unde
 
 /** The configured credit cap for a peer, or null when unset (settlement refused). */
 export function getConnectorCreditCap(address: string): number | null {
-    const connector = connectors.find(c => c.address === address);
+    // Tolerant lookup. A connector can be written as hostname:port, a multiaddr, or an HTTPS URL, and a
+    // caller may hold any of them. An exact-match miss returns null, which fail-closes and REFUSES a
+    // legitimate settlement — safe, but baffling for the operator who set the cap.
+    const connector = connectors.find(c =>
+        c.address === address || c.publicUrl === address || resolveMultiaddr(c.address) === address);
     return connector?.creditCap ?? null;
 }
 

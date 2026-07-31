@@ -15,6 +15,8 @@ export function setCommonsBalance(value: number): void {
     COMMONS_BALANCE = value;
 }
 
+import { isSyntheticAccount } from './protocol.js';
+
 export const TRANSACTION_FEE_RATE = 0.015;
 
 /**
@@ -129,7 +131,11 @@ export class LedgerManager {
         const epochsPassed = currentEpoch - account.lastDemurrageEpoch;
 
         // Exempt synthetic wallets (escrow, project, commons pool) from demurrage decay
-        const isExempt = this.decayExemptIds.has(account.id) || account.id.startsWith('escrow_') || account.id.startsWith('project_') || account.id === 'COMMONS_POOL';
+        // isSyntheticAccount() rather than a hardcoded prefix list, so exemption does NOT depend on the
+        // host having registered it. initStateEngine() calls loadState() before it registers
+        // exemptions, and the registration is wrapped in a try/catch — so a window existed where a
+        // synthetic account could decay. Structural fix: the ledger knows on its own.
+        const isExempt = this.decayExemptIds.has(account.id) || isSyntheticAccount(account.id);
 
         if (epochsPassed <= 0 || account.balance <= 0 || isExempt) {
             // Only positive, non-exempt balances decay

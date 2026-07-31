@@ -40,7 +40,13 @@ export { bridgeAccountId, peerFromBridgeAccountId };
  */
 export function ensureBridgeAccount(peerId: string): string {
     const id = bridgeAccountId(peerId);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id);
+    // Seed last_demurrage_epoch to NOW, not 0. Epoch 0 is 1970, so if a bridge account were ever
+    // evaluated while unexempt — registerBridgeDecayExemptions() is wrapped in a try/catch that logs and
+    // continues, so that is reachable — it would take ~56 years of compound demurrage on first read and
+    // wipe the balance. Being exempt makes this unreachable in the happy path; seeding correctly makes
+    // it harmless in the unhappy one.
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)`)
+        .run(id, ledger.getCurrentEpoch());
     ledger.setDecayExempt(id);
     return id;
 }

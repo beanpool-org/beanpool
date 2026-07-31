@@ -21,7 +21,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { isSyntheticAccount, bridgeAccountId, peerFromBridgeAccountId } from '@beanpool/core';
-import { initStateEngine, transfer } from './state-engine.js';
+import { initStateEngine, transfer, reconcileLedgerFromDb } from './state-engine.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { addConnector, setConnectorCreditCap, getConnectorCreditCap } from './connector-manager.js';
@@ -67,21 +67,42 @@ async function main() {
     assert(isSyntheticAccount(undefined) === false, 'a missing id is not synthetic (guards may run pre-validation)');
     assert(!!db.prepare('SELECT 1 FROM accounts WHERE public_key=?').get(bridge), 'the account row exists');
     assert(ensureBridgeAccount(PEER_ID) === bridge, 'ensureBridgeAccount is idempotent');
+    const seeded = db.prepare('SELECT last_demurrage_epoch AS e FROM accounts WHERE public_key=?').get(bridge) as any;
+    assert(seeded.e > 0 && seeded.e >= ledger.getCurrentEpoch() - 1,
+        'seeded at the CURRENT epoch, not 0 — epoch 0 would be ~56 years of compound decay if ever unexempt');
 
     // ── 2. Not decayable ────────────────────────────────────────────────────────
     // Push it positive, then run the ledger far into the future. A member balance would erode.
-    const memberCtl = makeMember('ControlHolder', 0);
+    // The decay check needs a BALANCE, not a transfer — set it directly and resync the in-memory
+    // ledger, rather than routing through member send-gates that are irrelevant here.
+    const memberCtl = makeMember('ControlHolder', 1000);
     const funder = makeMember('Funder', 3000);
-    transfer(funder, bridge, 1000, 'seed bridge', 'direct', true);
-    transfer(funder, memberCtl, 1000, 'seed control', 'direct', true);
+    db.prepare('UPDATE accounts SET balance=?, last_demurrage_epoch=? WHERE public_key=?')
+        .run(1000, ledger.getCurrentEpoch(), bridge);
+    reconcileLedgerFromDb();
+    assert(balanceOf(bridge) === 1000, 'the bridge really holds 1000 before the decay run');
 
+    // Run the ledger far into the future. A non-exempt balance of 1000 sits in the 1.5%/mo bracket, so
+    // a member control MUST erode while the bridge must not — that contrast is what makes this a test
+    // rather than a tautology.
     const before = balanceOf(bridge);
-    // 24 months of epochs — well past the 2.5% bracket for a 1000 balance.
-    const future = ledger.getCurrentEpoch() + 720;
-    ledger.getAccount(bridge);
-    (ledger as any).applyDecay?.((ledger as any).accounts?.get(bridge), future);
-    assert(balanceOf(bridge) === before, 'a bridge balance does not decay');
+    const futureEpoch = ledger.getCurrentEpoch() + 720;   // ~24 months
+    const ctlBefore = ledger.getAccount(memberCtl).balance;
+    (ledger as any).applyDecay?.((ledger as any).accounts?.get(bridge), futureEpoch);
+    (ledger as any).applyDecay?.((ledger as any).accounts?.get(memberCtl), futureEpoch);
+    assert(ledger.getAccount(bridge).balance === before, 'a bridge balance does not decay');
+    assert(ledger.getAccount(memberCtl).balance < ctlBefore, 'a MEMBER balance of the same size does decay — the exemption is doing real work');
     assert(registerBridgeDecayExemptions() >= 1, 'boot re-registration finds existing bridge accounts');
+
+    // ── 2b. An UNSEEDED bridge account must still persist (review finding) ──────
+    // ledger.getAccount() auto-creates in memory, but transfer() persisted with a bare UPDATE, which
+    // matched 0 rows for an account SQLite had never seen — silently desyncing memory from disk forever.
+    const UNSEEDED = '12D3KooWNeverSeededPeer';
+    const unseededId = bridgeAccountId(UNSEEDED);
+    assert(!db.prepare('SELECT 1 FROM accounts WHERE public_key=?').get(unseededId), 'the account genuinely does not exist yet');
+    assert(!!transfer(funder, unseededId, 25, 'settle into an unseeded bridge', 'escrow', true), 'the transfer succeeded');
+    assert(!!db.prepare('SELECT 1 FROM accounts WHERE public_key=?').get(unseededId), 'transferring to an unseeded bridge CREATES the DB row');
+    assert(getEnergyBalance(UNSEEDED) === 25, 'and the balance is readable from SQLite — no memory/DB desync');
 
     // ── 3. Sign convention ──────────────────────────────────────────────────────
     db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(0, bridge);

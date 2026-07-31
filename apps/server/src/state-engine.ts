@@ -6,7 +6,8 @@ import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
-import { registerBridgeDecayExemptions } from './federation-bridge.js';
+import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
+import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -1080,6 +1081,11 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
     // kind is covered automatically; #104's bridge_<peer> accounts were caught by a test failing here
     // (registerVisitor tried to create a member row for a bridge account and hit a UNIQUE violation).
+    // Bridge accounts need seeding AND decay-exempting on first touch, which ensureBridgeAccount does
+    // together. The upsert below would persist the balance regardless, but the exemption would be missed.
+    if (from.startsWith('bridge_')) ensureBridgeAccount(peerFromBridgeAccountId(from)!);
+    if (to.startsWith('bridge_')) ensureBridgeAccount(peerFromBridgeAccountId(to)!);
+
     if (!isSyntheticAccount(from) && !getMember(from)) registerVisitor(from);
     if (!isSyntheticAccount(to) && !getMember(to)) registerVisitor(to);
 
@@ -1150,8 +1156,23 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Sync ledger account balances to DB
     const fromAcc = ledger.getAccount(from);
     const toAcc = ledger.getAccount(to);
-    db.prepare(`UPDATE accounts SET balance=?, last_demurrage_epoch=?, last_updated_at=? WHERE public_key=?`).run(fromAcc.balance, fromAcc.lastDemurrageEpoch, new Date().toISOString(), from);
-    db.prepare(`UPDATE accounts SET balance=?, last_demurrage_epoch=?, last_updated_at=? WHERE public_key=?`).run(toAcc.balance, toAcc.lastDemurrageEpoch, new Date().toISOString(), to);
+    // UPSERT, not UPDATE. ledger.getAccount() auto-creates an account in memory on first touch, but a
+    // bare `UPDATE ... WHERE public_key=?` matches 0 rows when SQLite has never seen it — silently, so
+    // the in-memory balance and the DB diverge permanently and every later read returns 0. Synthetic
+    // accounts are the exposed case, since transfer() skips registerVisitor() for them: escrow_* happens
+    // to be safe only because escrow.ts INSERT OR IGNOREs first. This closes the class rather than one
+    // instance of it.
+    const persistAccount = db.prepare(`
+        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(public_key) DO UPDATE SET
+            balance = excluded.balance,
+            last_demurrage_epoch = excluded.last_demurrage_epoch,
+            last_updated_at = excluded.last_updated_at
+    `);
+    const nowIso = new Date().toISOString();
+    persistAccount.run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, nowIso);
+    persistAccount.run(to, toAcc.balance, toAcc.lastDemurrageEpoch, nowIso);
 
     // Persist demurrage decay rows + commons balance (transfers trigger decay on both accounts)
     persistDecayEvents();

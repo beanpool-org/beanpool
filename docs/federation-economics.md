@@ -258,11 +258,58 @@ Read-only verification is not sufficient — the home node must perform an actua
 a way the destination can rely on. This needs a new authenticated libp2p action alongside
 `verify_member` / `relay_message`.
 
+#### What authenticates a debit request: the member's signature, not the peer connection
+
+This is the most security-critical rule in the document, and the existing protocol handler is explicit
+about why. `relay_message` carries this comment:
+
+> *"the connection is trusted (a `peer` connector), but that authorizes the CONNECTION, not the asserted
+> sender authorship — a compromised/malicious federation peer can set senderPublicKey to anyone… Full
+> origin authenticity needs per-message sender signatures."*
+
+For a relayed message that is a spoofing risk. **For settlement it would be catastrophic**: a peer that
+can assert who is buying can ask us to debit *any* member we hold, for any amount, and connection-level
+trust would wave it through. `peer` trust means "this node may talk to us", never "this node may spend
+our members' credit".
+
+> **Rule 3a — A home node debits a member only on a request carrying that member's own signature. Peer
+> trust authorises the transport; the member's signature authorises the debit.**
+
+So the buyer signs a purchase authorisation on their own device, and the destination node **relays** it
+rather than asserting it:
+
+```
+signed by the BUYER, verified by their HOME node:
+  { key, buyer, amount, sellerNode, postId, timestamp, nonce }
+```
+
+Reuse the existing replay-proof scheme rather than inventing one — the same
+`method + path + timestamp + nonce + body` construction, freshness window and single-use nonce
+enforcement that `requireSignature` already applies to every mutating `/api/*` route. The home node holds
+the buyer's public key (they are its member), so verification is local and needs no trust in the peer at
+all.
+
+What that buys, precisely:
+
+- A peer **cannot fabricate** a debit — it has no signature to present.
+- A peer **cannot alter** the amount, the buyer, or the destination — all are inside the signed payload.
+- A peer **cannot replay** — idempotency key plus the existing nonce/freshness enforcement.
+- A **compromised peer degrades to a nuisance**: it can refuse to trade, or fail to pay its own seller.
+  It cannot reach into our ledger.
+
+The corollary is that settlement requires the buyer to be **present and signing** at the moment of
+purchase. That is true of an interactive purchase and is not a limitation worth engineering around;
+"charge my account while I'm away" is precisely the authority we are refusing to grant a peer.
+
+Node-level signatures (a peer signing with its PeerID key) are a *useful addition* for attributing which
+node asked, and for the receipt in step 2 — but they are not a substitute. A node signature proves who
+sent the request, never that the member consented.
+
 Ordering is chosen so that the only reachable failure state is the *safe* one:
 
 | Step | Actor | Action |
 |---|---|---|
-| 1 | BYRON → BRISBANE | `RESERVE(key, buyer, amount)`. Brisbane checks the buyer's `usableFloor`, their total foreign exposure cap, and its own willingness to extend. Returns a signed reservation token, or a refusal reason. |
+| 1 | BYRON → BRISBANE | `RESERVE(key, signedAuthorisation)`. Brisbane **verifies the buyer's signature first** (Rule 3a), then checks the buyer's `usableFloor`, their total foreign exposure cap, and its own willingness to extend. Returns a signed reservation token, or a refusal reason. |
 | 2 | BYRON → BRISBANE | `COMMIT(key)`. Brisbane atomically debits the buyer and credits `bridge_byron`, then returns a **signed settlement receipt**. |
 | 3 | BYRON | Only *on holding that receipt*, atomically credits the seller and debits `bridge_brisbane`. |
 

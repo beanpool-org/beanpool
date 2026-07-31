@@ -242,7 +242,7 @@ export function InvitePage({ identity }: Props) {
 
                     <input
                         type="text"
-                        placeholder="Who is this invite for? (Optional)"
+                        placeholder="Who is this invite for? (For your records)"
                         value={intendedFor}
                         onChange={e => setIntendedFor(e.target.value)}
                         className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"

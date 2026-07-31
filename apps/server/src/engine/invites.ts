@@ -84,15 +84,8 @@ export function redeemInvite(
         return { success: true, member: existingMember, alreadyMember: true };
     }
 
-    // Check intended_for restriction if specified
-    if (invite.intended_for) {
-        const normIntended = invite.intended_for.toLowerCase().replace(/^@/, '').trim();
-        const normCallsign = callsign.toLowerCase().replace(/^@/, '').trim();
-        if (normIntended && normCallsign && normIntended !== normCallsign) {
-            return { success: false, error: `This invite was issued specifically for @${invite.intended_for.replace(/^@/, '')}` };
-        }
-    }
-
+    // NB: `invite.intended_for` is recorded for the INVITER's records only — it is
+    // deliberately not enforced here, so an invitee picks whatever callsign they want.
     if (invite.used_by) return { success: false, error: 'This invite has already been used' };
 
     // Register member FIRST — invite_codes.used_by has FK to members(public_key)
@@ -135,15 +128,8 @@ export function redeemOfflineTicket(
             return { success: true, member: existingMember, alreadyMember: true };
         }
 
-        // Check intended_for restriction if specified
-        if (intendedFor) {
-            const normIntended = intendedFor.toLowerCase().replace(/^@/, '').trim();
-            const normCallsign = callsign.toLowerCase().replace(/^@/, '').trim();
-            if (normIntended && normCallsign && normIntended !== normCallsign) {
-                return { success: false, error: `This offline ticket was issued specifically for @${intendedFor.replace(/^@/, '')}` };
-            }
-        }
-
+        // As with redeemInvite: `intendedFor` rides along on the ticket for the inviter's
+        // records and is stored below, but never constrains the joiner's chosen callsign.
         const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
         if (existingInvite) {
             if (existingInvite.used_by) return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };

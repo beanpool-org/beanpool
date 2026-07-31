@@ -342,13 +342,14 @@ export default function SettingsScreen() {
                 if (profile) {
                     const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
                     setAvatar(cleaned);
+                    if (profile.callsign) setEditCallsign(profile.callsign);
                     if (profile.bio) setBio(profile.bio);
                     if (profile.contact_value) setContact(profile.contact_value);
                     if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
                 }
             }).catch(() => {});
         }
-    }, []);
+    }, [identity?.publicKey]);
 
     // Load holiday-mode state on mount (queried so an unset flag reads as OFF, not the pref default).
     React.useEffect(() => {
@@ -621,63 +622,80 @@ export default function SettingsScreen() {
 
     async function handleUpdateCallsign() {
         if (!identity) return;
-        if (editCallsign.trim().length < 2) {
+        const newCallsign = editCallsign.trim();
+        if (newCallsign.length < 2) {
             Alert.alert('Error', 'Callsign must be at least 2 characters.');
             return;
         }
         setLoading(true);
         try {
-            // Only include avatar_url in the update if we have one in local state.
-            // If avatar state is null (e.g., profile fetch hasn't completed), do NOT
-            // send avatar_url at all — otherwise we'd wipe the existing avatar on the server.
+            // Push the profile (callsign, avatar, bio, contact) to the node FIRST so it can
+            // validate uniqueness before we commit anything locally. Only a TRANSPORT failure
+            // falls through to the offline queue — an explicit rejection from the node aborts
+            // the save, so local state can never drift from what the server accepted.
+            let offline = false;
+            const url = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (!url) {
+                offline = true;
+            } else {
+                const payloadObj: any = {
+                    publicKey: identity.publicKey,
+                    bio: bio.trim(),
+                    contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
+                    callsign: newCallsign,
+                };
+                if (avatar) payloadObj.avatar = avatar;
+                const bodyString = JSON.stringify(payloadObj);
+                const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
+
+                let res: Response | null = null;
+                try {
+                    res = await fetch(`${url}/api/profile/update`, {
+                        method: 'POST',
+                        headers,
+                        body: bodyString,
+                    });
+                } catch (e: any) {
+                    console.warn('[Profile] Node unreachable, queueing for background sync:', e);
+                    offline = true;
+                }
+
+                if (res && !res.ok) {
+                    // The node answered and said no — surface its reason and abort rather
+                    // than committing a value the server has already rejected.
+                    const serverMsg = await res.json().then((b: any) => b?.message).catch(() => null);
+                    Alert.alert(
+                        res.status === 409 ? 'Name Taken' : 'Could Not Save',
+                        serverMsg || 'The community node rejected this profile update. Please try again.'
+                    );
+                    return;
+                }
+            }
+
+            if (offline) {
+                await AsyncStorage.setItem('pending_profile_sync', 'true');
+                Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
+            } else {
+                await AsyncStorage.removeItem('pending_profile_sync');
+            }
+
+            // Commit locally now that the node has accepted (or we know we are offline)
             const localUpdate: any = {
-                callsign: editCallsign.trim(),
+                callsign: newCallsign,
                 bio: bio.trim(),
                 contact_value: contact.trim(),
                 contact_visibility: contact.trim() ? contactVisibility : 'hidden',
             };
             if (avatar) localUpdate.avatar_url = avatar;
             await updateMemberProfile(identity.publicKey, localUpdate);
-            if (editCallsign.trim() !== identity.callsign) {
-                const updated = await updateCallsign(editCallsign.trim());
+            if (newCallsign !== identity.callsign) {
+                const updated = await updateCallsign(newCallsign);
                 if (updated) setIdentity(updated);
             }
 
-            // Push profile (including avatar) to the server so other devices see it
-            try {
-                const url = await AsyncStorage.getItem('beanpool_anchor_url');
-                if (url && identity) {
-                    // Same guard as local: don't send avatar=null if state hasn't loaded
-                    const payloadObj: any = {
-                        publicKey: identity.publicKey,
-                        bio: bio.trim(),
-                        contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
-                        callsign: editCallsign.trim(),
-                    };
-                    if (avatar) payloadObj.avatar = avatar;
-                    const bodyString = JSON.stringify(payloadObj);
-                    const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
-
-                    const res = await fetch(`${url}/api/profile/update`, {
-                        method: 'POST',
-                        headers,
-                        body: bodyString,
-                    });
-                    
-                    if (!res.ok) {
-                        throw new Error('Server rejected the profile update.');
-                    }
-                    await AsyncStorage.removeItem('pending_profile_sync');
-                }
-            } catch (e: any) {
-                console.warn('[Profile] Server sync failed (offline?):', e);
-                await AsyncStorage.setItem('pending_profile_sync', 'true');
-                Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
-            }
-
             setMode('menu');
-        } catch (e) {
-            Alert.alert('Error', 'Could not update profile.');
+        } catch (e: any) {
+            Alert.alert('Error', e?.message || 'Could not update profile.');
         } finally {
             setLoading(false);
         }

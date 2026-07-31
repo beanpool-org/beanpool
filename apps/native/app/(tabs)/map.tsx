@@ -384,6 +384,9 @@ export default function MapScreen() {
         checkboxActive: { backgroundColor: '#10b981', borderColor: '#10b981' },
         checkboxTick: { color: '#fff', fontSize: 14, fontWeight: '800' },
         repeatableText: { flex: 1, color: colors.text.secondary, fontSize: 13, fontWeight: '500' },
+        // #108
+        checkboxCash: { backgroundColor: colors.feedback.warning.solid, borderColor: colors.feedback.warning.solid },
+        cashNudge: { color: colors.feedback.warning.fg, backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12, lineHeight: 17, marginBottom: 6 },
 
         // Description
         descriptionInput: { backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 10, paddingVertical: 6, color: colors.text.heading, fontSize: 14, minHeight: 60, marginBottom: 8 },
@@ -438,6 +441,7 @@ export default function MapScreen() {
     const [postCredits, setPostCredits] = useState('');
     const [postPriceType, setPostPriceType] = useState<string>('fixed');
     const [postRepeatable, setPostRepeatable] = useState(false);
+    const [postCashAlsoNeeded, setPostCashAlsoNeeded] = useState(false);  // #108
     const [postPhotos, setPostPhotos] = useState<string[]>([]);
     const [postLat, setPostLat] = useState<number | null>(null);
     const [postLng, setPostLng] = useState<number | null>(null);
@@ -607,11 +611,11 @@ export default function MapScreen() {
             const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const draft = {
                 anchorUrl, postType, postCategory, postTitle, postDescription, postCredits,
-                postPriceType, postRepeatable, postPhotos, postLat, postLng, savedAt: Date.now(),
+                postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, savedAt: Date.now(),
             };
             await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
         } catch { /* draft is best-effort */ }
-    }, [postType, postCategory, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postPhotos, postLat, postLng]);
+    }, [postType, postCategory, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng]);
 
     const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
 
@@ -623,6 +627,7 @@ export default function MapScreen() {
         setPostCredits(d.postCredits || '');
         setPostPriceType(d.postPriceType || 'fixed');
         setPostRepeatable(!!d.postRepeatable);
+        setPostCashAlsoNeeded(!!d.postCashAlsoNeeded);
         setPostPhotos(Array.isArray(d.postPhotos) ? d.postPhotos : []);
         setPostLat(typeof d.postLat === 'number' ? d.postLat : null);
         setPostLng(typeof d.postLng === 'number' ? d.postLng : null);
@@ -809,6 +814,7 @@ export default function MapScreen() {
                 credits: Number(postCredits) || 0,
                 price_type: postPriceType,
                 repeatable: postRepeatable ? 1 : 0,
+                cash_also_needed: postCashAlsoNeeded ? 1 : 0,
                 author_pubkey: identity.publicKey,
                 lat: postLat,
                 lng: postLng,
@@ -1338,6 +1344,21 @@ export default function MapScreen() {
                                 </View>
                                 <Text style={styles.repeatableText}>🔁 Repeatable — keep listing active for ongoing bookings</Text>
                             </Pressable>
+
+                            {/* #108 Cash-also-needed toggle. The nudge appears on tick, where the
+                                decision is being made. No amount field: the app can escrow beans, not
+                                cash, so a figure would imply it settles money it never touches. */}
+                            <Pressable accessibilityRole="button" accessibilityState={{ selected: postCashAlsoNeeded }} style={styles.repeatableRow} onPress={() => setPostCashAlsoNeeded(!postCashAlsoNeeded)}>
+                                <View style={[styles.checkbox, postCashAlsoNeeded && styles.checkboxCash]}>
+                                    {postCashAlsoNeeded && <Text style={styles.checkboxTick}>✓</Text>}
+                                </View>
+                                <Text style={styles.repeatableText}>💸 Cash also needed — for fuel or materials</Text>
+                            </Pressable>
+                            {postCashAlsoNeeded && (
+                                <Text style={styles.cashNudge}>
+                                    Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.
+                                </Text>
+                            )}
                         </ScrollView>
 
                         {/* Sticky Submit */}

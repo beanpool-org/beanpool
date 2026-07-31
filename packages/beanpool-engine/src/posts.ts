@@ -27,6 +27,8 @@ export interface MarketplacePost {
     active: boolean;
     status: 'active' | 'pending' | 'completed' | 'cancelled' | 'paused' | string;
     repeatable?: boolean;
+    /** #108: a real cash outlay is involved (fuel/consumables). No amount — terms live in the chat. */
+    cashAlsoNeeded?: boolean;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -53,6 +55,8 @@ export interface PostFilter {
     authorPubkey?: string;
     viewerPubkey?: string;
     sync?: boolean;
+    /** #108: exclude listings with a cash outlay — the beans-only browse. */
+    beansOnly?: boolean;
 }
 
 // Server-side photo limits. Clients resize to ≤800px JPEG at 0.7 quality.
@@ -153,6 +157,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         active: Boolean(row.active),
         status: row.status,
         repeatable: Boolean(row.repeatable),
+        cashAlsoNeeded: Boolean(row.cash_also_needed),
         acceptedBy: row.accepted_by,
         acceptedByCallsign: row.accepted_callsign,
         acceptedAt: row.accepted_at,
@@ -240,6 +245,9 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
     if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
     if (filter?.authorPubkey) { query += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
+    // #108: beans-only browse. COALESCE so rows predating the column are treated as beans-only
+    // rather than vanishing from the filtered view.
+    if (filter?.beansOnly) { query += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
 
     if (filter?.query && filter.query.trim()) {
         const searchTerms = filter.query.trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);

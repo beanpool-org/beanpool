@@ -224,6 +224,7 @@ async function _doInitDB() {
             status TEXT DEFAULT 'active' CHECK (status IN ('active', 'pending', 'paused', 'completed', 'cancelled')),
             price_type TEXT DEFAULT 'fixed',
             repeatable INTEGER DEFAULT 0,
+            cash_also_needed INTEGER DEFAULT 0,
             accepted_by TEXT,
             accepted_by_callsign TEXT,
             accepted_at DATETIME,
@@ -388,6 +389,10 @@ async function _doInitDB() {
         // Add repeatable column if not exists
         try {
             await database.execAsync(`ALTER TABLE posts ADD COLUMN repeatable INTEGER DEFAULT 0;`);
+        } catch (e) {}
+        // #108: a listing may also need cash for fuel/consumables. Flag only, no amount.
+        try {
+            await database.execAsync(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0;`);
         } catch (e) {}
         // Transaction Tracking Migrations
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN accepted_by TEXT;`); } catch (e) {}
@@ -586,7 +591,7 @@ export async function getPost(id: string) {
                 await acquireSyncLock();
                 try {
                     await database.runAsync(
-                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                         [
                             p.id ?? id,
                             p.type ?? null,
@@ -600,6 +605,7 @@ export async function getPost(id: string) {
                             p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null,
                             p.price_type || p.priceType || 'fixed',
                             p.repeatable ? 1 : 0,
+                            (p.cashAlsoNeeded ?? p.cash_also_needed) ? 1 : 0,   // #108: API is camelCase; tolerate either
                             p.status || 'active',
                             p.active !== undefined ? (p.active ? 1 : 0) : 1,
                             p.accepted_by || p.acceptedBy || null,
@@ -1423,6 +1429,7 @@ export async function createPost(post: any) {
         lng: post.lng,
         photos: post.photos ? JSON.parse(post.photos) : undefined,
         repeatable: post.repeatable === 1,
+        cashAlsoNeeded: post.cash_also_needed === 1,
     };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
@@ -1478,11 +1485,11 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, photos)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
-         post.price_type || 'fixed', post.repeatable || 0, post.photos || null]
+         post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
 }

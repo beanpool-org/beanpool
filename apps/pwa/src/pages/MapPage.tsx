@@ -63,6 +63,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
     const [newPostCredits, setNewPostCredits] = useState('');
     const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
+    const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);
     const [posting, setPosting] = useState(false);
     const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
@@ -319,6 +320,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                 priceType: newPostPriceType,
                 authorPublicKey: identity.publicKey || '',
                 repeatable: newPostRepeatable,
+                cashAlsoNeeded: newPostCashAlsoNeeded,
                 ...(postLat != null && postLng != null ? { lat: postLat, lng: postLng } : {}),
                 ...(newPostPhotos.length > 0 ? { photos: newPostPhotos } : {}),
             });
@@ -327,6 +329,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
             setNewPostCredits('');
             setNewPostPriceType('fixed');
             setNewPostRepeatable(false);
+            setNewPostCashAlsoNeeded(false);
             setNewPostPhotos([]);
             setPostLat(null);
             setPostLng(null);
@@ -827,6 +830,26 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                     />
                     🔁 Repeatable — keep listing active for ongoing bookings
                 </label>
+
+                {/* #108 Cash-also-needed toggle. The nudge sits directly under the box, because the
+                    moment of ticking is where the rule actually lands. No amount field by design:
+                    the app can escrow beans, not cash, and a figure would imply it settles money it
+                    never touches. */}
+                <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1">
+                    <input
+                        type="checkbox"
+                        checked={newPostCashAlsoNeeded}
+                        onChange={e => setNewPostCashAlsoNeeded(e.target.checked)}
+                        className="w-5 h-5 rounded border-nature-300 text-amber-600 focus:ring-amber-500 shadow-sm accent-amber-600 cursor-pointer transition-all"
+                    />
+                    💸 Cash also needed — for fuel or materials
+                </label>
+                {newPostCashAlsoNeeded && (
+                    <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 mb-1">
+                        Cash is for fuel and consumables you paid for — <strong>not your time, not your tools</strong>.
+                        At cost, no markup. Agree the details in chat; the app never handles the money.
+                    </p>
+                )}
 
                 {/* Description */}
                 <textarea

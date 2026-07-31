@@ -13,6 +13,7 @@ import {
     getMember, getBalance,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
+import { getPeerOrigins } from '../connector-manager.js';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -70,12 +71,27 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const offset = clampOffset(ctx.query.offset);
     const updatedAfter = ctx.query.updatedAfter as string | undefined;
     const sync = ctx.query.sync === 'true';
+
+    // #108: beans-only browse, so nobody is ambushed by a cash requirement in paragraph three of a
+    // description. Forced on for a peer node's request — cash cannot cross a boundary, so a listing
+    // with a cash outlay is meaningless to a remote member. Remote browsing hits this same public
+    // endpoint, so the peer origin is the only signal available.
+    //
+    // Origin is a HINT, not a credential, and that is the right strength here: reach is a discovery
+    // filter, not an access control (docs/federation-economics.md Rule 9). Nothing is protected by
+    // this — a cash listing exposes no secret, and physicality self-enforces the rest.
+    const isPeerRequest = (() => {
+        const origin = ctx.get('Origin');
+        return !!origin && getPeerOrigins().includes(origin);
+    })();
+    const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
+
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
-    ctx.body = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined, sync });
+    ctx.body = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined, sync, beansOnly });
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -90,7 +106,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
             lng != null ? Number(lng) : undefined,
             photos,
             repeatable === true || repeatable === 'true',
-            id
+            id,
+            cashAlsoNeeded === true || cashAlsoNeeded === 'true'
         );
         if (!post) {
             ctx.status = 400;

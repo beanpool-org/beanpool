@@ -11,7 +11,7 @@ import { useTheme, useStyles } from './ThemeContext';
 
 // A community treasury's detail screen. Everyone sees the transparency view (balance, credit line,
 // live listings, recent activity — the Commons is meant to be legible). A member holding the
-// operator capability additionally gets the steward controls: post the treasury's Offer/Need and
+// stewardship of THIS enterprise additionally gets the steward controls: post its Offer/Need and
 // sweep its surplus into the shared Commons pool.
 export default function TreasuryDetailScreen() {
     const params = useLocalSearchParams<{ publicKey: string; name?: string; avatar?: string }>();
@@ -19,7 +19,7 @@ export default function TreasuryDetailScreen() {
 
     const [detail, setDetail] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [canOperate, setCanOperate] = useState(false);
+    const [isStewardOfThis, setIsStewardOfThis] = useState(false);
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
 
@@ -95,7 +95,14 @@ export default function TreasuryDetailScreen() {
         }
         loadIdentity().then((id: any) => {
             if (id?.publicKey) {
-                getBalance(id.publicKey).then((b: any) => { if (active) setCanOperate(!!b.canOperate); }).catch(() => {});
+                // #106: gate on stewardship of THIS enterprise, not the coarse "is a steward
+                // of something" flag — otherwise a steward of one enterprise sees operate
+                // controls on every other one and their action 403s.
+                getBalance(id.publicKey).then((b: any) => {
+                    if (!active) return;
+                    const mine: string[] = Array.isArray(b.stewardOf) ? b.stewardOf : [];
+                    setIsStewardOfThis(mine.includes(String(params.publicKey)));
+                }).catch(() => {});
             }
         });
         return () => { active = false; };
@@ -184,7 +191,7 @@ export default function TreasuryDetailScreen() {
                         </View>
 
                         {/* Operator controls */}
-                        {canOperate && (
+                        {isStewardOfThis && (
                             <View style={styles.opPanel}>
                                 <View style={styles.opTitleRow}>
                                     <MaterialCommunityIcons name="shield-account" size={16} color={colors.brand.primary} />

@@ -84,14 +84,6 @@ export function redeemInvite(
         return { success: true, member: existingMember, alreadyMember: true };
     }
 
-    // Check intended_for restriction if specified
-    if (invite.intended_for) {
-        const normIntended = invite.intended_for.toLowerCase().replace(/^@/, '').trim();
-        const normCallsign = callsign.toLowerCase().replace(/^@/, '').trim();
-        if (normIntended && normCallsign && normIntended !== normCallsign) {
-            return { success: false, error: `This invite was issued specifically for @${invite.intended_for.replace(/^@/, '')}` };
-        }
-    }
 
     if (invite.used_by) return { success: false, error: 'This invite has already been used' };
 
@@ -135,14 +127,6 @@ export function redeemOfflineTicket(
             return { success: true, member: existingMember, alreadyMember: true };
         }
 
-        // Check intended_for restriction if specified
-        if (intendedFor) {
-            const normIntended = intendedFor.toLowerCase().replace(/^@/, '').trim();
-            const normCallsign = callsign.toLowerCase().replace(/^@/, '').trim();
-            if (normIntended && normCallsign && normIntended !== normCallsign) {
-                return { success: false, error: `This offline ticket was issued specifically for @${intendedFor.replace(/^@/, '')}` };
-            }
-        }
 
         const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
         if (existingInvite) {

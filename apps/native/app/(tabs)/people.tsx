@@ -871,7 +871,7 @@ export default function PeopleScreen() {
                             <Text style={styles.sectionDesc}>Invite links are single-use and valid for 30 days. If you are offline, a cryptographic voucher ticket will be generated instead.</Text>
 
                             <TextInput
-                                placeholder="Who is this invite for? (Optional)"
+                                placeholder="Who is this invite for? (For your records)"
                                 value={intendedFor}
                                 onChangeText={setIntendedFor}
                                 style={styles.input}

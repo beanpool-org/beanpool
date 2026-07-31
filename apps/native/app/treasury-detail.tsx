@@ -19,7 +19,7 @@ export default function TreasuryDetailScreen() {
 
     const [detail, setDetail] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [isKeeperOfThis, setIsStewardOfThis] = useState(false);
+    const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
 
@@ -101,7 +101,7 @@ export default function TreasuryDetailScreen() {
                 getBalance(id.publicKey).then((b: any) => {
                     if (!active) return;
                     const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
-                    setIsStewardOfThis(mine.includes(String(params.publicKey)));
+                    setIsKeeperOfThis(mine.includes(String(params.publicKey)));
                 }).catch(() => {});
             }
         });

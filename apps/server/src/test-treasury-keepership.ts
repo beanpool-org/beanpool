@@ -1,5 +1,5 @@
 /**
- * Per-enterprise stewardship (#106) against the REAL server.
+ * Per-enterprise keepership (#106) against the REAL server.
  *
  * `members.can_operate` was a node-wide boolean: `requireOperator` checked that the actor was *an*
  * operator and the target was *a* treasury, never that the two were related. So appointing someone
@@ -8,12 +8,12 @@
  * Authority is now `can_operate = 1` AND a `treasury_operators` row. These checks pin the four
  * acceptance criteria from the issue:
  *
- *   1. A steward bound to enterprise A cannot post/approve/complete/sweep on enterprise B.
+ *   1. A keeper bound to enterprise A cannot post/approve/complete/sweep on enterprise B.
  *   2. Admin can assign and revoke per-enterprise, effective without a restart.
  *   3. Existing operators keep working after migration.
- *   4. Members can see who stewards a given enterprise.
+ *   4. Members can see who keeps a given enterprise.
  *
- *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-treasury-stewardship.ts
+ *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-treasury-keepership.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, adminSetOperator,
-    canOperateTreasury, stewardOf, treasuryStewards,
+    canOperateTreasury, keeperOf, treasuryKeepers,
     adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     getBalance,
 } from './state-engine.js';
@@ -63,7 +63,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
 }
 
 async function main() {
-    console.log('Running per-enterprise stewardship tests (#106)...\n');
+    console.log('Running per-enterprise keepership tests (#106)...\n');
     await initTls();
     initStateEngine();
     await startHttpsServer(PORT);
@@ -78,15 +78,15 @@ async function main() {
     adminAssignTreasuryOperator(eggs, doone.pubKeyHex, 'admin');
     adminAssignTreasuryOperator(wood, river.pubKeyHex, 'admin');
 
-    assert(canOperateTreasury(doone.pubKeyHex, eggs) === true, 'a steward of Eggs may drive Eggs');
-    assert(canOperateTreasury(doone.pubKeyHex, wood) === false, 'a steward of Eggs may NOT drive Firewood');
-    assert(canOperateTreasury(river.pubKeyHex, wood) === true, 'a steward of Firewood may drive Firewood');
-    assert(canOperateTreasury(river.pubKeyHex, eggs) === false, 'a steward of Firewood may NOT drive Eggs');
+    assert(canOperateTreasury(doone.pubKeyHex, eggs) === true, 'a keeper of Eggs may drive Eggs');
+    assert(canOperateTreasury(doone.pubKeyHex, wood) === false, 'a keeper of Eggs may NOT drive Firewood');
+    assert(canOperateTreasury(river.pubKeyHex, wood) === true, 'a keeper of Firewood may drive Firewood');
+    assert(canOperateTreasury(river.pubKeyHex, eggs) === false, 'a keeper of Firewood may NOT drive Eggs');
 
     // Every operator-gated route, not just one — a scope check is only as good as its coverage.
     const offer = { title: 'Dozen eggs', category: 'food', credits: 12 };
     const own = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, offer);
-    assert(own.status === 200, `steward posts an Offer on their OWN enterprise (got ${own.status} ${own.error ?? ''})`);
+    assert(own.status === 200, `keeper posts an Offer on their OWN enterprise (got ${own.status} ${own.error ?? ''})`);
 
     for (const [route, payload] of [
         ['offer', offer],
@@ -105,29 +105,29 @@ async function main() {
 
     // ── 2. The client signal is a list, not a boolean ────────────────────────────
     const dBal = getBalance(doone.pubKeyHex);
-    assert(Array.isArray(dBal.stewardOf), 'getBalance exposes stewardOf as an array');
-    assert(dBal.stewardOf.length === 1 && dBal.stewardOf[0] === eggs, 'stewardOf lists only the enterprise they steward');
-    assert(dBal.canOperate === true, 'canOperate stays true as the coarse "is a steward" flag');
+    assert(Array.isArray(dBal.keeperOf), 'getBalance exposes keeperOf as an array');
+    assert(dBal.keeperOf.length === 1 && dBal.keeperOf[0] === eggs, 'keeperOf lists only the enterprise they keeper');
+    assert(dBal.canOperate === true, 'canOperate stays true as the coarse "is a keeper" flag');
 
-    // ── 3. Transparency — members can see who stewards what ─────────────────────
+    // ── 3. Transparency — members can see who keepers what ─────────────────────
     const pub = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
-    assert(Array.isArray(pub.stewards), 'public treasury detail exposes stewards');
-    assert(pub.stewards.length === 1 && pub.stewards[0].callsign === 'doone', 'stewards names the accountable member');
+    assert(Array.isArray(pub.keepers), 'public treasury detail exposes keepers');
+    assert(pub.keepers.length === 1 && pub.keepers[0].callsign === 'doone', 'keepers names the accountable member');
     const list = await fetch(`${BASE}/api/treasuries`).then(r => r.json()) as any;
-    assert(list.treasuries.every((t: any) => Array.isArray(t.stewards)), 'treasury list carries stewards per enterprise');
+    assert(list.treasuries.every((t: any) => Array.isArray(t.keepers)), 'treasury list carries keepers per enterprise');
 
     // ── 4. Revoke takes effect with no restart ──────────────────────────────────
     adminRevokeTreasuryOperator(eggs, doone.pubKeyHex);
     assert(canOperateTreasury(doone.pubKeyHex, eggs) === false, 'revoke removes authority immediately');
     const afterRevoke = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, offer);
-    assert(afterRevoke.status === 403, `revoked steward is refused on the live server (got ${afterRevoke.status})`);
-    assert(getBalance(doone.pubKeyHex).canOperate === false, 'can_operate clears once a member stewards nothing');
-    assert(treasuryStewards(eggs).length === 0, 'the public steward list empties on revoke');
+    assert(afterRevoke.status === 403, `revoked keeper is refused on the live server (got ${afterRevoke.status})`);
+    assert(getBalance(doone.pubKeyHex).canOperate === false, 'can_operate clears once a member keepers nothing');
+    assert(treasuryKeepers(eggs).length === 0, 'the public keeper list empties on revoke');
 
     // ── 5. The master switch suspends without losing assignments ────────────────
     adminSetOperator(river.pubKeyHex, false);
-    assert(canOperateTreasury(river.pubKeyHex, wood) === false, 'clearing can_operate suspends a steward node-wide');
-    assert(stewardOf(river.pubKeyHex).length === 0, 'a suspended steward reports no enterprises');
+    assert(canOperateTreasury(river.pubKeyHex, wood) === false, 'clearing can_operate suspends a keeper node-wide');
+    assert(keeperOf(river.pubKeyHex).length === 0, 'a suspended keeper reports no enterprises');
     assert(
         !!db.prepare('SELECT 1 FROM treasury_operators WHERE member_pubkey=? AND treasury_pubkey=?').get(river.pubKeyHex, wood),
         'the binding SURVIVES suspension — suspend is not revoke',
@@ -141,7 +141,7 @@ async function main() {
     assert(/not a treasury/i.test(threw), `assigning against a non-treasury is refused (got "${threw}")`);
     threw = '';
     try { adminAssignTreasuryOperator(eggs, wood, 'admin'); } catch (e: any) { threw = e.message; }
-    assert(/cannot steward another treasury/i.test(threw), `a treasury cannot steward a treasury (got "${threw}")`);
+    assert(/cannot keep another treasury/i.test(threw), `a treasury cannot keep another treasury (got "${threw}")`);
 
     // ── 7. Migration — existing operators keep working ──────────────────────────
     // Simulate a pre-#106 node: legacy flag set, no bindings.
@@ -156,7 +156,7 @@ async function main() {
     const written = seedTreasuryOperatorsFromLegacyFlag();
     assert(
         written === legacyCount * treasuryCount,
-        `migration over-grants one row per enterprise: ${legacyCount} steward(s) × ${treasuryCount} enterprise(s) = ${legacyCount * treasuryCount} (wrote ${written})`,
+        `migration over-grants one row per enterprise: ${legacyCount} keeper(s) × ${treasuryCount} enterprise(s) = ${legacyCount * treasuryCount} (wrote ${written})`,
     );
     assert(canOperateTreasury(doone.pubKeyHex, eggs) === true, 'post-migration: an existing operator keeps Eggs');
     assert(canOperateTreasury(doone.pubKeyHex, wood) === true, 'post-migration: and keeps Firewood — pruning is the admin\'s job');
@@ -169,7 +169,7 @@ async function main() {
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ Per-enterprise stewardship checks PASSED (#106).');
+    console.log('⭐️ Per-enterprise keepership checks PASSED (#106).');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

@@ -13,7 +13,7 @@
 import Router from '@koa/router';
 import {
     createTreasury, adminSetOperator, canOperateTreasury,
-    treasuryStewards, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
+    treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     createPost, approvePostRequest, completePostTransaction,
     transfer, getBalance,
 } from '../state-engine.js';
@@ -31,7 +31,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Returns the operator pubkey, or null after having written the error response.
     //
     // Before #106 this checked only that the actor was *an* operator and the target was *a*
-    // treasury — never that the two were related, so any steward could drive every enterprise on
+    // treasury — never that the two were related, so any keeper could drive every enterprise on
     // the node. The 404-before-403 order is deliberate: a non-treasury target is not a permission
     // problem, and reporting it as one sends people hunting for the wrong thing.
     const requireOperator = (ctx: any, treasury: string): string | null => {
@@ -39,7 +39,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
         if (!actor || !canOperateTreasury(actor, treasury)) {
             ctx.status = 403;
-            ctx.body = { error: 'You are not a steward of this enterprise' };
+            ctx.body = { error: 'You are not a keeper of this enterprise' };
             return null;
         }
         return actor;
@@ -56,9 +56,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 return {
                     publicKey: r.public_key, name: r.callsign, avatar: r.avatar_url,
                     balance: b.balance, creditLine: r.earned_credit, liveOffers: b.liveOffers,
-                    // #106: lets the Commons list say "Stewarded by doone" / "No steward yet"
+                    // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
-                    stewards: treasuryStewards(r.public_key),
+                    keepers: treasuryKeepers(r.public_key),
                 };
             }),
         };
@@ -82,8 +82,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
             liveOffers: b.liveOffers, posts, flow,
             // #106: who is accountable for this enterprise, public by design — a community should be
-            // able to see who stewards what without asking an admin.
-            stewards: treasuryStewards(treasury),
+            // able to see who keeps what without asking an admin.
+            keepers: treasuryKeepers(treasury),
         };
     });
 
@@ -108,7 +108,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed' }; }
     });
 
-    // ---- Per-enterprise stewardship (#106) ----------------------------------------------
+    // ---- Per-enterprise keepership (#106) ----------------------------------------------
     // Assign and revoke are the same primitive inverted, per docs/community-governance.md
     // (appoint/remove as one symmetric operation, so removal needs no separate workflow).
     // Both take effect on the next request — the check reads the table, nothing is cached.
@@ -117,7 +117,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         const { treasury } = ctx.params;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        ctx.body = { stewards: treasuryStewards(treasury) };
+        ctx.body = { keepers: treasuryKeepers(treasury) };
     });
 
     router.post('/api/local/admin/treasury/:treasury/operators', async (ctx) => {
@@ -127,8 +127,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!pubkey) { ctx.status = 400; ctx.body = { error: 'pubkey is required' }; return; }
         try {
             adminAssignTreasuryOperator(treasury, String(pubkey), 'admin');
-            ctx.body = { success: true, stewards: treasuryStewards(treasury) };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to assign steward' }; }
+            ctx.body = { success: true, keepers: treasuryKeepers(treasury) };
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to assign keeper' }; }
     });
 
     router.delete('/api/local/admin/treasury/:treasury/operators/:pubkey', async (ctx) => {
@@ -137,8 +137,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         try {
             adminRevokeTreasuryOperator(treasury, pubkey);
-            ctx.body = { success: true, stewards: treasuryStewards(treasury) };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to revoke steward' }; }
+            ctx.body = { success: true, keepers: treasuryKeepers(treasury) };
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to revoke keeper' }; }
     });
 
     // Admin (password): post an Offer / Need as a treasury — a bootstrap convenience so a community

@@ -328,6 +328,20 @@ Needs** — the two places where the surplus side is the one paying. Byron's cap
 the top pair is governed by *Brisbane's* cap, which has enormous room precisely because Brisbane is owed
 nothing.
 
+**Beans and energy move in opposite directions, and conflating them is how this gets read backwards.**
+In the permitted direction:
+
+```
+beans   Byron  ──────────▶  Brisbane      (Byron pays; the claim shrinks)
+energy  Byron  ◀──────────  Brisbane      (Brisbane does the work; Byron is finally paid in real value)
+```
+
+Which is the whole point of the throttle. Byron has been accumulating a *claim* — an entitlement to
+future work it has not yet received. At the cap, the only crossing still open is the one that **redeems
+that claim instead of growing it**: Byron spends its position down and receives real work for it. Nothing
+is confiscated and nobody is being generous; Byron simply gets what it was already owed, and Brisbane's
+members earn their way back off the floor doing it (§5.2).
+
 The mechanism is therefore asymmetric by construction: each cap binds only the sign representing credit
 *given*, and the rebalancing flow reduces the very quantity that was capped. The failure mode to avoid is
 an implementation that checks `abs(tab) > cap` and blocks the peer wholesale. That would freeze a drained

@@ -1234,7 +1234,7 @@ export default function MarketScreen() {
                             </View>
                         )}
                         {isOwn && (
-                            <View style={[styles.gridPriceBadge, { left: !!item.repeatable ? 95 : 8, right: undefined, backgroundColor: '#2563eb' }]}>
+                            <View style={[styles.gridPriceBadge, { left: item.repeatable ? 95 : 8, right: undefined, backgroundColor: '#2563eb' }]}>
                                 <Text style={styles.gridPriceText}>👤 YOU</Text>
                             </View>
                         )}

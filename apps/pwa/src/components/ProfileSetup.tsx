@@ -51,7 +51,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
             } catch { /* first time / offline — start at name */ }
             setLoading(false);
         })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line
     }, []);
 
     const nameOk = callsign.trim().length >= 2;

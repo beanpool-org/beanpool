@@ -1,0 +1,20 @@
+[
+  {
+    "path": "apps/server/src/engine/members.ts",
+    "position": 55,
+    "side": "RIGHT",
+    "body": "### Critical Bug: `.run()` Used Instead of `.get()` for Query Returning Row\n**Risk:** In `better-sqlite3`, `stmt.run()` is used for DML operations (INSERT/UPDATE/DELETE) and returns a `RunResult` metadata object `{ changes: 0, lastInsertRowid: 0 }`. It does NOT return query row results. In JavaScript, `{ changes: 0, lastInsertRowid: 0 }` is truthy, meaning `!row` will ALWAYS evaluate to `false`.\n\nAs a consequence, `isCallsignAvailable` will return `false` for every single callsign check across the application. All profile callsign updates and registrations will fail and incorrectly declare names as taken (`CALLSIGN_TAKEN`).\n\n**Suggested Fix:**\nChange `.run(...)` back to `.get(...)`:\n```typescript\n    const row = db.prepare(\n        `SELECT 1 FROM members WHERE lower(callsign) = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`\n    ).get(norm, excludePublicKey ?? '');\n    return !row;\n```"
+  },
+  {
+    "path": "apps/server/src/engine/members.ts",
+    "position": 53,
+    "side": "RIGHT",
+    "body": "### Architectural Risk: DB Index Mismatch with Application Availability Check\n**Risk:** `isCallsignAvailable` was updated to exclude `pruned` members (`status NOT IN ('migrated', 'pruned')`), but the DB partial unique index `idx_members_callsign_unique` in `apps/server/src/db/db.ts` is still defined as:\n`CREATE UNIQUE INDEX IF NOT EXISTS idx_members_callsign_unique ON members(lower(callsign)) WHERE status != 'migrated'`\n\nIf a user reclaims a callsign previously owned by a `pruned` member, `isCallsignAvailable` will report it as available, but the database write will throw an unhandled `SqliteError: UNIQUE constraint failed: members.lower(callsign)` because the database index still includes `pruned` rows.\n\n**Suggested Fix:**\nUpdate the partial index definition in `apps/server/src/db/db.ts` to match the application check:\n```sql\nCREATE UNIQUE INDEX IF NOT EXISTS idx_members_callsign_unique ON members(lower(callsign)) WHERE status NOT IN ('migrated', 'pruned');\n```"
+  },
+  {
+    "path": "apps/native/app/(tabs)/settings.tsx",
+    "position": 657,
+    "side": "RIGHT",
+    "body": "### Edge Case: HTTP Error Responses Caught as Offline Mode\n**Risk:** If the server rejects a profile update with an HTTP error status code (e.g. `400 Bad Request` for invalid parameters or `CALLSIGN_TOO_SHORT`), `if (!res.ok)` throws an `Error`. This error is immediately caught by the inner `catch` block on line 663, which logs a warning, alerts `\"Offline Mode\"`, sets `pending_profile_sync`, and then proceeds to execute the local state update (`updateMemberProfile` & `updateCallsign`) with the rejected callsign.\n\nInvalid or rejected callsigns will be persisted locally on the device and queued for endless re-sync attempts.\n\n**Suggested Fix:**\nDifferentiate between network connection failures and HTTP client/server error responses:\n```typescript\n                    if (res.status === 409) {\n                        Alert.alert('Name Taken', 'That name is already taken in this community. Please pick another.');\n                        return;\n                    }\n                    if (!res.ok) {\n                        const errData = await res.json().catch(() => ({}));\n                        Alert.alert('Update Failed', errData.message || 'Server rejected the profile update.');\n                        return;\n                    }\n```"
+  }
+]

@@ -124,7 +124,7 @@ That is a genuinely different *kind* of ledger row from a member balance, even t
 | What it mirrors | a specific member's live negative | nothing at member level — no member is at −N because of it |
 | Can it be spent? | yes | **no** — no member is ever paid out of it |
 | Can it be transferred? | yes | **no** — it is a claim on *one* community's future work, not a bearer instrument |
-| Does it decay? | yes, above the green zone | **no** — decaying a debt is silent forgiveness |
+| Does it decay? | yes, above the green zone | **no** — decaying a debt is silent forgiveness. Enforced by `ledger.setDecayExempt()`, applied at boot alongside `COMMONS_POOL`, `escrow_*`, `project_*` and every `is_treasury=1` account |
 
 Three rules elsewhere in this document follow from that single fact rather than standing on their own:
 bridge accounts are prefix-reserved and rejected on public routes (§2.4), credit is never routed through
@@ -280,8 +280,25 @@ rather than asserting it:
 
 ```
 signed by the BUYER, verified by their HOME node:
-  { key, buyer, amount, sellerNode, postId, timestamp, nonce }
+  { key, buyer, amount, homeNode, sellerNode, postId, timestamp, nonce }
 ```
+
+**`homeNode` is not redundant, and leaving it out is exploitable.** A single identity can be a full
+member of several nodes at once — `registerMember(publicKey, callsign)` takes no home-node constraint,
+and that is deliberate: one phone holds one identity and uses it across every node it joins. So the same
+public key may be a member, with a real balance, on both Brisbane and Gold Coast.
+
+Now suppose the payload only named the *seller's* node. A malicious Byron takes one valid authorisation
+and presents it to **both** Brisbane and Gold Coast. Each verifies the buyer's signature successfully —
+both legitimately hold that key as a member — and each debits and opens a bridge position. The buyer is
+charged twice for one purchase, and Byron holds two claims for one lesson.
+
+The idempotency key does not save you: each node keeps its own key namespace, so neither sees a
+duplicate. **Binding `homeNode` inside the signed payload is what makes the authorisation single-target** —
+a node must refuse any authorisation that does not name it.
+
+> **Rule 3b — A node refuses a settlement authorisation that does not name it as `homeNode`. One
+> signature authorises exactly one debit, on exactly one ledger.**
 
 Reuse the existing replay-proof scheme rather than inventing one — the same
 `method + path + timestamp + nonce + body` construction, freshness window and single-use nonce
@@ -313,10 +330,14 @@ Ordering is chosen so that the only reachable failure state is the *safe* one:
 | 2 | BYRON → BRISBANE | `COMMIT(key)`. Brisbane atomically debits the buyer and credits `bridge_byron`, then returns a **signed settlement receipt**. |
 | 3 | BYRON | Only *on holding that receipt*, atomically credits the seller and debits `bridge_brisbane`. |
 
-> **Rule 3 — A node never credits a local member before it holds a signed settlement receipt from the
+> **Rule 3c — A node never credits a local member before it holds a signed settlement receipt from the
 > buyer's home node.**
 
-Rule 3 is the whole point. Crediting first is exactly the #102 defect: unbacked local beans.
+Rule 3c is the whole point. Crediting first is exactly the #102 defect: unbacked local beans.
+
+Taken together, §2.5's three rules answer three separate questions and none substitutes for another:
+**3a** — who authorised this debit? (the member, by signature). **3b** — which ledger may act on it?
+(exactly one, named inside the signature). **3c** — in what order? (never credit before the receipt).
 
 **Failure handling.**
 
@@ -745,6 +766,22 @@ defect from. Somebody eventually will.
 
 So the charge stays **local**: to the pair, or funding the clearing work itself (#107). Revisit only if a
 real multi-community cluster makes the case, and never by quietly widening the scope of #107.
+
+**The honest cost of staying local, past two nodes.** Bilateral caps can deadlock a loop that would
+otherwise clear itself: A is at its cap with B, B at its cap with C, C at its cap with A — and yet the
+three positions sum to nothing. Each pair is stuck even though the ring is balanced. That is precisely
+why multi-community **netting** is the attractive deferred item in §7, and it is a real limitation rather
+than an oversight.
+
+Until netting exists, the answer is bilateral and unglamorous: a community at its cap with a partner
+clears it *with that partner*, by buying the work described in §5. To be explicit about two things this
+does **not** license:
+
+- **#107 is not netting.** It is the imbalance-keyed circulation charge and clearance fund. Netting is a
+  separate, unbuilt mechanism, and conflating them would smuggle multi-hop clearing in under a scope that
+  never covered it.
+- **Nothing here may become mandatory before it exists.** A spec must not require a protocol that has not
+  been built; the bilateral case has to be proven in production first (§7, routed credit).
 
 ### Persistent per-node visitor accounts
 

@@ -605,7 +605,7 @@ export async function getPost(id: string) {
                             p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null,
                             p.price_type || p.priceType || 'fixed',
                             p.repeatable ? 1 : 0,
-                            p.cashAlsoNeeded ? 1 : 0,
+                            (p.cashAlsoNeeded ?? p.cash_also_needed) ? 1 : 0,   // #108: API is camelCase; tolerate either
                             p.status || 'active',
                             p.active !== undefined ? (p.active ? 1 : 0) : 1,
                             p.accepted_by || p.acceptedBy || null,

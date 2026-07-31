@@ -693,6 +693,12 @@ export default function MarketScreen() {
                             author_energy_cycled: p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
                             authorFoundingNeeded: p.authorFoundingNeeded ?? (p.author_founding_needed === 1),
                             author_founding_needed: p.author_founding_needed ?? (p.authorFoundingNeeded ? 1 : 0),
+                            // #108: the server returns camelCase `cashAlsoNeeded`; local SQLite rows carry
+                            // snake_case 0/1. Normalise here — the same place the other mixed-casing fields
+                            // are reconciled — so the beans-only filter AND the card badge both keep working
+                            // while a server search is active. Guarding at each call site instead would leave
+                            // the next reader to rediscover this.
+                            cash_also_needed: p.cash_also_needed ?? (p.cashAlsoNeeded ? 1 : 0),
                         };
                     });
                     setSearchResults(parsed);

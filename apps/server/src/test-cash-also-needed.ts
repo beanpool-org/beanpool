@@ -134,6 +134,23 @@ async function main() {
         'the re-set flag reads back as true',
     );
 
+    // A stringified payload must still be able to CLEAR the flag. "false" is truthy in JS, so a
+    // naive `updates.cashAlsoNeeded ? 1 : 0` would silently keep it set forever.
+    const strCleared = await signedFetch('POST', '/api/marketplace/posts/update', author,
+        { id: cashId, authorPublicKey: author.pubKeyHex, cashAlsoNeeded: 'false' });
+    assert(strCleared.status === 200, `a stringified update is accepted (got ${strCleared.status})`);
+    assert(
+        ((await signedFetch('GET', `/api/marketplace/posts?id=${cashId}`, author)).body as any[])[0]?.cashAlsoNeeded === false,
+        'the string "false" CLEARS the flag — not treated as truthy',
+    );
+    // Put it back for the cross-node checks below.
+    await signedFetch('POST', '/api/marketplace/posts/update', author,
+        { id: cashId, authorPublicKey: author.pubKeyHex, cashAlsoNeeded: 'true' });
+    assert(
+        ((await signedFetch('GET', `/api/marketplace/posts?id=${cashId}`, author)).body as any[])[0]?.cashAlsoNeeded === true,
+        'the string "true" SETS the flag',
+    );
+
     // ── 4. Cash cannot travel: a peer node never sees a cash-flagged listing ────
     // Remote browsing hits this same public endpoint, so the peer Origin is the signal.
     addConnector('byron.beanpool.org', 'peer', 'Byron', PEER_ORIGIN);

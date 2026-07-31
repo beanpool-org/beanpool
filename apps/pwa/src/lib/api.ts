@@ -775,56 +775,19 @@ export async function sendRemoteTransfer(
     return res.json();
 }
 
-/** Send a federation relay message — delivers to remote node AND stores locally */
-export async function sendFederationMessage(
-    targetNodeUrl: string,
-    senderPublicKey: string,
-    senderCallsign: string,
-    recipientPublicKey: string,
-    ciphertext: string,
-    nonce: string,
-): Promise<{ conversationId: string }> {
-    assertHttpsPeerUrl(targetNodeUrl); // A2-7: never relay to a non-HTTPS peer
-    const homeNodeUrl = window.location.origin;
-    const payload = {
-        senderPublicKey,
-        senderCallsign,
-        senderNodeUrl: homeNodeUrl,
-        recipientPublicKey,
-        ciphertext,
-        nonce,
-    };
-
-    // 1. Deliver to the remote node
-    const remoteRes = await fetch(`${targetNodeUrl}/api/federation/relay-message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-    });
-    if (!remoteRes.ok) {
-        const err = await remoteRes.json().catch(() => ({ error: 'Relay failed' }));
-        throw new Error(err.error || 'Failed to relay message to remote node');
-    }
-
-    // 2. Store locally so the sender can see the conversation in their Chat tab
-    const localRes = await fetch(`/api/federation/relay-message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            ...payload,
-            // Swap perspective: on our node, the "sender" is us (already a member),
-            // the "recipient" is the remote user (will be registered as visitor)
-            recipientPublicKey: recipientPublicKey,
-        }),
-    });
-    if (!localRes.ok) {
-        // Remote delivery succeeded but local copy failed — still usable
-        console.warn('Failed to store local copy of federation message');
-        return { conversationId: '' };
-    }
-    const localData = await localRes.json();
-    return { conversationId: localData.conversationId };
-}
+// REMOVED (#109): sendFederationMessage() posted to /api/federation/relay-message on
+// both the peer and this node. Both routes are commented out in the server
+// (federation-api.ts) because they are unauthenticated HTTP stubs that would allow
+// remote message spoofing, so the call could only ever fail.
+//
+// It is deliberately NOT re-pointed at the working relay. That relay lives in
+// routes/messaging.ts and fires on the ordinary signed POST /api/messages/send, but
+// only when the DM's other participant is a local member carrying a home_node_url.
+// createConversation registers unknown participants WITHOUT one
+// (engine/messaging.ts), so for a cross-browsed remote author the relay can never
+// resolve their node — the message would be stored locally and silently never
+// delivered. Threading the home node URL through visitor registration is federation
+// messaging work, not a client-side rename.
 
 /** Check balance on a remote node */
 export async function getRemoteBalance(baseUrl: string, publicKey: string): Promise<BalanceInfo> {

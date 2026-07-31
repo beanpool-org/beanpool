@@ -3,6 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import { db } from '../db/db.js';
+import { assertLocalSettlement } from '../federation-settlement.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -89,6 +90,9 @@ export function requestPost(
     const finalCredits = post.price_type !== 'fixed' ? post.credits * hours! : post.credits;
 
     const payerPubkey = isOffer ? requesterPublicKey : post.author_pubkey;
+    // #102: on a Need the payer is the post's author, NOT the requester — which is exactly why this
+    // check belongs at the draw point instead of the route's actor.
+    assertLocalSettlement(payerPubkey);
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(payerPubkey);
     if (balance - finalCredits < floor) throw new Error('Insufficient balance to request this post.');
     if (balance - finalCredits < uFloor) throw cb.floorLockedError(payerPubkey, balance - finalCredits);
@@ -154,6 +158,9 @@ export function approvePostRequest(
     if (isOnHoliday(row.buyer_pubkey) || isOnHoliday(row.seller_pubkey)) {
         throw new Error('Trading is paused while a member is in holiday mode.');
     }
+
+    // #102: the approver is the post author, but the money moves from the BUYER on this row.
+    assertLocalSettlement(row.buyer_pubkey);
 
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
     if (balance - row.credits < floor) throw new Error('Buyer has insufficient balance to cover escrow');
@@ -286,6 +293,10 @@ export function acceptPost(
 
     const buyer = getMember(db, buyerPublicKey);
     const finalCredits = post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
+
+    // #102: a visitor's beans live on their home ledger, so this node cannot fund escrow for them.
+    // Guarded here rather than only at the route because the PAYER is not always the actor.
+    assertLocalSettlement(buyerPublicKey);
 
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(buyerPublicKey);
     if (balance - finalCredits < floor) throw new Error('Insufficient balance to accept this offer');

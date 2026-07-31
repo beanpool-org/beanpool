@@ -13,6 +13,7 @@ import {
     getMember, getBalance,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
+import { respondSettlementAware } from '../federation-settlement.js';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -155,8 +156,8 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         const tx = acceptPost(postId, (ctx.state.actor as string) || buyerPublicKey, parsedHours);
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
-        ctx.status = 400;
-        ctx.body = { error: err.message };
+        // #102: the escrow engine refuses a visitor's draw — surface it as 503 + code, not a 400.
+        respondSettlementAware(ctx, err, 'Failed to accept post');
     }
 });
 
@@ -173,8 +174,7 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
         if (!tx) throw new Error('Cannot request — post not found or unauthorized');
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
-        ctx.status = 400;
-        ctx.body = { error: err.message };
+        respondSettlementAware(ctx, err, 'Failed to request post');
     }
 });
 
@@ -189,8 +189,7 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
         const tx = approvePostRequest(transactionId, (ctx.state.actor as string) || authorPublicKey);
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
-        ctx.status = 400;
-        ctx.body = { error: err.message };
+        respondSettlementAware(ctx, err, 'Failed to approve request');
     }
 });
 

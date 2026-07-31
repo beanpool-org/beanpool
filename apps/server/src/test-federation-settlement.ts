@@ -6,8 +6,11 @@
  * moved value LOCALLY, so the home ledger was read and never written: the same beans
  * could be spent once on every node the member visited.
  *
- *   POST /api/ledger/transfer              (routes/community.ts)
- *   POST /api/crowdfund/projects/:id/pledge (routes/commons.ts)
+ *   POST /api/ledger/transfer                  (routes/community.ts)
+ *   POST /api/crowdfund/projects/:id/pledge    (routes/commons.ts)
+ *   POST /api/marketplace/posts/accept         (escrow draw)
+ *   POST /api/marketplace/posts/request        (escrow draw)
+ *   POST /api/marketplace/transactions/approve (escrow draw)
  *
  * Both now refuse via blockCrossNodeSettlement() until charge-home settlement exists
  * (#104). These checks pin the refusal, pin that the ledger does NOT move, and pin that
@@ -27,7 +30,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { FEDERATION_SETTLEMENT_ENABLED, isVisitor } from './federation-settlement.js';
+import { FEDERATION_SETTLEMENT_ENABLED, isVisitor, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 
 const PORT = 8548;
 const BASE = `https://localhost:${PORT}`;
@@ -68,7 +71,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     if (method === 'POST') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${BASE}${path}`, { method, headers, body: method === 'POST' ? bodyString : undefined });
     let json: any; try { json = await res.json(); } catch { /* */ }
-    return { status: res.status, error: json?.error as string | undefined, code: json?.code as string | undefined };
+    return { status: res.status, error: json?.error as string | undefined, code: json?.code as string | undefined, body: json as any };
 }
 
 async function main() {
@@ -116,6 +119,60 @@ async function main() {
     assert(vPledge.status === 503, `visitor pledge is REFUSED (got ${vPledge.status} ${vPledge.error ?? ''})`);
     assert(vPledge.code === 'federation_settlement_disabled', `pledge refusal carries the settlement code (got ${vPledge.code ?? 'none'})`);
     assert(balanceOf(visitor.pubKeyHex) === vAfterSend, 'visitor balance unchanged by the refused pledge');
+
+    // ── The marketplace escrow routes ────────────────────────────────────────────
+    // These draw against the payer's floor and transfer to escrow_<id> LOCALLY, so they carry the
+    // same defect as the transfer route. Critically, the payer is NOT always the actor:
+    //   • accept  → payer is the buyer (the actor)
+    //   • request → on a NEED, the payer is the post's AUTHOR, not the requester
+    //   • approve → payer is the buyer recorded on the row, not the approver
+    // So the guard sits at the draw point in the escrow engine, and these checks pin all three.
+    // Reuses `local` and `payee` from above — they differ from `visitor` only in home_node_url.
+
+    // A local member's Offer, so the visitor has something to accept. Both need a listed Offer of
+    // their own first (the contribution covenant), so give each one.
+    const mkOffer = async (id: typeof local, title: string) => {
+        const r = await signedFetch('POST', '/api/marketplace/posts', id, {
+            type: 'offer', category: 'general', title, description: 'x', credits: 5,
+            priceType: 'fixed', authorPublicKey: id.pubKeyHex,
+        });
+        return r.body?.post?.id as string | undefined;
+    };
+    // Profile completeness is enforced on post creation; seed avatars directly.
+    for (const pk of [local.pubKeyHex, visitor.pubKeyHex, payee.pubKeyHex]) {
+        db.prepare("UPDATE members SET avatar_url='data:image/png;base64,iVBORw0KGgo=' WHERE public_key=?").run(pk);
+    }
+    const localOffer = await mkOffer(local, 'Local fence fixing');
+    await mkOffer(visitor, 'Visiting guitar lessons');   // satisfies the visitor's own covenant
+
+    const vAccept = await signedFetch('POST', '/api/marketplace/posts/accept', visitor,
+        { postId: localOffer, buyerPublicKey: visitor.pubKeyHex });
+    assert(vAccept.status === 503, `visitor marketplace ACCEPT is refused (got ${vAccept.status} ${vAccept.error ?? ''})`);
+    assert(vAccept.code === SETTLEMENT_REFUSED_CODE, `accept refusal carries the settlement code (got ${vAccept.code ?? 'none'})`);
+    assert(balanceOf(visitor.pubKeyHex) === vAfterSend, 'visitor balance unchanged by the refused accept');
+
+    // The actor-is-not-the-payer case: a visitor's NEED, requested by a local member. The visitor
+    // (post author) is the payer, so it must be refused even though the actor is local.
+    const vNeed = await signedFetch('POST', '/api/marketplace/posts', visitor, {
+        type: 'need', category: 'general', title: 'Visiting need', description: 'x', credits: 5,
+        priceType: 'fixed', authorPublicKey: visitor.pubKeyHex,
+    });
+    assert(vNeed.status === 200, `a visitor can still POST a need (got ${vNeed.status} ${vNeed.error ?? ''})`);
+    const vReq = await signedFetch('POST', '/api/marketplace/posts/request', local,
+        { postId: vNeed.body?.post?.id, buyerPublicKey: local.pubKeyHex });
+    assert(vReq.status === 503, `a LOCAL member's request against a VISITOR's need is refused (got ${vReq.status} ${vReq.error ?? ''})`);
+    assert(vReq.code === SETTLEMENT_REFUSED_CODE, 'that refusal carries the settlement code — the payer is the visitor, not the actor');
+
+    // And the mirror: a local member's need requested by a local member still works, so the guard
+    // is not simply refusing everything.
+    const lNeed = await signedFetch('POST', '/api/marketplace/posts', local, {
+        type: 'need', category: 'general', title: 'Local need', description: 'x', credits: 5,
+        priceType: 'fixed', authorPublicKey: local.pubKeyHex,
+    });
+    const lReq = await signedFetch('POST', '/api/marketplace/posts/request', payee,
+        { postId: lNeed.body?.post?.id, buyerPublicKey: payee.pubKeyHex });
+    assert(lReq.status !== 503, `a wholly-local request is NOT refused by the guard (got ${lReq.status} ${lReq.error ?? ''})`);
+    assert(lReq.code !== SETTLEMENT_REFUSED_CODE, 'a wholly-local request carries no settlement code');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

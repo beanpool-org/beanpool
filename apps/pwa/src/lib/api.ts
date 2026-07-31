@@ -260,6 +260,7 @@ export async function updateMemberProfile(publicKey: string, update: {
     avatar?: string | null;
     bio?: string;
     contact?: { value: string; visibility: 'hidden' | 'trade_partners' | 'community' | 'friends' } | null;
+    callsign?: string;
 }): Promise<{ success: boolean; profile: MemberProfile }> {
     return request('POST', '/api/profile/update', { publicKey, ...update });
 }

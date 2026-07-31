@@ -61,12 +61,12 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 contact: contactValue.trim()
                     ? { value: contactValue.trim(), visibility: contactVisibility }
                     : null,
+                callsign: callsign.trim() || undefined,
             });
             // Update callsign if changed
             if (callsign.trim() && callsign.trim() !== identity.callsign) {
                 const updated = await updateCallsign(callsign.trim());
                 if (updated) {
-                    await registerMember(updated.publicKey, updated.callsign);
                     onIdentityUpdated?.(updated);
                 }
             }

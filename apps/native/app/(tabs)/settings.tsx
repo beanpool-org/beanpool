@@ -342,13 +342,14 @@ export default function SettingsScreen() {
                 if (profile) {
                     const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
                     setAvatar(cleaned);
+                    if (profile.callsign) setEditCallsign(profile.callsign);
                     if (profile.bio) setBio(profile.bio);
                     if (profile.contact_value) setContact(profile.contact_value);
                     if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
                 }
             }).catch(() => {});
         }
-    }, []);
+    }, [identity?.publicKey]);
 
     // Load holiday-mode state on mount (queried so an unset flag reads as OFF, not the pref default).
     React.useEffect(() => {
@@ -621,38 +622,23 @@ export default function SettingsScreen() {
 
     async function handleUpdateCallsign() {
         if (!identity) return;
-        if (editCallsign.trim().length < 2) {
+        const newCallsign = editCallsign.trim();
+        if (newCallsign.length < 2) {
             Alert.alert('Error', 'Callsign must be at least 2 characters.');
             return;
         }
         setLoading(true);
         try {
-            // Only include avatar_url in the update if we have one in local state.
-            // If avatar state is null (e.g., profile fetch hasn't completed), do NOT
-            // send avatar_url at all — otherwise we'd wipe the existing avatar on the server.
-            const localUpdate: any = {
-                callsign: editCallsign.trim(),
-                bio: bio.trim(),
-                contact_value: contact.trim(),
-                contact_visibility: contact.trim() ? contactVisibility : 'hidden',
-            };
-            if (avatar) localUpdate.avatar_url = avatar;
-            await updateMemberProfile(identity.publicKey, localUpdate);
-            if (editCallsign.trim() !== identity.callsign) {
-                const updated = await updateCallsign(editCallsign.trim());
-                if (updated) setIdentity(updated);
-            }
-
-            // Push profile (including avatar) to the server so other devices see it
+            // Push profile (including callsign & avatar) to the server FIRST so the node validates uniqueness before local commit
+            let published = false;
             try {
                 const url = await AsyncStorage.getItem('beanpool_anchor_url');
                 if (url && identity) {
-                    // Same guard as local: don't send avatar=null if state hasn't loaded
                     const payloadObj: any = {
                         publicKey: identity.publicKey,
                         bio: bio.trim(),
                         contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
-                        callsign: editCallsign.trim(),
+                        callsign: newCallsign,
                     };
                     if (avatar) payloadObj.avatar = avatar;
                     const bodyString = JSON.stringify(payloadObj);
@@ -664,9 +650,14 @@ export default function SettingsScreen() {
                         body: bodyString,
                     });
                     
+                    if (res.status === 409) {
+                        Alert.alert('Name Taken', 'That name is already taken in this community. Please pick another.');
+                        return;
+                    }
                     if (!res.ok) {
                         throw new Error('Server rejected the profile update.');
                     }
+                    published = true;
                     await AsyncStorage.removeItem('pending_profile_sync');
                 }
             } catch (e: any) {
@@ -675,9 +666,23 @@ export default function SettingsScreen() {
                 Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
             }
 
+            // Commit locally after server accepts (or when offline)
+            const localUpdate: any = {
+                callsign: newCallsign,
+                bio: bio.trim(),
+                contact_value: contact.trim(),
+                contact_visibility: contact.trim() ? contactVisibility : 'hidden',
+            };
+            if (avatar) localUpdate.avatar_url = avatar;
+            await updateMemberProfile(identity.publicKey, localUpdate);
+            if (newCallsign !== identity.callsign) {
+                const updated = await updateCallsign(newCallsign);
+                if (updated) setIdentity(updated);
+            }
+
             setMode('menu');
-        } catch (e) {
-            Alert.alert('Error', 'Could not update profile.');
+        } catch (e: any) {
+            Alert.alert('Error', e?.message || 'Could not update profile.');
         } finally {
             setLoading(false);
         }

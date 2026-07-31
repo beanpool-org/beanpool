@@ -50,8 +50,8 @@ export function isCallsignAvailable(callsign: string, excludePublicKey?: string)
     const norm = callsign.trim().toLowerCase();
     if (norm.length < 2) return false;
     const row = db.prepare(
-        `SELECT 1 FROM members WHERE lower(callsign) = ? AND status != 'migrated' AND public_key != ? LIMIT 1`
-    ).get(norm, excludePublicKey ?? '');
+        `SELECT 1 FROM members WHERE lower(callsign) = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`
+    ).run(norm, excludePublicKey ?? '');
     return !row;
 }
 
@@ -185,9 +185,11 @@ export function updateProfile(
     let callsign = existing.callsign;
     if (typeof update.callsign === 'string') {
         const requested = update.callsign.trim().slice(0, 32);
-        if (requested.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
+        if (requested !== existing.callsign) {
             if (requested.length < 2) throw new Error('CALLSIGN_TOO_SHORT');
-            if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
+            if (requested.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
+                if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
+            }
             callsign = requested;
         }
     }

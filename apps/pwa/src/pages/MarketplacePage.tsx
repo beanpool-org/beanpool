@@ -935,6 +935,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                                 const remoteNode = (selectedPost as any)._remoteNode;
                                                 if (remoteNode) {
+                                                    // Unreachable while the confirm button is disabled for
+                                                    // remote posts (below). Kept as a defensive branch, but
+                                                    // sendRemoteTransfer() posts UNSIGNED to the peer's
+                                                    // /api/ledger/transfer, which requireSignature rejects
+                                                    // with 401 — and PR #112 refuses a visitor's settlement
+                                                    // there regardless. Cross-node trade needs #104.
                                                     const isOffer = selectedPost.type === 'offer';
                                                     if (totalCredits > 0) {
                                                         const from = isOffer ? identity.publicKey : selectedPost.authorPublicKey;
@@ -959,16 +965,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setAccepting(false);
                                             }
                                         }}
-                                        disabled={accepting || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
+                                        disabled={accepting || isRemotePost || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
                                         className={`flex-1 py-2.5 rounded-lg font-bold text-white text-sm transition-all shadow-sm ${
-                                            accepting 
-                                                ? 'bg-emerald-400 cursor-not-allowed opacity-60' 
+                                            accepting || isRemotePost
+                                                ? 'bg-emerald-400 cursor-not-allowed opacity-60'
                                                 : 'bg-emerald-600 hover:bg-emerald-700'
                                         }`}
                                     >
                                         {accepting ? 'Processing...' : 'Confirm'}
                                     </button>
                                 </div>
+                                {isRemotePost && (
+                                    <p className="mt-2 text-xs text-nature-600 text-center">
+                                        This post is from another community — trading across communities isn't available yet.
+                                    </p>
+                                )}
                             </div>
                         ) : (
                             <button

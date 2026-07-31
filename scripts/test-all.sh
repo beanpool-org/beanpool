@@ -27,7 +27,11 @@ if [ $FORCE_ALL -eq 0 ] && [ $FAST -eq 0 ]; then
   if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     BASE_REF="origin/main"
     if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
-      BASE_REF="HEAD"
+      if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+        BASE_REF="HEAD~1"
+      else
+        FORCE_ALL=1
+      fi
     fi
     CHANGED_FILES=$(git diff --name-only "$BASE_REF"... 2>/dev/null; git status --porcelain 2>/dev/null | awk '{print $2}')
     
@@ -49,6 +53,7 @@ if [ $FAST -eq 1 ]; then
 fi
 
 LOGDIR=$(mktemp -d)
+trap 'rm -rf "$LOGDIR"' EXIT INT TERM
 PIDS=()
 NAMES=()
 SKIPPED_NAMES=()

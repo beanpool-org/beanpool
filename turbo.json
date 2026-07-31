@@ -23,7 +23,7 @@
         },
         "test": {
             "dependsOn": [
-                "^test"
+                "^build"
             ]
         },
         "dev": {

@@ -539,3 +539,47 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
 -- Covers "which enterprises does this member steward?" — the stewardOf() lookup that
 -- drives the Commons tab's per-enterprise controls.
 CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(member_pubkey);
+
+-- 21. Cross-node settlements (#104) — the durable state machine behind charge-home settlement.
+--
+-- Spec: docs/federation-economics.md §2.5. This is the "outbox" the failure-handling rules require, and
+-- BOTH sides of a trade keep a row, for different reasons:
+--
+--   the BUYER's node persists 'committed' before returning a receipt, so a bridge disagreement is
+--   DETECTABLE — without it, a receipt that was never acted on is invisible and the mismatch surfaces
+--   later as unexplained drift;
+--   the SELLER's node persists the receipt before paying its seller, so payment is REPLAYABLE — a crash
+--   mid-payment resumes from the receipt instead of losing the fact that it owes someone.
+--
+-- `key` is the idempotency key, minted by the buyer's node and shared by both sides. Every transition is
+-- idempotent on it, so a retry can never double-charge or double-pay.
+CREATE TABLE IF NOT EXISTS settlements (
+    key             TEXT PRIMARY KEY,
+    -- 'outbound' = we are the buyer's node (we debit our member, we owe outward)
+    -- 'inbound'  = we are the seller's node (we mint locally, we are owed)
+    direction       TEXT NOT NULL CHECK (direction IN ('outbound', 'inbound')),
+    peer_id         TEXT NOT NULL,
+    buyer_pubkey    TEXT NOT NULL,
+    buyer_home_node TEXT,
+    post_id         TEXT,
+    amount          REAL NOT NULL CHECK (amount > 0),
+    -- Deliberately NOT a foreign key and NOT reused from marketplace_transactions: a settlement outlives
+    -- the trade it came from, and must remain auditable after a post is deleted.
+    state           TEXT NOT NULL CHECK (state IN (
+                        'escrowed',    -- outbound: buyer's beans held, peer not yet asked
+                        'reserved',    -- inbound: our cap reserved, seller NOT yet paid
+                        'committed',   -- outbound: real entries written, receipt issued, awaiting confirmation
+                        'held',        -- inbound: receipt persisted, seller not yet paid
+                        'settled',     -- both: complete and agreed
+                        'reversed',    -- compensated by opposite entries (never deleted)
+                        'abandoned'    -- refused/expired before any entries were written
+                    )),
+    receipt         TEXT,
+    failure_reason  TEXT,
+    created_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+-- Boot recovery scans for unfinalised rows, so index the states it looks for.
+CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(state, updated_at)
+    WHERE state IN ('escrowed', 'reserved', 'committed', 'held');
+CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, state);

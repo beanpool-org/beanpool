@@ -177,3 +177,40 @@ export function totalEnergyPosition(): number {
     const row = db.prepare("SELECT COALESCE(SUM(balance), 0) AS t FROM accounts WHERE public_key LIKE 'bridge_%'").get() as any;
     return Math.round((row?.t ?? 0) * 100) / 100;
 }
+
+/**
+ * Human label for a bridge account, for a member's ledger (#104).
+ *
+ * A settled cross-node trade pays the seller from `bridge_<peerId>`, so that account IS the counterparty
+ * on a real person's transaction. Left raw it reads `bridge_12D3KooWByron…`, which tells them nothing.
+ *
+ * The name comes from the **connector's callsign**, not from a member row — bridge accounts deliberately
+ * have no member record (§2.2), and putting the name on the connector means it lives where the
+ * relationship lives and follows an operator rename.
+ *
+ * The 🌐 prefix is the same marker the clients already use for cross-community posts, so a local
+ * enterprise ("Community Eggs") and another whole community stay visually distinct in the same list —
+ * they are very different facts and would otherwise read alike.
+ */
+export function bridgeDisplayName(accountId: string): string | null {
+    const peerId = peerFromBridgeAccountId(accountId);
+    if (!peerId) return null;
+
+    const byPeer = getConnectors().find(c => c.peerId === peerId);
+    if (byPeer?.callsign) return `🌐 ${byPeer.callsign}`;
+
+    // Connected but unnamed, or configured and never met. Say what we know rather than leaking a peer id:
+    // "another community" is honest and readable, where a truncated hash is neither.
+    return '🌐 Another community';
+}
+
+/**
+ * Resolve any account id a member might see as a counterparty into something readable, or null to let the
+ * caller fall back to its normal member lookup.
+ *
+ * Only bridge accounts are handled here. `escrow_*` and `COMMONS_POOL` already have client-side copy
+ * treatments, and duplicating them would create two places to change one label.
+ */
+export function resolveCounterpartyLabel(accountId: string): string | null {
+    return accountId.startsWith('bridge_') ? bridgeDisplayName(accountId) : null;
+}

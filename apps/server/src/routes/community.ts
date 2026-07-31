@@ -34,13 +34,11 @@ import {
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
-    getConnectorByPublicUrl,
     type TrustLevel,
 } from '../connector-manager.js';
-import { federatedVerifyMember } from '../federation-protocol.js';
+import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
-import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
 
@@ -690,32 +688,11 @@ router.post('/api/ledger/transfer', async (ctx) => {
         return;
     }
 
-    // --- FEDERATION VERIFY ---
-    try {
-        const fromMember = getMember(from);
-        if (fromMember && fromMember.homeNodeUrl) {
-            const p2pNode = getP2PNode();
-            if (p2pNode) {
-                const targetConnector = getConnectorByPublicUrl(fromMember.homeNodeUrl);
-                if (targetConnector && targetConnector.peerId) {
-                    const verifyResult = await federatedVerifyMember(p2pNode, targetConnector.peerId, from);
-                    const homeBalance = verifyResult?.homeBalance ?? 0;
-                    const floor = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR; // use base floor for conservative federation check
-                    if (!verifyResult || !verifyResult.isMember || (homeBalance - parsedAmount < floor)) {
-                        ctx.status = 400;
-                        ctx.body = { error: 'Federation check failed: Insufficient funds on home node or member not recognized.' };
-                        return;
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error('[Federation] Error verifying remote member:', e);
-        ctx.status = 502;
-        ctx.body = { error: 'Federation check failed: Could not reach home node.' };
-        return;
-    }
-    // -------------------------
+    // A visitor's beans live on their home node's ledger, so this node cannot settle
+    // a send for them until charge-home settlement exists (#102 / #104). The previous
+    // guard here verified the home balance and then transferred locally, minting the
+    // amount on this node.
+    if (blockCrossNodeSettlement(ctx, from)) return;
 
     // Peer member→member transfers are fee-exempt — the recipient receives the
     // full amount. (The 1.5% transaction fee still applies to marketplace trade

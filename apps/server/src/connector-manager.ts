@@ -38,6 +38,25 @@ export interface ConnectorConfig {
     callsign?: string;       // friendly name for the UI
     publicUrl?: string;      // HTTPS URL for federation API (e.g. "https://mullum2.beanpool.org")
     addedAt: number;
+    /**
+     * #104 — how many beans of credit this node will extend to this peer before it stops honouring
+     * their members' purchases. Bounds how NEGATIVE our `bridge_<peer>` account may go
+     * (docs/federation-economics.md Rule 5).
+     *
+     * DELIBERATELY HAS NO DEFAULT. `undefined` means "not set", and settlement with this peer stays
+     * refused until an operator chooses a number. A default that suits a 200-member town quietly
+     * overexposes a 15-member one, and small communities are both the most vulnerable to being drained
+     * and the least able to absorb a bad balance — so the failure mode of a too-generous default lands
+     * hardest exactly where it does most damage.
+     *
+     * Note the useful consequence: the safe state is also the CURRENT state. With no cap configured,
+     * settlement is refused — which is what the #102 kill switch already does. So this inherits
+     * fail-closed rather than introducing it.
+     *
+     * Never negotiated over the wire: each node enforces its own, on its own books, from its own
+     * config. A compromised peer must not be able to raise the limit that constrains it.
+     */
+    creditCap?: number;
 }
 
 export interface ConnectorStatus extends ConnectorConfig {
@@ -466,6 +485,46 @@ export function addConnector(address: string, trustLevel: TrustLevel, callsign?:
     saveConnectors();
     logger.info('P2P', `[Connectors] Added connector: ${address} (trust: ${trustLevel}, enabled: ${connector.enabled})`);
     return connector;
+}
+
+/**
+ * #104 — set (or clear) the credit cap this node extends to a peer.
+ *
+ * Pass `undefined`/`null` to clear it, which returns the pair to the fail-closed state: settlement with
+ * that peer is refused until a number is chosen again. Clearing is therefore a legitimate operator
+ * action — the fastest way to stop honouring a peer's purchases without severing the connection or
+ * touching discovery, which must stay open in both directions (Rule 6).
+ *
+ * Rejects a negative cap: the cap bounds how much credit we EXTEND, so a negative figure is
+ * meaningless rather than restrictive, and silently coercing it would hide an operator's mistake.
+ */
+export function setConnectorCreditCap(address: string, cap: number | null | undefined): ConnectorConfig | null {
+    const connector = connectors.find(c => c.address === address);
+    if (!connector) return null;
+
+    if (cap === null || cap === undefined) {
+        delete connector.creditCap;
+        saveConnectors();
+        logger.info('P2P', `[Connectors] Credit cap CLEARED for ${address} — cross-node settlement with this peer is now refused`);
+        return connector;
+    }
+
+    if (!Number.isFinite(cap) || cap < 0) throw new Error('Credit cap must be a non-negative number');
+
+    connector.creditCap = cap;
+    saveConnectors();
+    logger.info('P2P', `[Connectors] Credit cap for ${address} set to ${cap}`);
+    return connector;
+}
+
+/** The configured credit cap for a peer, or null when unset (settlement refused). */
+export function getConnectorCreditCap(address: string): number | null {
+    // Tolerant lookup. A connector can be written as hostname:port, a multiaddr, or an HTTPS URL, and a
+    // caller may hold any of them. An exact-match miss returns null, which fail-closes and REFUSES a
+    // legitimate settlement — safe, but baffling for the operator who set the cap.
+    const connector = connectors.find(c =>
+        c.address === address || c.publicUrl === address || resolveMultiaddr(c.address) === address);
+    return connector?.creditCap ?? null;
 }
 
 export function removeConnector(address: string): boolean {

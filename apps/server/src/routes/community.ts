@@ -37,6 +37,7 @@ import {
     type TrustLevel,
 } from '../connector-manager.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
+import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { db } from '../db/db.js';
@@ -680,9 +681,10 @@ router.post('/api/ledger/transfer', async (ctx) => {
     // here bypassed the Ghost-gift tier gate — transfer() infers isEscrow from a
     // to-prefix — and stranded funds. Real escrow/crowdfund funding is internal
     // (marketplace / pledge routes call transfer with method='escrow'), never here.
-    const toStr = String(to);
-    if (toStr.startsWith('escrow_') || toStr.startsWith('project_') ||
-        toStr === 'COMMONS_POOL' || toStr === 'SYSTEM' || toStr === 'genesis') {
+    // Synthetic accounts are not people and must never be addressable here. Uses the shared predicate
+    // so a new synthetic kind (e.g. #104's bridge_<peer> energy balances) is covered automatically
+    // rather than needing every reject list found and edited — which is how #102 ended up duplicated.
+    if (isSyntheticAccount(String(to))) {
         ctx.status = 400;
         ctx.body = { error: 'Invalid recipient' };
         return;

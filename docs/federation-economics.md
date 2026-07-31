@@ -1,13 +1,31 @@
 # Federation Economics — Inter-Node Clearing Model
 
-> **Status:** Specification. Agreed in the 2026-07-30/31 design session; written up per #103.
+> **Status:** Specification, model agreed. Designed in the 2026-07-30/31 session, written up per #103,
+> and the four remaining design questions settled 2026-07-31 — see [Decisions taken](#decisions-taken).
 > Implemented by #104 (settlement + bridge accounts), #105 (cross-node needs board),
-> #107 (federation-aware circulation charge). Not yet built.
+> #107 (federation-aware circulation charge). **Not yet built** — #104 is clear to start.
 >
 > **Companion docs:** [protocol-rules.md](protocol-rules.md) §14 (Federation) — the protocol-level
 > constants that must be identical on every node. [commons-pool-transparency.md](commons-pool-transparency.md)
 > — zero-sum equilibrium, pruning write-offs. #96 covers federation *transport*; this document covers
 > federation *economics*. Where they meet, see [Two kinds of trust](#two-kinds-of-trust).
+
+## Decisions taken
+
+Four questions that were open when this document was first written, and are now settled. Each links to
+the section that implements it — read the section for the mechanism, this table for the *why*.
+
+| Question | Decision | Why this one |
+|---|---|---|
+| Where does the tab live? | A dedicated **`bridge_<peer>`** account per peer, not `COMMONS_POOL` — [§2.3](#23-bridge-accounts-are-not-the-commons) | Keeps "how much of the Commons is actually ours to spend?" answerable, and keeps two peers' tabs from blending into one number. One source of truth, in the ledger. |
+| Where does a visitor's spending power abroad come from? | **Carved out of their existing home `usableFloor`** — [§3.1](#31-a-members-total-foreign-exposure--capped-by-their-home-node) | Creates no new credit at the boundary, which is the thing Rule 1 exists to prevent. Also inherits the offer covenant free: you can only run up foreign exposure while actively offering at home. |
+| How is a node's credit cap on a peer set? | **No default. The operator sets an explicit number before credit-enabled federation works** — [§3.2](#32-a-nodes-credit-to-each-peer--capped-by-each-node-independently) | A default that suits a 200-member town quietly overexposes a 15-member one, and small communities are both the most vulnerable to being drained and the least able to absorb a bad tab. Fails safe, and forces the decision while the operator is actually thinking about that peer. |
+| Who receives the 1.5% transaction fee on a cross-node purchase? | The **buyer's home node's Commons** — [§9](#9-open-questions) | It holds the resulting debt, so it carries the write-off if that member is later pruned. Put the fee where the solvency risk sits. |
+
+The first supersedes the ledger diagram in the "Beans on holiday" design notes, which showed the tab in
+`Commons`. Sign convention is identical either way; only the account differs.
+
+---
 
 Federation has a transport design — how nodes discover each other, authenticate, and replicate. It has
 had no economic design. "How do beans cross a node boundary" turns out to be a distinct and much harder
@@ -90,12 +108,21 @@ Consequences that follow directly:
 
 ### 2.3 Bridge accounts are not the Commons
 
-A bridge position is held in a **dedicated per-peer synthetic account**, alongside the existing
-`escrow_*` / `project_*` / `COMMONS_POOL` synthetics — never folded into `COMMONS_POOL`.
+**Decided.** A bridge position is held in a **dedicated per-peer synthetic account**, alongside the
+existing `escrow_*` / `project_*` / `COMMONS_POOL` synthetics — never folded into `COMMONS_POOL`.
 
-A liability owed to a neighbour must stay distinguishable from local project funds. Mixing them means a
-community cannot answer "how much of the Commons is actually ours to spend?", which is precisely the
-question the Commons transparency work exists to answer.
+Two reasons, and the second is the one that settled it:
+
+1. A liability owed to a neighbour must stay distinguishable from local project funds. Mixing them means
+   a community cannot answer "how much of the Commons is actually ours to spend?", which is precisely
+   the question the Commons transparency work exists to answer.
+2. `COMMONS_POOL` is **one** balance, so two peers' tabs would net into a single number — and the tab is
+   only meaningful *per peer*. A node owed 40 by Byron and owing 40 to Brisbane is not in balance; it has
+   two separate positions with two separate caps, and one of them may be about to throttle.
+
+The alternative considered was keeping the notes' `Commons` entry and tracking per-peer positions in a
+side table. Rejected: that is two sources of truth to reconcile, which is the exact bug class #102 came
+from — a balance that was read while no write kept it in step.
 
 Bridge accounts are:
 
@@ -166,9 +193,34 @@ A per-peer cap is trivially multiplied by visiting more nodes: five peers at 200
 exposure against a member whose home floor may be 400. The cap must be a single pool drawn down by
 reservations and commits to any peer.
 
-The pool is bounded by the member's existing home credit standing — it grants no new headroom. Because
-`usableFloor` is offer-band gated, a member can only run up foreign exposure while actively offering at
-home, which is the same covenant that governs local credit.
+**Decided: the pool is carved out of the member's existing home `usableFloor`. It is not an additional
+allowance.** Spending abroad reduces what they can spend at home, and vice versa — there is one pot.
+
+```
+usableFloor at home        −400
+
+spends 120 in Byron
+  → foreign exposure        120
+  → headroom left at home   280      (not 400)
+
+visits three more nodes
+  → the SAME 280 is all that's left, across all of them
+```
+
+Why this and not a separate foreign allowance: an allowance *on top* of the home floor is new credit
+created at the boundary, mirrored by no local negative anywhere. That is Rule 1's failure mode arriving
+through the front door instead of the side. The simpler UX of "travelling doesn't change your home
+headroom" is not worth minting beans for.
+
+Two properties fall out of it for free, which is a good sign the choice is the right shape:
+
+- Because `usableFloor` is offer-band gated, **a member can only run up foreign exposure while actively
+  offering at home** — the same covenant that governs local credit, with nothing extra to build.
+- Standing is genuinely what travels. A five-year member has more spending power abroad than a newcomer
+  without any separate foreign-reputation concept existing.
+
+A flat per-member cap was also considered and rejected: it hands a brand-new member the same foreign
+spending power as a veteran, which contradicts the premise that it is *standing* crossing the boundary.
 
 ### 3.2 A node's credit to each peer — capped by each node independently
 
@@ -178,6 +230,24 @@ home, which is the same covenant that governs local credit.
 This is the `−bridge_<peer>` limit from Rule 2. Its natural home is the **connector record**, alongside
 the existing `TrustLevel` (`mirror` | `peer` | `blocked`) — the same place the operator already decides
 how much to trust a neighbour.
+
+**Decided: there is no default cap.** An operator must set an explicit number per peer, and until they
+do, cross-node settlement with that peer stays refused.
+
+The reasoning is about who gets hurt by a wrong default. A number that suits a 200-member town quietly
+overexposes a 15-member one, and small communities are simultaneously **the most vulnerable to being
+drained and the least able to absorb a bad tab** — so the failure mode of a too-generous default lands
+hardest exactly where it does the most damage. Requiring the number also puts the decision in front of
+the operator at the one moment they are actually thinking about that specific neighbour.
+
+Two useful consequences:
+
+- **The safe state is already the current state.** With no cap configured, settlement is refused — which
+  is precisely what the #102 kill switch does today. #104 doesn't have to introduce a fail-closed path;
+  it inherits one, and the flag simply stops being global.
+- **Nothing needs a formula yet.** Scaling the cap by active member count or total earned credit is the
+  obvious eventual move, but any formula now is a guess. Let real operators set real numbers on a real
+  cluster first, then derive the default from what they actually chose.
 
 Neither cap may be negotiated over the wire. Each node enforces its own, on its own books, from its own
 configuration. A compromised peer must not be able to raise the limit that constrains it.
@@ -472,29 +542,28 @@ does not need to.
 
 ## 9. Open questions
 
-Deliberately unresolved. Each needs a decision before or during #104; none blocks writing it down.
+Deliberately unresolved. Each needs a decision before or during #104; none blocks writing it down. The
+four that *were* here and are now settled have moved to [Decisions taken](#decisions-taken).
 
-1. **Does the 1.5% transaction fee (§8) apply to a cross-node purchase, and whose Commons receives
-   it?** Options: the seller's node (it did the minting), the buyer's node (it carries the write-off
-   risk if the buyer is later pruned), split, or exempt. Leaning: the buyer's home node, since it holds
-   the debt that pruning would write off — but this needs confirming against the solvency model in
-   [commons-pool-transparency.md](commons-pool-transparency.md).
-2. **What happens to a live tab when a member is pruned at home?** Their negative is written off against
+**Resolved: the 1.5% transaction fee on a cross-node purchase goes to the buyer's home node's Commons.**
+The fee exists to keep the network solvent when pruning an inactive member means writing off their debt
+(§8, and [commons-pool-transparency.md](commons-pool-transparency.md)). In a cross-node purchase the debt
+lands on the **buyer's home** ledger — so that is the node facing the write-off, and that is the Commons
+that should be building the reserve against it. The seller's node minted locally but carries no debt from
+the trade, so a fee there would accumulate against an exposure it doesn't have.
+
+1. **What happens to a live tab when a member is pruned at home?** Their negative is written off against
    their home Commons today. The bridge position is a separate obligation between nodes and should
    presumably survive — confirm.
-3. **What happens to a tab on defederation?** A `blocked` transition with a non-zero tab needs a defined
+2. **What happens to a tab on defederation?** A `blocked` transition with a non-zero tab needs a defined
    end state: frozen pending settlement, or written off symmetrically.
-4. **Reservation timeout value**, and whether it should scale with peer latency. The test pair is a
+3. **Reservation timeout value**, and whether it should scale with peer latency. The test pair is a
    1 CPU / 1 GB VM specifically because its added latency exposes races a local run hides — tune against
    that, not against localhost.
-5. **How is the tab surfaced to members**, if at all? The bridge-equality check is the most useful
+4. **How is the tab surfaced to members**, if at all? The bridge-equality check is the most useful
    federation health signal, and Commons transparency argues for showing it. But "our community is owed
    40 by Byron" is a governance-grade fact and may belong in the Commons tab rather than a status page.
-6. **How does the per-peer cap scale with community size?** A flat default is wrong in the direction that
-   matters: a small community is the most vulnerable to being drained by a large one, and is the least
-   able to absorb a bad tab. Scaling the cap by something like active member count or total earned credit
-   is the obvious move, but it needs a decision before #104 ships a default.
-7. **Are stewards of a community enterprise appointed by an admin or nominated by the community?** Carried
+5. **Are stewards of a community enterprise appointed by an admin or nominated by the community?** Carried
    here from #106, because the answer determines whether an `appoint` Decision becomes the grantor. #106
    builds admin-appointed and keeps the schema open; this is the decision it defers.
 

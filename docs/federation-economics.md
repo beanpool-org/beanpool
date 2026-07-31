@@ -139,6 +139,50 @@ those would be an arbitrary restriction. Because it is an obligation marker, eac
 `bridge_<peer>` stays the internal account name; "energy balance" is what it's called in prose and to
 members.
 
+#### Worked both ways: the balance moving out and back
+
+§2.1 shows one crossing. What it doesn't show is the thing that matters most — the balance **returning to
+zero**, which is the whole point of the design. Fees omitted here to keep the movement legible.
+
+**Step 1.** A Brisbane member buys a 5-bean guitar lesson from a Byron member.
+
+```
+BYRON                                    BRISBANE
+  seller                 +5               buyer                  −5
+  bridge_brisbane        −5               bridge_byron           +5
+
+  energy balance with Brisbane: −5        energy balance with Byron: +5
+  "we've delivered 5 of work,             "we owe 5 of work
+   not yet paid back in kind"              to Byron"
+```
+
+**Step 2.** Later, a Byron member has their fence fixed by a Brisbane member, also 5 beans. Same four
+entries, roles swapped — there is no special "settlement" transaction, it is just an ordinary trade that
+happens to run the other way.
+
+```
+BYRON                                    BRISBANE
+  buyer                  −5               seller                 +5
+  bridge_brisbane        +5               bridge_byron           −5
+
+  energy balance with Brisbane: 0         energy balance with Byron: 0
+  "square"                                "square"
+```
+
+Note what did and didn't happen across those two steps:
+
+- **Two individuals were charged, on their own home ledgers.** Neither ever held or spent a foreign
+  balance.
+- **Two sellers were paid in their own community's beans, immediately.**
+- **Both nodes summed to zero at every point** — after step 1 as much as after step 2.
+- **Nothing crossed the border in either direction.** The only thing that moved was the *number the two
+  nodes agree on*, out to −5 and back to 0.
+- **Nobody settled anything.** No transfer between nodes, no reconciliation run, no payment. Two ordinary
+  trades in opposite directions cleared the balance as a side effect. This is why "correcting the
+  imbalance" is not a transaction type (§5.1) — there is nothing to build.
+
+The tab only needs deliberate attention when flow *stops* running both ways. That is what §5 is for.
+
 #### Present it as a scale centred on zero, not as a debt
 
 The canonical presentation is a slider or gauge with **zero in the middle and each node's cap at one

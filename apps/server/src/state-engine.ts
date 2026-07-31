@@ -1010,7 +1010,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; stewardOf: string[]; isTreasury: boolean } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean } {
     const account = ledger.getAccount(publicKey);
     const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
     const balance = Math.round(account.balance * 100) / 100;
@@ -1031,12 +1031,12 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         // canVouch: this member holds the appointed-voucher capability (drives the client vouch UI).
         activated,
         canVouch: canVouch(publicKey),
-        // canOperate: this member is a steward of SOMETHING — a coarse "show the steward layer at all"
-        // flag. Never gate a specific enterprise's controls on it (#106); use stewardOf below.
+        // canOperate: this member is a keeper of SOMETHING — a coarse "show the steward layer at all"
+        // flag. Never gate a specific enterprise's controls on it (#106); use keeperOf below.
         canOperate: canOperate(publicKey),
-        // stewardOf: the enterprises this member may actually drive. The Commons tab renders operate
+        // keeperOf: the enterprises this member may actually drive. The Commons tab renders operate
         // controls only on these cards — a control you can't use shouldn't be drawn.
-        stewardOf: stewardOf(publicKey),
+        keeperOf: keeperOf(publicKey),
         // isTreasury: this account IS a community treasury (the Commons' trading face), not a person.
         isTreasury: !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury,
     };
@@ -1292,7 +1292,7 @@ export function canVouch(publicKey: string): boolean {
  * This is the coarse prerequisite (members.can_operate, set via adminSetOperator), plus the system
  * admin who always holds it.
  *
- * ⚠️ This is NOT an authorisation check. It answers "is this person a steward?", never "may they
+ * ⚠️ This is NOT an authorisation check. It answers "is this person a keeper?", never "may they
  * drive THIS enterprise?" — use canOperateTreasury() for that. Before #106 the two questions had the
  * same answer, which is exactly the bug: granting someone the egg flock also handed them every other
  * treasury on the node.
@@ -1325,12 +1325,12 @@ export function canOperateTreasury(publicKey: string, treasuryPubkey: string): b
 }
 
 /**
- * Which enterprises does this member steward? Drives the Commons tab's per-enterprise controls —
+ * Which enterprises does this member keep? Drives the Commons tab's per-enterprise controls —
  * the client needs the list, not a boolean, to know which cards get an operate panel.
  *
  * The admin holds a node-wide override, so they get every treasury.
  */
-export function stewardOf(publicKey: string): string[] {
+export function keeperOf(publicKey: string): string[] {
     if (publicKey === getAdminPubkey()) {
         return (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as any[])
             .map(r => r.public_key);
@@ -1342,11 +1342,11 @@ export function stewardOf(publicKey: string): string[] {
 }
 
 /**
- * Who stewards this enterprise? Public — stewardship is transparent to members by design
+ * Who keeps this enterprise? Public — stewardship is transparent to members by design
  * (docs/community-governance.md), so a community can see who is accountable for what.
- * Suspended stewards (can_operate=0) are excluded: they cannot act, so listing them would misinform.
+ * Suspended keepers (can_operate=0) are excluded: they cannot act, so listing them would misinform.
  */
-export function treasuryStewards(treasuryPubkey: string): Array<{ publicKey: string; callsign: string; avatarUrl: string | null; grantedAt: string | null }> {
+export function treasuryKeepers(treasuryPubkey: string): Array<{ publicKey: string; callsign: string; avatarUrl: string | null; grantedAt: string | null }> {
     return (db.prepare(`
         SELECT m.public_key, m.callsign, m.avatar_url, o.granted_at
         FROM treasury_operators o
@@ -1369,13 +1369,13 @@ export function treasuryStewards(treasuryPubkey: string): Array<{ publicKey: str
 export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin'): { ok: true } {
     const member = getMember(memberPubkey);
     if (!member) throw new Error('Member not found');
-    if (member.isTreasury) throw new Error('A treasury cannot steward another treasury');
+    if (member.isTreasury) throw new Error('A treasury cannot keep another treasury');
     const t = db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
     if (!t?.is_treasury) throw new Error('Not a treasury');
 
     db.transaction(() => {
         db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
-                    VALUES (?, ?, 'steward', ?)`).run(treasuryPubkey, memberPubkey, grantedBy);
+                    VALUES (?, ?, 'keeper', ?)`).run(treasuryPubkey, memberPubkey, grantedBy);
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     })();
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
@@ -1386,7 +1386,7 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
  * Unbind a member from one enterprise. Symmetric with assign (docs/community-governance.md asks for
  * appoint/remove to be one primitive, so removal needs no separate workflow).
  *
- * Clears can_operate once a member stewards nothing, so `canOperate()` keeps meaning "is a steward"
+ * Clears can_operate once a member keeps nothing, so `canOperate()` keeps meaning "is a keeper"
  * and the fleet manager's display stays truthful.
  */
 export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey: string): { ok: true } {

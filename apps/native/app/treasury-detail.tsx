@@ -11,7 +11,7 @@ import { useTheme, useStyles } from './ThemeContext';
 
 // A community treasury's detail screen. Everyone sees the transparency view (balance, credit line,
 // live listings, recent activity — the Commons is meant to be legible). A member holding the
-// stewardship of THIS enterprise additionally gets the steward controls: post its Offer/Need and
+// keepership of THIS enterprise additionally gets the keeper controls: post its Offer/Need and
 // sweep its surplus into the shared Commons pool.
 export default function TreasuryDetailScreen() {
     const params = useLocalSearchParams<{ publicKey: string; name?: string; avatar?: string }>();
@@ -19,7 +19,7 @@ export default function TreasuryDetailScreen() {
 
     const [detail, setDetail] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [isStewardOfThis, setIsStewardOfThis] = useState(false);
+    const [isKeeperOfThis, setIsStewardOfThis] = useState(false);
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
 
@@ -95,12 +95,12 @@ export default function TreasuryDetailScreen() {
         }
         loadIdentity().then((id: any) => {
             if (id?.publicKey) {
-                // #106: gate on stewardship of THIS enterprise, not the coarse "is a steward
-                // of something" flag — otherwise a steward of one enterprise sees operate
+                // #106: gate on keepership of THIS enterprise, not the coarse "is a keeper
+                // of something" flag — otherwise a keeper of one enterprise sees operate
                 // controls on every other one and their action 403s.
                 getBalance(id.publicKey).then((b: any) => {
                     if (!active) return;
-                    const mine: string[] = Array.isArray(b.stewardOf) ? b.stewardOf : [];
+                    const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
                     setIsStewardOfThis(mine.includes(String(params.publicKey)));
                 }).catch(() => {});
             }
@@ -191,7 +191,7 @@ export default function TreasuryDetailScreen() {
                         </View>
 
                         {/* Operator controls */}
-                        {isStewardOfThis && (
+                        {isKeeperOfThis && (
                             <View style={styles.opPanel}>
                                 <View style={styles.opTitleRow}>
                                     <MaterialCommunityIcons name="shield-account" size={16} color={colors.brand.primary} />

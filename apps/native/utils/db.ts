@@ -1035,7 +1035,7 @@ export async function refreshBalanceFromServer(pubkey: string) {
                 elderVouchedBy: balData.elderVouchedBy ?? null,
                 canVouch: !!balData.canVouch,
                 canOperate: !!balData.canOperate,
-                stewardOf: Array.isArray(balData.stewardOf) ? balData.stewardOf : [],
+                keeperOf: Array.isArray(balData.keeperOf) ? balData.keeperOf : [],
                 isTreasury: !!balData.isTreasury,
                 activated: !!balData.activated,
                 hasLiveOffer: !!balData.hasLiveOffer,
@@ -1075,8 +1075,8 @@ export async function getBalance(pubkey: string) {
     let isBlockedFromTrading = false;
     let elderVouchedBy: string | null = null;
     let canVouch = false;      // this account may hand out the -20/-50/-100 vouch floor
-    let canOperate = false;    // this member stewards SOMETHING — shows the steward layer at all
-    let stewardOf: string[] = []; // #106: the specific enterprises they may drive — gate per-card on this
+    let canOperate = false;    // this member keeps SOMETHING — shows the keeper layer at all
+    let keeperOf: string[] = []; // #106: the specific enterprises they may drive — gate per-card on this
     let isTreasury = false;    // this account IS a community treasury, not a person
     let activated = false;     // has a credit line at all (earned/vouched/granted)
     let hasLiveOffer = false;  // has ≥1 live Offer posted (offer covenant)
@@ -1105,7 +1105,7 @@ export async function getBalance(pubkey: string) {
             elderVouchedBy = parsed.elderVouchedBy ?? null;
             canVouch = !!parsed.canVouch;
             canOperate = !!parsed.canOperate;
-            stewardOf = Array.isArray(parsed.stewardOf) ? parsed.stewardOf : [];
+            keeperOf = Array.isArray(parsed.keeperOf) ? parsed.keeperOf : [];
             isTreasury = !!parsed.isTreasury;
             activated = !!parsed.activated;
             hasLiveOffer = !!parsed.hasLiveOffer;
@@ -1130,7 +1130,7 @@ export async function getBalance(pubkey: string) {
         elderVouchedBy,
         canVouch,
         canOperate,
-        stewardOf,
+        keeperOf,
         isTreasury,
         activated,
         hasLiveOffer,

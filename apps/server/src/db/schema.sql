@@ -515,13 +515,13 @@ CREATE TABLE IF NOT EXISTS system_metrics (
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_key_time ON system_metrics(metric_key, timestamp DESC);
 
--- 20. Treasury stewardship (#106)
+-- 20. Treasury keepership (#106)
 -- Binds a member to ONE community enterprise (a members row with is_treasury=1).
 -- Before this table, members.can_operate was a node-wide boolean: granting someone
 -- stewardship of the egg flock also handed them every other treasury on the node.
 --
 -- Authority = members.can_operate = 1 AND a row here. can_operate is retained as a
--- master switch per member (so an admin can suspend a steward without dropping their
+-- master switch per member (so an admin can suspend a keeper without dropping their
 -- assignments), and adminAssignTreasuryOperator sets it automatically so a row can
 -- never be silently inert.
 --
@@ -531,7 +531,7 @@ CREATE INDEX IF NOT EXISTS idx_system_metrics_key_time ON system_metrics(metric_
 CREATE TABLE IF NOT EXISTS treasury_operators (
     treasury_pubkey TEXT NOT NULL REFERENCES members(public_key),
     member_pubkey   TEXT NOT NULL REFERENCES members(public_key),
-    role            TEXT NOT NULL DEFAULT 'steward',
+    role            TEXT NOT NULL DEFAULT 'keeper',
     granted_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by      TEXT,
     PRIMARY KEY (treasury_pubkey, member_pubkey)

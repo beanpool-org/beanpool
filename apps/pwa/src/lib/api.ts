@@ -429,15 +429,15 @@ export interface BalanceInfo {
     /** True if this member holds the appointed-voucher capability (can hand out the vouch floor). */
     canVouch?: boolean;
     /**
-     * True if this member stewards *something* — the coarse "show the steward layer at all" flag.
-     * Never gate a specific enterprise's controls on it (#106); use `stewardOf` for that.
+     * True if this member keeps *something* — the coarse "show the keeper layer at all" flag.
+     * Never gate a specific enterprise's controls on it (#106); use `keeperOf` for that.
      */
     canOperate?: boolean;
     /**
      * Public keys of the enterprises this member may actually drive (#106). Operate controls belong
      * only on these — a control you can't use shouldn't be drawn.
      */
-    stewardOf?: string[];
+    keeperOf?: string[];
     /** True if this account IS a community treasury (the Commons' trading face), not a person. */
     isTreasury?: boolean;
     /** True if the member has ≥1 live Offer posted (offer covenant, Gate 2). */

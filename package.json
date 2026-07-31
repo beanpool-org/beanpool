@@ -7,6 +7,8 @@
     "dev": "dotenv -- turbo run dev",
     "manager": "pnpm --filter @beanpool/manager dev",
     "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test-all": "bash scripts/test-all.sh",
     "clean": "turbo run clean"
   },
   "devDependencies": {
@@ -14,7 +16,8 @@
     "dotenv-cli": "^11.0.0",
     "eslint": "^10.4.0",
     "turbo": "latest",
-    "typescript-eslint": "^8.59.4"
+    "typescript-eslint": "^8.59.4",
+    "vitest": "^3.0.5"
   },
   "pnpm": {
     "overrides": {

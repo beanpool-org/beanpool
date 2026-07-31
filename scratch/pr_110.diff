@@ -1,0 +1,224 @@
+diff --git a/apps/native/app/(tabs)/people.tsx b/apps/native/app/(tabs)/people.tsx
+index 526747c..81b79d9 100644
+--- a/apps/native/app/(tabs)/people.tsx
++++ b/apps/native/app/(tabs)/people.tsx
+@@ -871,7 +871,7 @@ export default function PeopleScreen() {
+                             <Text style={styles.sectionDesc}>Invite links are single-use and valid for 30 days. If you are offline, a cryptographic voucher ticket will be generated instead.</Text>
+ 
+                             <TextInput
+-                                placeholder="Who is this invite for? (Optional)"
++                                placeholder="Who is this invite for? (For your records)"
+                                 value={intendedFor}
+                                 onChangeText={setIntendedFor}
+                                 style={styles.input}
+diff --git a/apps/native/app/(tabs)/settings.tsx b/apps/native/app/(tabs)/settings.tsx
+index ce565ee..d79cdb5 100644
+--- a/apps/native/app/(tabs)/settings.tsx
++++ b/apps/native/app/(tabs)/settings.tsx
+@@ -342,13 +342,14 @@ export default function SettingsScreen() {
+                 if (profile) {
+                     const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
+                     setAvatar(cleaned);
++                    if (profile.callsign) setEditCallsign(profile.callsign);
+                     if (profile.bio) setBio(profile.bio);
+                     if (profile.contact_value) setContact(profile.contact_value);
+                     if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
+                 }
+             }).catch(() => {});
+         }
+-    }, []);
++    }, [identity?.publicKey]);
+ 
+     // Load holiday-mode state on mount (queried so an unset flag reads as OFF, not the pref default).
+     React.useEffect(() => {
+@@ -621,38 +622,23 @@ export default function SettingsScreen() {
+ 
+     async function handleUpdateCallsign() {
+         if (!identity) return;
+-        if (editCallsign.trim().length < 2) {
++        const newCallsign = editCallsign.trim();
++        if (newCallsign.length < 2) {
+             Alert.alert('Error', 'Callsign must be at least 2 characters.');
+             return;
+         }
+         setLoading(true);
+         try {
+-            // Only include avatar_url in the update if we have one in local state.
+-            // If avatar state is null (e.g., profile fetch hasn't completed), do NOT
+-            // send avatar_url at all — otherwise we'd wipe the existing avatar on the server.
+-            const localUpdate: any = {
+-                callsign: editCallsign.trim(),
+-                bio: bio.trim(),
+-                contact_value: contact.trim(),
+-                contact_visibility: contact.trim() ? contactVisibility : 'hidden',
+-            };
+-            if (avatar) localUpdate.avatar_url = avatar;
+-            await updateMemberProfile(identity.publicKey, localUpdate);
+-            if (editCallsign.trim() !== identity.callsign) {
+-                const updated = await updateCallsign(editCallsign.trim());
+-                if (updated) setIdentity(updated);
+-            }
+-
+-            // Push profile (including avatar) to the server so other devices see it
++            // Push profile (including callsign & avatar) to the server FIRST so the node validates uniqueness before local commit
++            let published = false;
+             try {
+                 const url = await AsyncStorage.getItem('beanpool_anchor_url');
+                 if (url && identity) {
+-                    // Same guard as local: don't send avatar=null if state hasn't loaded
+                     const payloadObj: any = {
+                         publicKey: identity.publicKey,
+                         bio: bio.trim(),
+                         contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
+-                        callsign: editCallsign.trim(),
++                        callsign: newCallsign,
+                     };
+                     if (avatar) payloadObj.avatar = avatar;
+                     const bodyString = JSON.stringify(payloadObj);
+@@ -664,9 +650,14 @@ export default function SettingsScreen() {
+                         body: bodyString,
+                     });
+                     
++                    if (res.status === 409) {
++                        Alert.alert('Name Taken', 'That name is already taken in this community. Please pick another.');
++                        return;
++                    }
+                     if (!res.ok) {
+                         throw new Error('Server rejected the profile update.');
+                     }
++                    published = true;
+                     await AsyncStorage.removeItem('pending_profile_sync');
+                 }
+             } catch (e: any) {
+@@ -675,9 +666,23 @@ export default function SettingsScreen() {
+                 Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
+             }
+ 
++            // Commit locally after server accepts (or when offline)
++            const localUpdate: any = {
++                callsign: newCallsign,
++                bio: bio.trim(),
++                contact_value: contact.trim(),
++                contact_visibility: contact.trim() ? contactVisibility : 'hidden',
++            };
++            if (avatar) localUpdate.avatar_url = avatar;
++            await updateMemberProfile(identity.publicKey, localUpdate);
++            if (newCallsign !== identity.callsign) {
++                const updated = await updateCallsign(newCallsign);
++                if (updated) setIdentity(updated);
++            }
++
+             setMode('menu');
+-        } catch (e) {
+-            Alert.alert('Error', 'Could not update profile.');
++        } catch (e: any) {
++            Alert.alert('Error', e?.message || 'Could not update profile.');
+         } finally {
+             setLoading(false);
+         }
+diff --git a/apps/pwa/src/lib/api.ts b/apps/pwa/src/lib/api.ts
+index c82ad99..230196c 100644
+--- a/apps/pwa/src/lib/api.ts
++++ b/apps/pwa/src/lib/api.ts
+@@ -260,6 +260,7 @@ export async function updateMemberProfile(publicKey: string, update: {
+     avatar?: string | null;
+     bio?: string;
+     contact?: { value: string; visibility: 'hidden' | 'trade_partners' | 'community' | 'friends' } | null;
++    callsign?: string;
+ }): Promise<{ success: boolean; profile: MemberProfile }> {
+     return request('POST', '/api/profile/update', { publicKey, ...update });
+ }
+diff --git a/apps/pwa/src/pages/InvitePage.tsx b/apps/pwa/src/pages/InvitePage.tsx
+index 2cd47a8..c5240da 100644
+--- a/apps/pwa/src/pages/InvitePage.tsx
++++ b/apps/pwa/src/pages/InvitePage.tsx
+@@ -242,7 +242,7 @@ export function InvitePage({ identity }: Props) {
+ 
+                     <input
+                         type="text"
+-                        placeholder="Who is this invite for? (Optional)"
++                        placeholder="Who is this invite for? (For your records)"
+                         value={intendedFor}
+                         onChange={e => setIntendedFor(e.target.value)}
+                         className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
+diff --git a/apps/pwa/src/pages/ProfilePage.tsx b/apps/pwa/src/pages/ProfilePage.tsx
+index 68c34c6..24fa2b9 100644
+--- a/apps/pwa/src/pages/ProfilePage.tsx
++++ b/apps/pwa/src/pages/ProfilePage.tsx
+@@ -61,12 +61,12 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
+                 contact: contactValue.trim()
+                     ? { value: contactValue.trim(), visibility: contactVisibility }
+                     : null,
++                callsign: callsign.trim() || undefined,
+             });
+             // Update callsign if changed
+             if (callsign.trim() && callsign.trim() !== identity.callsign) {
+                 const updated = await updateCallsign(callsign.trim());
+                 if (updated) {
+-                    await registerMember(updated.publicKey, updated.callsign);
+                     onIdentityUpdated?.(updated);
+                 }
+             }
+diff --git a/apps/server/src/engine/invites.ts b/apps/server/src/engine/invites.ts
+index ec28b94..e0aa676 100644
+--- a/apps/server/src/engine/invites.ts
++++ b/apps/server/src/engine/invites.ts
+@@ -84,14 +84,6 @@ export function redeemInvite(
+         return { success: true, member: existingMember, alreadyMember: true };
+     }
+ 
+-    // Check intended_for restriction if specified
+-    if (invite.intended_for) {
+-        const normIntended = invite.intended_for.toLowerCase().replace(/^@/, '').trim();
+-        const normCallsign = callsign.toLowerCase().replace(/^@/, '').trim();
+-        if (normIntended && normCallsign && normIntended !== normCallsign) {
+-            return { success: false, error: `This invite was issued specifically for @${invite.intended_for.replace(/^@/, '')}` };
+-        }
+-    }
+ 
+     if (invite.used_by) return { success: false, error: 'This invite has already been used' };
+ 
+@@ -135,14 +127,6 @@ export function redeemOfflineTicket(
+             return { success: true, member: existingMember, alreadyMember: true };
+         }
+ 
+-        // Check intended_for restriction if specified
+-        if (intendedFor) {
+-            const normIntended = intendedFor.toLowerCase().replace(/^@/, '').trim();
+-            const normCallsign = callsign.toLowerCase().replace(/^@/, '').trim();
+-            if (normIntended && normCallsign && normIntended !== normCallsign) {
+-                return { success: false, error: `This offline ticket was issued specifically for @${intendedFor.replace(/^@/, '')}` };
+-            }
+-        }
+ 
+         const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
+         if (existingInvite) {
+diff --git a/apps/server/src/engine/members.ts b/apps/server/src/engine/members.ts
+index afba3b1..6ece9e7 100644
+--- a/apps/server/src/engine/members.ts
++++ b/apps/server/src/engine/members.ts
+@@ -50,8 +50,8 @@ export function isCallsignAvailable(callsign: string, excludePublicKey?: string)
+     const norm = callsign.trim().toLowerCase();
+     if (norm.length < 2) return false;
+     const row = db.prepare(
+-        `SELECT 1 FROM members WHERE lower(callsign) = ? AND status != 'migrated' AND public_key != ? LIMIT 1`
+-    ).get(norm, excludePublicKey ?? '');
++        `SELECT 1 FROM members WHERE lower(callsign) = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`
++    ).run(norm, excludePublicKey ?? '');
+     return !row;
+ }
+ 
+@@ -185,9 +185,11 @@ export function updateProfile(
+     let callsign = existing.callsign;
+     if (typeof update.callsign === 'string') {
+         const requested = update.callsign.trim().slice(0, 32);
+-        if (requested.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
++        if (requested !== existing.callsign) {
+             if (requested.length < 2) throw new Error('CALLSIGN_TOO_SHORT');
+-            if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
++            if (requested.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
++                if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
++            }
+             callsign = requested;
+         }
+     }

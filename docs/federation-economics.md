@@ -315,10 +315,21 @@ node that **mints locally** never does so on a promise:
 | Step | Actor | Action |
 |---|---|---|
 | 1 | BRISBANE (local) | The buyer purchases through Brisbane's ordinary signed route. Brisbane checks their `usableFloor` and total foreign exposure, then **holds the amount in local escrow**. Nothing has crossed the border. |
-| 2 | BRISBANE → BYRON | `PURCHASE(key, visitor, amount, postId)`. Byron checks its **own** cap on Brisbane (`settlementCapacity`), reserves against it, and replies accepted or refused. It does **not** pay its seller yet. |
+| 2 | BRISBANE → BYRON | `PURCHASE(key, buyerPublicKey, buyerHomeNode, amount, postId)`. Byron checks its **own** cap on Brisbane (`settlementCapacity`), reserves against it, and replies accepted or refused. It does **not** pay its seller yet. |
 | 3 | BRISBANE | On acceptance, atomically converts escrow into the real entries: buyer debited, `bridge_byron` credited, fee to its own Commons. Returns a **signed settlement receipt**. |
 | 4 | BYRON | Only *on holding that receipt*, atomically credits the seller and debits `bridge_brisbane`. |
 | — | either side | Refusal or timeout before step 3 → Brisbane **refunds the escrow** to the buyer and Byron releases its reservation. Nothing happened. |
+
+**Why Brisbane escrows before asking.** Step 1 holds the buyer's beans without yet knowing whether Byron
+will accept — deliberately. Step 2 is the **sole gate on Byron's cap**, and Byron is the only authority on
+it (Rule 5), so asking earlier would be advisory at best and stale by the time it mattered. Escrow is
+cheap and fully reversible, whereas discovering the buyer cannot afford it *after* a round trip is not. So
+the order is: establish the buyer can pay, then ask whether the peer will accept.
+
+`buyerPublicKey` and `buyerHomeNode` are both carried explicitly. The public key identifies the person for
+the seller (they still need to know who they are serving, and Byron holds a visitor record for them); the
+home node names who to send the receipt to and who the resulting balance is with. Neither is inferable
+from the connection alone once a node has more than one peer.
 
 > **Rule 3c — A node never credits a local member before it holds a signed settlement receipt from the
 > buyer's node.**
@@ -359,6 +370,19 @@ terms of who now does what.
 
   On boot, each side resolves its unfinalised rows: Byron by completing step 4, Brisbane by asking
   `GET_RECEIPT_STATUS(key)`. This is what makes "recoverable by replay" true rather than aspirational.
+
+  `GET_RECEIPT_STATUS(key)` returns exactly one of three states, and each has a single correct response —
+  a two-state answer is not enough, because "never arrived" and "arrived, not yet acted on" require
+  opposite actions:
+
+  | Response | Means | Brisbane must |
+  |---|---|---|
+  | `NOT_FOUND` | Byron never received the receipt, or its reservation lapsed | **reverse** — compensate its entries and refund the buyer |
+  | `HELD` | receipt persisted, seller not yet paid | **wait** and re-ask. Byron will complete step 4; reversing now would strand a payment about to happen |
+  | `SETTLED` | seller paid, `bridge_brisbane` debited | **finalise** — mark confirmed; the two bridges agree |
+
+  Byron must answer `NOT_FOUND` only when it can be *sure*, never as a default for an unrecognised key —
+  a fabricated or truncated key answered `NOT_FOUND` would have Brisbane reverse a settled trade.
 - **Byron's cap reservation expires** if no receipt arrives within a defined timeout, releasing the
   headroom it was holding. A reservation moves no beans on either side.
 - **A receipt arriving after Byron's reservation expired must be re-validated, not honoured on trust.** A
@@ -370,6 +394,17 @@ terms of who now does what.
   This makes a reservation *a hint that reduces headroom*, not a promise — the right shape, because a
   node's own cap is the only authority on what it may extend, and it should never be bound by a decision
   it made in the past.
+
+- **A reversal is a compensating transaction, never a deletion.** Brisbane has already written real
+  entries by step 3, so undoing them means *posting the opposite entries against the same `key`* — leaving
+  both the original and the reversal in the ledger and in the audit trail. Silently removing rows would
+  make a settled trade indistinguishable from one that never happened, defeat `runLedgerAudit`, and hand a
+  spoofed or replayed `CAPACITY_LAPSED` the power to quietly rewrite history. A compensating entry is
+  self-documenting and idempotent on the key.
+- **Byron's reservation must outlive Brisbane's step-3 timeout**, by a clear margin. Then a late receipt
+  is an exceptional event caused by a genuine fault, not routine operation. `CAPACITY_LAPSED` and its
+  reversal path must still be implemented and tested — but they should be the rare path, and if they are
+  firing regularly the timers are misconfigured rather than the protocol being exercised as designed.
 
 **Note what the buyer side no longer needs.** An earlier draft had the buyer's node hold a *reservation*
 against the member's `usableFloor`, which then had to be subtracted from local headroom so the same credit

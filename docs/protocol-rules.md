@@ -400,9 +400,26 @@ When BeanPool nodes connect as **peers**, they form a federated network. The pro
 - Marketplace posts
 - Member balances and transaction history (synced via Merkle exchange)
 
-### Federation Verification
+### Cross-Node Value Transfer
 
-When a transfer occurs across federated nodes, both nodes independently calculate the sender's dynamic floor using the protocol formula. If the transfer would exceed the floor, it is rejected. This prevents a compromised node from allowing over-limit transfers.
+**Beans never cross a node boundary — standing does.** A bean is the mirror of a live negative held by a
+specific member, so exporting a positive strands its matching negative on someone at home who can no
+longer earn it back, permanently draining local circulation.
+
+A cross-node purchase is therefore settled by charging the buyer on their **home** ledger, minting
+locally on the destination node to pay its own seller, and carrying the difference as a **bilateral tab**
+in dedicated per-peer bridge accounts. Each node's books still sum to zero.
+
+The full model — the four ledger entries, the bridge sign convention, the two exposure caps, the
+reserve/commit exchange, rebalancing, and the rejected alternatives — is specified in
+**[federation-economics.md](federation-economics.md)**.
+
+> **Previous rule, removed.** This section formerly described a "Federation Verification" step in which
+> both nodes independently recalculated the sender's floor and rejected an over-limit transfer. That
+> mechanism was unsound: it *read* the home ledger and never wrote to it, so the home balance was
+> verified while the transfer happened purely locally — the same beans could be spent once on every node
+> a member visited (#102). It was also skippable whenever the peer connection was incomplete. The path is
+> refused outright pending #104; see federation-economics.md §1.
 
 ---
 

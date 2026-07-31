@@ -20,7 +20,7 @@ the section that implements it — read the section for the mechanism, this tabl
 | Where does the tab live? | A dedicated **`bridge_<peer>`** account per peer, not `COMMONS_POOL` — [§2.3](#23-bridge-accounts-are-not-the-commons) | Keeps "how much of the Commons is actually ours to spend?" answerable, and keeps two peers' tabs from blending into one number. One source of truth, in the ledger. |
 | Where does a visitor's spending power abroad come from? | **Carved out of their existing home `usableFloor`** — [§3.1](#31-a-members-total-foreign-exposure--capped-by-their-home-node) | Creates no new credit at the boundary, which is the thing Rule 1 exists to prevent. Also inherits the offer covenant free: you can only run up foreign exposure while actively offering at home. |
 | How is a node's credit cap on a peer set? | **No default. The operator sets an explicit number before credit-enabled federation works** — [§3.2](#32-a-nodes-credit-to-each-peer--capped-by-each-node-independently) | A default that suits a 200-member town quietly overexposes a 15-member one, and small communities are both the most vulnerable to being drained and the least able to absorb a bad tab. Fails safe, and forces the decision while the operator is actually thinking about that peer. |
-| Who receives the 1.5% transaction fee on a cross-node purchase? | The **buyer's home node's Commons** — [§9](#9-open-questions) | It holds the resulting debt, so it carries the write-off if that member is later pruned. Put the fee where the solvency risk sits. |
+| Who receives the 1.5% transaction fee on a cross-node purchase? | The **buyer's home node's Commons** — worked into the entries in [§2.1](#21-the-entries) | It holds the resulting debt, so it carries the write-off if that member is later pruned. Put the fee where the solvency risk sits. **Consequence:** the buyer pays the fee *on top*, rather than the seller absorbing it as they would locally — that's the only arrangement where both nodes balance and the reserve lands on the node with the exposure. See §2.1. |
 
 The first supersedes the ledger diagram in the "Beans on holiday" design notes, which showed the tab in
 `Commons`. Sign convention is identical either way; only the account differs.
@@ -71,21 +71,43 @@ A cross-node purchase is settled in three moves:
 2. The destination node **mints locally** to pay its own seller.
 3. The two nodes carry a **bilateral tab** in dedicated per-peer bridge accounts.
 
-### 2.1 The four entries
+### 2.1 The entries
 
 Buyer `B` is a member of **BRISBANE** (their home node). Seller `S` is a member of **BYRON**. `B` buys a
-5-bean service from `S`.
+5-bean service from `S`. The 1.5% transaction fee (§8) is 0.075.
 
 ```
 BYRON                                    BRISBANE
-  S                        +5              B                        −5
-  bridge_brisbane          −5              bridge_byron             +5
+  S                     +5.000              B                     −5.075
+  bridge_brisbane       −5.000              COMMONS_POOL          +0.075
+                                            bridge_byron          +5.000
   ─────────────────────────────            ─────────────────────────────
-  node total                0              node total                0
+  node total             0.000              node total             0.000
 ```
 
-Four entries, two per node, each node's books still summing to zero. The pair of bridge entries **is**
-the tab. Nothing else crosses the border.
+Each node's books still sum to zero. Two properties to preserve when implementing:
+
+- **The bridge entries are equal and opposite, and carry the agreed price — never price plus fee.** The
+  tab is what the two communities owe each other for the *trade*; a local fee is nobody else's business.
+- **The seller receives exactly the agreed amount.** They quoted 5 and they get 5.
+
+#### Why the buyer pays the fee here, when locally the recipient absorbs it
+
+Locally, §8 has the recipient absorb the fee: Bob receives `amount − 1.5%`. Cross-node that convention
+cannot hold together with [Decision 4](#decisions-taken), and the arithmetic is the reason rather than a
+preference:
+
+- If the **seller absorbs** it, the fee is deducted on Byron, so it can only land in *Byron's* Commons —
+  otherwise Byron's books don't balance. But Byron holds no debt from this trade, so it would accumulate
+  a reserve against an exposure it does not have, while Brisbane — which *does* carry the write-off if
+  `B` is later pruned — gets nothing.
+- If the **buyer pays it on top**, the fee never crosses the border, both nodes balance, and the reserve
+  builds on the node facing the risk.
+
+So the cross-node fee is visible to the buyer rather than absorbed by the seller. That is a deliberate
+divergence from the local convention, and arguably the more honest presentation for a cross-border trade
+— but it *is* a divergence, and it follows from Decision 4 rather than standing on its own. If the fee
+should instead follow the local convention, Decision 4 is the thing to revisit, not this table.
 
 ### 2.2 Sign convention
 
@@ -169,8 +191,25 @@ Rule 3 is the whole point. Crediting first is exactly the #102 defect: unbacked 
   and the seller unpaid. This is the one unresolved state, it is **recoverable by replaying from the
   durable receipt**, and it never mints unbacked beans. Receipts must therefore be persisted before
   step 3 is attempted.
+- **Byron must persist its intent to an outbox BEFORE dispatching `COMMIT`** — `key`, buyer, seller,
+  amount, peer. Persisting only the *receipt* is not enough: if Byron crashes after the request goes out
+  but before the reply lands, it has lost the key and cannot ask Brisbane what happened, leaving a
+  debited buyer and an unpaid seller with nothing to reconcile from. On boot, every unfinalised outbox
+  row must be resolved by retrying `COMMIT(key)` (idempotent, returns the original receipt) or by
+  `GET_RECEIPT(key)`. This is what makes "recoverable by replay" actually true.
 - A reservation that is never committed **expires** and is released after a defined timeout. Reservations
   hold no beans; they only reduce the buyer's available headroom while live.
+- **`COMMIT` on an expired reservation must re-validate, not trust the reservation.** A slow network or a
+  sleeping VM can land a commit after expiry, and honouring it blindly would push the member past a
+  `usableFloor` that may have moved in the meantime. So: Brisbane re-evaluates the buyer's `usableFloor`
+  and total foreign exposure **atomically at commit**; if the headroom is still there it commits normally,
+  and if it isn't it returns `RESERVATION_EXPIRED`. On `RESERVATION_EXPIRED` Byron **must not** proceed to
+  step 3 — it abandons the purchase and tells both parties, because the alternative is paying a seller
+  against a debit that never happened.
+
+  This makes the reservation a *hint that reduces headroom*, not a promise. Which is the right shape: the
+  home ledger is the only authority on what its member can afford, and it should never be bound by a
+  decision it made in the past.
 
 **Home node offline.** Solar and off-grid nodes sleep. **Fail closed** — refuse the purchase, and say so
 plainly and without alarm ("Byron can't reach your community's node right now, so this purchase can't
@@ -206,6 +245,19 @@ spends 120 in Byron
 visits three more nodes
   → the SAME 280 is all that's left, across all of them
 ```
+
+**Live reservations count against local headroom too, not just committed bridge debits.** Otherwise a
+member with a `RESERVE` outstanding in Byron can spend the same headroom locally before it commits, and
+over-commit their credit line across the two. So the effective figure a local spend is checked against is:
+
+```
+effectiveUsableFloor = usableFloor
+                     − committed foreign exposure   (their share of the bridge debits)
+                     − live, unexpired reservations
+```
+
+This is the local counterpart of the re-validation rule in §2.4: a reservation reduces headroom the moment
+it is granted, and stops doing so the moment it expires or commits.
 
 Why this and not a separate foreign allowance: an allowance *on top* of the home floor is new credit
 created at the boundary, mirrored by no local negative anywhere. That is Rule 1's failure mode arriving
@@ -545,7 +597,9 @@ does not need to.
 Deliberately unresolved. Each needs a decision before or during #104; none blocks writing it down. The
 four that *were* here and are now settled have moved to [Decisions taken](#decisions-taken).
 
-**Resolved: the 1.5% transaction fee on a cross-node purchase goes to the buyer's home node's Commons.**
+**Resolved: the 1.5% transaction fee on a cross-node purchase goes to the buyer's home node's Commons**
+— worked into the ledger entries in [§2.1](#21-the-entries), including why the buyer pays it on top
+rather than the seller absorbing it as they would locally.
 The fee exists to keep the network solvent when pruning an inactive member means writing off their debt
 (§8, and [commons-pool-transparency.md](commons-pool-transparency.md)). In a cross-node purchase the debt
 lands on the **buyer's home** ledger — so that is the node facing the write-off, and that is the Commons

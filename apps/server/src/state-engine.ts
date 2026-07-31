@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
+import { registerBridgeDecayExemptions } from './federation-bridge.js';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -342,6 +343,14 @@ export function initStateEngine(): void {
         if (treasuries.length > 0) console.log(`🏛️ Registered ${treasuries.length} treasury account(s) as demurrage-exempt`);
     } catch (e) { console.warn('[Treasury] Failed to register demurrage exemptions:', e); }
 
+    // #104 — inter-node energy balances are obligations, not hoards. The exemption set lives in the
+    // in-memory ledger and is rebuilt each boot, so an exemption that isn't re-applied here would
+    // silently start decaying a debt — i.e. forgiving it (docs/federation-economics.md §2.4).
+    try {
+        const n = registerBridgeDecayExemptions();
+        if (n > 0) console.log(`🌉 Registered ${n} bridge account(s) as demurrage-exempt`);
+    } catch (e) { console.warn('[Federation] Failed to register bridge demurrage exemptions:', e); }
+
     // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes)
     setInterval(() => {
         try { persistDecayEvents(); } catch (e) { console.warn('[Ledger] Failed to persist decay events:', e); }
@@ -632,7 +641,7 @@ export function broadcast(event: any, recipients?: string[]): void {
 // ===================== DB HELPERS =====================
 
 export function assertMemberActive(publicKey: string): void {
-    if (publicKey.startsWith('escrow_') || publicKey.startsWith('project_') || publicKey === 'COMMONS_POOL' || publicKey === 'SYSTEM' || publicKey === 'genesis') return;
+    if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');
@@ -1068,9 +1077,11 @@ export function reconcileLedgerFromDb(): void {
 export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature: string; payload: string }): Transaction | null {
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
     if (amount < 0) return null;
-    // Only register real members — skip synthetic wallets (escrow_*, project_*, etc.) and COMMONS_POOL
-    if (!from.startsWith('escrow_') && !from.startsWith('project_') && from !== 'COMMONS_POOL' && !getMember(from)) registerVisitor(from);
-    if (!to.startsWith('escrow_') && !to.startsWith('project_') && to !== 'COMMONS_POOL' && !getMember(to)) registerVisitor(to);
+    // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
+    // kind is covered automatically; #104's bridge_<peer> accounts were caught by a test failing here
+    // (registerVisitor tried to create a member row for a bridge account and hit a UNIQUE violation).
+    if (!isSyntheticAccount(from) && !getMember(from)) registerVisitor(from);
+    if (!isSyntheticAccount(to) && !getMember(to)) registerVisitor(to);
 
     // Send gate (Trust Model v2): direct peer-to-peer sends ("gift a friend") require the sender
     // to have EARNED trust — i.e. completed at least one real (marketplace) trade. Stops a fresh /
@@ -1078,7 +1089,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // now-cosmetic tier (canGift) onto value-based earned credit. Escrow/marketplace flows and
     // system accounts (COMMONS_POOL/genesis) are exempt.
     const isEscrow = method === 'escrow' || from.startsWith('escrow_') || to.startsWith('escrow_');
-    if (!isEscrow && from !== 'COMMONS_POOL' && from !== 'genesis') {
+    // #104: a bridge_<peer> account is the local payer when settling a visitor's purchase. It has no
+    // trust profile, so the completed-trade gate would block every cross-node settlement.
+    if (!isEscrow && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
         const { earnedCredit } = getMemberTrustProfile(from);
         if (earnedCredit <= 0) {
             console.log(`🚫 Send blocked (no completed trade yet): ${from.substring(0, 12)}`);
@@ -1095,7 +1108,12 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     //    the overdraft exists so you can trade for real goods/services, backed by a promise to reciprocate.
     //  • Direct "send credits" gifts — POSITIVE BALANCE ONLY (floor 0). You can only gift beans you
     //    actually hold; you can never go into debt to give beans away.
-    const isSystemFrom = from.startsWith('escrow_') || from === 'COMMONS_POOL' || from === 'genesis';
+    // #104: bridge_<peer> is unbounded HERE on purpose — it must be able to go negative, because that
+    // negative IS the credit extended to the peer. It is not unbounded in effect: settlementCapacity()
+    // bounds it upstream against the operator-set per-peer cap, which is the only place that limit
+    // belongs (docs/federation-economics.md Rule 5). A floor here would make settlement impossible.
+    const isSystemFrom = from.startsWith('escrow_') || from === 'COMMONS_POOL' || from === 'genesis'
+        || from.startsWith('bridge_');
     const senderFloor = isSystemFrom ? -Infinity
         : isEscrow ? usableFloor(from)   // v3: marketplace spends bounded by the offer-banded floor
         : 0;
@@ -1106,7 +1124,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
     if (!success) return null;
 
-    if (!from.startsWith('escrow_') && !from.startsWith('project_') && from !== 'COMMONS_POOL' && from !== 'genesis') {
+    if (!isSyntheticAccount(from) && from !== 'genesis') {
         recordActivity(from);
     }
 

@@ -2,6 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
+import { isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import crypto from 'node:crypto';
 import {
@@ -25,7 +26,7 @@ export interface MessagingCallbacks {
 }
 
 function assertMemberActive(publicKey: string): void {
-    if (publicKey.startsWith('escrow_') || publicKey.startsWith('project_') || publicKey === 'COMMONS_POOL' || publicKey === 'SYSTEM' || publicKey === 'genesis') return;
+    if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');

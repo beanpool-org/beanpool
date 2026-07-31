@@ -1,0 +1,173 @@
+/**
+ * Inter-node energy balances — the `bridge_<peer>` accounts (#104).
+ *
+ * Spec: docs/federation-economics.md §2.2 (what the entry is), §2.4 (why it isn't the Commons),
+ * §3.2 (the per-peer cap and its one-way nature).
+ *
+ * WHAT A BRIDGE ROW IS. Not beans parked in an account. Nothing is transferred between nodes — each
+ * makes purely local entries, and the two nodes' bridge rows mirror each other as a shared record of
+ * who owes whom WORK. The number says: "we have delivered N beans' worth of real work and have not yet
+ * received equivalent work back." Hence "energy balance".
+ *
+ * That makes it a different KIND of row from a member balance even though it lives in the same
+ * `accounts` table, and three properties follow from that one fact rather than being arbitrary:
+ *   - not spendable    — no member is ever paid out of it; only opposite-direction trade moves it
+ *   - not transferable — it is a claim on ONE community's future work, not a bearer instrument
+ *   - not decayable    — decaying a debt is silent forgiveness (setDecayExempt below)
+ *
+ * SIGN CONVENTION (Rule 2), which implementations get wrong:
+ *   positive → value taken from a local member and owed outward
+ *   negative → value minted locally against a claim, i.e. credit we have EXTENDED to that peer
+ * The two nodes' rows are always equal and opposite; drift is a reconciliation failure and is the most
+ * useful federation health signal we have.
+ *
+ * Depends only on leaves (db, ledger, connector-manager, core) so any layer may import it.
+ */
+
+import { db } from './db/db.js';
+import { ledger } from './engine/ledger.js';
+import { bridgeAccountId, peerFromBridgeAccountId } from '@beanpool/core';
+import { getConnectorCreditCap, getConnectors } from './connector-manager.js';
+
+export { bridgeAccountId, peerFromBridgeAccountId };
+
+/**
+ * Ensure the bridge account for a peer exists and is demurrage-exempt.
+ *
+ * Idempotent. Reuses `ledger.setDecayExempt()` — the same mechanism that already covers COMMONS_POOL,
+ * `escrow_*`, `project_*` and every `is_treasury=1` account — rather than inventing a second exemption
+ * concept. Must be re-applied on every boot, because the exemption set lives in the in-memory ledger.
+ */
+export function ensureBridgeAccount(peerId: string): string {
+    const id = bridgeAccountId(peerId);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id);
+    ledger.setDecayExempt(id);
+    return id;
+}
+
+/**
+ * Re-register every existing bridge account as demurrage-exempt. Call at boot, alongside the treasury
+ * exemptions — the in-memory ledger is rebuilt each start, so an exemption that isn't re-applied
+ * silently begins decaying a debt.
+ */
+export function registerBridgeDecayExemptions(): number {
+    const rows = db.prepare("SELECT public_key FROM accounts WHERE public_key LIKE 'bridge_%'").all() as any[];
+    for (const r of rows) ledger.setDecayExempt(r.public_key);
+    return rows.length;
+}
+
+/**
+ * This node's energy balance toward a peer, read straight from the ledger.
+ *
+ * Positive = we owe them work. Negative = they owe us work (we extended credit).
+ */
+export function getEnergyBalance(peerId: string): number {
+    const row = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(bridgeAccountId(peerId)) as any;
+    return Math.round((row?.balance ?? 0) * 100) / 100;
+}
+
+/** How much credit we have currently extended to a peer — the magnitude of the negative side only. */
+export function creditExtendedTo(peerId: string): number {
+    return Math.max(0, -getEnergyBalance(peerId));
+}
+
+export type SettlementCapacity =
+    | { ok: true; headroom: number; cap: number; extended: number }
+    | { ok: false; reason: 'no_cap_configured'; message: string }
+    | { ok: false; reason: 'cap_exhausted'; cap: number; extended: number; headroom: 0; message: string };
+
+/**
+ * May this node extend `amount` more credit to a peer, and how much room is left?
+ *
+ * The two failure reasons are deliberately distinct because they need different operator responses:
+ * `no_cap_configured` is "nobody has decided yet" and is the state every peer starts in;
+ * `cap_exhausted` is "the throttle is working as designed".
+ *
+ * ONE-WAY BY CONSTRUCTION (§3.2). This bounds only the NEGATIVE side — credit we extend. Flow in the
+ * other direction moves the balance positive and is governed by the *peer's* cap, not ours, so it is
+ * never blocked here. That matters: a check like `abs(balance) > cap` would freeze a drained community
+ * permanently, because the only thing that can clear the balance is exactly what it would have blocked.
+ *
+ * @param address the connector address (the cap lives on the connector record, keyed by address)
+ */
+export function settlementCapacity(peerId: string, address: string, amount = 0): SettlementCapacity {
+    const cap = getConnectorCreditCap(address);
+    const extended = creditExtendedTo(peerId);
+
+    if (cap === null) {
+        return {
+            ok: false,
+            reason: 'no_cap_configured',
+            message: `No credit limit is set for this community yet, so purchases can't be settled with them. An operator needs to choose a limit in Settings first.`,
+        };
+    }
+
+    const headroom = Math.round((cap - extended) * 100) / 100;
+    if (amount > headroom) {
+        return {
+            ok: false,
+            reason: 'cap_exhausted',
+            cap,
+            extended,
+            headroom: 0,
+            message: `This community has reached the credit limit set for them (${extended} of ${cap}). They can buy from us — which is what brings the balance back — but we can't extend more until it does.`,
+        };
+    }
+
+    return { ok: true, headroom, cap, extended };
+}
+
+/**
+ * Every peer's energy balance, for the operator health view and the zero-centred display (§2.2).
+ *
+ * `cap` is null when unset, which is also what makes `settleable` false — the fail-closed default.
+ */
+export function listEnergyBalances(): Array<{
+    peerId: string | null;
+    address: string;
+    callsign?: string;
+    balance: number;
+    cap: number | null;
+    extended: number;
+    headroom: number | null;
+    settleable: boolean;
+}> {
+    return getConnectors()
+        .filter(c => c.trustLevel === 'peer')
+        .map(c => {
+            // A bridge account is keyed by the peer's LIBP2P PEER ID, never its address: the peerId is
+            // the node's cryptographic identity and is stable, whereas an address can change when a node
+            // moves host or DNS. You cannot rename a ledger account without migrating balances, so the
+            // key has to be the stable one.
+            //
+            // The consequence is that a connector we have never connected to has no peerId yet, and
+            // therefore no balance to report. Do NOT fall back to the address — that would read a
+            // DIFFERENT account and report someone else's position as this peer's.
+            const peerId = c.peerId ?? null;
+            const balance = peerId ? getEnergyBalance(peerId) : 0;
+            const cap = c.creditCap ?? null;
+            const extended = Math.max(0, -balance);
+            return {
+                peerId,
+                address: c.address,
+                callsign: c.callsign,
+                balance,
+                cap,
+                extended,
+                headroom: cap === null ? null : Math.round((cap - extended) * 100) / 100,
+                // Settleable needs BOTH a cap (an operator decided) and a known peerId (we have actually
+                // met this node). Either missing is fail-closed.
+                settleable: cap !== null && peerId !== null,
+            };
+        });
+}
+
+/**
+ * Sum of all bridge rows. Included because it is a useful invariant to assert in tests and audits, not
+ * because it should be zero: it is zero only when every peer relationship is square. A non-zero total is
+ * normal — it is the net of what we owe outward against what is owed to us.
+ */
+export function totalEnergyPosition(): number {
+    const row = db.prepare("SELECT COALESCE(SUM(balance), 0) AS t FROM accounts WHERE public_key LIKE 'bridge_%'").get() as any;
+    return Math.round((row?.t ?? 0) * 100) / 100;
+}

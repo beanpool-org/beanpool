@@ -2,6 +2,7 @@
 //
 // Bridges the database storage layer with server singletons and tombstone logs.
 
+import { isSyntheticAccount } from '@beanpool/core';
 import { db, writeTombstone } from '../db/db.js';
 import crypto from 'node:crypto';
 import {
@@ -12,7 +13,7 @@ import {
 } from '@beanpool/engine';
 
 function assertMemberActive(publicKey: string): void {
-    if (publicKey.startsWith('escrow_') || publicKey.startsWith('project_') || publicKey === 'COMMONS_POOL' || publicKey === 'SYSTEM' || publicKey === 'genesis') return;
+    if (isSyntheticAccount(publicKey)) return;
     if (!getMember(db, publicKey)) throw new Error('Member not found');
 }
 

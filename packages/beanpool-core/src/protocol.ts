@@ -215,3 +215,48 @@ export function formatTimeEquivalent(beans: number): string {
     if (hours < 10) return `≈ ${hours.toFixed(1)}hr`;
     return `≈ ${Math.round(hours)}hr`;
 }
+
+// ── Synthetic accounts ────────────────────────────────────────────────────────
+// Accounts that are not people. They hold balances and trade, but they have no member
+// record, no profile, no trust tier, and must never be addressable as a transfer
+// recipient on a public route.
+//
+// Centralised deliberately. This predicate was previously copy-pasted into five files
+// (state-engine, engine/escrow, engine/messaging, engine/posts, engine/social), which is
+// exactly the shape of the #102 defect: the same guard duplicated, and one copy missed.
+// Adding a new synthetic kind should be a one-line change, not a five-file hunt.
+
+/** Reserved account-id prefixes. A `bridge_<peer>` account holds an inter-node energy balance (#104). */
+export const SYNTHETIC_ACCOUNT_PREFIXES = ['escrow_', 'project_', 'bridge_'] as const;
+
+/** Reserved exact account ids. */
+export const SYNTHETIC_ACCOUNT_IDS = ['COMMONS_POOL', 'SYSTEM', 'genesis'] as const;
+
+/**
+ * Is this account id a synthetic (non-person) account?
+ *
+ * Use for "skip the member/profile/holiday checks" guards, and for rejecting a recipient on any
+ * public route that moves value between people.
+ */
+export function isSyntheticAccount(accountId: string | null | undefined): boolean {
+    if (!accountId || typeof accountId !== 'string') return false;
+    if ((SYNTHETIC_ACCOUNT_IDS as readonly string[]).includes(accountId)) return true;
+    return SYNTHETIC_ACCOUNT_PREFIXES.some(p => accountId.startsWith(p));
+}
+
+/**
+ * The per-peer bridge account holding this node's energy balance toward `peerId` (#104).
+ *
+ * Sign convention (docs/federation-economics.md Rule 2): positive = value taken from a local member
+ * and owed outward; negative = value minted locally against a claim, i.e. credit extended to that peer.
+ * Deliberately per-peer and never folded into COMMONS_POOL — two peers' balances must not net into one
+ * number, since each has its own cap and either may be about to throttle.
+ */
+export function bridgeAccountId(peerId: string): string {
+    return `bridge_${peerId}`;
+}
+
+/** Recover the peer id from a bridge account id, or null if it isn't one. */
+export function peerFromBridgeAccountId(accountId: string): string | null {
+    return accountId.startsWith('bridge_') ? accountId.slice('bridge_'.length) || null : null;
+}

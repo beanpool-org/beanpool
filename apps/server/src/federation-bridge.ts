@@ -215,15 +215,30 @@ export function totalEnergyPosition(): number {
  * enterprise ("Community Eggs") and another whole community stay visually distinct in the same list —
  * they are very different facts and would otherwise read alike.
  */
-export function bridgeDisplayName(accountId: string): string | null {
+export function bridgeDisplayName(accountId?: string | null): string | null {
+    // Tolerate a missing id: counterparty fields are optional on some rows, and a label helper must not
+    // be the thing that throws on one (review finding).
+    if (!accountId || typeof accountId !== 'string') return null;
+    if (!accountId.startsWith('bridge_')) return null;
+
     const peerId = peerFromBridgeAccountId(accountId);
-    if (!peerId) return null;
 
-    const byPeer = getConnectors().find(c => c.peerId === peerId);
-    if (byPeer?.callsign) return `🌐 ${byPeer.callsign}`;
+    // A malformed `bridge_` id still gets a label. Returning null here let the caller fall back to its
+    // normal member lookup, which fails, and the raw `bridge_12D3Koo…` string reached a member's ledger
+    // (review finding). Every bridge account is *some* other community, whether we can name it or not.
+    if (peerId) {
+        // Trim, and strip a globe the operator may have typed into the callsign themselves — otherwise a
+        // community called "🌐 Byron" renders as "🌐 🌐 Byron", and a callsign of "   " renders as "🌐    ".
+        const callsign = getConnectors().find(c => c.peerId === peerId)?.callsign?.replace(/^🌐\s*/, '').trim();
+        if (callsign) return `🌐 ${callsign}`;
+    }
 
-    // Connected but unnamed, or configured and never met. Say what we know rather than leaking a peer id:
-    // "another community" is honest and readable, where a truncated hash is neither.
+    // Connected but unnamed, configured and never met, or unparseable. Say what we know rather than leaking
+    // a peer id: "another community" is honest and readable, where a truncated hash is neither.
+    //
+    // TODO(clients): screen readers read the globe verbatim ("Globe showing Americas, Byron Bay"). This
+    // returns a plain string because nothing renders it yet; when a client wires it up, wrap the emoji in
+    // an aria-hidden span and give the row an aria-label naming the community.
     return '🌐 Another community';
 }
 
@@ -234,6 +249,9 @@ export function bridgeDisplayName(accountId: string): string | null {
  * Only bridge accounts are handled here. `escrow_*` and `COMMONS_POOL` already have client-side copy
  * treatments, and duplicating them would create two places to change one label.
  */
-export function resolveCounterpartyLabel(accountId: string): string | null {
-    return accountId.startsWith('bridge_') ? bridgeDisplayName(accountId) : null;
+export function resolveCounterpartyLabel(accountId?: string | null): string | null {
+    // Delegates entirely: bridgeDisplayName now owns both the prefix test and the "cannot name it" case, so
+    // there is one place that decides what a bridge account looks like to a member. A `bridge_` id can no
+    // longer fall through to a raw-string fallback in the caller.
+    return bridgeDisplayName(accountId);
 }

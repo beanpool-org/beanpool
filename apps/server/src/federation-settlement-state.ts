@@ -19,12 +19,34 @@
 
 import { db } from './db/db.js';
 
-/** Terminal states. Recovery ignores these; everything else is unfinalised and must be resolved. */
-const TERMINAL = ['settled', 'reversed', 'abandoned'] as const;
-
 export type SettlementDirection = 'outbound' | 'inbound';
 export type SettlementState =
     | 'escrowed' | 'reserved' | 'committed' | 'held' | 'settled' | 'reversed' | 'abandoned';
+
+/** Terminal states. Recovery ignores these. */
+const TERMINAL = ['settled', 'reversed', 'abandoned'] as const;
+
+/**
+ * The states recovery must resolve. Listed POSITIVELY, not as `NOT IN (TERMINAL)` — review finding.
+ *
+ * `idx_settlements_unfinalised` is a partial index defined `WHERE state IN ('escrowed','reserved',
+ * 'committed','held')`, and SQLite's planner cannot match a `NOT IN` predicate against a partial index's
+ * condition. The equivalent-looking negative form therefore full-scans `settlements` on every boot, and the
+ * cost grows with settlement history — exactly the table that only ever gets longer.
+ */
+const UNFINALISED = ['escrowed', 'reserved', 'committed', 'held'] as const;
+
+// The two lists must partition the state space: a state in neither would be invisible to recovery AND
+// never finalised, which is the one outcome this table exists to prevent. Asserted at import so a future
+// state added to the union without a home fails loudly instead of silently going unrecovered.
+{
+    const all: SettlementState[] = ['escrowed', 'reserved', 'committed', 'held', 'settled', 'reversed', 'abandoned'];
+    const covered = new Set<string>([...TERMINAL, ...UNFINALISED]);
+    const missing = all.filter(s => !covered.has(s));
+    if (missing.length || covered.size !== all.length) {
+        throw new Error(`[Settlement] states not partitioned into terminal/unfinalised: ${missing.join(', ') || 'overlap'}`);
+    }
+}
 
 export interface SettlementRow {
     key: string;
@@ -105,12 +127,33 @@ export function openSettlement(input: {
     state: Extract<SettlementState, 'escrowed' | 'reserved'>;
 }): SettlementRow {
     const existing = getSettlement(input.key);
-    if (existing) return existing;
+    if (existing) {
+        // Idempotent ONLY for the same trade. Returning the existing row for a DIFFERENT payload would be
+        // silent trade aliasing (review finding): a peer re-using a key with a larger amount, or a
+        // different counterparty, would get a success back and the caller would proceed believing the new
+        // terms were registered. The identity of a settlement is the whole tuple, not just the key.
+        //
+        // Amount is compared at 4dp because it round-trips through JSON as a float.
+        const same = existing.direction === input.direction
+            && existing.peerId === input.peerId
+            && existing.buyerPubkey === input.buyerPubkey
+            && (existing.sellerPubkey ?? null) === (input.sellerPubkey ?? null)
+            && Math.round(existing.amount * 10000) === Math.round(input.amount * 10000);
+        if (!same) {
+            throw new Error(`Settlement key collision for ${input.key}: payload does not match the existing row`);
+        }
+        return existing;
+    }
 
+    // ON CONFLICT DO NOTHING rather than a bare INSERT. better-sqlite3 is synchronous and there is no
+    // await between the read above and this write, so the interleaving that would raise a UNIQUE error is
+    // not reachable in-process today — but the idempotency guarantee should not rest on the absence of an
+    // await in a function that may later grow one, or on there being exactly one writer process.
     db.prepare(`
         INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, buyer_home_node, seller_pubkey,
                                  post_id, amount, fee, reserved_until, state)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(key) DO NOTHING
     `).run(
         input.key, input.direction, input.peerId, input.buyerPubkey,
         input.buyerHomeNode ?? null, input.sellerPubkey ?? null, input.postId ?? null,
@@ -133,28 +176,44 @@ export function advanceSettlement(
 ): SettlementRow {
     const row = getSettlement(key);
     if (!row) throw new Error(`Unknown settlement ${key}`);
-    if (row.state === to) return row;                       // idempotent replay
 
-    if (!LEGAL[row.state].includes(to)) {
+    // A same-state call carrying NEW metadata must still write it. Returning early on `state === to`
+    // silently dropped it (review finding) — so a row that reached `held` without its receipt could never
+    // have one attached afterwards, and the receipt is the only thing that makes the payment replayable.
+    const newReceipt = extra?.receipt !== undefined && extra.receipt !== row.receipt;
+    const newReason = extra?.failureReason !== undefined && extra.failureReason !== row.failureReason;
+    if (row.state === to && !newReceipt && !newReason) return row;      // idempotent replay
+
+    if (row.state !== to && !LEGAL[row.state].includes(to)) {
         throw new Error(`Illegal settlement transition ${row.state} → ${to} for ${key}`);
     }
 
-    db.prepare(`
+    // Compare-and-swap on the state we validated against, not just the key. As with openSettlement, the
+    // interleaving this defends against is not reachable in-process — but the difference between "refused
+    // an illegal transition" and "performed one silently" is worth making structural in SQL rather than
+    // resting on the read and the write staying adjacent.
+    const result = db.prepare(`
         UPDATE settlements
         SET state = ?, receipt = COALESCE(?, receipt), failure_reason = COALESCE(?, failure_reason),
             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-        WHERE key = ?
-    `).run(to, extra?.receipt ?? null, extra?.failureReason ?? null, key);
+        WHERE key = ? AND state = ?
+    `).run(to, extra?.receipt ?? null, extra?.failureReason ?? null, key, row.state);
+
+    if (result.changes === 0) {
+        const current = getSettlement(key);
+        if (current?.state === to) return current;          // someone else got there first; same outcome
+        throw new Error(`Concurrent settlement transition conflict for ${key} (expected ${row.state})`);
+    }
     return getSettlement(key)!;
 }
 
 /** Unfinalised settlements, oldest first — what boot recovery iterates. */
 export function unfinalisedSettlements(direction?: SettlementDirection): SettlementRow[] {
-    const placeholders = TERMINAL.map(() => '?').join(',');
-    const sql = `SELECT * FROM settlements WHERE state NOT IN (${placeholders})`
+    const placeholders = UNFINALISED.map(() => '?').join(',');
+    const sql = `SELECT * FROM settlements WHERE state IN (${placeholders})`
         + (direction ? ' AND direction = ?' : '')
         + ' ORDER BY created_at';
-    const params: any[] = [...TERMINAL];
+    const params: any[] = [...UNFINALISED];
     if (direction) params.push(direction);
     return (db.prepare(sql).all(...params) as any[]).map(rowToSettlement);
 }

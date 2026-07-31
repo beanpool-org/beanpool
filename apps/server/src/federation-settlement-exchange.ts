@@ -56,6 +56,21 @@ export const PURCHASE_ASK_TIMEOUT_MS = 10_000;
 export const RECEIPT_DELIVERY_TIMEOUT_MS = 15_000;
 export const RESERVATION_TTL_MS = 120_000;
 
+/**
+ * How long an outbound settlement may sit unresolved before it is reported as STUCK (review finding).
+ *
+ * `UNKNOWN` from `GET_RECEIPT_STATUS` means wait, and that is right — `NOT_FOUND` instructs a reversal, so
+ * treating an unrecognised key as permission to reverse is how a settled trade gets silently undone. But
+ * "wait" with no bound means a buyer's beans can sit in a committed settlement forever, re-counted as
+ * "still open" on every boot and never surfacing to anyone.
+ *
+ * So the wait is bounded, and what the bound triggers is **escalation, not reversal**. A cross-node
+ * settlement that stays ambiguous for a day is a genuine dispute between two communities: it needs a human
+ * who can talk to the other operator, not a node guessing which way to write the ledger. 24h so a sleeping
+ * solar node that misses an overnight window is not immediately an incident.
+ */
+export const STUCK_SETTLEMENT_AFTER_MS = 24 * 60 * 60 * 1000;
+
 if (RESERVATION_TTL_MS <= PURCHASE_ASK_TIMEOUT_MS + RECEIPT_DELIVERY_TIMEOUT_MS) {
     throw new Error(
         '[Federation] RESERVATION_TTL_MS must outlive the ask + delivery timeouts by a clear margin — '
@@ -339,6 +354,15 @@ export function handlePurchaseRequest(input: {
                 message: 'That settlement reference is already in use.',
             };
         }
+        // Re-asking with the SAME key but a different amount is refused, not silently accepted at the old
+        // figure (review finding). It would otherwise return `accepted: true` for 500 against a 5-bean
+        // reservation — the receipt check at step 4 would catch it, but the peer would have been told yes.
+        if (round4(existing.amount) !== round4(input.amount)) {
+            return {
+                accepted: false, reason: 'key_conflict',
+                message: 'That settlement reference is already in use for a different amount.',
+            };
+        }
         if (existing.state === 'reserved' || existing.state === 'held' || existing.state === 'settled') {
             return {
                 accepted: true, key: existing.key,
@@ -549,6 +573,15 @@ export interface RecoveryResult {
     reversed: number;
     finalised: number;
     stillOpen: number;
+    /** Unresolved for longer than STUCK_SETTLEMENT_AFTER_MS — needs an operator, not another retry. */
+    stuck: SettlementRow[];
+}
+
+/** Outbound settlements that have been unresolved long enough to need a human. */
+export function stuckSettlements(now = Date.now()): SettlementRow[] {
+    return unfinalisedSettlements('outbound').filter(
+        r => r.state === 'committed' && now - new Date(r.updatedAt).getTime() > STUCK_SETTLEMENT_AFTER_MS,
+    );
 }
 
 /**
@@ -565,7 +598,9 @@ export interface RecoveryResult {
 export async function recoverSettlements(
     askPeer?: (peerId: string, key: string) => Promise<ReceiptStatus>,
 ): Promise<RecoveryResult> {
-    const result: RecoveryResult = { expired: 0, paid: 0, refunded: 0, reversed: 0, finalised: 0, stillOpen: 0 };
+    const result: RecoveryResult = {
+        expired: 0, paid: 0, refunded: 0, reversed: 0, finalised: 0, stillOpen: 0, stuck: [],
+    };
 
     result.expired = expireStaleReservations();
 
@@ -608,12 +643,25 @@ export async function recoverSettlements(
         }
     }
 
+    // Anything still committed after a day of asking is not going to resolve by asking again. Surface it
+    // rather than counting it as "still open" forever (review finding) — a buyer's beans are sitting in it.
+    // Reported, NOT auto-reversed: an ambiguous cross-node settlement is a dispute between two communities,
+    // and reversing on a guess is exactly what the UNKNOWN/NOT_FOUND split exists to prevent.
+    result.stuck = stuckSettlements();
+    for (const row of result.stuck) {
+        console.warn(
+            `[Federation] ⚠️  Settlement ${row.key} has been unresolved since ${row.updatedAt} `
+            + `(${row.amount} beans, peer ${row.peerId.slice(-8)}). The buyer's beans are still committed. `
+            + `An operator needs to reconcile this with the other community — it will not clear by retrying.`,
+        );
+    }
+
     const touched = result.expired + result.paid + result.refunded + result.reversed + result.finalised;
     if (touched || result.stillOpen) {
         console.log(
             `[Federation] Settlement recovery: ${result.paid} paid, ${result.refunded} refunded, `
             + `${result.reversed} reversed, ${result.finalised} finalised, ${result.expired} reservations released, `
-            + `${result.stillOpen} still open`,
+            + `${result.stillOpen} still open, ${result.stuck.length} needing an operator`,
         );
     }
     return result;

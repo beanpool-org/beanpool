@@ -18,6 +18,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import { initStateEngine } from './state-engine.js';
+import { db } from './db/db.js';
 import { addConnector } from './connector-manager.js';
 import { bridgeAccountId, resolveCounterpartyLabel, bridgeDisplayName } from './federation-bridge.js';
 import {
@@ -63,6 +64,27 @@ async function main() {
     assert(advanceSettlement('k-out-1', 'committed').state === 'committed',
         're-applying the current state is an idempotent no-op, not an error');
 
+    // Idempotent for the SAME trade only. Returning the existing row for a different payload would be
+    // silent trade aliasing: the caller proceeds believing the new terms were registered.
+    throws(() => openSettlement({
+        key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
+        buyerPubkey: 'buyerpk', amount: 500, state: 'escrowed',
+    }), /key collision/, 'reusing a key with a DIFFERENT amount is refused, not silently accepted');
+    throws(() => openSettlement({
+        key: 'k-out-1', direction: 'outbound', peerId: 'someone-else',
+        buyerPubkey: 'buyerpk', amount: 5, state: 'escrowed',
+    }), /key collision/, 'and reusing it for a different peer is refused too');
+    assert(getSettlement('k-out-1')!.amount === 5, 'the original row is untouched by the rejected reuse');
+
+    // A same-state call carrying NEW metadata must still write it. An early return on state === to dropped
+    // it, so a row that reached `held` without its receipt could never have one attached — and the receipt
+    // is the only thing that makes the payment replayable.
+    openSettlement({ key: 'k-meta', direction: 'inbound', peerId: PEER_ID, buyerPubkey: 'b', amount: 1, state: 'reserved' });
+    advanceSettlement('k-meta', 'held');
+    assert(getSettlement('k-meta')!.receipt === null, 'a held row can exist with no receipt yet');
+    assert(advanceSettlement('k-meta', 'held', { receipt: 'late-sig' }).receipt === 'late-sig',
+        'attaching a receipt to a row already in that state WRITES it rather than dropping it');
+
     // ── 2. Illegal transitions throw ────────────────────────────────────────────
     throws(() => advanceSettlement('k-out-1', 'escrowed'), /Illegal settlement transition/,
         'committed → escrowed is refused');
@@ -94,6 +116,15 @@ async function main() {
     assert(!keys.includes('k-out-1'), 'settled is finalised and excluded');
     assert(!keys.includes('k-out-2'), 'reversed is finalised and excluded');
     assert(unfinalisedSettlements('inbound').every(r => r.direction === 'inbound'), 'recovery can scan one side');
+
+    // The recovery scan must be able to use idx_settlements_unfinalised, which is a PARTIAL index keyed on
+    // `state IN (...)`. SQLite cannot match a NOT IN predicate against a partial index's condition, so the
+    // equivalent-looking negative form full-scans a table that only ever grows.
+    const plan = db.prepare(
+        `EXPLAIN QUERY PLAN SELECT * FROM settlements WHERE state IN ('escrowed','reserved','committed','held') ORDER BY created_at`,
+    ).all() as any[];
+    assert(plan.some(r => /idx_settlements_unfinalised/.test(r.detail ?? '')),
+        'and the scan uses the partial index rather than reading every settlement ever made');
 
     // ── 5. GET_RECEIPT_STATUS — three states, and UNKNOWN means WAIT ─────────────
     assert(receiptStatus('k-in-1') === 'HELD', 'a persisted-but-unpaid receipt reports HELD');
@@ -127,6 +158,24 @@ async function main() {
 
     assert(resolveCounterpartyLabel(bridge) !== null, 'the resolver claims bridge accounts');
     assert(!bridgeDisplayName(bridge)!.includes(PEER_ID), 'the raw peer id never reaches a member');
+
+    // A member's ledger must never show a raw account string. Every one of these previously returned null,
+    // which sent the caller to a member lookup that fails, leaking `bridge_…` into the UI.
+    assert(bridgeDisplayName('bridge_') === '🌐 Another community',
+        'a malformed bridge id still gets a label rather than falling through to the raw string');
+    assert(resolveCounterpartyLabel('bridge_') === '🌐 Another community', 'and the resolver agrees');
+    assert(bridgeDisplayName(undefined) === null, 'a missing account id returns null instead of throwing');
+    assert(resolveCounterpartyLabel(null) === null, 'and so does the resolver');
+    assert(resolveCounterpartyLabel('COMMONS_POOL') === null, 'non-bridge accounts are still left to the caller');
+
+    // Operator-entered callsigns are messy: whitespace-only rendered as "🌐    ", and a callsign the
+    // operator had already decorated rendered as "🌐 🌐 Byron".
+    addConnector(`/dns4/blank.beanpool.org/tcp/4001/p2p/12D3KooWBlankName`, 'peer', '   ', 'https://blank.beanpool.org');
+    assert(bridgeDisplayName(bridgeAccountId('12D3KooWBlankName')) === '🌐 Another community',
+        'a whitespace-only callsign falls back instead of rendering an empty name');
+    addConnector(`/dns4/dupe.beanpool.org/tcp/4001/p2p/12D3KooWDupeGlobe`, 'peer', '🌐 Mullum', 'https://dupe.beanpool.org');
+    assert(bridgeDisplayName(bridgeAccountId('12D3KooWDupeGlobe')) === '🌐 Mullum',
+        'a callsign that already carries a globe is not given a second one');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

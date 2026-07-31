@@ -41,8 +41,8 @@ import {
     beginOutboundSettlement, commitOutboundSettlement, reverseOutboundSettlement,
     abandonOutboundSettlement, finaliseOutboundSettlement,
     handlePurchaseRequest, handleReceiptDelivery, settleHeldReceipt, answerReceiptStatus,
-    expireStaleReservations, recoverSettlements, crossNodeFee,
-    RESERVATION_TTL_MS, PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS,
+    expireStaleReservations, recoverSettlements, crossNodeFee, stuckSettlements,
+    RESERVATION_TTL_MS, PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS, STUCK_SETTLEMENT_AFTER_MS,
 } from './federation-settlement-exchange.js';
 import {
     settlementGateRefusal, SETTLEMENT_ACTIONS,
@@ -135,6 +135,8 @@ async function main() {
     // CAPACITY_LAPSED fires in normal operation and the rare compensating path becomes the routine one.
     assert(RESERVATION_TTL_MS > PURCHASE_ASK_TIMEOUT_MS + RECEIPT_DELIVERY_TIMEOUT_MS,
         'the reservation outlives the ask + delivery timeouts');
+    assert(STUCK_SETTLEMENT_AFTER_MS > RESERVATION_TTL_MS * 10,
+        'and escalation is far beyond the reservation, so a slow link is never mistaken for a dispute');
 
     // ── 1. Receipts are bound to their issuer ───────────────────────────────────────────────────
     const proto: SettlementReceipt = {
@@ -248,6 +250,11 @@ async function main() {
     const conflict = ask(R1, 5, OTHER);
     assert(conflict.accepted === false && (conflict as any).reason === 'key_conflict',
         'a key already held for another peer is refused — otherwise one peer\'s receipt pays from another\'s line');
+
+    const amountConflict = ask(R1, 500);
+    assert(amountConflict.accepted === false && (amountConflict as any).reason === 'key_conflict',
+        're-asking with the same key for a BIGGER amount is refused, not answered yes at the reserved figure');
+    assert(getSettlement(R1)!.amount === 5, 'and the reservation still holds its original amount');
 
     setConnectorCreditCap(OTHER_ADDR, 10);
     const over = ask('k-in-over', 999, OTHER);
@@ -397,7 +404,21 @@ async function main() {
     const noAsk = await recoverSettlements();
     assert(getSettlement(R8)!.state === 'committed' && noAsk.stillOpen >= 1,
         'with no way to ask the peer, a committed row waits — waiting is always safe, guessing is not');
+    assert(noAsk.stuck.length === 0, 'and a fresh one is not yet anybody\'s problem');
+
+    // ── 10b. But the wait is BOUNDED, and the bound escalates rather than reverses ─────────────────
+    // "UNKNOWN means wait" without a bound leaves a buyer's beans committed forever, re-counted as "still
+    // open" on every boot and never surfacing to anyone.
+    db.prepare(`UPDATE settlements SET updated_at = '2020-01-01T00:00:00.000Z' WHERE key = ?`).run(R8);
+    assert(stuckSettlements().some(r => r.key === R8), 'a long-unresolved committed settlement is reported stuck');
+    const stale = await recoverSettlements(async () => 'UNKNOWN');
+    assert(stale.stuck.some(r => r.key === R8), 'recovery surfaces it for an operator');
+    assert(getSettlement(R8)!.state === 'committed',
+        'and does NOT auto-reverse it — an ambiguous crossing is a dispute between two communities, not a guess');
+    assert(stale.stuck[0].amount === 2 && !!stale.stuck[0].peerId,
+        'the report carries what an operator needs: the amount at stake and which community to talk to');
     finaliseOutboundSettlement(R8);
+    assert(stuckSettlements().every(r => r.key !== R8), 'once resolved it stops being reported');
 
     // ── 11. The pair nets to zero (§2.1) ─────────────────────────────────────────────────────────
     // Both halves of one crossing, run against this single database. That proves the ARITHMETIC of the

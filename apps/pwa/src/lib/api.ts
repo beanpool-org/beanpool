@@ -483,6 +483,9 @@ export interface MarketplacePost {
     active: boolean;
     status: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
     repeatable: boolean;
+    /** #108: a real cash outlay is involved (fuel / consumables used up doing the job). No amount by
+     *  design — the app never touches the money, so terms are agreed in the chat. */
+    cashAlsoNeeded?: boolean;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -512,12 +515,13 @@ export interface MarketplaceTransaction {
     ratedBySeller?: boolean;
 }
 
-export async function getMarketplacePosts(filter?: { id?: string; type?: string; category?: string; author?: string }): Promise<MarketplacePost[]> {
+export async function getMarketplacePosts(filter?: { id?: string; type?: string; category?: string; author?: string; beansOnly?: boolean }): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
     if (filter?.type) params.set('type', filter.type);
     if (filter?.category) params.set('category', filter.category);
     if (filter?.author) params.set('author', filter.author);
+    if (filter?.beansOnly) params.set('beansOnly', 'true');
     return request('GET', `/api/marketplace/posts?${params}`);
 }
 
@@ -533,6 +537,7 @@ export async function createMarketplacePost(post: {
     lng?: number;
     photos?: string[];
     repeatable?: boolean;
+    cashAlsoNeeded?: boolean;
 }): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', '/api/marketplace/posts', post);
 }

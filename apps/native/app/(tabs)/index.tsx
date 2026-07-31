@@ -514,6 +514,7 @@ export default function MarketScreen() {
     }));
 
     const [trustFilter, setTrustFilter] = useState<string>('all');
+    const [beansOnly, setBeansOnly] = useState(false);  // #108: hide listings that also need cash
     const [showTrustPicker, setShowTrustPicker] = useState(false);
     const [viewMode, setViewMode] = useState<'list' | 'grid' | 'compact'>('list');
     const [favCategories, setFavCategories] = useState<string[]>([]);
@@ -792,6 +793,8 @@ export default function MarketScreen() {
         if (p.status !== 'active') return false;
         if (blockedUsers.includes(p.author_pubkey)) return false;
         if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+        // #108: beans-only browse. Rows predating the column read as 0, i.e. beans-only.
+        if (beansOnly && p.cash_also_needed === 1) return false;
         
         // Type / For You filters
         if (filter === 'offers' && p.type !== 'offer') return false;
@@ -830,7 +833,7 @@ export default function MarketScreen() {
 
     const selectedCategory = MARKETPLACE_CATEGORIES.find(c => c.id === categoryFilter);
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
-    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all';
+    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly;
 
     const freshTodayCount = posts.filter(post => {
         if (post.status !== 'active') return false;
@@ -1022,6 +1025,22 @@ export default function MarketScreen() {
                             </Pressable>
                         ) : (
                             <Text style={{ fontSize: 8, color: colors.text.muted, marginLeft: 4 }}>▼</Text>
+                        )}
+                    </Pressable>
+
+                    {/* #108 Beans-only filter — a toggle, not a picker, so it needs no sheet. */}
+                    <Pressable
+                        onPress={() => setBeansOnly(!beansOnly)}
+                        style={[styles.dropdownBtn, beansOnly && styles.dropdownBtnNewMembersActive]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Show only listings that need no cash"
+                        accessibilityState={{ selected: beansOnly }}
+                    >
+                        <Text style={[styles.dropdownText, beansOnly && styles.dropdownTextActive]} numberOfLines={1}>
+                            🫘 Beans only
+                        </Text>
+                        {beansOnly && (
+                            <Text style={{ fontSize: 9, color: colors.text.inverse, fontWeight: 'bold', marginLeft: 6 }}>✓</Text>
                         )}
                     </Pressable>
                 </View>
@@ -1243,7 +1262,9 @@ export default function MarketScreen() {
                         </View>
                     </View>
                     <View style={styles.gridTextContent}>
-                        <Text style={styles.gridCardTitle} numberOfLines={1}>{item.title}</Text>
+                        <Text style={styles.gridCardTitle} numberOfLines={1}>
+                            {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
+                        </Text>
                         <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={item.authorFoundingNeeded} />
                     </View>
                 </Pressable>
@@ -1260,7 +1281,7 @@ export default function MarketScreen() {
                         </Text>
                         <View style={{ flex: 1, marginLeft: 10, marginRight: 8, justifyContent: 'center' }}>
                             <Text style={styles.compactTitle} numberOfLines={1}>
-                                {item.title}
+                                {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                             </Text>
                             <Text style={styles.compactAuthor} numberOfLines={1}>
                                 by {cardAuthor} {elderCard ? '⛰️' : ''} {isOwn ? '👤 (You)' : ''}
@@ -1319,6 +1340,12 @@ export default function MarketScreen() {
                                 {!!item.repeatable && (
                                     <View style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>↻ RECURRING</Text>
+                                    </View>
+                                )}
+                                {/* #108: on the card, not just the detail view */}
+                                {item.cash_also_needed === 1 && (
+                                    <View style={{ backgroundColor: colors.feedback.warning.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.warning.border }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.feedback.warning.fg }}>💸 CASH TOO</Text>
                                     </View>
                                 )}
                             </View>
@@ -1431,7 +1458,7 @@ export default function MarketScreen() {
                             <Pressable
                                 accessibilityRole="button"
                                 style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 12 }}
-                                onPress={() => { setFilter('all'); setCategoryFilter('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); }}
+                                onPress={() => { setFilter('all'); setCategoryFilter('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); }}
                             >
                                 <Text style={{ fontWeight: '700', color: palette.gray600, fontSize: 14 }}>Clear All Filters</Text>
                             </Pressable>

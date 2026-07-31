@@ -106,6 +106,11 @@ CREATE TABLE IF NOT EXISTS posts (
     origin_node TEXT,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     search_keywords TEXT DEFAULT '',
+    -- #108: this listing has a real cash outlay attached (fuel, consumables used up doing the
+    -- job). Deliberately a flag with NO amount: the app can escrow beans, it cannot escrow cash,
+    -- and a structured figure would imply it holds or settles money it never touches. Terms live
+    -- in the chat. Local-only by nature — cash can't cross a node boundary.
+    cash_also_needed INTEGER DEFAULT 0,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 

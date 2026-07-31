@@ -158,6 +158,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // FTS5 Search: Add search_keywords column to posts
     try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
+    // #108: a listing may carry a real cash outlay (fuel/consumables). Flag only, no amount —
+    // the app never touches the money, so it must not imply a figure it holds or settles.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     // Moderation: Add status tracking to abuse reports
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     // Marketplace hygiene: track when a lingering escrow deal was last nudged

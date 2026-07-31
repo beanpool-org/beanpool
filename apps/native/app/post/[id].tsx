@@ -793,6 +793,15 @@ export default function PostDetailModal() {
                     </View>
                     <Text style={styles.timeAgo} numberOfLines={1}>{getTimeAgo(post.created_at)}</Text>
                 </View>
+                {/* #108: the detail view is where the terms get discussed, so say what the flag means
+                    rather than just badging it. No amount — that's agreed in chat. */}
+                {post.cash_also_needed === 1 && (
+                    <View style={{ backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 }}>
+                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 12, lineHeight: 17 }}>
+                            💸 <Text style={{ fontWeight: '700' }}>Cash also needed</Text> for fuel or materials, at cost. Time and tools are beans. Agree the details in chat — the app never handles the money.
+                        </Text>
+                    </View>
+                )}
 
                 {/* Title */}
                 <Text style={styles.postTitle}>{post.title}</Text>

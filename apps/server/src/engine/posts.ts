@@ -59,7 +59,8 @@ export function createPost(
     lng?: number,
     photos?: string[],
     repeatable?: boolean,
-    id?: string
+    id?: string,
+    cashAlsoNeeded?: boolean
 ): MarketplacePost | null {
     assertMemberActive(authorPublicKey);
     if (!getMember(db, authorPublicKey)) {
@@ -77,8 +78,8 @@ export function createPost(
     
     db.transaction(() => {
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?)`).run(finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt, repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords);
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?)`).run(finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt, repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords, cashAlsoNeeded ? 1 : 0);
 
         if (photos && photos.length > 0) {
             const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
@@ -133,6 +134,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.credits !== undefined) { fields.push('credits = ?'); values.push(updates.credits); }
     if (updates.priceType !== undefined) { fields.push('price_type = ?'); values.push(updates.priceType); }
     if (updates.repeatable !== undefined) { fields.push('repeatable = ?'); values.push(updates.repeatable ? 1 : 0); }
+    if (updates.cashAlsoNeeded !== undefined) { fields.push('cash_also_needed = ?'); values.push(updates.cashAlsoNeeded ? 1 : 0); }
     if (updates.lat !== undefined) { fields.push('lat = ?'); values.push(updates.lat); }
     if (updates.lng !== undefined) { fields.push('lng = ?'); values.push(updates.lng); }
 

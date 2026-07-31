@@ -304,6 +304,47 @@ Two useful consequences:
 Neither cap may be negotiated over the wire. Each node enforces its own, on its own books, from its own
 configuration. A compromised peer must not be able to raise the limit that constrains it.
 
+#### The cap is one-way. This is the part to get right.
+
+There is no single switch governing "trade with Byron". There are **two independent one-way valves**, one
+held by each node, each governing only the credit *it* extends.
+
+> **A node at its cap for a peer must keep accepting flow in the *other* direction. Refusing both is
+> refusing the cure along with the disease.**
+
+**Which direction a listing belongs to depends on who PAYS, not on who posted it.** Offer-vs-need is only
+a question of who spoke first (§5.1), so both framings appear on each side of the ledger. With Brisbane
+drained and Byron holding the claim:
+
+| Listing | Payer | Direction | Status at the cap |
+|---|---|---|---|
+| **Byron's Needs**, filled by Brisbane members | Byron | Byron → Brisbane | ✅ **rebalances** |
+| **Brisbane's Offers**, bought by Byron members | Byron | Byron → Brisbane | ✅ **rebalances** |
+| Byron's Offers, bought by Brisbane members | Brisbane | Brisbane → Byron | ⛔ throttled |
+| Brisbane's Needs, filled by Byron members | Brisbane | Brisbane → Byron | ⛔ throttled |
+
+So the rebalancing surface is precisely **the drained community's Offers plus the surplus community's
+Needs** — the two places where the surplus side is the one paying. Byron's cap throttles the bottom pair;
+the top pair is governed by *Brisbane's* cap, which has enormous room precisely because Brisbane is owed
+nothing.
+
+The mechanism is therefore asymmetric by construction: each cap binds only the sign representing credit
+*given*, and the rebalancing flow reduces the very quantity that was capped. The failure mode to avoid is
+an implementation that checks `abs(tab) > cap` and blocks the peer wholesale. That would freeze a drained
+community permanently, because the only thing that can clear the tab is exactly what it blocked.
+
+#### Discovery stays open both ways, and skew may reorder it
+
+A community at its credit cap must still *see* its partner's listings — seeing them is the precondition
+for the trade that fixes things. **Never hide a listing because a tab is full; that is the moment it
+matters most** (Rule 6, Rule 9).
+
+A skewed tab is, however, exactly the licence Rule 7 allows: it **may decide what gets surfaced first,
+never whether a need is genuine.** So when a tab is near its cap, promoting the rebalancing pair — the
+creditor's Needs to the debtor community, the debtor's Offers to the creditor community — is legitimate
+prioritisation. Inventing needs to soak up a surplus is not. That distinction is the whole content of
+Rule 7, and this is its first concrete application: it is the ranking rule #105 should implement.
+
 Both refusals surface at the point of sale and must be **clear and non-alarming**. Hitting a cap is a
 throttle working as designed, not an error the member did something wrong to cause.
 
@@ -366,8 +407,13 @@ purchases from the drained community's members are refused until flow reverses o
 deliberately settled.
 
 That is a **controlled stop, not a collapse.** Both ledgers stay balanced, local trade in both
-communities is entirely unaffected, and nothing is lost — the boundary simply stops passing value until
-someone acts. Designing for a clean throttle instead of an unbounded tab is the point of the caps.
+communities is entirely unaffected, and nothing is lost — the boundary simply stops passing value in the
+direction that was draining it. Designing for a clean throttle instead of an unbounded tab is the point
+of the caps.
+
+Note "in that direction": the throttle is **one-way**, and the opposite direction is the cure. See
+[§3.2](#the-cap-is-one-way-this-is-the-part-to-get-right) — a cap that blocked the peer relationship
+wholesale would freeze the drained community permanently.
 
 Note also *who* suffers versus who can act, because it is the whole design problem in one sentence: under
 one-way flow the surplus community is perfectly comfortable — visitor demand puts otherwise-idle people to

@@ -39,7 +39,8 @@ import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
 import { initConnectorManager, connectAll } from './connector-manager.js';
 import { registerHandshakeHandler } from './handshake.js';
-import { registerFederationHandler } from './federation-protocol.js';
+import { registerFederationHandler, federatedReceiptStatus } from './federation-protocol.js';
+import { recoverSettlements } from './federation-settlement-exchange.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, promotionSanityCheck } from './state-engine.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initPublicAddress } from './services/public-address-agent.js';
@@ -100,6 +101,16 @@ async function main() {
     registerHandshakeHandler(p2pNode);
     registerFederationHandler(p2pNode);
     connectAll().catch((e) => console.warn('[Connectors] Initial connect failed:', e));
+
+    // Step 8.1: Resolve settlements that were in flight when this node last stopped (#104 §2.5).
+    // Deliberately NOT gated on FEDERATION_SETTLEMENT_ENABLED: turning settlement off is a decision about
+    // accepting NEW cross-node trades, and must not strand beans already in escrow or a seller already
+    // owed. Runs detached so a slow or unreachable peer can never delay boot — an unresolved row is
+    // retried on the next start, and waiting is always the safe side.
+    recoverSettlements(async (peerId, key) => {
+        const { peerIdFromString } = await import('@libp2p/peer-id');
+        return federatedReceiptStatus(p2pNode, peerIdFromString(peerId), key);
+    }).catch((e) => console.warn('[Federation] Settlement recovery failed:', e?.message || e));
 
     // Step 8.5: Backup puller (one-directional live backup). On a node with
     // NODE_ROLE=backup, periodically pull the primary's signed snapshot over

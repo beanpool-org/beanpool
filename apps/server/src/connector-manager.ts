@@ -538,28 +538,41 @@ export function removeConnector(address: string): boolean {
     return true;
 }
 
+/** The peer id an operator wrote into a connector address, when the address is a full multiaddr. */
+function peerIdFromAddress(address?: string): string | null {
+    return address?.match(/\/p2p\/([^/]+)/)?.[1] ?? null;
+}
+
+/**
+ * Merge a connector's config with its live status.
+ *
+ * `peerId` falls back to the one embedded in the address. `isPeerTrusted()` has always accepted a peer
+ * identified either way, but `getConnectors()` used to report `peerId: null` until a live connection
+ * populated the statuses map — so a peer added by full multiaddr was trusted by the protocol gate while
+ * every peer-id-keyed lookup (#104's per-peer cap, energy balance, ledger label) still saw an unknown
+ * node. Those disagreed about the same connector. One resolution rule, used everywhere.
+ *
+ * The observed id wins over the configured one when both exist: what actually connected is a fact, what
+ * was typed is an intention.
+ */
+function materialise(c: ConnectorConfig): ConnectorStatus {
+    const status = statuses.get(c.address) || newStatus();
+    return { ...c, ...status, peerId: status.peerId ?? peerIdFromAddress(c.address) };
+}
+
 export function getConnectors(): ConnectorStatus[] {
-    return connectors.map(c => {
-        const status = statuses.get(c.address) || newStatus();
-        return { ...c, ...status };
-    });
+    return connectors.map(materialise);
 }
 
 export function getConnectorByAddress(address: string): ConnectorStatus | null {
     const connector = connectors.find(c => c.address === address);
-    if (!connector) return null;
-
-    const status = statuses.get(connector.address) || newStatus();
-    return { ...connector, ...status };
+    return connector ? materialise(connector) : null;
 }
 
 // ⚡ Bolt: O(1) allocation lookup instead of calling getConnectors().find() which maps the whole array
 export function getConnectorByPublicUrl(publicUrl: string): ConnectorStatus | null {
     const connector = connectors.find(c => c.publicUrl === publicUrl);
-    if (!connector) return null;
-
-    const status = statuses.get(connector.address) || newStatus();
-    return { ...connector, ...status };
+    return connector ? materialise(connector) : null;
 }
 
 /**
@@ -594,7 +607,7 @@ export function getConnectorsByLevel(level: TrustLevel): ConnectorStatus[] {
     const result: ConnectorStatus[] = [];
     for (const c of connectors) {
         if (c.trustLevel !== level) continue;
-        result.push({ ...c, ...(statuses.get(c.address) || newStatus()) });
+        result.push(materialise(c));
     }
     return result;
 }

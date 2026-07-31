@@ -1187,6 +1187,86 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     return txn;
 }
 
+/**
+ * Move value from a SYNTHETIC account into the Commons pot, and record it.
+ *
+ * `transfer(x, 'COMMONS_POOL', n)` does NOT do this, and the difference is not cosmetic. The Commons pot
+ * is the `COMMONS_BALANCE` global; the `COMMONS_POOL` account row is only its persisted shadow, rewritten
+ * from the global by `persistCommonsBalance()` after every transfer. So a transfer INTO that account is
+ * persisted and then overwritten a moment later, and the value is gone from the node's books at the next
+ * restart — the books stop summing to zero, quietly.
+ *
+ * Restricted to synthetic senders (escrow_*, bridge_*, project_*) on purpose. Member-facing debits belong
+ * in `transfer()`, where the send gate, floor policy and fee policy live; this is a plumbing move for value
+ * already held in a system account, and it deliberately implements none of those policies.
+ *
+ * #104 uses it for the cross-node fee, which the buyer pays on top of the price (§2.1) and which lands in
+ * the buyer node's own Commons because that is the node carrying the write-off if the buyer is ever pruned.
+ */
+export function moveToCommons(from: string, amount: number, memo: string): Transaction | null {
+    if (!isSyntheticAccount(from)) {
+        throw new Error(`moveToCommons is for synthetic accounts only, got ${from}`);
+    }
+    if (amount <= 0) return null;
+    if (!ledger.moveToCommons(from, amount, -Infinity)) return null;
+
+    const txn: Transaction = {
+        id: crypto.randomUUID(),
+        from, to: 'COMMONS_POOL', amount, taxFee: 0,
+        memo: memo || '', timestamp: new Date().toISOString(),
+    };
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp);
+
+    const fromAcc = ledger.getAccount(from);
+    db.prepare(`
+        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(public_key) DO UPDATE SET
+            balance = excluded.balance,
+            last_demurrage_epoch = excluded.last_demurrage_epoch,
+            last_updated_at = excluded.last_updated_at
+    `).run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, txn.timestamp);
+
+    persistDecayEvents();
+    persistCommonsBalance();   // must come last — it is what makes the credit durable
+    return txn;
+}
+
+/**
+ * Pay a member OUT of the Commons pot, and record it. The mirror of `moveToCommons`.
+ *
+ * Same reasoning: `transfer('COMMONS_POOL', x, n)` moves the shadow account (pushing it negative, funded
+ * from nowhere) rather than drawing on the pot, so the draw has to go through `deductFromCommons`. Returns
+ * null if the pot cannot cover it — the Commons never goes into debt.
+ */
+export function payFromCommons(to: string, amount: number, memo: string): Transaction | null {
+    if (amount <= 0) return null;
+    if (!ledger.deductFromCommons(amount)) return null;
+
+    const toAcc = ledger.getAccount(to);
+    toAcc.balance += amount;
+
+    const txn: Transaction = {
+        id: crypto.randomUUID(),
+        from: 'COMMONS_POOL', to, amount, taxFee: 0,
+        memo: memo || '', timestamp: new Date().toISOString(),
+    };
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp);
+    db.prepare(`
+        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(public_key) DO UPDATE SET
+            balance = excluded.balance,
+            last_demurrage_epoch = excluded.last_demurrage_epoch,
+            last_updated_at = excluded.last_updated_at
+    `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, txn.timestamp);
+
+    persistCommonsBalance();
+    return txn;
+}
+
 export function getTransactions(publicKey?: string, limit = 50, offset = 0): Transaction[] {
     let rows;
     if (publicKey) {

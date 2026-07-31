@@ -561,8 +561,17 @@ CREATE TABLE IF NOT EXISTS settlements (
     peer_id         TEXT NOT NULL,
     buyer_pubkey    TEXT NOT NULL,
     buyer_home_node TEXT,
+    seller_pubkey   TEXT,
     post_id         TEXT,
     amount          REAL NOT NULL CHECK (amount > 0),
+    -- Outbound only. The cross-node fee is paid by the buyer ON TOP of the price (§2.1), so it is a
+    -- separate figure from `amount` — the bridge entries carry the price alone, never price plus fee.
+    -- Stored rather than recomputed so a reversal refunds exactly what was taken, even if the fee rate
+    -- changes between the commit and the reversal.
+    fee             REAL NOT NULL DEFAULT 0,
+    -- Inbound only. When the cap reservation lapses. A reservation moves no beans, so expiry is free —
+    -- but a receipt arriving after it must be re-validated against the cap, never honoured on trust.
+    reserved_until  DATETIME,
     -- Deliberately NOT a foreign key and NOT reused from marketplace_transactions: a settlement outlives
     -- the trade it came from, and must remain auditable after a post is deleted.
     state           TEXT NOT NULL CHECK (state IN (

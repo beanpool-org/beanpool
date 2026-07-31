@@ -371,8 +371,8 @@ terms of who now does what.
   On boot, each side resolves its unfinalised rows: Byron by completing step 4, Brisbane by asking
   `GET_RECEIPT_STATUS(key)`. This is what makes "recoverable by replay" true rather than aspirational.
 
-  `GET_RECEIPT_STATUS(key)` returns exactly one of three states, and each has a single correct response —
-  a two-state answer is not enough, because "never arrived" and "arrived, not yet acted on" require
+  `GET_RECEIPT_STATUS(key)` answers with a state, and each state has a single correct response — a
+  two-state answer is not enough, because "never arrived" and "arrived, not yet acted on" require
   opposite actions:
 
   | Response | Means | Brisbane must |
@@ -380,9 +380,18 @@ terms of who now does what.
   | `NOT_FOUND` | Byron never received the receipt, or its reservation lapsed | **reverse** — compensate its entries and refund the buyer |
   | `HELD` | receipt persisted, seller not yet paid | **wait** and re-ask. Byron will complete step 4; reversing now would strand a payment about to happen |
   | `SETTLED` | seller paid, `bridge_brisbane` debited | **finalise** — mark confirmed; the two bridges agree |
+  | `UNKNOWN` | Byron cannot say — an unrecognised key, or one belonging to a different peer | **wait** and re-ask, and escalate to a human if it never resolves |
 
-  Byron must answer `NOT_FOUND` only when it can be *sure*, never as a default for an unrecognised key —
-  a fabricated or truncated key answered `NOT_FOUND` would have Brisbane reverse a settled trade.
+  Byron must answer `NOT_FOUND` only when it can be *sure*. **`UNKNOWN` is a fourth state rather than a
+  default of `NOT_FOUND`, and the distinction is load-bearing:** `NOT_FOUND` instructs the asker to
+  *reverse*, so answering it for anything unrecognised would let a fabricated or truncated key talk a node
+  into undoing a trade that actually settled. Making the safe answer structural beats requiring the
+  implementer to remember it. Anything malformed on the wire is likewise read as `UNKNOWN`, never as
+  permission to reverse.
+
+  For the same reason `GET_RECEIPT_STATUS` is **scoped to the asking peer**: a peer asking about a key
+  that belongs to someone else gets `UNKNOWN`, not the real state. Otherwise the answer doubles as a probe
+  of another community's trading activity.
 - **Byron's cap reservation expires** if no receipt arrives within a defined timeout, releasing the
   headroom it was holding. A reservation moves no beans on either side.
 - **A receipt arriving after Byron's reservation expired must be re-validated, not honoured on trust.** A
@@ -417,6 +426,42 @@ plainly and without alarm ("Byron can't reach your community's node right now, s
 be completed yet"). Extending a local allowance that reconciles later is exactly the unbacked-mint
 temptation this model exists to remove, and fail-closed matches the offline-safe stance already taken in
 the DNS registrar attestation work.
+
+### 2.6 What "signed receipt" means, and two guards it does not cover
+
+Three details settled while building the exchange. Each is a place where the obvious implementation is
+wrong in a way that only shows up as beans in the wrong place.
+
+**The receipt is signed with the node's persistent libp2p identity, and the signature binds the issuing
+peer id.** Signing at all is worth justifying, since the stream is already an authenticated Noise channel
+from a trusted peer: the receipt has to *outlive the connection*. The seller's node persists it and may act
+on it after a reboot with nothing live to re-authenticate against, so at that moment the signature is the
+only evidence the buyer's node really committed. Transport authentication proves who is talking now; the
+signature proves who committed then, and stays checkable in an audit.
+
+Binding the issuer is the part with teeth. **The bridge account that gets debited is chosen by who issued
+the receipt**, so a receipt not pinned to its issuer would let peer B settle against peer A's credit line —
+spending a limit set for someone else. Verification therefore checks the receipt's `issuerPeerId` against
+the peer of the connection it arrived on (or, in recovery, the peer recorded on the row), and an Ed25519
+peer id embeds its own public key, so this needs no key distribution beyond the trust list that already
+exists. Amount, buyer, seller and post are all inside the signature too, and are re-checked against the
+reservation: a validly-signed receipt naming a larger amount than was reserved must be refused, because the
+cap check authorised the reserved figure and nothing else.
+
+**The buyer named in a `PURCHASE` must not be one of the seller node's own members.** Same shape as the
+existing `relay_message` impersonation guard — the connection is trusted, but that authorises the
+*connection*, not the asserted identity. The consequence here is worse than a bogus trade: accepting it
+reaches `registerVisitor`, which stamps a `home_node_url` onto a member row that has none, quietly
+converting a local member into a visitor — and #102's guard then refuses that member's own local spending.
+Any peer knowing a public key could freeze its owner's account. So a peer claiming one of our members is
+refused outright.
+
+**Crediting the Commons is not a transfer to `COMMONS_POOL`.** The Commons pot is the `COMMONS_BALANCE`
+global; the `COMMONS_POOL` *account* is only its persisted shadow, rewritten from the global after every
+transfer. A transfer into that account is therefore written and then overwritten, and the value disappears
+at the next restart — the node stops summing to zero, silently. The cross-node fee goes through a dedicated
+`moveToCommons` / `payFromCommons` pair instead. (The pre-existing `adminPruneUser` path has this bug and is
+tracked separately; it is not settlement's to fix.)
 
 ---
 

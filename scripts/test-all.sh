@@ -86,6 +86,29 @@ run_check "build"         pnpm turbo run build
 run_check "lint"          pnpm turbo run lint
 run_check "test"          pnpm turbo run test
 
+# Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
+# so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
+# invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the
+# kind that must not depend on someone remembering.
+#
+# Each needs its OWN data dir: they share the module-level sqlite singleton, so a reused dir would let one
+# suite's rows leak into the next. ENABLE_PEER_CONNECTORS=true because connector reads short-circuit
+# without it, which would make the checks pass vacuously rather than fail.
+#
+# This is what HAS_SERVER_CHANGES was computed for; until now nothing consumed it.
+if [ $HAS_SERVER_CHANGES -eq 1 ]; then
+  run_check "federation" bash -c '
+    set -e
+    cd apps/server
+    for t in test-federation-bridge test-settlement-state test-settlement-exchange test-federation-settlement; do
+      echo "━━━ $t ━━━"
+      ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx "src/$t.ts"
+    done
+  '
+else
+  skip_check "federation"
+fi
+
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
   if grep -rE "sk_test_|sk_live_|pk_live_" apps/ packages/ --exclude-dir=node_modules --exclude-dir=dist 2>/dev/null; then

@@ -115,15 +115,16 @@ async function main() {
     const bridge = bridgeAccountId(PEER_ID);
     assert(bridgeDisplayName(bridge) === '🌐 Another community', 'an unmet peer gets an honest generic label, not a peer id');
 
+    // A bare host:port connector names no peer, so it cannot claim this bridge even with a callsign set.
     addConnector('byron.beanpool.org', 'peer', 'Byron Community', 'https://byron.beanpool.org');
-    // A configured-but-never-connected peer still has no peerId — that only arrives via libp2p's
-    // peer:connect handler, which populates the statuses map. So it correctly stays generic.
     assert(bridgeDisplayName(bridge) === '🌐 Another community',
-        'configured but never connected is still generic — a callsign alone does not identify the peer');
+        'a host:port connector stays generic — a callsign alone does not identify the peer');
 
-    // NOT COVERED HERE: the resolved-callsign path needs a live connection to populate peerId, and
-    // getConnectors() returns a merged copy so a test cannot inject it. Deliberately not adding a
-    // production seam for a test — the step-3b multi-node harness exercises it against a real handshake.
+    // A full multiaddr DOES name the peer, so the callsign resolves without ever connecting. (Step 3b
+    // made getConnectors() derive peerId from the address, matching what isPeerTrusted already accepted.)
+    addConnector(`/dns4/byron.beanpool.org/tcp/4001/p2p/${PEER_ID}`, 'peer', 'Byron Bay', 'https://byron2.beanpool.org');
+    assert(bridgeDisplayName(bridge) === '🌐 Byron Bay', 'a peer named by multiaddr resolves to its callsign');
+
     assert(resolveCounterpartyLabel(bridge) !== null, 'the resolver claims bridge accounts');
     assert(!bridgeDisplayName(bridge)!.includes(PEER_ID), 'the raw peer id never reaches a member');
 

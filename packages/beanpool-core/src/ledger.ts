@@ -251,6 +251,34 @@ export class LedgerManager {
     }
 
     /**
+     * Move value from an account INTO the global Commons pot. The mirror of `deductFromCommons()`.
+     *
+     * WHY THIS EXISTS instead of `transfer(x, 'COMMONS_POOL', n)`: the Commons pot IS the
+     * `COMMONS_BALANCE` global, and the `COMMONS_POOL` *account* is only its persisted shadow —
+     * `persistCommonsBalance()` rewrites that row from the global after every transfer. So value
+     * transferred into the account is written and then immediately overwritten, and disappears from the
+     * node's books on the next flush. Anything crediting the Commons must go through the global.
+     *
+     * @param floorOverride the sender's credit floor. Pass `-Infinity` for synthetic senders (escrow_*,
+     *                      bridge_*) which are not bounded by a member floor.
+     */
+    moveToCommons(fromId: string, amount: number, floorOverride?: number): boolean {
+        if (amount < 0) return false;
+        if (amount === 0) return true;
+
+        const currentEpoch = this.getCurrentEpoch();
+        const fromAccount = this.getAccount(fromId);      // applies any pending decay first
+        const floor = floorOverride ?? this.DEFAULT_CREDIT_LIMIT;
+
+        if (fromAccount.balance - amount < floor) return false;
+
+        fromAccount.balance -= amount;
+        COMMONS_BALANCE += amount;
+        fromAccount.lastDemurrageEpoch = currentEpoch;
+        return true;
+    }
+
+    /**
      * Deducts funds directly from the global Commons Balance (Demurrage pool).
      */
     deductFromCommons(amount: number): boolean {

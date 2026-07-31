@@ -32,8 +32,14 @@ export interface SettlementRow {
     peerId: string;
     buyerPubkey: string;
     buyerHomeNode: string | null;
+    /** Inbound: the local member we pay when the receipt lands. Outbound: the peer's seller, informational. */
+    sellerPubkey: string | null;
     postId: string | null;
     amount: number;
+    /** Outbound only: the fee charged to the buyer on top of `amount` (§2.1). Refunded on reversal. */
+    fee: number;
+    /** Inbound only: ISO timestamp at which the cap reservation lapses. */
+    reservedUntil: string | null;
     state: SettlementState;
     receipt: string | null;
     failureReason: string | null;
@@ -47,8 +53,11 @@ const rowToSettlement = (r: any): SettlementRow => ({
     peerId: r.peer_id,
     buyerPubkey: r.buyer_pubkey,
     buyerHomeNode: r.buyer_home_node ?? null,
+    sellerPubkey: r.seller_pubkey ?? null,
     postId: r.post_id ?? null,
     amount: r.amount,
+    fee: r.fee ?? 0,
+    reservedUntil: r.reserved_until ?? null,
     state: r.state,
     receipt: r.receipt ?? null,
     failureReason: r.failure_reason ?? null,
@@ -88,19 +97,24 @@ export function openSettlement(input: {
     peerId: string;
     buyerPubkey: string;
     buyerHomeNode?: string | null;
+    sellerPubkey?: string | null;
     postId?: string | null;
     amount: number;
+    fee?: number;
+    reservedUntil?: string | null;
     state: Extract<SettlementState, 'escrowed' | 'reserved'>;
 }): SettlementRow {
     const existing = getSettlement(input.key);
     if (existing) return existing;
 
     db.prepare(`
-        INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, buyer_home_node, post_id, amount, state)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, buyer_home_node, seller_pubkey,
+                                 post_id, amount, fee, reserved_until, state)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         input.key, input.direction, input.peerId, input.buyerPubkey,
-        input.buyerHomeNode ?? null, input.postId ?? null, input.amount, input.state,
+        input.buyerHomeNode ?? null, input.sellerPubkey ?? null, input.postId ?? null,
+        input.amount, input.fee ?? 0, input.reservedUntil ?? null, input.state,
     );
     return getSettlement(input.key)!;
 }
@@ -143,6 +157,46 @@ export function unfinalisedSettlements(direction?: SettlementDirection): Settlem
     const params: any[] = [...TERMINAL];
     if (direction) params.push(direction);
     return (db.prepare(sql).all(...params) as any[]).map(rowToSettlement);
+}
+
+/**
+ * Inbound reservations whose hold has lapsed with no receipt.
+ *
+ * A reservation moves no beans on either side, so letting one go is free — it just returns the headroom
+ * it was holding. Rows are compared as ISO-8601 strings, which sort lexicographically in the same order
+ * they sort chronologically, so a plain string comparison is a correct time comparison here.
+ */
+export function expiredReservations(nowIso = new Date().toISOString()): SettlementRow[] {
+    return (db.prepare(`
+        SELECT * FROM settlements
+        WHERE direction = 'inbound' AND state = 'reserved'
+          AND reserved_until IS NOT NULL AND reserved_until < ?
+        ORDER BY created_at
+    `).all(nowIso) as any[]).map(rowToSettlement);
+}
+
+/**
+ * A member's committed foreign exposure — Rule 4's aggregate figure, across ALL peers (§3.1).
+ *
+ * READ ONLY, deliberately. Rule 4 caps a member's foreign spending in aggregate, and that cap is already
+ * enforced, by the ordinary escrow floor check: a cross-node purchase moves the beans into local escrow
+ * through `transfer(..., 'escrow')`, which bounds the debit by `usableFloor`. Spending abroad therefore
+ * draws down the same single pot as spending at home, automatically, with no second gate to keep in step.
+ *
+ * So what is missing is not enforcement but *visibility* — the spec's "what still has to be tracked is
+ * committed foreign exposure". This is that number. Adding a separate cap here would be a second
+ * authority on the same limit, and the two would eventually disagree.
+ *
+ * Counts price + fee (what actually left the member) for rows that are still live or complete. Reversed
+ * and abandoned rows are excluded because their entries have been compensated — the member got it back.
+ */
+export function memberForeignExposure(publicKey: string): number {
+    const row = db.prepare(`
+        SELECT COALESCE(SUM(amount + fee), 0) AS total FROM settlements
+        WHERE direction = 'outbound' AND buyer_pubkey = ?
+          AND state IN ('escrowed', 'committed', 'settled')
+    `).get(publicKey) as any;
+    return Math.round((row?.total ?? 0) * 10000) / 10000;
 }
 
 /**

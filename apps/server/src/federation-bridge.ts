@@ -124,6 +124,28 @@ export function settlementCapacity(peerId: string, address: string, amount = 0):
 }
 
 /**
+ * `settlementCapacity` addressed by peer id alone, which is what the settlement path actually has.
+ *
+ * The cap lives on the connector record, keyed by address (§3.2) — but a libp2p stream knows only the
+ * remote peer id. Resolving here keeps every caller from re-deriving it, and puts the fail-closed cases in
+ * one place:
+ *   • the peer is not a configured connector at all → refuse
+ *   • it is configured, but not at trust level `peer` (a `mirror` is a backup replica, not a trading
+ *     partner) → refuse. Trust level and credit cap are separate decisions and both must be affirmative.
+ */
+export function settlementCapacityForPeer(peerId: string, amount = 0): SettlementCapacity {
+    const connector = getConnectors().find(c => c.peerId === peerId);
+    if (!connector || connector.trustLevel !== 'peer') {
+        return {
+            ok: false,
+            reason: 'no_cap_configured',
+            message: `This community isn't a trading partner of ours, so purchases can't be settled with them.`,
+        };
+    }
+    return settlementCapacity(peerId, connector.address, amount);
+}
+
+/**
  * Every peer's energy balance, for the operator health view and the zero-centred display (§2.2).
  *
  * `cap` is null when unset, which is also what makes `settleable` false — the fail-closed default.
@@ -146,9 +168,10 @@ export function listEnergyBalances(): Array<{
             // moves host or DNS. You cannot rename a ledger account without migrating balances, so the
             // key has to be the stable one.
             //
-            // The consequence is that a connector we have never connected to has no peerId yet, and
-            // therefore no balance to report. Do NOT fall back to the address — that would read a
-            // DIFFERENT account and report someone else's position as this peer's.
+            // A connector resolves its peer id from a live connection or from its own multiaddr, so one
+            // added as a bare `host:port` has none until it connects, and therefore no balance to report.
+            // Do NOT fall back to the address in that case — that would read a DIFFERENT account and
+            // report someone else's position as this peer's.
             const peerId = c.peerId ?? null;
             const balance = peerId ? getEnergyBalance(peerId) : 0;
             const cap = c.creditCap ?? null;

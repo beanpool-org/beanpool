@@ -161,6 +161,14 @@ export function initSchema() {
     // #108: a listing may carry a real cash outlay (fuel/consumables). Flag only, no amount —
     // the app never touches the money, so it must not imply a figure it holds or settles.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
+    // #104 step 3b: the settlement exchange needs three more facts per row. Guarded ALTERs as well as the
+    // schema.sql definition, because a node may already have created `settlements` from step 3a.
+    //   seller_pubkey  — inbound: who we pay when the receipt lands
+    //   fee            — outbound: charged to the buyer on top of the price (§2.1), refunded on reversal
+    //   reserved_until — inbound: when the cap reservation lapses
+    try { db.prepare(`ALTER TABLE settlements ADD COLUMN seller_pubkey TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE settlements ADD COLUMN fee REAL NOT NULL DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE settlements ADD COLUMN reserved_until DATETIME`).run(); } catch { }
     // Moderation: Add status tracking to abuse reports
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     // Marketplace hygiene: track when a lingering escrow deal was last nudged

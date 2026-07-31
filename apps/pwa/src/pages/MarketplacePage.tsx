@@ -65,6 +65,9 @@ function explainTradeError(err: unknown): string {
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile }: Props) {
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>('all');
+    // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,
+    // so it persists across sessions.
+    const [beansOnly, setBeansOnly] = useState(() => localStorage.getItem('bp_beans_only') === 'true');
     const [foundingOnly, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [loading, setLoading] = useState(true);
@@ -241,6 +244,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             const filter: any = {};
             if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
             if (categoryFilter !== 'all') filter.category = categoryFilter;
+            if (beansOnly) filter.beansOnly = true;
 
             // Always fetch home node + global requests. Also fetch the viewer's OWN posts — the server
             // returns the author's paused posts only to the authenticated author, so this is how "My
@@ -280,7 +284,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         } finally {
             setLoading(false);
         }
-    }, [typeFilter, categoryFilter, enabledPeers, identity]);
+    }, [typeFilter, categoryFilter, beansOnly, enabledPeers, identity]);
 
     // Fetch peer nodes on mount
     useEffect(() => {
@@ -1513,6 +1517,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         );
                     })}
                 </div>
+
+                {/* #108: beans-only browse. Orthogonal to offer/need, so it sits outside the segmented
+                    control rather than competing for a slot in it. */}
+                <button
+                    onClick={() => {
+                        const next = !beansOnly;
+                        setBeansOnly(next);
+                        localStorage.setItem('bp_beans_only', String(next));
+                    }}
+                    aria-pressed={beansOnly}
+                    className={`self-start mb-1 px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
+                        beansOnly
+                            ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
+                            : 'bg-transparent text-nature-500 dark:text-nature-400 border-nature-200 dark:border-nature-800 hover:text-nature-800 dark:hover:text-nature-200'
+                    }`}
+                    title="Hide listings that also need cash for fuel or materials"
+                >
+                    🫘 Beans only{beansOnly ? ' ✓' : ''}
+                </button>
 
                 {/* Founding-trade filter: surface newcomers whose first trade unlocks their account */}
                 <button

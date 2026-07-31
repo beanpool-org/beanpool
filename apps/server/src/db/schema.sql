@@ -106,6 +106,11 @@ CREATE TABLE IF NOT EXISTS posts (
     origin_node TEXT,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     search_keywords TEXT DEFAULT '',
+    -- #108: this listing has a real cash outlay attached (fuel, consumables used up doing the
+    -- job). Deliberately a flag with NO amount: the app can escrow beans, it cannot escrow cash,
+    -- and a structured figure would imply it holds or settles money it never touches. Terms live
+    -- in the chat. Local-only by nature — cash can't cross a node boundary.
+    cash_also_needed INTEGER DEFAULT 0,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 
@@ -509,3 +514,28 @@ CREATE TABLE IF NOT EXISTS system_metrics (
     metric_value REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_system_metrics_key_time ON system_metrics(metric_key, timestamp DESC);
+
+-- 20. Treasury stewardship (#106)
+-- Binds a member to ONE community enterprise (a members row with is_treasury=1).
+-- Before this table, members.can_operate was a node-wide boolean: granting someone
+-- stewardship of the egg flock also handed them every other treasury on the node.
+--
+-- Authority = members.can_operate = 1 AND a row here. can_operate is retained as a
+-- master switch per member (so an admin can suspend a steward without dropping their
+-- assignments), and adminAssignTreasuryOperator sets it automatically so a row can
+-- never be silently inert.
+--
+-- granted_by holds the granting admin's public key today. It is deliberately a plain
+-- TEXT with no FK so an `appoint` Decision id can be recorded here later
+-- (docs/community-governance.md) without a migration.
+CREATE TABLE IF NOT EXISTS treasury_operators (
+    treasury_pubkey TEXT NOT NULL REFERENCES members(public_key),
+    member_pubkey   TEXT NOT NULL REFERENCES members(public_key),
+    role            TEXT NOT NULL DEFAULT 'steward',
+    granted_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    granted_by      TEXT,
+    PRIMARY KEY (treasury_pubkey, member_pubkey)
+);
+-- Covers "which enterprises does this member steward?" — the stewardOf() lookup that
+-- drives the Commons tab's per-enterprise controls.
+CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(member_pubkey);

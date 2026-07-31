@@ -139,6 +139,16 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     ↻ RECURRING
                                 </span>
                             )}
+                            {/* #108: on the card, not just the detail view — the point of the flag is
+                                that nobody discovers a cash requirement in paragraph three. */}
+                            {post.cashAlsoNeeded && (
+                                <span
+                                    className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300"
+                                    title="Cash also needed for fuel or materials — agreed in chat"
+                                >
+                                    💸 CASH TOO
+                                </span>
+                            )}
                             {post.authorFoundingNeeded && (
                                 <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300/50">
                                     🌱 FOUNDING TRADE

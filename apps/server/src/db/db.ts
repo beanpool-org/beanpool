@@ -158,6 +158,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // FTS5 Search: Add search_keywords column to posts
     try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
+    // #108: a listing may carry a real cash outlay (fuel/consumables). Flag only, no amount —
+    // the app never touches the money, so it must not imply a figure it holds or settles.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     // Moderation: Add status tracking to abuse reports
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     // Marketplace hygiene: track when a lingering escrow deal was last nudged
@@ -233,6 +236,48 @@ export function initSchema() {
     try { db.prepare(`UPDATE friends SET updated_at = COALESCE(added_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
     try { db.prepare(`UPDATE abuse_reports SET updated_at = COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
     try { db.prepare(`UPDATE conversation_participants SET updated_at = COALESCE(last_read_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
+
+    seedTreasuryOperatorsFromLegacyFlag();
+}
+
+/**
+ * #106 treasury stewardship — seed the join table from the legacy node-wide flag.
+ *
+ * Before `treasury_operators` existed, `members.can_operate = 1` granted authority over EVERY
+ * treasury on the node. Existing stewards must not silently lose access on upgrade, and we cannot
+ * know which enterprise each of them was actually meant to run — so we **over-grant** (a row per
+ * existing treasury) and let the admin prune. That is deliberately the safe direction: briefly-broad
+ * access beats locking a community out of its own enterprises on a deploy.
+ *
+ * Guarded on the table being EMPTY rather than on individual rows: once an admin has pruned,
+ * re-running must not resurrect what they removed.
+ *
+ * @returns how many rows were written (0 when it was a no-op)
+ */
+export function seedTreasuryOperatorsFromLegacyFlag(): number {
+    try {
+        const already = db.prepare(`SELECT COUNT(*) AS c FROM treasury_operators`).get() as any;
+        if (already?.c) return 0;
+
+        const legacy = db.prepare(`SELECT public_key FROM members WHERE can_operate = 1`).all() as any[];
+        const treasuries = db.prepare(`SELECT public_key FROM members WHERE is_treasury = 1`).all() as any[];
+        if (!legacy.length || !treasuries.length) return 0;
+
+        const ins = db.prepare(
+            `INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
+             VALUES (?, ?, 'steward', 'migration:can_operate')`
+        );
+        db.transaction(() => {
+            for (const t of treasuries) for (const m of legacy) ins.run(t.public_key, m.public_key);
+        })();
+
+        const written = legacy.length * treasuries.length;
+        console.log(`🏛️  Treasury stewardship migrated: ${legacy.length} steward(s) × ${treasuries.length} enterprise(s) = ${written} binding(s). Prune per-enterprise in Settings.`);
+        return written;
+    } catch (e) {
+        console.error('[DB] ⚠️  Could not seed treasury_operators from can_operate. Existing stewards may need re-assigning per enterprise.', e);
+        return 0;
+    }
 }
 
 // Function to migrate from legacy JSON state

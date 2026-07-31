@@ -428,8 +428,16 @@ export interface BalanceInfo {
     activated?: boolean;
     /** True if this member holds the appointed-voucher capability (can hand out the vouch floor). */
     canVouch?: boolean;
-    /** True if this member holds the treasury operator capability (drives the Commons operator UI). */
+    /**
+     * True if this member stewards *something* — the coarse "show the steward layer at all" flag.
+     * Never gate a specific enterprise's controls on it (#106); use `stewardOf` for that.
+     */
     canOperate?: boolean;
+    /**
+     * Public keys of the enterprises this member may actually drive (#106). Operate controls belong
+     * only on these — a control you can't use shouldn't be drawn.
+     */
+    stewardOf?: string[];
     /** True if this account IS a community treasury (the Commons' trading face), not a person. */
     isTreasury?: boolean;
     /** True if the member has ≥1 live Offer posted (offer covenant, Gate 2). */
@@ -483,6 +491,9 @@ export interface MarketplacePost {
     active: boolean;
     status: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
     repeatable: boolean;
+    /** #108: a real cash outlay is involved (fuel / consumables used up doing the job). No amount by
+     *  design — the app never touches the money, so terms are agreed in the chat. */
+    cashAlsoNeeded?: boolean;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -512,12 +523,13 @@ export interface MarketplaceTransaction {
     ratedBySeller?: boolean;
 }
 
-export async function getMarketplacePosts(filter?: { id?: string; type?: string; category?: string; author?: string }): Promise<MarketplacePost[]> {
+export async function getMarketplacePosts(filter?: { id?: string; type?: string; category?: string; author?: string; beansOnly?: boolean }): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
     if (filter?.type) params.set('type', filter.type);
     if (filter?.category) params.set('category', filter.category);
     if (filter?.author) params.set('author', filter.author);
+    if (filter?.beansOnly) params.set('beansOnly', 'true');
     return request('GET', `/api/marketplace/posts?${params}`);
 }
 
@@ -533,6 +545,7 @@ export async function createMarketplacePost(post: {
     lng?: number;
     photos?: string[];
     repeatable?: boolean;
+    cashAlsoNeeded?: boolean;
 }): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', '/api/marketplace/posts', post);
 }

@@ -9,7 +9,6 @@ import {
     getProjects, getAllProjects, getVotingRounds, getActiveRound,
     getCommonsBalance, getGovernanceCredits,
     adminRejectProject,
-    getMember,
 } from '../state-engine.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -17,10 +16,7 @@ import {
     pledgeToProject, deleteCrowdfundProject, db,
 } from '../db/db.js';
 import { getThresholds } from '../config/local-config.js';
-import { getConnectorByPublicUrl } from '../connector-manager.js';
-import { federatedVerifyMember } from '../federation-protocol.js';
-import { getP2PNode } from '../p2p.js';
-import { PROTOCOL_CONSTANTS } from '@beanpool/core';
+import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
@@ -211,32 +207,10 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
         return;
     }
 
-    // --- FEDERATION VERIFY ---
-    try {
-        const fromMember = getMember(fromPubkey);
-        if (fromMember && fromMember.homeNodeUrl) {
-            const p2pNode = getP2PNode();
-            if (p2pNode) {
-                const targetConnector = getConnectorByPublicUrl(fromMember.homeNodeUrl);
-                if (targetConnector && targetConnector.peerId) {
-                    const verifyResult = await federatedVerifyMember(p2pNode, targetConnector.peerId, fromPubkey);
-                    const homeBalance = verifyResult?.homeBalance ?? 0;
-                    const floor = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR; // use base floor for conservative federation check
-                    if (!verifyResult || !verifyResult.isMember || (homeBalance - parsedAmount < floor)) {
-                        ctx.status = 400;
-                        ctx.body = { error: 'Federation check failed: Insufficient funds on home node or member not recognized.' };
-                        return;
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error('[Federation] Error verifying remote member:', e);
-        ctx.status = 502;
-        ctx.body = { error: 'Federation check failed: Could not reach home node.' };
-        return;
-    }
-    // -------------------------
+    // Same defect as the ledger transfer route (#102): the guard here verified the
+    // pledger's home balance and then pledged locally, so a visitor's pledge was minted
+    // on this node. Refuse until charge-home settlement exists (#104).
+    if (blockCrossNodeSettlement(ctx, fromPubkey)) return;
 
     try {
         const txId = crypto.randomUUID();

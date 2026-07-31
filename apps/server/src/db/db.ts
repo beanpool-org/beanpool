@@ -237,14 +237,19 @@ export function initSchema() {
     try { db.prepare(`UPDATE abuse_reports SET updated_at = COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
     try { db.prepare(`UPDATE conversation_participants SET updated_at = COALESCE(last_read_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE updated_at IS NULL`).run(); } catch { }
 
+    // The role was briefly labelled 'steward', which collided with the Steward TRUST TIER
+    // (protocol-rules §7) — two different meanings for one word. Renamed to 'keeper'. Cheap and
+    // idempotent; the column isn't read yet, so this is tidiness rather than a behaviour change.
+    try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
+
     seedTreasuryOperatorsFromLegacyFlag();
 }
 
 /**
- * #106 treasury stewardship — seed the join table from the legacy node-wide flag.
+ * #106 treasury keepership — seed the join table from the legacy node-wide flag.
  *
  * Before `treasury_operators` existed, `members.can_operate = 1` granted authority over EVERY
- * treasury on the node. Existing stewards must not silently lose access on upgrade, and we cannot
+ * treasury on the node. Existing keepers must not silently lose access on upgrade, and we cannot
  * know which enterprise each of them was actually meant to run — so we **over-grant** (a row per
  * existing treasury) and let the admin prune. That is deliberately the safe direction: briefly-broad
  * access beats locking a community out of its own enterprises on a deploy.
@@ -265,17 +270,17 @@ export function seedTreasuryOperatorsFromLegacyFlag(): number {
 
         const ins = db.prepare(
             `INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
-             VALUES (?, ?, 'steward', 'migration:can_operate')`
+             VALUES (?, ?, 'keeper', 'migration:can_operate')`
         );
         db.transaction(() => {
             for (const t of treasuries) for (const m of legacy) ins.run(t.public_key, m.public_key);
         })();
 
         const written = legacy.length * treasuries.length;
-        console.log(`🏛️  Treasury stewardship migrated: ${legacy.length} steward(s) × ${treasuries.length} enterprise(s) = ${written} binding(s). Prune per-enterprise in Settings.`);
+        console.log(`🏛️  Treasury keepership migrated: ${legacy.length} keeper(s) × ${treasuries.length} enterprise(s) = ${written} binding(s). Prune per-enterprise in Settings.`);
         return written;
     } catch (e) {
-        console.error('[DB] ⚠️  Could not seed treasury_operators from can_operate. Existing stewards may need re-assigning per enterprise.', e);
+        console.error('[DB] ⚠️  Could not seed treasury_operators from can_operate. Existing keepers may need re-assigning per enterprise.', e);
         return 0;
     }
 }

@@ -178,14 +178,22 @@ export function initSchema() {
     } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at)`).run(); } catch { }
 
-    // Per-node callsign uniqueness: case-insensitive, excluding 'migrated' members
-    // (they moved away — their name is reclaimable). Guarded on purpose: if a node
+    // Per-node callsign uniqueness: case-insensitive, excluding 'migrated' and 'pruned'
+    // members (they left — their name is reclaimable). Guarded on purpose: if a node
     // still has duplicate callsigns the index BUILD fails, and we must NOT crash
     // startup over it. We log loudly instead — the app-level check in updateProfile
     // still enforces new renames; the admin de-dupes and the index builds next boot.
     // Fresh nodes start empty, so it builds cleanly and enforces at the DB level too.
+    //
+    // The DROP is a migration: nodes built before 'pruned' was reclaimable carry the
+    // narrower `status != 'migrated'` predicate, and CREATE ... IF NOT EXISTS would
+    // silently keep it — leaving the DB rejecting renames that isCallsignAvailable()
+    // has already allowed (a raw SQLITE_CONSTRAINT surfacing as a 500). Dropping is
+    // safe: the new predicate indexes a strict SUBSET of the old one's rows, so any
+    // node whose old index built cleanly will build this one cleanly too.
     try {
-        db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_members_callsign_unique ON members(lower(callsign)) WHERE status != 'migrated'`).run();
+        db.prepare(`DROP INDEX IF EXISTS idx_members_callsign_unique`).run();
+        db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_members_callsign_unique ON members(lower(callsign)) WHERE status NOT IN ('migrated', 'pruned')`).run();
     } catch (e) {
         console.error(`[DB] ⚠️  Could not build unique callsign index — this node has duplicate callsigns. De-duplicate the members table and restart to enforce uniqueness at the DB level. App-level rename checks remain active.`, e);
     }

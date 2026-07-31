@@ -629,44 +629,57 @@ export default function SettingsScreen() {
         }
         setLoading(true);
         try {
-            // Push profile (including callsign & avatar) to the server FIRST so the node validates uniqueness before local commit
-            let published = false;
-            try {
-                const url = await AsyncStorage.getItem('beanpool_anchor_url');
-                if (url && identity) {
-                    const payloadObj: any = {
-                        publicKey: identity.publicKey,
-                        bio: bio.trim(),
-                        contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
-                        callsign: newCallsign,
-                    };
-                    if (avatar) payloadObj.avatar = avatar;
-                    const bodyString = JSON.stringify(payloadObj);
-                    const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
+            // Push the profile (callsign, avatar, bio, contact) to the node FIRST so it can
+            // validate uniqueness before we commit anything locally. Only a TRANSPORT failure
+            // falls through to the offline queue — an explicit rejection from the node aborts
+            // the save, so local state can never drift from what the server accepted.
+            let offline = false;
+            const url = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (!url) {
+                offline = true;
+            } else {
+                const payloadObj: any = {
+                    publicKey: identity.publicKey,
+                    bio: bio.trim(),
+                    contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
+                    callsign: newCallsign,
+                };
+                if (avatar) payloadObj.avatar = avatar;
+                const bodyString = JSON.stringify(payloadObj);
+                const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
 
-                    const res = await fetch(`${url}/api/profile/update`, {
+                let res: Response | null = null;
+                try {
+                    res = await fetch(`${url}/api/profile/update`, {
                         method: 'POST',
                         headers,
                         body: bodyString,
                     });
-                    
-                    if (res.status === 409) {
-                        Alert.alert('Name Taken', 'That name is already taken in this community. Please pick another.');
-                        return;
-                    }
-                    if (!res.ok) {
-                        throw new Error('Server rejected the profile update.');
-                    }
-                    published = true;
-                    await AsyncStorage.removeItem('pending_profile_sync');
+                } catch (e: any) {
+                    console.warn('[Profile] Node unreachable, queueing for background sync:', e);
+                    offline = true;
                 }
-            } catch (e: any) {
-                console.warn('[Profile] Server sync failed (offline?):', e);
-                await AsyncStorage.setItem('pending_profile_sync', 'true');
-                Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
+
+                if (res && !res.ok) {
+                    // The node answered and said no — surface its reason and abort rather
+                    // than committing a value the server has already rejected.
+                    const serverMsg = await res.json().then((b: any) => b?.message).catch(() => null);
+                    Alert.alert(
+                        res.status === 409 ? 'Name Taken' : 'Could Not Save',
+                        serverMsg || 'The community node rejected this profile update. Please try again.'
+                    );
+                    return;
+                }
             }
 
-            // Commit locally after server accepts (or when offline)
+            if (offline) {
+                await AsyncStorage.setItem('pending_profile_sync', 'true');
+                Alert.alert('Offline Mode', 'Profile saved locally. It will be published automatically in the background when you reconnect to the network.');
+            } else {
+                await AsyncStorage.removeItem('pending_profile_sync');
+            }
+
+            // Commit locally now that the node has accepted (or we know we are offline)
             const localUpdate: any = {
                 callsign: newCallsign,
                 bio: bio.trim(),

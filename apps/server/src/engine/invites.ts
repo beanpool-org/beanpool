@@ -84,7 +84,8 @@ export function redeemInvite(
         return { success: true, member: existingMember, alreadyMember: true };
     }
 
-
+    // NB: `invite.intended_for` is recorded for the INVITER's records only — it is
+    // deliberately not enforced here, so an invitee picks whatever callsign they want.
     if (invite.used_by) return { success: false, error: 'This invite has already been used' };
 
     // Register member FIRST — invite_codes.used_by has FK to members(public_key)
@@ -127,7 +128,8 @@ export function redeemOfflineTicket(
             return { success: true, member: existingMember, alreadyMember: true };
         }
 
-
+        // As with redeemInvite: `intendedFor` rides along on the ticket for the inviter's
+        // records and is stored below, but never constrains the joiner's chosen callsign.
         const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
         if (existingInvite) {
             if (existingInvite.used_by) return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };

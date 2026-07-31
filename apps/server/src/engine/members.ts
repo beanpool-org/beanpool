@@ -41,17 +41,22 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
 
 /**
  * Is `callsign` free on THIS node? Uniqueness is per-node and case-insensitive.
- * `'migrated'` members are excluded (they moved away — their name is reclaimable),
- * as is the caller's own row via `excludePublicKey` (so re-saving your own name is
- * never a "collision"). Mirrors the partial UNIQUE index `lower(callsign) WHERE
- * status != 'migrated'` so the app-level check and the DB constraint agree.
+ * `'migrated'` and `'pruned'` members are excluded (they left — their name is
+ * reclaimable), as is the caller's own row via `excludePublicKey` (so re-saving your
+ * own name is never a "collision"). Mirrors the partial UNIQUE index `lower(callsign)
+ * WHERE status NOT IN ('migrated', 'pruned')` so the app-level check and the DB
+ * constraint agree — keep the two predicates in lockstep.
+ *
+ * NB: this MUST use `.get()`. better-sqlite3's `.run()` returns a truthy RunResult even
+ * for a SELECT that matched nothing, which would make this return `false` unconditionally
+ * ("every name is taken") — and tsc cannot catch it, since `!someObject` is valid TS.
  */
 export function isCallsignAvailable(callsign: string, excludePublicKey?: string): boolean {
     const norm = callsign.trim().toLowerCase();
     if (norm.length < 2) return false;
     const row = db.prepare(
         `SELECT 1 FROM members WHERE lower(callsign) = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`
-    ).run(norm, excludePublicKey ?? '');
+    ).get(norm, excludePublicKey ?? '');
     return !row;
 }
 

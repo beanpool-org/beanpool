@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { updateMemberProfile, getMemberProfile, registerMember, type MemberProfile } from '../lib/api';
+import { updateMemberProfile, getMemberProfile, type MemberProfile } from '../lib/api';
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 

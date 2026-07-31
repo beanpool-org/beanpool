@@ -420,7 +420,7 @@ reserve/commit exchange, rebalancing, and the rejected alternatives — is speci
 > verified while the transfer happened purely locally — the same beans could be spent once on every node
 > a member visited (#102). It was also skippable whenever the peer connection was incomplete. The path is
 > refused outright pending #104 — see federation-economics.md §1 for why beans cannot travel, and
-> §2.4 / §3.2 for the refusal paths (home node offline, and no per-peer credit cap configured).
+> §2.5 / §3.2 for the refusal paths (home node offline, and no per-peer credit cap configured).
 
 ---
 

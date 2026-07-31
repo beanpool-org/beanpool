@@ -63,6 +63,9 @@ deploy-targets.conf
 
 # Private Agent and Workspace Configurations (ignored in public repository)
 .agents/
+!.agents/workflows/
+!.agents/skills/
 .claude/
 HANDOVER.md
 SECURITY-AUDIT.md
+

@@ -3164,11 +3164,13 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
                 db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
                     .run(txId, 'COMMONS_POOL', winner.proposerPubkey, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
             })();
-            // The getAccount() above may have queued a decay event. Without this it is stranded: the debit
-            // is durable in the row this path just wrote, but no `demurrage_` transaction row is ever
-            // recorded for it, so `transactions` drifts from balances and the collection is unauditable.
-            // Conservation itself is safe either way since #137 (loadState unwinds an undrained credit with
-            // its debit) — this is about the audit trail, which is the other half of the promise.
+            // The getAccount() above may have queued a decay event, and this path DESTROYS BEANS without
+            // draining it. Measured by reverting this line: 1.99 beans gone. #137 made `loadState` unwind an
+            // undrained Commons credit along with its debit, which is right when the debit lives only in
+            // memory — but the UPSERT above has already written the post-decay balance to the row, so the
+            // debit is durable and the unwind takes back a credit that had a real counterpart. Draining here
+            // settles both halves before anything can resync. It also gives the collection its `demurrage_`
+            // transaction row, without which the demurrage is invisible to an audit.
             persistDecayEvents();
             persistCommonsBalance(); // flush the debited COMMONS_BALANCE to the COMMONS_POOL row
         } else {

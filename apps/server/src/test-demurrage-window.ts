@@ -104,6 +104,7 @@ async function main() {
     const refundee = id('refundee');    // path 2 — pledges, then gets refunded
     const emptyHanded = id('emptyhand'); // path 2 — creator of the deleted project, never paid
     const proposer = id('proposer');    // path 3 — granted, with an existing accounts row
+    const quietProposer = id('quietprop'); // path 3c — the same, from inside the Green Zone
     const rowless = id('rowless');      // path 3b — granted, with NO accounts row (the epoch-0 insert)
     const admin = id('admin');          // invited_by NULL → eligible round creator
 
@@ -114,6 +115,7 @@ async function main() {
     seedMember(refundee, OPENING + PAYOUT, STALE_DAYS);
     seedMember(emptyHanded, 0, 0);
     seedMember(proposer, OPENING, STALE_DAYS);
+    seedMember(quietProposer, GREEN_ZONE_HOLDING, STALE_DAYS);
     // Seeded EMPTY on purpose. Path 3b deletes this account's row to reach the UPSERT's INSERT arm, and
     // deleting a row that holds beans destroys them — the conservation check below caught exactly that, off
     // by the 300 an earlier version of this fixture seeded here. The assertion was right and the fixture was
@@ -213,7 +215,7 @@ async function main() {
         + `actually held, with ${refunded} refunded on top and taxed at nothing`);
 
     // ── Path 3: commons voting-round grant, proposer WITH an existing row ──────────────────────────
-    const grantCharge = await grantTo(proposer, admin, 'Existing row');
+    const grantCharge = await grantTo(proposer, admin, 'Existing row', OPENING);
     assert(row(proposer)!.epoch === nowEpoch(),
         'path 3: the grant carried the settled epoch into the row on the DO UPDATE arm');
     assert(Math.abs(grantCharge - fairCharge) < SAME_CHARGE,
@@ -225,6 +227,22 @@ async function main() {
     assert(decayRows.n === 1,
         'path 3: the decay the grant path collected has a `demurrage_` transaction row — it never persisted '
         + 'its decay events, so the collection was unauditable even once conservation was safe');
+
+    // ── Path 3c: the same grant, proposer inside the Green Zone → nothing to persist ────────────────
+    // This is what actually holds the DO UPDATE arm honest. When the decay IS recordable, as for `proposer`
+    // above, persistDecayEvents() writes `last_demurrage_epoch` on its own — so path 3 passes even with the
+    // column omitted from the UPSERT, and reverting that fix looks harmless. A proposer who owes nothing
+    // queues no event, and the omission is then the only thing standing between the grant and a stale window.
+    await grantTo(quietProposer, admin, 'Quiet proposer', GREEN_ZONE_HOLDING);
+    const quietPropRow = row(quietProposer)!;
+    assert(quietPropRow.epoch === nowEpoch(),
+        'path 3c: a granted proposer who owes no demurrage still has the window closed in the row — the '
+        + 'UPSERT carries the epoch itself rather than relying on there being a decay event to persist');
+    assert(Math.abs(quietPropRow.balance - (GREEN_ZONE_HOLDING + PAYOUT)) < 1e-9,
+        `path 3c: and the grant arrives whole — ${GREEN_ZONE_HOLDING} + ${PAYOUT}`);
+    reconcileLedgerFromDb();
+    assert(Math.abs(getBalance(quietProposer).balance - (GREEN_ZONE_HOLDING + PAYOUT)) < 1e-9,
+        'path 3c: and the next read charges nothing against it');
 
     // ── Path 3b: the same grant, proposer with NO accounts row → the literal epoch 0 ────────────────
     const rowlessProject = createProject(rowless, 'No row yet', 'tests the INSERT arm', PAYOUT);
@@ -254,12 +272,12 @@ async function main() {
 }
 
 /** Run a full propose → vote → close cycle and return what demurrage cost the proposer. */
-async function grantTo(proposerPubkey: string, adminPubkey: string, title: string): Promise<number> {
+async function grantTo(proposerPubkey: string, adminPubkey: string, title: string, opening: number): Promise<number> {
     const project = createProject(proposerPubkey, title, 'granted by the commons', PAYOUT);
     if (!project) throw new Error(`setup: createProject failed for ${title}`);
     await closeRoundFor(project.id, adminPubkey);
     reconcileLedgerFromDb();
-    return OPENING + PAYOUT - getBalance(proposerPubkey).balance;
+    return opening + PAYOUT - getBalance(proposerPubkey).balance;
 }
 
 /** Give a project the only vote in a round, then close it — so it wins and is funded. */

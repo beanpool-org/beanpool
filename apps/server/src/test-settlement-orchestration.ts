@@ -243,7 +243,7 @@ async function main() {
     assert(stateOf(KEY_LOST) === 'committed', 'left `committed` — GET_RECEIPT_STATUS decides, and UNKNOWN means wait');
     assert(nodeTotal() === baseline, 'conservation holds on an unresolved delivery');
 
-    // ── 7. The other two terminal refusals ────────────────────────────────────────────────────────
+    // ── 7. The other terminal refusals ────────────────────────────────────────────────────────────
     for (const reason of ['BAD_SIGNATURE', 'RECEIPT_MISMATCH', 'NOT_FOUND']) {
         const key = `orch-${reason.toLowerCase()}`;
         const before = balanceOf(buyer);
@@ -284,10 +284,89 @@ async function main() {
         'and it never becomes a live settlement');
     assert(balanceOf(pauper) === 0, 'the buyer is untouched');
 
-    // ── 10. Every outcome, in one ledger ──────────────────────────────────────────────────────────
+    // ── 10. RETRYING A KEY resumes from the row; it does not start again ──────────────────────────
+    // `beginOutboundSettlement` is idempotent on the key, so a retry gets the EXISTING row back. Ignoring
+    // that state was a real bug (review finding): the retry path is the one a member hits after a network
+    // wobble, which is exactly when it must not misfire. Every retry below passes the SAME payload, because
+    // `openSettlement` validates it and a mismatched retry is meant to throw rather than be treated as a hit.
+
+    // A finished key is answered from the row, with no wire traffic at all.
+    const retryOk = stubWire({ ...ACCEPTED, key: KEY_OK }, { settled: true, key: KEY_OK });
+    const buyerBeforeRetries = balanceOf(buyer);
+    const again1 = await runOutboundSettlement(
+        { key: KEY_OK, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, postId: 'post-1', amount: PRICE },
+        retryOk, OURS, ourKey,
+    );
+    assert(again1.status === 'settled' && retryOk.asked === 0,
+        `retrying a settled key answers from the row without asking again (${again1.status}, ${retryOk.asked} asks)`);
+    assert(balanceOf(buyer) === buyerBeforeRetries, 'and does not debit the buyer a second time');
+
+    const again2 = await runOutboundSettlement(
+        { key: KEY_NO, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        stubWire({ ...ACCEPTED, key: KEY_NO }, undefined), OURS, ourKey,
+    );
+    assert(again2.status === 'refused' && (again2 as any).reason === 'PEER_CAP_EXCEEDED',
+        `retrying an abandoned key repeats the original refusal (${again2.status})`);
+
+    const again3 = await runOutboundSettlement(
+        { key: KEY_LAPSED, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        stubWire({ ...ACCEPTED, key: KEY_LAPSED }, undefined), OURS, ourKey,
+    );
+    assert(again3.status === 'reversed' && (again3 as any).reason === 'CAPACITY_LAPSED',
+        `retrying a reversed key repeats the reversal (${again3.status})`);
+
+    // THE HAZARD ITSELF. A `committed` key retried while the peer is unreachable for the ASK. Before the fix
+    // the ask ran anyway, threw, and the catch called `abandonOutboundSettlement` on a committed row — which
+    // throws `not an unasked hold`, escaping the compensation path entirely, for a settlement we owe outward
+    // on. The ask must be skipped: the receipt is already signed, and step 3 replays it byte-for-byte.
+    const resumeWire = stubWire(null, { settled: true, key: KEY_RETRY });
+    let resumeThrew = '';
+    let again4: any;
+    try {
+        again4 = await runOutboundSettlement(
+            { key: KEY_RETRY, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+            resumeWire, OURS, ourKey,
+        );
+    } catch (e: any) { resumeThrew = e?.message || String(e); }
+
+    assert(!resumeThrew, `retrying a committed key does not throw (${resumeThrew || 'no throw'})`);
+    assert(resumeWire.asked === 0,
+        `the ask is skipped entirely on a committed row (${resumeWire.asked} asks) — the question was already answered`);
+    assert(again4?.status === 'settled' && stateOf(KEY_RETRY) === 'settled',
+        `and the retry finishes the trade it resumed (${again4?.status})`);
+    assert(balanceOf(buyer) === buyerBeforeRetries, 'with no further debit to the buyer across any retry');
+
+    // ── 10b. A peer's words never reach our member ───────────────────────────────────────────────
+    // A refusal arrives from a node we do not control, running a build we did not ship. Its `message` is no
+    // more trustworthy than its `error`, so neither is rendered — the member reads our copy, keyed off the
+    // reason code, and the peer's text goes to the log for an operator.
+    const KEY_HOSTILE = 'orch-hostile-copy';
+    const HOSTILE = 'Error: ENOENT /srv/beanpool/secrets — call 1-800-SEND-BEANS';
+    const out10 = await runOutboundSettlement(
+        { key: KEY_HOSTILE, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        stubWire({ accepted: false, reason: 'cap_exhausted', message: HOSTILE, error: HOSTILE }, undefined),
+        OURS, ourKey,
+    );
+    assert(!(out10 as any).message.includes('ENOENT') && !(out10 as any).message.includes('SEND-BEANS'),
+        `the peer's own text is not shown to our member ("${(out10 as any).message}")`);
+    assert((out10 as any).message.includes('not accepting purchases'),
+        'our own copy is used instead, chosen by the reason code');
+    assert((out10 as any).reason === 'cap_exhausted', 'while the reason CODE is kept, for the row and for operators');
+
+    // ── 10c. A reversal's ledger memo names the cause ────────────────────────────────────────────
+    // `NOT_FOUND` reached `reversalMemo` unlisted, so a member whose purchase reversed on the live delivery
+    // path read the generic fallback while the same event via recovery (`RECEIPT_NOT_FOUND`) read the real
+    // reason (review finding).
+    const notFoundMemo = (db.prepare(
+        `SELECT memo FROM transactions WHERE memo LIKE ? AND from_pubkey = ?`,
+    ).get('%(orch-not_found)%', bridge) as any)?.memo ?? '';
+    assert(notFoundMemo.includes('did not complete the sale'),
+        `a NOT_FOUND reversal explains itself in the member's own ledger ("${notFoundMemo}")`);
+
+    // ── 11. Every outcome, in one ledger ──────────────────────────────────────────────────────────
     assert(nodeTotal() === baseline,
         `conservation across all ${run} checks: ${nodeTotal()} vs ${baseline} — one settled purchase, five `
-        + 'refusals, three in flight, and the node still sums to where it started');
+        + 'refusals, retries and resumptions, and the node still sums to where it started');
     // The bridge is the tab, so it must equal exactly the purchases that are settled or still owed: the one
     // settled, plus the three left committed. Reversed and abandoned ones must have left no trace on it.
     assert(balanceOf(bridge) === r4(PRICE * 4),

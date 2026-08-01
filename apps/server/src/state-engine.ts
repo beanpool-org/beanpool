@@ -326,10 +326,18 @@ export function initStateEngine(): void {
 
     // CRITICAL: Restore persisted commons balance from DB
     // Without this, COMMONS_BALANCE resets to 0 on every restart, destroying accumulated demurrage
+    //
+    // Restores ANY recorded figure, including a NEGATIVE one (review finding). The old `> 0` test silently
+    // reset a deficit to zero on every restart — which would erase the record of a write-off the community
+    // has actually made and break conservation across a reboot, in the one direction where the books are
+    // already strained. A deficit is a real state now that `payFromCommons({ allowDeficit })` exists, and
+    // docs/commons-pool-transparency.md's Solvency Rule requires the pot to absorb write-offs even when
+    // empty. It has to survive a restart to mean anything.
     const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-    if (commonsRow && commonsRow.balance > 0) {
+    if (commonsRow && typeof commonsRow.balance === 'number') {
         setCommonsBalance(commonsRow.balance);
-        console.log(`🏛️ Restored Commons Pool balance: ${commonsRow.balance.toFixed(2)}`);
+        const note = commonsRow.balance < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
+        console.log(`🏛️ Restored Commons Pool balance: ${commonsRow.balance.toFixed(2)}${note}`);
     } else {
         // Seed the COMMONS_POOL account if it doesn't exist
         db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', 0, 0)").run();

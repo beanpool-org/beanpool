@@ -118,6 +118,28 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
 
+    // #104 step 3b: the settlement exchange needs four more columns on `settlements`.
+    //
+    // These MUST come BEFORE the schema.sql exec below, exactly like the trigger-referenced member columns
+    // above (review finding — this was a hard boot failure). schema.sql defines
+    // `idx_settlements_reserved_until` over `settlements(reserved_until)`, and on a node that already
+    // created `settlements` from step 3a the `CREATE TABLE IF NOT EXISTS` no-ops against the OLD shape —
+    // so the index then references a column that does not exist, SQLite aborts the whole `db.exec` with
+    // "no such column", and the node fails to boot. Adding the columns first makes the index compile.
+    //
+    //   seller_pubkey   — inbound: who we pay when the receipt lands
+    //   fee             — outbound: charged to the buyer on top of the price (§2.1), refunded on reversal
+    //   reserved_until  — inbound: when the cap reservation lapses (indexed by schema.sql)
+    //   receipt_payload — outbound: the exact signed receipt object, so a retry replays identical bytes
+    //
+    // A CHECK constraint cannot be added by ALTER TABLE in SQLite, so `fee >= 0` binds only on tables
+    // created from schema.sql. Pre-existing rows are all fee = 0, and every writer goes through
+    // crossNodeFee(), which cannot return a negative for a positive amount.
+    try { db.prepare(`ALTER TABLE settlements ADD COLUMN seller_pubkey TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE settlements ADD COLUMN fee REAL NOT NULL DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE settlements ADD COLUMN reserved_until DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE settlements ADD COLUMN receipt_payload TEXT`).run(); } catch { }
+
     // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
     // column-whitelist form that excludes last_active_at heartbeats from cursor sync.
     // CREATE TRIGGER IF NOT EXISTS is a no-op against an existing trigger.
@@ -161,23 +183,16 @@ export function initSchema() {
     // #108: a listing may carry a real cash outlay (fuel/consumables). Flag only, no amount —
     // the app never touches the money, so it must not imply a figure it holds or settles.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
-    // #104 step 3b: the settlement exchange needs three more facts per row. Guarded ALTERs as well as the
-    // schema.sql definition, because a node may already have created `settlements` from step 3a.
-    //   seller_pubkey  — inbound: who we pay when the receipt lands
-    //   fee            — outbound: charged to the buyer on top of the price (§2.1), refunded on reversal
-    //   reserved_until — inbound: when the cap reservation lapses
-    try { db.prepare(`ALTER TABLE settlements ADD COLUMN seller_pubkey TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE settlements ADD COLUMN fee REAL NOT NULL DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE settlements ADD COLUMN reserved_until DATETIME`).run(); } catch { }
     // Rule 4's per-member aggregate exposure read would otherwise full-scan `settlements`.
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, direction, state)`).run(); } catch { }
     // Reservation expiry runs every recovery cycle; without this it scans every reserved row.
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_reserved_until ON settlements(reserved_until) WHERE direction = 'inbound' AND state = 'reserved'`).run(); } catch { }
-    // The exact signed receipt object, so a retried commit replays byte-identical bytes (see schema.sql).
-    // NOTE: a CHECK constraint cannot be added by ALTER TABLE in SQLite, so `fee >= 0` is enforced only on
-    // tables created from schema.sql. Pre-existing rows are all fee = 0, and every writer goes through
-    // crossNodeFee(), which cannot return a negative for a positive amount.
-    try { db.prepare(`ALTER TABLE settlements ADD COLUMN receipt_payload TEXT`).run(); } catch { }
+    // reservedAgainstPeer() also filters on `direction`; widen the pre-existing 2-column index. DROP first
+    // because CREATE INDEX IF NOT EXISTS would keep the narrower definition on an already-live DB.
+    try {
+        db.prepare(`DROP INDEX IF EXISTS idx_settlements_peer`).run();
+        db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, state, direction)`).run();
+    } catch { }
     // Moderation: Add status tracking to abuse reports
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     // Marketplace hygiene: track when a lingering escrow deal was last nudged

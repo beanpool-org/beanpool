@@ -598,7 +598,9 @@ CREATE TABLE IF NOT EXISTS settlements (
 -- Boot recovery scans for unfinalised rows, so index the states it looks for.
 CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(state, updated_at)
     WHERE state IN ('escrowed', 'reserved', 'committed', 'held');
-CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, state);
+-- Covers reservedAgainstPeer(), which filters peer_id + state + direction. `direction` last because
+-- peer_id is the selective column; including it at all avoids a row fetch per candidate.
+CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, state, direction);
 -- memberForeignExposure() sums a member's outbound settlements (Rule 4's aggregate figure) and would
 -- otherwise full-scan a table that only ever grows. Column order matches the query's selectivity:
 -- buyer_pubkey narrows to one member first, then direction and state.

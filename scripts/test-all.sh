@@ -111,18 +111,23 @@ fi
 
 run_federation_suites() {
   bash -c '
-    set -e
     cd apps/server
-    for t in test-federation-bridge test-settlement-state test-settlement-exchange test-federation-settlement; do
+    # NO `set -e`, and every suite runs even after one fails (review finding). Aborting on the first failure
+    # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
+    # cycle only revealed the next problem. Statuses are collected and all failures reported together.
+    FAILED=""
+    for t in test-schema-upgrade test-federation-bridge test-settlement-state test-settlement-exchange test-federation-settlement; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
-      # trap, not a trailing rm: `set -e` aborts the loop on a failing suite, and the dir would leak
-      # exactly when someone is running this repeatedly to chase that failure.
-      trap "rm -rf \"$TMP_DIR\"" EXIT
       ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" pnpm exec tsx "src/$t.ts"
+      if [ $? -ne 0 ]; then FAILED="$FAILED $t"; fi
       rm -rf "$TMP_DIR"
-      trap - EXIT
     done
+    if [ -n "$FAILED" ]; then
+      echo ""
+      echo "❌ Federation suites failed:$FAILED"
+      exit 1
+    fi
   '
 }
 

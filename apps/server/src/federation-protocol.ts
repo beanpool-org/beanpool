@@ -304,7 +304,7 @@ export async function federatedVerifyMember(node: Libp2p, targetPeerId: any, pub
     } finally {
         if (stream) {
             try {
-                stream.close();
+                await stream.close();
             } catch {}
         }
     }
@@ -332,7 +332,9 @@ async function settlementRoundTrip(
         return JSON.parse(await readPromise);
     } finally {
         if (stream) {
-            try { stream.close(); } catch {}
+            // close() returns a promise, so a synchronous try/catch cannot catch a teardown
+            // rejection — it would surface as an unhandled rejection (review finding).
+            try { await stream.close(); } catch {}
         }
     }
 }
@@ -419,7 +421,7 @@ export async function federatedRelayMessage(
     } finally {
         if (stream) {
             try {
-                stream.close();
+                await stream.close();
             } catch {}
         }
     }

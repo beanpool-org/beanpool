@@ -287,13 +287,34 @@ export async function commitOutboundSettlement(
     ensureBridgeAccount(row.peerId);
 
     return settlementTransaction(() => {
+        // RE-READ INSIDE THE TRANSACTION, and let the first writer win.
+        //
+        // This closes a genuine double-spend (review finding), and unlike the earlier "not reachable
+        // in-process" races this one WAS reachable: `signReceipt` is awaited between the state read above
+        // and this transaction, so two overlapping retries both observed `escrowed` and both arrived here.
+        // The second would repeat the bridge and Commons moves — and because a synthetic `escrow_` account
+        // has an unbounded floor, `mustTransfer` happily drives it NEGATIVE rather than refusing. The bridge
+        // would be credited twice for one purchase, and the same-state metadata write would then replace the
+        // first receipt with the second. Two valid receipts, double the tab, one trade.
+        const fresh = getSettlement(key);
+        if (!fresh) throw new SettlementError(`Unknown settlement ${key}`, 'unknown_settlement');
+        if (fresh.state !== 'escrowed') {
+            if (!fresh.receipt || !fresh.receiptPayload) {
+                throw new SettlementError(`${key} is ${fresh.state} with no stored receipt`, 'receipt_missing');
+            }
+            return {
+                receipt: JSON.parse(fresh.receiptPayload) as SettlementReceipt,
+                signature: fresh.receipt,
+            };
+        }
+
         // Price to the bridge; fee to our OWN Commons. The bridge entry carries the price alone, so the
         // two nodes' bridge rows can be equal and opposite.
-        mustTransfer(escrowAccount, bridge, row.amount, `Cross-community purchase (${key})`);
+        mustTransfer(escrowAccount, bridge, fresh.amount, `Cross-community purchase (${key})`);
         // moveToCommons, NOT transfer(..., 'COMMONS_POOL', ...) — see its docstring. A transfer into the
         // COMMONS_POOL *account* is overwritten by the next persistCommonsBalance() flush, so the fee
         // would vanish from the books and the node would stop summing to zero.
-        if (row.fee > 0 && !moveToCommons(escrowAccount, row.fee, `Cross-community purchase fee (${key})`)) {
+        if (fresh.fee > 0 && !moveToCommons(escrowAccount, fresh.fee, `Cross-community purchase fee (${key})`)) {
             throw new SettlementError(`Could not move the fee for ${key} to the Commons`, 'fee_failed');
         }
         // Persist the payload as well as the signature, so a retry can hand back byte-identical bytes.
@@ -315,6 +336,24 @@ export async function commitOutboundSettlement(
  * The fee is refunded too. The trade did not happen, so the buyer is made whole — the fee is a charge on a
  * completed crossing, not a fee for asking.
  */
+/**
+ * Plain-language memo for a reversal, keyed off the internal reason code.
+ *
+ * The code itself stays in `failure_reason` for operators and audits; a member's ledger gets words (review
+ * finding). "CAPACITY_LAPSED" tells someone reading their own transaction history nothing about what
+ * happened or whether it was their fault — and it wasn't.
+ */
+function reversalMemo(reason: string): string {
+    switch (reason) {
+        case 'CAPACITY_LAPSED':
+            return 'Refunded — the other community had reached its credit limit';
+        case 'RECEIPT_NOT_FOUND':
+            return 'Refunded — the other community did not complete the sale';
+        default:
+            return 'Refunded — this cross-community purchase could not be completed';
+    }
+}
+
 export function reverseOutboundSettlement(key: string, reason: string): SettlementRow {
     const row = getSettlement(key);
     if (!row) throw new SettlementError(`Unknown settlement ${key}`, 'unknown_settlement');
@@ -331,7 +370,7 @@ export function reverseOutboundSettlement(key: string, reason: string): Settleme
     return settlementTransaction(() => {
         // The PRINCIPAL always goes back. Naming the reason in the memo so a member sees why their purchase
         // reversed rather than only that it did.
-        mustTransfer(bridge, row.buyerPubkey, row.amount, `Reversed cross-community purchase — ${reason} (${key})`);
+        mustTransfer(bridge, row.buyerPubkey, row.amount, `${reversalMemo(reason)} (${key})`);
 
         // Drawn from the Commons pot, not from the shadow account — otherwise the refund is funded from
         // nowhere and the node's books stop balancing.
@@ -566,7 +605,21 @@ export async function handleReceiptDelivery(input: {
     }
 
     if (row.state === 'reserved') advanceSettlement(row.key, 'held', { receipt: input.signature });
-    return settleHeldReceipt(row.key);
+
+    // Answer with a structured refusal rather than letting a throw escape (review finding). A ledger error
+    // here would propagate to the stream handler, which logs and closes WITHOUT writing a response — so the
+    // peer sees a timeout instead of a reason, and its retry logic can't tell "refused" from "unreachable".
+    // The receipt is already persisted as `held` at this point, so the payment stays replayable either way.
+    try {
+        return settleHeldReceipt(row.key);
+    } catch (e: any) {
+        console.error(`[Federation] Settling ${row.key} failed:`, e?.message || e);
+        return {
+            settled: false,
+            reason: e?.reason ?? 'settlement_error',
+            message: 'We could not complete that purchase just now. It is recorded and will be retried.',
+        };
+    }
 }
 
 /**
@@ -624,10 +677,20 @@ export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean
     ensureBridgeAccount(row.peerId);
 
     return settlementTransaction((): ReceiptOutcome => {
+        // Re-read and let the first writer win, same as the commit path. Not currently reachable in-process
+        // — `settleHeldReceipt` is fully synchronous, so no await can interleave between the read above and
+        // this transaction — but the guarantee should not rest on that staying true, and here the cost of
+        // being wrong is paying a seller twice out of a bridge account.
+        const fresh = getSettlement(key);
+        if (fresh?.state === 'settled') return { settled: true, key };
+        if (fresh?.state !== 'held') {
+            return { settled: false, reason: 'wrong_state', message: `Settlement is ${fresh?.state}, not awaiting payment.` };
+        }
+
         // The seller receives exactly the agreed amount — fee-exempt, because the buyer already paid the
         // fee on their own node and it never crossed the border.
         mustTransfer(
-            bridgeAccountId(row.peerId), row.sellerPubkey!, row.amount,
+            bridgeAccountId(fresh.peerId), fresh.sellerPubkey!, fresh.amount,
             `Cross-community sale (${key})`,
         );
         advanceSettlement(key, 'settled');

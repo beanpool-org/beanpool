@@ -83,6 +83,14 @@ export function receiptPayload(r: SettlementReceipt): string {
 /** Sign a receipt with this node's libp2p identity key. Returns base64. */
 export async function signReceipt(r: SettlementReceipt, privateKey: any): Promise<string> {
     if (!privateKey?.sign) throw new Error('No node identity key available to sign a settlement receipt');
+    // `canonicalAmount` calls toFixed, which throws a bare TypeError on a non-number. Fail with a message
+    // that says what is wrong, since a malformed receipt here means a caller bug, not a peer's input.
+    if (!r || typeof r.amount !== 'number' || !Number.isFinite(r.amount)) {
+        throw new Error('Cannot sign a settlement receipt without a finite numeric amount');
+    }
+    if (!r.key || !r.issuerPeerId) {
+        throw new Error('Cannot sign a settlement receipt without a key and an issuer');
+    }
     const sig = await privateKey.sign(new TextEncoder().encode(receiptPayload(r)));
     return Buffer.from(sig).toString('base64');
 }

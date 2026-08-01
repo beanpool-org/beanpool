@@ -214,10 +214,42 @@ async function main() {
     assert(rc2.committedAt === rc1.committedAt && rc2.buyerHomeNode === 'https://brisbane.beanpool.org',
         'because the exact signed object is replayed, not reconstructed from the row');
 
+    // ── 2b. Two OVERLAPPING commits must not double-credit the bridge ─────────────────────────────
+    // Reachable, unlike the other races here: commitOutboundSettlement awaits signReceipt between reading
+    // `escrowed` and opening its transaction, so two retries genuinely both got through. The second repeated
+    // the bridge and Commons moves — and a synthetic escrow_ account has an UNBOUNDED floor, so the transfer
+    // did not refuse, it drove escrow negative. One trade, double the tab, and the second signature
+    // overwriting the first.
+    const RACE = 'k-race';
+    beginOutboundSettlement({
+        key: RACE, peerId: BRIS, buyerPublicKey: buyer, buyerHomeNode: 'https://brisbane.beanpool.org',
+        sellerPublicKey: seller, postId: 'post-r', amount: 4,
+    });
+    const bridgeBeforeRace = getEnergyBalance(BRIS);
+    const [raceA, raceB] = await Promise.all([
+        commitOutboundSettlement(RACE, BRIS, brisKey, 'https://brisbane.beanpool.org'),
+        commitOutboundSettlement(RACE, BRIS, brisKey, 'https://brisbane.beanpool.org'),
+    ]);
+    assert(near(getEnergyBalance(BRIS), bridgeBeforeRace + 4),
+        'two overlapping commits credit the bridge ONCE — the second sees the committed row and replays it');
+    assert(balanceOf(escrowFor(RACE)) === 0, 'and escrow closes to zero rather than being driven negative');
+    assert(raceA.signature === raceB.signature, 'both callers get the SAME receipt, not two valid ones');
+    assert(await verifyReceipt(raceA.receipt, raceA.signature, BRIS) === true, 'and it verifies');
+    assert(getSettlement(RACE)!.state === 'committed', 'with a single committed row');
+    reverseOutboundSettlement(RACE, 'CAPACITY_LAPSED');   // tidy up so later totals are unaffected
+
     // ── 3. A reversal compensates; it never deletes ──────────────────────────────────────────────
     const txnsBeforeReversal = txnsFor(KEY);
     const reversed = reverseOutboundSettlement(KEY, 'CAPACITY_LAPSED');
     assert(reversed.state === 'reversed' && reversed.failureReason === 'CAPACITY_LAPSED', 'the row records the reason');
+
+    // The CODE stays on the row for operators; the member's ledger gets words. "CAPACITY_LAPSED" tells
+    // someone reading their own history nothing about what happened, or that it wasn't their fault.
+    const reversalMemoRow = db.prepare(
+        `SELECT memo FROM transactions WHERE memo LIKE ? AND to_pubkey = ? ORDER BY timestamp DESC LIMIT 1`,
+    ).get(`%(${KEY})%`, buyer) as any;
+    assert(!/CAPACITY_LAPSED/.test(reversalMemoRow.memo) && /credit limit/i.test(reversalMemoRow.memo),
+        'and the member-visible memo explains it in plain language, not an internal enum');
     assert(near(balanceOf(buyer), buyerBefore), 'the buyer is made whole — fee refunded too, since no crossing happened');
     assert(getEnergyBalance(BRIS) === 0, 'the bridge is back to square');
     assert(withinPersistTolerance(balanceOf('COMMONS_POOL'), commonsBefore),

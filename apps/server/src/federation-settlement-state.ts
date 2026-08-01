@@ -204,8 +204,25 @@ export function advanceSettlement(
 
     if (result.changes === 0) {
         const current = getSettlement(key);
-        if (current?.state === to) return current;          // someone else got there first; same outcome
-        throw new Error(`Concurrent settlement transition conflict for ${key} (expected ${row.state})`);
+        if (current?.state !== to) {
+            throw new Error(`Concurrent settlement transition conflict for ${key} (expected ${row.state})`);
+        }
+        // Someone else reached the same state first, so the OUTCOME agrees — but they may have got there
+        // without the metadata we were asked to attach, and returning here would strand it (review finding).
+        // The receipt is what makes a payment replayable, so losing it is not cosmetic. Re-apply it against
+        // the state we now know the row is in.
+        if ((extra?.receipt && !current.receipt) || (extra?.receiptPayload && !current.receiptPayload)
+            || (extra?.failureReason && !current.failureReason)) {
+            db.prepare(`
+                UPDATE settlements
+                SET receipt = COALESCE(receipt, ?), receipt_payload = COALESCE(receipt_payload, ?),
+                    failure_reason = COALESCE(failure_reason, ?),
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                WHERE key = ? AND state = ?
+            `).run(extra?.receipt ?? null, extra?.receiptPayload ?? null, extra?.failureReason ?? null, key, to);
+            return getSettlement(key)!;
+        }
+        return current;
     }
     return getSettlement(key)!;
 }

@@ -242,11 +242,16 @@ async function main() {
 
     // The CODE stays on the row for operators; the member's ledger gets words. "CAPACITY_LAPSED" tells
     // someone reading their own history nothing about what happened, or that it wasn't their fault.
-    const reversalMemoRow = db.prepare(
-        `SELECT memo FROM transactions WHERE memo LIKE ? AND to_pubkey = ? ORDER BY timestamp DESC LIMIT 1`,
-    ).get(`%(${KEY})%`, buyer) as any;
-    assert(!/CAPACITY_LAPSED/.test(reversalMemoRow.memo) && /credit limit/i.test(reversalMemoRow.memo),
-        'and the member-visible memo explains it in plain language, not an internal enum');
+    // EVERY memo for this key, not `ORDER BY timestamp DESC LIMIT 1`. The principal refund and the fee refund
+    // are written inside one transaction and share a timestamp, so "the last one" was arbitrary — this
+    // assertion passed or failed by luck between runs. Assert the property, not the ordering.
+    const reversalMemos = (db.prepare(
+        `SELECT memo FROM transactions WHERE memo LIKE ? AND to_pubkey = ?`,
+    ).all(`%(${KEY})%`, buyer) as any[]).map(r => r.memo as string);
+    assert(reversalMemos.some(m => /credit limit/i.test(m)),
+        'and the member-visible memo explains it in plain language');
+    assert(reversalMemos.every(m => !/CAPACITY_LAPSED/.test(m)),
+        'with no internal enum anywhere in what the member sees');
     assert(near(balanceOf(buyer), buyerBefore), 'the buyer is made whole — fee refunded too, since no crossing happened');
     assert(getEnergyBalance(BRIS) === 0, 'the bridge is back to square');
     assert(exactly(balanceOf('COMMONS_POOL'), commonsBefore),
@@ -567,6 +572,30 @@ async function main() {
         'and it does not verify against a different peer — the binding survives persistence');
     assert(await verifyStoredReceipt({ ...heldRow, receiptPayload: null }) === false,
         'a row with no stored payload is NOT payable — fail closed rather than pay on a mutable row');
+
+    // ── 10h2. A redelivery REPAIRS a held row left without a payload by an older build ────────────
+    // The upgrade shape: a settlement that reached `held` before receipts were stored as objects has a
+    // signature and no payload. Recovery now refuses to pay what it cannot re-verify — so without repair
+    // that row would be rejected FOREVER, an in-flight trade made permanently unpayable by an upgrade.
+    const LEGACY = 'k-legacy-held';
+    setConnectorCreditCap(BRIS_ADDR, 1000);
+    assert(ask(LEGACY, 3).accepted === true, 'a reservation to age into the legacy shape');
+    const legacyReceipt: SettlementReceipt = { ...lapseReceipt, key: LEGACY, amount: 3 };
+    const legacySig = await signReceipt(legacyReceipt, brisKey);
+    // Signature only — exactly what an older build persisted.
+    db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=NULL WHERE key=?`)
+        .run(legacySig, LEGACY);
+    assert(await verifyStoredReceipt(getSettlement(LEGACY)!) === false,
+        'the legacy row cannot be re-verified, so recovery will not pay it');
+    assert((await recoverSettlements()).stillOpen >= 1, 'and recovery leaves it alone rather than paying blind');
+
+    const sellerBeforeRepair = balanceOf(seller);
+    const repaired = await handleReceiptDelivery({
+        key: LEGACY, receipt: legacyReceipt, signature: legacySig, peerId: BRIS,
+    });
+    assert(repaired.settled === true, 'a redelivery settles it');
+    assert(!!getSettlement(LEGACY)!.receiptPayload, 'and repairs the missing payload while it has it in hand');
+    assert(near(balanceOf(seller), sellerBeforeRepair + 3), 'so the seller is finally paid');
 
     // ── 10i. Settlements survive into a backup snapshot ──────────────────────────────────────────
     // A promoted backup inherits the LEDGER EFFECTS of an in-flight settlement — escrow held, a bridge

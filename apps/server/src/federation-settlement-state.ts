@@ -156,6 +156,11 @@ export function openSettlement(input: {
         && row.peerId === input.peerId
         && row.buyerPubkey === input.buyerPubkey
         && (row.sellerPubkey ?? null) === (input.sellerPubkey ?? null)
+        // postId included (review finding): reusing a key for a DIFFERENT post returned the original row as
+        // an idempotent success, so the caller proceeded with new terms while the receipt was built from the
+        // old row — an avoidable mismatch and reversal. `fee` and `buyerHomeNode` are deliberately excluded:
+        // fee is derived from amount, and buyerHomeNode is informational rather than trade-defining.
+        && (row.postId ?? null) === (input.postId ?? null)
         && Math.round(row.amount * 10000) === Math.round(input.amount * 10000);
     if (!same) {
         throw new Error(`Settlement key collision for ${input.key}: payload does not match the existing row`);
@@ -213,6 +218,17 @@ export function advanceSettlement(
         // the state we now know the row is in.
         if ((extra?.receipt && !current.receipt) || (extra?.receiptPayload && !current.receiptPayload)
             || (extra?.failureReason && !current.failureReason)) {
+            // NOTE the COALESCE order, which is DELIBERATELY THE OPPOSITE of the main update above, and was
+            // read as a bug in review — so it is worth spelling out.
+            //
+            //   main path:  COALESCE(?, col)  → "prefer what the caller passed"      (a normal transition)
+            //   here:       COALESCE(col, ?)  → "fill a gap, never overwrite"        (we LOST the race)
+            //
+            // We are the loser here: another writer already reached this state. Their receipt is the one the
+            // peer holds, so overwriting it with ours would leave two different valid signatures for one
+            // settlement — exactly what idempotency exists to prevent. We may only fill in what nobody set.
+            // The guard above is what makes this reachable at all: it fires only when a field is still null,
+            // and COALESCE(null, ?) is ?.
             db.prepare(`
                 UPDATE settlements
                 SET receipt = COALESCE(receipt, ?), receipt_payload = COALESCE(receipt_payload, ?),

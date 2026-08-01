@@ -187,11 +187,17 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, direction, state)`).run(); } catch { }
     // Reservation expiry runs every recovery cycle; without this it scans every reserved row.
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_reserved_until ON settlements(reserved_until) WHERE direction = 'inbound' AND state = 'reserved'`).run(); } catch { }
-    // reservedAgainstPeer() also filters on `direction`; widen the pre-existing 2-column index. DROP first
-    // because CREATE INDEX IF NOT EXISTS would keep the narrower definition on an already-live DB.
+    // Both settlement indexes are recreated rather than left as-is: CREATE INDEX IF NOT EXISTS keeps an
+    // older narrower definition on an already-live DB, so the DROP is what actually applies the change.
+    //   peer:        equality columns (peer_id, direction) before the IN range on state
+    //   unfinalised: created_at, matching the ORDER BY, so recovery avoids a temp sort
     try {
         db.prepare(`DROP INDEX IF EXISTS idx_settlements_peer`).run();
-        db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, state, direction)`).run();
+        db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, direction, state)`).run();
+    } catch { }
+    try {
+        db.prepare(`DROP INDEX IF EXISTS idx_settlements_unfinalised`).run();
+        db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(created_at) WHERE state IN ('escrowed', 'reserved', 'committed', 'held')`).run();
     } catch { }
     // Moderation: Add status tracking to abuse reports
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }

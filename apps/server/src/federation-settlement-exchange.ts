@@ -453,6 +453,11 @@ export function handlePurchaseRequest(input: {
     if (!input.key || typeof input.key !== 'string') {
         return { accepted: false, reason: 'invalid_key', message: 'A settlement key is required.' };
     }
+    // `peer_id` is NOT NULL, so a missing one would surface as a raw SQLite exception from openSettlement
+    // rather than a structured refusal the peer can act on. Every decision here is keyed on it anyway.
+    if (!input.peerId || typeof input.peerId !== 'string') {
+        return { accepted: false, reason: 'invalid_peer', message: 'Settlement requires an identified peer.' };
+    }
     if (typeof input.amount !== 'number' || !Number.isFinite(input.amount) || input.amount <= 0) {
         return { accepted: false, reason: 'invalid_amount', message: 'A settlement amount must be a positive number.' };
     }
@@ -609,7 +614,14 @@ export async function handleReceiptDelivery(input: {
     // nowhere else, so the payload could not be rebuilt — and `settleHeldReceipt` paid from the row's own
     // mutable fields instead. That contradicted §2.6's claim that the persisted receipt is the evidence
     // authorising the payment and stays checkable in an audit. Now it genuinely is.
-    if (row.state === 'reserved') {
+    // Attach on the reserved→held transition AND to a `held` row that is missing either artifact.
+    //
+    // The second case is not hypothetical, and it is a trap the previous commit created (review finding): a
+    // settlement that was already `held` before this build stored only a signature. Recovery now refuses to
+    // pay a row it cannot re-verify, so without repairing it here that row would be **rejected forever** —
+    // an in-flight trade permanently unpayable because of an upgrade. A redelivery is exactly the moment the
+    // missing payload is back in our hands, so take it.
+    if (row.state === 'reserved' || !row.receipt || !row.receiptPayload) {
         advanceSettlement(row.key, 'held', {
             receipt: input.signature,
             receiptPayload: JSON.stringify(input.receipt),

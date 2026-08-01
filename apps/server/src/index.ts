@@ -124,10 +124,11 @@ async function main() {
     const RECOVERY_INTERVAL_MS = 15 * 60_000;
     const logRecoveryFailure = (e: any) => console.warn('[Federation] Settlement recovery failed:', e?.message || e);
 
-    const askPeerForStatus = async (peerId: string, key: string) => {
-        const { peerIdFromString } = await import('@libp2p/peer-id');
-        return federatedReceiptStatus(p2pNode, peerIdFromString(peerId), key);
-    };
+    // Imported once, not per row: recovery now runs on a timer over every unfinalised settlement, so a
+    // dynamic import inside the callback would repeat for each one on every cycle.
+    const { peerIdFromString } = await import('@libp2p/peer-id');
+    const askPeerForStatus = async (peerId: string, key: string) =>
+        federatedReceiptStatus(p2pNode, peerIdFromString(peerId), key);
 
     recoverSettlements().catch(logRecoveryFailure);
 

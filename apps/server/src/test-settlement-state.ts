@@ -22,7 +22,7 @@ import { db } from './db/db.js';
 import { addConnector } from './connector-manager.js';
 import { bridgeAccountId, resolveCounterpartyLabel, bridgeDisplayName } from './federation-bridge.js';
 import {
-    openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements,
+    openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, unfinalisedSettlementsSql,
     receiptStatus, actionForReceiptStatus,
 } from './federation-settlement-state.js';
 
@@ -56,7 +56,7 @@ async function main() {
     advanceSettlement('k-out-1', 'committed', { receipt: 'sig-abc' });
     const replay = openSettlement({
         key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
-        buyerPubkey: 'buyerpk', amount: 5, state: 'escrowed',
+        buyerPubkey: 'buyerpk', postId: 'post-1', amount: 5, state: 'escrowed',
     });
     assert(replay.state === 'committed', 'reopening an existing key does NOT reset it — a retry is safe');
     assert(replay.receipt === 'sig-abc', 'and the receipt survives the retry');
@@ -72,8 +72,13 @@ async function main() {
     }), /key collision/, 'reusing a key with a DIFFERENT amount is refused, not silently accepted');
     throws(() => openSettlement({
         key: 'k-out-1', direction: 'outbound', peerId: 'someone-else',
-        buyerPubkey: 'buyerpk', amount: 5, state: 'escrowed',
+        buyerPubkey: 'buyerpk', postId: 'post-1', amount: 5, state: 'escrowed',
     }), /key collision/, 'and reusing it for a different peer is refused too');
+    throws(() => openSettlement({
+        key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
+        buyerPubkey: 'buyerpk', postId: 'a-different-post', amount: 5, state: 'escrowed',
+    }), /key collision/,
+        'and for a different POST — otherwise the caller proceeds on new terms while the receipt is built from the old row');
     assert(getSettlement('k-out-1')!.amount === 5, 'the original row is untouched by the rejected reuse');
 
     // A same-state call carrying NEW metadata must still write it. An early return on state === to dropped
@@ -120,11 +125,14 @@ async function main() {
     // The recovery scan must be able to use idx_settlements_unfinalised, which is a PARTIAL index keyed on
     // `state IN (...)`. SQLite cannot match a NOT IN predicate against a partial index's condition, so the
     // equivalent-looking negative form full-scans a table that only ever grows.
-    const plan = db.prepare(
-        `EXPLAIN QUERY PLAN SELECT * FROM settlements WHERE state IN ('escrowed','reserved','committed','held') ORDER BY created_at`,
-    ).all() as any[];
+    // EXPLAINs the EXACT production SQL, via the exported builder — not a hand-written lookalike. The first
+    // version of this check wrote its own literal query and passed while production still bound placeholders
+    // and skipped the index entirely. A test that constructs its own subject proves nothing about the caller.
+    const plan = db.prepare(`EXPLAIN QUERY PLAN ${unfinalisedSettlementsSql()}`).all() as any[];
     assert(plan.some(r => /idx_settlements_unfinalised/.test(r.detail ?? '')),
         'and the scan uses the partial index rather than reading every settlement ever made');
+    assert(!plan.some(r => /TEMP B-TREE|USE TEMP/i.test(r.detail ?? '')),
+        'without a temp sort — the index carries created_at so the ORDER BY is free');
 
     // ── 5. GET_RECEIPT_STATUS — three states, and UNKNOWN means WAIT ─────────────
     assert(receiptStatus('k-in-1') === 'HELD', 'a persisted-but-unpaid receipt reports HELD');

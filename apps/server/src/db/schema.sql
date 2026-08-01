@@ -596,11 +596,20 @@ CREATE TABLE IF NOT EXISTS settlements (
     updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 -- Boot recovery scans for unfinalised rows, so index the states it looks for.
-CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(state, updated_at)
+-- Keyed on created_at ALONE, with the state set in the partial WHERE.
+--
+-- Recovery runs `WHERE state IN (4 values) ORDER BY created_at`. A (state, created_at) index is used, but
+-- still needs a TEMP B-TREE: an IN over the leading column becomes four separate index seeks, and merging
+-- four created_at-ordered ranges is not globally ordered. Measured, not assumed — EXPLAIN QUERY PLAN said
+-- `USE TEMP B-TREE FOR ORDER BY`.
+--
+-- Putting the state set in the partial condition instead means the index contains EXACTLY the unfinalised
+-- rows, already in created_at order, so the scan needs no filter and no sort. The test asserts both.
+CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(created_at)
     WHERE state IN ('escrowed', 'reserved', 'committed', 'held');
--- Covers reservedAgainstPeer(), which filters peer_id + state + direction. `direction` last because
--- peer_id is the selective column; including it at all avoids a row fetch per candidate.
-CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, state, direction);
+-- Covers reservedAgainstPeer(), which filters peer_id and direction by EQUALITY and state by IN. Equality
+-- columns come first: a range/IN predicate stops the index being usable for anything after it.
+CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, direction, state);
 -- memberForeignExposure() sums a member's outbound settlements (Rule 4's aggregate figure) and would
 -- otherwise full-scan a table that only ever grows. Column order matches the query's selectivity:
 -- buyer_pubkey narrows to one member first, then direction and state.

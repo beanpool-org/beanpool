@@ -655,12 +655,14 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             // Settlements (#104). INSERT OR REPLACE keyed on `key`, so a later state from the primary wins —
             // a settlement's states only ever move forward, and the primary is the only writer.
             if (remote.settlements) {
+                // Prepared once, outside the loop — a snapshot can carry the whole outbox.
+                const insertSettlement = db.prepare(`INSERT OR REPLACE INTO settlements
+                    (key, direction, peer_id, buyer_pubkey, buyer_home_node, seller_pubkey, post_id,
+                     amount, fee, reserved_until, state, receipt, receipt_payload, failure_reason,
+                     created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 for (const st of remote.settlements) {
-                    db.prepare(`INSERT OR REPLACE INTO settlements
-                        (key, direction, peer_id, buyer_pubkey, buyer_home_node, seller_pubkey, post_id,
-                         amount, fee, reserved_until, state, receipt, receipt_payload, failure_reason,
-                         created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    insertSettlement.run(
                         st.key, st.direction, st.peerId, st.buyerPubkey, st.buyerHomeNode ?? null,
                         st.sellerPubkey ?? null, st.postId ?? null, st.amount, st.fee ?? 0,
                         st.reservedUntil ?? null, st.state, st.receipt ?? null, st.receiptPayload ?? null,

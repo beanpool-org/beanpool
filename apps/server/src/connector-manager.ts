@@ -546,7 +546,9 @@ export function removeConnector(address: string): boolean {
  * the operator had configured correctly.
  */
 function peerIdFromAddress(address?: string): string | null {
-    if (!address) return null;
+    // typeof, not just truthiness: connector records are loaded from JSON on disk, so a hand-edited or
+    // corrupted file can put a number or object here, and `.matchAll` would throw a TypeError during boot.
+    if (!address || typeof address !== 'string') return null;
     const all = [...address.matchAll(/\/(?:p2p|ipfs)\/([^/]+)/g)].map(m => m[1]);
     if (all.length === 0) return null;
     // The LAST component, not the first (review finding). A circuit-relay multiaddr names two peers —

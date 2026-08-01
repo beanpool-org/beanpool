@@ -92,7 +92,7 @@ Six layers. A connector is only useful when all six are in place, and today they
 | 2 | **Transport** | libp2p — TCP + WebSockets, Noise encryption, yamux muxing. Two protocols: `/beanpool/handshake/1.0.0` (mutual trust + RTT) and `/beanpool/federation/1.0.0` (RPC). | Built |
 | 3 | **Trust level** | `mirror` = backup replica, full state replication. `peer` = trading partner, no sync. `blocked` = deny. **A mirror must never settle** — a replica mirrors a ledger, it does not author one. | Built |
 | 4 | **Economics — Half A** | Bridge accounts, per-peer credit caps, per-member foreign exposure caps, the purchase/receipt exchange, compensating reversals, boot recovery. | Built, unverified across two live nodes |
-| 5 | **Redemption — Half B** | The cross-node needs board and per-listing reach. The thing that makes a tab settle rather than accumulate. | **Not built** |
+| 5 | **Redemption — Half B** | The cross-node needs board and per-listing reach. The thing that makes a tab settle rather than accumulate. | **Not built** — shape decided [§7](#resolved-2026-08-02), plan in [§8](#8-the-first-slice) |
 
 ## 5. Three gates, all fail-closed, all currently shut
 
@@ -137,13 +137,66 @@ the mechanism that makes this model rebalance rather than merely account"* — b
 otherwise, and the issue ordering is what got worked.
 
 **2. The overlap with Commons / Treasury / enterprises was flagged and never resolved.** Mid-conversation:
-*"you do realise we already have a commons and treasury feature... people are nominated to manage
+*"you do realise wme already have a comons and treasury feature... people are nominated to manage
 'enterprises' inside the commons tab... it does seem that there is overlap here."* Two of the four
 rebalancing channels are Commons-side, and the actors that would run them — treasuries, keepers,
 per-enterprise stewardship — **already exist and are deployed**. Half B has far more foundation under it
 than #105 implies. Nobody has checked how the two fit together.
 
-## 8. Open decisions
+### Resolved 2026-08-02
+
+Four decisions, which close out both findings above.
+
+**A federation link is an enterprise.** Each peer relationship becomes an enterprise in the Commons tab —
+"Byron Link" — with a treasury, a visible energy balance, and a **keeper** appointed through the existing
+`treasury_operators` table (#106). This answers "who calls the favour in?" with a named, accountable person
+rather than an admin task, and it reuses machinery that is already built and deployed.
+
+Rejected, and why: the **general Commons treasury** would blend "what we owe Byron" into "what the Commons
+has to spend", which is the precise question [§2.4](federation-economics.md#24-bridge-accounts-are-not-the-commons)
+separated bridge accounts to keep answerable. **Operator-only config** would keep a community from seeing or
+acting on its own energy balance. A **community vote** is the most legitimate answer but the Decision
+primitive is design-only, so it would block Half B behind a whole other workstream — worth revisiting once
+Decisions exist, and `treasury_operators.granted_by` is already a plain TEXT so an `appoint` Decision id can
+be recorded there without a migration.
+
+**A partner's needs arrive by periodic pull, cached locally.** We ask each peer for its remote-visible
+listings on a timer and store them with `origin_node` set. Chosen because **off-grid and solar nodes sleep**,
+and a board that empties whenever a peer naps is not a board — this matches the fail-closed, offline-tolerant
+stance settlement already takes. Accepted cost: a listing can be up to one interval stale, so a filled need
+may briefly still show. Push-on-publish loses anything posted while a peer is down unless a queue and retry
+are added, which is most of a pull implementation plus new failure modes.
+
+**Reach is three-tier: local / named peers / everywhere.** Default local, one tap for everywhere, multi-select
+for specific communities. Covers the original "byron only / everywhere / brisbane / mullum / gold coast"
+without making every poster think about network topology. Still **Rule 9** — a discovery filter, never an
+access control.
+
+**Build the thinnest slice of the whole loop first.** Not Half A to completion, not Half B in isolation — one
+purchase across two nodes and one redemption back the other way, proving the tab goes up *and* comes down.
+
+## 8. The first slice
+
+The smallest thing that demonstrates the concept working, in order. Each step is only worth doing because of
+the one after it.
+
+1. **A route for a cross-node purchase.** `settleCrossNodePurchase` exists and is tested but has no HTTP
+   caller, so no member can trigger it. Half A is otherwise complete.
+2. **Two live nodes, one purchase.** The four entries, both ledgers summing to zero, bridges equal and
+   opposite. On the real 1 CPU / 1 GB pair, because its latency exposes races localhost hides — and that is
+   also how open decision 3 (reservation timeout) gets measured rather than guessed.
+3. **The "Byron Link" enterprise.** A per-peer treasury, its keeper, and the energy balance shown on it.
+4. **Reach on a listing, and the pull.** Three-tier reach, a periodic pull of each peer's remote-visible
+   listings, cached with `origin_node`.
+5. **One redemption.** The keeper of Byron Link commissions a Brisbane member's offer; the tab nets down.
+   This is the step that turns an accounting exercise into the model.
+
+Steps 1–2 are mostly verification of what exists. Steps 3–5 are the half that has no code.
+
+**Deliberately not in this slice:** the federation-aware circulation charge (#107 — a rebalancing *pressure*,
+useful only once tabs actually move), multi-peer topology, and anything in section 9.
+
+## 9. Open decisions
 
 Carried from [§9](federation-economics.md#9-open-questions), still unresolved:
 
@@ -157,7 +210,9 @@ Carried from [§9](federation-economics.md#9-open-questions), still unresolved:
    with each cap at an end, in beans. Placement is open: an operator health signal, or a governance-grade
    fact belonging in the Commons tab.
 5. **Are enterprise stewards appointed by an admin or nominated by the community?** Determines whether an
-   `appoint` Decision becomes the grantor. Currently admin-appointed with the schema left open.
+   `appoint` Decision becomes the grantor. Currently admin-appointed with the schema left open. **Federation now
+   depends on this the same way #106 does** — a federation link is an enterprise (§7), so its keeper is
+   appointed by whatever mechanism this settles on.
 
 **Settled, and recorded so they aren't relitigated:** the tab lives in `bridge_<peer>` rather than the
 Commons; foreign spending power is carved out of the member's existing home floor; a node's cap on a peer
@@ -168,7 +223,7 @@ has no default; the 1.5% fee goes to the buyer's home Commons. Reasoning for eac
 multi-hop credit, any tradeable settlement token or second kind of bean, and routing a surplus charge to a
 supra-community pool.
 
-## 9. Prior art
+## 10. Prior art
 
 This is Keynes' International Clearing Union (1943), component for component — bilateral tabs in a unit of
 account nobody can hoard or export, with pressure applied to *both* the deficit and the surplus side.

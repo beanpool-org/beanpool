@@ -189,11 +189,10 @@ export function initConnectorManager(node: Libp2p): void {
         // Initialize status for this peer ID if we have a connector
         for (const connector of connectors) {
             let matches = false;
-            if (connector.address) {
-                const match = connector.address.match(/\/p2p\/([^/]+)/);
-                if (match && match[1] === peerId) {
-                    matches = true;
-                }
+            // Same resolution rule as materialise()/isPeerTrusted — one place decides what address
+            // names a peer, so /ipfs/ and /p2p/ can't be treated differently in different checks.
+            if (connector.address && peerIdFromAddress(connector.address) === peerId) {
+                matches = true;
             }
             const status = statuses.get(connector.address);
             if (status?.peerId === peerId) {
@@ -538,9 +537,16 @@ export function removeConnector(address: string): boolean {
     return true;
 }
 
-/** The peer id an operator wrote into a connector address, when the address is a full multiaddr. */
+/**
+ * The peer id an operator wrote into a connector address, when the address is a full multiaddr.
+ *
+ * Accepts `/ipfs/` as well as `/p2p/` — they are aliases for the same component, and `/ipfs/` is what older
+ * tooling and copied-from-docs addresses still emit (review finding). Missing it meant a peer configured
+ * that way stayed unidentified, so every peer-id-keyed settlement lookup fail-closed against a connector
+ * the operator had configured correctly.
+ */
 function peerIdFromAddress(address?: string): string | null {
-    return address?.match(/\/p2p\/([^/]+)/)?.[1] ?? null;
+    return address?.match(/\/(?:p2p|ipfs)\/([^/]+)/)?.[1] ?? null;
 }
 
 /**
@@ -589,11 +595,8 @@ export function isPeerTrusted(peerId: string): { trusted: boolean; trustLevel: T
             return { trusted: true, trustLevel: c.trustLevel, enabled: c.enabled };
         }
 
-        if (c.address) {
-            const match = c.address.match(/\/p2p\/([^/]+)/);
-            if (match && match[1] === peerId) {
-                return { trusted: true, trustLevel: c.trustLevel, enabled: c.enabled };
-            }
+        if (c.address && peerIdFromAddress(c.address) === peerId) {
+            return { trusted: true, trustLevel: c.trustLevel, enabled: c.enabled };
         }
     }
 
@@ -641,11 +644,8 @@ export function updateInboundHandshakeStatus(
 ): void {
     for (const connector of connectors) {
         let matches = false;
-        if (connector.address) {
-            const match = connector.address.match(/\/p2p\/([^/]+)/);
-            if (match && match[1] === peerId) {
-                matches = true;
-            }
+        if (connector.address && peerIdFromAddress(connector.address) === peerId) {
+            matches = true;
         }
         const status = statuses.get(connector.address);
         if (status?.peerId === peerId) {

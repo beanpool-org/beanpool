@@ -126,29 +126,10 @@ export function openSettlement(input: {
     reservedUntil?: string | null;
     state: Extract<SettlementState, 'escrowed' | 'reserved'>;
 }): SettlementRow {
-    const existing = getSettlement(input.key);
-    if (existing) {
-        // Idempotent ONLY for the same trade. Returning the existing row for a DIFFERENT payload would be
-        // silent trade aliasing (review finding): a peer re-using a key with a larger amount, or a
-        // different counterparty, would get a success back and the caller would proceed believing the new
-        // terms were registered. The identity of a settlement is the whole tuple, not just the key.
-        //
-        // Amount is compared at 4dp because it round-trips through JSON as a float.
-        const same = existing.direction === input.direction
-            && existing.peerId === input.peerId
-            && existing.buyerPubkey === input.buyerPubkey
-            && (existing.sellerPubkey ?? null) === (input.sellerPubkey ?? null)
-            && Math.round(existing.amount * 10000) === Math.round(input.amount * 10000);
-        if (!same) {
-            throw new Error(`Settlement key collision for ${input.key}: payload does not match the existing row`);
-        }
-        return existing;
-    }
-
-    // ON CONFLICT DO NOTHING rather than a bare INSERT. better-sqlite3 is synchronous and there is no
-    // await between the read above and this write, so the interleaving that would raise a UNIQUE error is
-    // not reachable in-process today — but the idempotency guarantee should not rest on the absence of an
-    // await in a function that may later grow one, or on there being exactly one writer process.
+    // Insert-then-validate, NOT validate-then-insert (review finding). A pre-insert check plus
+    // `ON CONFLICT DO NOTHING` has a hole: if a conflicting row appears between the check and the insert,
+    // the conflict clause silently skips the write and the mismatched row is returned as if it were ours.
+    // Validating whatever row actually ends up in the table closes both orderings with one check.
     db.prepare(`
         INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, buyer_home_node, seller_pubkey,
                                  post_id, amount, fee, reserved_until, state)
@@ -159,7 +140,24 @@ export function openSettlement(input: {
         input.buyerHomeNode ?? null, input.sellerPubkey ?? null, input.postId ?? null,
         input.amount, input.fee ?? 0, input.reservedUntil ?? null, input.state,
     );
-    return getSettlement(input.key)!;
+
+    const row = getSettlement(input.key)!;
+
+    // Idempotent ONLY for the same trade. Returning the row for a DIFFERENT payload would be silent trade
+    // aliasing: a peer re-using a key with a larger amount, or a different counterparty, would get a
+    // success back and the caller would proceed believing the new terms were registered. The identity of a
+    // settlement is the whole tuple, not just the key.
+    //
+    // Amount is compared at 4dp because it round-trips through JSON as a float.
+    const same = row.direction === input.direction
+        && row.peerId === input.peerId
+        && row.buyerPubkey === input.buyerPubkey
+        && (row.sellerPubkey ?? null) === (input.sellerPubkey ?? null)
+        && Math.round(row.amount * 10000) === Math.round(input.amount * 10000);
+    if (!same) {
+        throw new Error(`Settlement key collision for ${input.key}: payload does not match the existing row`);
+    }
+    return row;
 }
 
 /**

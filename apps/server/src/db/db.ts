@@ -169,6 +169,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE settlements ADD COLUMN seller_pubkey TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE settlements ADD COLUMN fee REAL NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE settlements ADD COLUMN reserved_until DATETIME`).run(); } catch { }
+    // Rule 4's per-member aggregate exposure read would otherwise full-scan `settlements`.
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, direction, state)`).run(); } catch { }
     // Moderation: Add status tracking to abuse reports
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     // Marketplace hygiene: track when a lingering escrow deal was last nudged

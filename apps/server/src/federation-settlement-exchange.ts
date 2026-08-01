@@ -33,7 +33,7 @@
 
 import { db } from './db/db.js';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
-import { transfer, registerVisitor, getMember, moveToCommons, payFromCommons } from './state-engine.js';
+import { transfer, registerVisitor, getMember, moveToCommons, payFromCommons, reconcileLedgerFromDb } from './state-engine.js';
 import { bridgeAccountId, ensureBridgeAccount, settlementCapacityForPeer } from './federation-bridge.js';
 import {
     openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, expiredReservations,
@@ -104,6 +104,37 @@ function mustTransfer(from: string, to: string, amount: number, memo: string): v
     if (!txn) throw new SettlementError(`Ledger move refused: ${from} → ${to} (${amount})`, 'ledger_refused');
 }
 
+/**
+ * Run a settlement's writes in a DB transaction that also unwinds the IN-MEMORY ledger on failure.
+ *
+ * THE PROBLEM THIS SOLVES (review finding, and the most consequential one in this PR). `transfer()`,
+ * `moveToCommons()` and `payFromCommons()` mutate the in-memory `ledger` — account balances and the
+ * `COMMONS_BALANCE` global — as well as writing SQLite. `db.transaction()` rolls back only the SQLite half.
+ * So if any later statement in the same transaction throws, the rows revert and the in-memory ledger keeps
+ * the mutation: the two disagree permanently, until a restart, with every subsequent read served from the
+ * wrong number.
+ *
+ * It is reachable. The compare-and-swap added to `advanceSettlement` throws on a lost race, and it runs
+ * *after* the ledger moves in every write path here — so hardening the state machine introduced exactly
+ * this hazard at exactly the wrong point.
+ *
+ * `reconcileLedgerFromDb()` is the existing cure: it rebuilds the in-memory ledger from the rows, which
+ * after a rollback are the truth. Cheap, and only ever runs on a failure path.
+ */
+function settlementTransaction<T>(fn: () => T): T {
+    try {
+        return db.transaction(fn)();
+    } catch (e) {
+        // The DB has rolled back; resync memory to it rather than leaving the two disagreeing.
+        try {
+            reconcileLedgerFromDb();
+        } catch (resyncError: any) {
+            console.error('[Federation] Ledger resync after a failed settlement write FAILED:', resyncError?.message || resyncError);
+        }
+        throw e;
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // BUYER'S NODE (outbound) — steps 1, 3, and the compensating reversal
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -137,7 +168,7 @@ export function beginOutboundSettlement(input: {
     const fee = crossNodeFee(amount);
     const escrowAccount = escrowAccountFor(input.key);
 
-    return db.transaction(() => {
+    return settlementTransaction(() => {
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`)
             .run(escrowAccount);
 
@@ -164,7 +195,7 @@ export function beginOutboundSettlement(input: {
             fee,
             state: 'escrowed',
         });
-    })();
+    });
 }
 
 /**
@@ -221,7 +252,7 @@ export async function commitOutboundSettlement(
     const bridge = bridgeAccountId(row.peerId);
     ensureBridgeAccount(row.peerId);
 
-    return db.transaction(() => {
+    return settlementTransaction(() => {
         // Price to the bridge; fee to our OWN Commons. The bridge entry carries the price alone, so the
         // two nodes' bridge rows can be equal and opposite.
         mustTransfer(escrowAccount, bridge, row.amount, `Cross-community purchase (${key})`);
@@ -233,7 +264,7 @@ export async function commitOutboundSettlement(
         }
         advanceSettlement(key, 'committed', { receipt: signature });
         return { receipt, signature };
-    })();
+    });
 }
 
 /**
@@ -262,7 +293,7 @@ export function reverseOutboundSettlement(key: string, reason: string): Settleme
 
     const bridge = bridgeAccountId(row.peerId);
 
-    return db.transaction(() => {
+    return settlementTransaction(() => {
         mustTransfer(bridge, row.buyerPubkey, row.amount, `Reversed cross-community purchase (${key})`);
         // Drawn from the Commons pot, not from the shadow account — otherwise the refund is funded from
         // nowhere and the node's books stop balancing. Refusing here (rather than skipping the fee) keeps
@@ -271,7 +302,7 @@ export function reverseOutboundSettlement(key: string, reason: string): Settleme
             throw new SettlementError(`Commons cannot cover the fee refund for ${key}`, 'fee_refund_failed');
         }
         return advanceSettlement(key, 'reversed', { failureReason: reason });
-    })();
+    });
 }
 
 /**
@@ -286,13 +317,13 @@ export function abandonOutboundSettlement(key: string, reason: string): Settleme
         throw new SettlementError(`${key} is ${row.state}, not an unasked hold`, 'wrong_state');
     }
 
-    return db.transaction(() => {
+    return settlementTransaction(() => {
         mustTransfer(
             escrowAccountFor(key), row.buyerPubkey, round4(row.amount + row.fee),
             `Released cross-community hold (${key})`,
         );
         return advanceSettlement(key, 'abandoned', { failureReason: reason });
-    })();
+    });
 }
 
 /** The peer confirmed it paid its seller. Both bridges agree; nothing left to do but record it. */
@@ -500,7 +531,8 @@ export async function handleReceiptDelivery(input: {
  * node's own cap is the only authority on what it may extend and should never be bound by a decision it
  * made in the past.
  */
-export function settleHeldReceipt(key: string): ReceiptOutcome {
+export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean }): ReceiptOutcome {
+    const latch = opts?.latchOnRefusal ?? true;
     const row = getSettlement(key);
     if (!row) return { settled: false, reason: 'NOT_FOUND', message: 'No such settlement.' };
     if (row.state === 'settled') return { settled: true, key };
@@ -513,15 +545,33 @@ export function settleHeldReceipt(key: string): ReceiptOutcome {
 
     const capacity = settlementCapacityForPeer(row.peerId, row.amount);
     if (!capacity.ok) {
-        // Do NOT pay. Mark it reversed so the buyer's node can compensate its own entries; on this side
-        // there is nothing to compensate, because nothing was ever paid out.
-        advanceSettlement(key, 'reversed', { failureReason: 'CAPACITY_LAPSED' });
+        // Do NOT pay. Whether to LATCH that refusal depends on who is asking, and the distinction matters
+        // (review finding):
+        //
+        //   • Live delivery (latch): the peer is on the other end of a stream waiting for an answer, and
+        //     `reversed` is what tells them to compensate their own entries. On this side there is nothing
+        //     to compensate, because nothing was ever paid out.
+        //   • Boot recovery (no latch): nobody is waiting. Latching here would turn a TEMPORARY cap change
+        //     — an operator lowering a limit during maintenance, or a trust level briefly edited — into a
+        //     permanent outcome, because `reversed` is terminal. Restoring the cap afterwards would not
+        //     let the seller be paid, and we would owe someone with no way left to pay them.
+        //
+        // So recovery leaves it `held` and tries again next boot, and `stuckSettlements()` surfaces it if it
+        // never clears.
+        if (latch) {
+            advanceSettlement(key, 'reversed', { failureReason: 'CAPACITY_LAPSED' });
+        } else {
+            console.warn(
+                `[Federation] Held receipt ${key} cannot be settled yet (${capacity.message}). `
+                + `Left held — it will be retried, and reported if it persists.`,
+            );
+        }
         return { settled: false, reason: 'CAPACITY_LAPSED', message: capacity.message };
     }
 
     ensureBridgeAccount(row.peerId);
 
-    return db.transaction((): ReceiptOutcome => {
+    return settlementTransaction((): ReceiptOutcome => {
         // The seller receives exactly the agreed amount — fee-exempt, because the buyer already paid the
         // fee on their own node and it never crossed the border.
         mustTransfer(
@@ -530,7 +580,7 @@ export function settleHeldReceipt(key: string): ReceiptOutcome {
         );
         advanceSettlement(key, 'settled');
         return { settled: true, key };
-    })();
+    });
 }
 
 /** The `GET_RECEIPT_STATUS(key)` answer. Scoped to the asking peer so no peer can probe another's keys. */
@@ -577,10 +627,22 @@ export interface RecoveryResult {
     stuck: SettlementRow[];
 }
 
-/** Outbound settlements that have been unresolved long enough to need a human. */
+/**
+ * Settlements unresolved long enough to need a human, on either side.
+ *
+ * Two shapes, both of which mean real value is in limbo and no amount of retrying will move it:
+ *   • outbound `committed` — we debited our buyer and issued a receipt, and still don't know its fate.
+ *   • inbound `held` — we hold a verified receipt and owe our seller, but cannot pay within our own cap.
+ *     Recovery deliberately does not latch that as reversed, so without this it would retry silently
+ *     forever while a local member goes unpaid.
+ */
 export function stuckSettlements(now = Date.now()): SettlementRow[] {
-    return unfinalisedSettlements('outbound').filter(
-        r => r.state === 'committed' && now - new Date(r.updatedAt).getTime() > STUCK_SETTLEMENT_AFTER_MS,
+    const tooOld = (r: SettlementRow) => now - new Date(r.updatedAt).getTime() > STUCK_SETTLEMENT_AFTER_MS;
+    return unfinalisedSettlements().filter(r =>
+        tooOld(r) && (
+            (r.direction === 'outbound' && r.state === 'committed')
+            || (r.direction === 'inbound' && r.state === 'held')
+        ),
     );
 }
 
@@ -608,9 +670,11 @@ export async function recoverSettlements(
         try {
             if (row.direction === 'inbound') {
                 // We hold a verified receipt and owe our seller. No network needed — replay the payment.
+                // latchOnRefusal: false — nobody is waiting on an answer here, so a cap that is temporarily
+                // too low must not permanently reverse a receipt we hold (see settleHeldReceipt).
                 if (row.state === 'held') {
-                    if (settleHeldReceipt(row.key).settled) result.paid++;
-                    else result.reversed++;
+                    if (settleHeldReceipt(row.key, { latchOnRefusal: false }).settled) result.paid++;
+                    else result.stillOpen++;
                 } else {
                     result.stillOpen++;      // 'reserved' — still within its hold, wait for the receipt
                 }
@@ -649,9 +713,12 @@ export async function recoverSettlements(
     // and reversing on a guess is exactly what the UNKNOWN/NOT_FOUND split exists to prevent.
     result.stuck = stuckSettlements();
     for (const row of result.stuck) {
+        const whatIsStuck = row.direction === 'outbound'
+            ? `The buyer's beans are still committed`
+            : `A local seller is owed and we cannot pay within our own credit limit`;
         console.warn(
             `[Federation] ⚠️  Settlement ${row.key} has been unresolved since ${row.updatedAt} `
-            + `(${row.amount} beans, peer ${row.peerId.slice(-8)}). The buyer's beans are still committed. `
+            + `(${row.amount} beans, peer ${row.peerId.slice(-8)}). ${whatIsStuck}. `
             + `An operator needs to reconcile this with the other community — it will not clear by retrying.`,
         );
     }

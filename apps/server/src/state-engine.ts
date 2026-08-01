@@ -1263,6 +1263,10 @@ export function payFromCommons(to: string, amount: number, memo: string): Transa
             last_updated_at = excluded.last_updated_at
     `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, txn.timestamp);
 
+    // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this
+    // they are stranded and the transactions table drifts from account balances — `moveToCommons` persists
+    // them and this must too (review finding).
+    persistDecayEvents();
     persistCommonsBalance();
     return txn;
 }
@@ -2609,6 +2613,18 @@ export function adminPruneUser(publicKey: string) {
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
 
+        // KNOWN BUG — tracked in issue #124, deliberately not fixed here.
+        //
+        // Both of these move the COMMONS_POOL *account*, which is only the persisted shadow of the
+        // `COMMONS_BALANCE` global; `persistCommonsBalance()` rewrites the row from the global after every
+        // transfer, so the confiscation is discarded and the write-off is funded from nowhere (creating
+        // beans). `moveToCommons()` / `payFromCommons()` below in this file are the correct primitives and
+        // are what #124 will switch these to.
+        //
+        // Left alone in #104's PR on purpose: it is a live admin money path, and `payFromCommons` REFUSES
+        // when the pot cannot cover the debt — where today the write-off always "succeeds" by minting. That
+        // is the right behaviour but it is a product decision (pruning a deeply negative member can now
+        // fail and the admin UI has to say something useful), and it needs its own conservation test.
         if (balance < 0) {
             const D = Math.abs(balance);
             transfer('COMMONS_POOL', publicKey, D, `Settle bad debt for pruned user: ${publicKey}`, 'direct', true);

@@ -103,14 +103,29 @@ async function main() {
     connectAll().catch((e) => console.warn('[Connectors] Initial connect failed:', e));
 
     // Step 8.1: Resolve settlements that were in flight when this node last stopped (#104 §2.5).
+    //
     // Deliberately NOT gated on FEDERATION_SETTLEMENT_ENABLED: turning settlement off is a decision about
-    // accepting NEW cross-node trades, and must not strand beans already in escrow or a seller already
-    // owed. Runs detached so a slow or unreachable peer can never delay boot — an unresolved row is
-    // retried on the next start, and waiting is always the safe side.
-    recoverSettlements(async (peerId, key) => {
-        const { peerIdFromString } = await import('@libp2p/peer-id');
-        return federatedReceiptStatus(p2pNode, peerIdFromString(peerId), key);
-    }).catch((e) => console.warn('[Federation] Settlement recovery failed:', e?.message || e));
+    // accepting NEW cross-node trades, and must not strand beans already in escrow or a seller already owed.
+    //
+    // Two passes, because the two halves have different prerequisites (review finding):
+    //   1. Immediately, with no peer resolver — releases lapsed reservations, replays payments we already
+    //      owe, and refunds holds interrupted before the ask. All local; none of it needs the network.
+    //   2. After a delay, with the resolver — `connectAll()` above is fired detached, so dialling a peer
+    //      right now fails for every row and leaves each one unresolved on every single boot. The pass is
+    //      idempotent by design, so running it twice costs nothing.
+    //
+    // A delay rather than a connection-ready event because libp2p exposes none for "the peers I configured
+    // are reachable", and waiting is always the safe side here — an unresolved row is retried next boot.
+    const RECOVERY_PEER_DELAY_MS = 15_000;
+    const logRecoveryFailure = (e: any) => console.warn('[Federation] Settlement recovery failed:', e?.message || e);
+
+    recoverSettlements().catch(logRecoveryFailure);
+    setTimeout(() => {
+        recoverSettlements(async (peerId, key) => {
+            const { peerIdFromString } = await import('@libp2p/peer-id');
+            return federatedReceiptStatus(p2pNode, peerIdFromString(peerId), key);
+        }).catch(logRecoveryFailure);
+    }, RECOVERY_PEER_DELAY_MS).unref();
 
     // Step 8.5: Backup puller (one-directional live backup). On a node with
     // NODE_ROLE=backup, periodically pull the primary's signed snapshot over

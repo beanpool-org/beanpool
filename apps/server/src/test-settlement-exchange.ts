@@ -66,6 +66,7 @@ const r4 = (n: number): number => Math.round(n * 10000) / 10000;
 const balanceOf = (pk: string): number =>
     r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
 const near = (a: number, b: number): boolean => r4(a) === r4(b);
+const escrowFor = (key: string): string => `escrow_${key}`;
 
 /** Ledger rows whose memo names this settlement — how we prove a reversal ADDS entries, not removes them. */
 const txnsFor = (key: string): number =>
@@ -419,6 +420,49 @@ async function main() {
         'the report carries what an operator needs: the amount at stake and which community to talk to');
     finaliseOutboundSettlement(R8);
     assert(stuckSettlements().every(r => r.key !== R8), 'once resolved it stops being reported');
+
+    // ── 10c. A temporary cap change must not permanently strand a held receipt ────────────────────
+    // `reversed` is terminal, so latching a refusal during recovery would mean restoring the cap later
+    // could never pay the seller — we would owe someone with no way left to pay them.
+    const R9 = 'k-in-maintenance';
+    setConnectorCreditCap(BRIS_ADDR, 1000);
+    assert(ask(R9, 6).accepted === true, 'a reservation made while the cap is healthy');
+    const r9Receipt: SettlementReceipt = { ...lapseReceipt, key: R9, amount: 6 };
+    db.prepare(`UPDATE settlements SET state='held', receipt=? WHERE key=?`)
+        .run(await signReceipt(r9Receipt, brisKey), R9);
+
+    setConnectorCreditCap(BRIS_ADDR, 1);            // operator lowers it during maintenance
+    const recoverUnderLowCap = await recoverSettlements();
+    assert(getSettlement(R9)!.state === 'held',
+        'recovery leaves it HELD rather than latching a temporary cap change into a terminal reversal');
+    assert(recoverUnderLowCap.stillOpen >= 1, 'and reports it as still open, to retry');
+
+    setConnectorCreditCap(BRIS_ADDR, 1000);         // ...and restores it
+    const sellerBeforeRestore = balanceOf(seller);
+    await recoverSettlements();
+    assert(getSettlement(R9)!.state === 'settled' && near(balanceOf(seller), sellerBeforeRestore + 6),
+        'once the cap is restored the seller is paid — the receipt was never thrown away');
+
+    // Live delivery is the opposite: a peer is waiting on an answer, so the refusal IS latched (§2.5) —
+    // `reversed` is what tells them to compensate their own entries. Verified in section 8 above.
+    assert(getSettlement(R2)!.state === 'reversed', 'live delivery still latches CAPACITY_LAPSED');
+
+    // ── 10d. A failed write resyncs the in-memory ledger to the rolled-back rows ───────────────────
+    // transfer()/moveToCommons() mutate the in-memory ledger AND SQLite; db.transaction rolls back only
+    // the latter. Without a resync the two disagree permanently and every later read is served the wrong
+    // number. Forced here by making the state transition illegal at the moment the ledger has already moved.
+    const R10 = 'k-rollback';
+    beginOutboundSettlement({ key: R10, peerId: OTHER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: 3 });
+    const buyerBeforeFailedCommit = balanceOf(buyer);
+    const bridgeBeforeFailedCommit = getEnergyBalance(OTHER);
+    db.prepare(`UPDATE settlements SET state='settled' WHERE key=?`).run(R10);   // commit is now illegal
+    let threw = false;
+    try { await commitOutboundSettlement(R10, OTHER, otherKey); } catch { threw = true; }
+    assert(threw, 'committing into an illegal state throws rather than writing');
+    assert(near(balanceOf(buyer), buyerBeforeFailedCommit) && near(getEnergyBalance(OTHER), bridgeBeforeFailedCommit),
+        'and the DB rows are unchanged');
+    assert(near(ledger.getAccount(escrowFor(R10)).balance, balanceOf(escrowFor(R10))),
+        'and the IN-MEMORY ledger agrees with them — a rollback resyncs memory instead of leaving it ahead');
 
     // ── 11. The pair nets to zero (§2.1) ─────────────────────────────────────────────────────────
     // Both halves of one crossing, run against this single database. That proves the ARITHMETIC of the

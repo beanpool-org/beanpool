@@ -592,3 +592,7 @@ CREATE TABLE IF NOT EXISTS settlements (
 CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(state, updated_at)
     WHERE state IN ('escrowed', 'reserved', 'committed', 'held');
 CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, state);
+-- memberForeignExposure() sums a member's outbound settlements (Rule 4's aggregate figure) and would
+-- otherwise full-scan a table that only ever grows. Column order matches the query's selectivity:
+-- buyer_pubkey narrows to one member first, then direction and state.
+CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, direction, state);

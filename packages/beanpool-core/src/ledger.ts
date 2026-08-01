@@ -39,6 +39,7 @@ export class LedgerManager {
     private readonly DEFAULT_CREDIT_LIMIT = -100; // Legacy fallback — callers should pass dynamic floor
     private readonly EPOCH_MS = 24 * 60 * 60 * 1000; // 24 hours
     private readonly MAX_PENDING_DECAY_EVENTS = 10_000; // backstop if the host never drains
+    private decayCapWarned = false;                     // so hitting the cap logs once, not per read
     // Community treasury accounts are real members (so they can trade in the marketplace)
     // but, like COMMONS_POOL, are exempt from demurrage so their working balance doesn't
     // erode. Populated by the host at boot from `members WHERE is_treasury=1`, and on create.
@@ -57,15 +58,32 @@ export class LedgerManager {
     }
 
     /**
-     * Loads ledger state from an array
+     * Loads ledger state from an array, discarding any queued decay events AND the Commons credit they made.
+     *
+     * DROPPING THE EVENTS ALONE WAS A CONSERVATION BUG. `applyDecay` does two things together: it debits the
+     * account, and it does `COMMONS_BALANCE += decayed`. Only the debit lives in the account map this call is
+     * about to REPLACE with the host's stored rows — so the debit was reverted while the credit stayed. A
+     * credit with no matching debit, which the host's next `persistCommonsBalance()` makes durable: minting,
+     * out of the one function whose entire job is to resynchronise.
+     *
+     * The old comment reasoned correctly about the events and forgot the credit they had already made.
+     *
+     * WHY REVERTING THE CREDIT IS EXACTLY RIGHT rather than approximately right: a queued event always means
+     * its debit is memory-only. `drainDecayEvents()` is only ever called by a host that immediately persists
+     * those balances, so anything still queued has not been written to a row. And since #127's sibling fix
+     * every credit has exactly one event — see `applyDecay`, which now defers rather than applying a decay it
+     * cannot record.
+     *
+     * Nothing is lost by dropping both halves. Decay is epoch-based and recomputes lazily from
+     * `lastDemurrageEpoch`, which these reloaded rows still carry, so the next read applies it again.
      */
     loadState(accounts: LedgerAccount[]): void {
+        const undoneCredit = this.decayEvents.reduce((total, e) => total + e.amount, 0);
+        if (undoneCredit > 0) COMMONS_BALANCE -= undoneCredit;
         this.accounts = new Map();
         accounts.forEach(acc => this.accounts.set(acc.id, acc));
-        // Pending decay events refer to the replaced state — they no longer match the
-        // reloaded balances. Decay is epoch-based and recomputes lazily, so dropping
-        // them is safe; persisting them against fresh state would double-count.
         this.decayEvents = [];
+        this.decayCapWarned = false;
     }
 
     /**
@@ -75,6 +93,7 @@ export class LedgerManager {
     drainDecayEvents(): DecayEvent[] {
         const events = this.decayEvents;
         this.decayEvents = [];
+        this.decayCapWarned = false;
         return events;
     }
 
@@ -143,23 +162,42 @@ export class LedgerManager {
             return account;
         }
 
+        // EVERY CREDIT MUST HAVE EXACTLY ONE EVENT, which is what makes `loadState` able to unwind it and the
+        // host able to write a ledger row for it. Both guards below therefore DEFER the decay — returning
+        // without touching the balance or the epoch — rather than applying a decay they cannot record.
+        //
+        // Deferring is not losing: `epochsPassed` is measured from the stored `lastDemurrageEpoch`, so leaving
+        // it alone means the same decay is simply computed again on the next read, over a longer interval.
+        if (this.decayEvents.length >= this.MAX_PENDING_DECAY_EVENTS) {
+            // Previously the credit was applied and the event silently skipped past this cap, so the host
+            // could never write the matching row and the Commons held a credit with no traceable source.
+            if (!this.decayCapWarned) {
+                console.warn(`[Ledger] ${this.MAX_PENDING_DECAY_EVENTS} decay events pending and undrained — `
+                    + 'deferring further demurrage until the host persists them.');
+                this.decayCapWarned = true;
+            }
+            return account;
+        }
+
         const monthsPassed = epochsPassed / 30;
         const newBalance = this._calculateProgressiveDecay(account.balance, monthsPassed);
         const decayedAmount = account.balance - newBalance;
 
+        // Below the recording threshold, defer too. The old form advanced the epoch and credited the Commons
+        // for an amount too small to record, so the interval was consumed and the credit left unaccounted —
+        // a tiny leak, but on every read of every small balance, and one `loadState` could not unwind.
+        if (decayedAmount <= 0.0001) return account;
+
         COMMONS_BALANCE += decayedAmount;
         account.balance = newBalance;
         account.lastDemurrageEpoch = currentEpoch;
-
-        if (decayedAmount > 0.0001 && this.decayEvents.length < this.MAX_PENDING_DECAY_EVENTS) {
-            this.decayEvents.push({
-                accountId: account.id,
-                amount: decayedAmount,
-                epochsPassed,
-                toEpoch: currentEpoch,
-                timestamp: new Date().toISOString(),
-            });
-        }
+        this.decayEvents.push({
+            accountId: account.id,
+            amount: decayedAmount,
+            epochsPassed,
+            toEpoch: currentEpoch,
+            timestamp: new Date().toISOString(),
+        });
 
         return account;
     }

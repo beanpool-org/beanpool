@@ -1204,19 +1204,46 @@ export function transfer(from: string, to: string, amount: number, memo: string,
  * persisted and then overwritten a moment later, and the value is gone from the node's books at the next
  * restart — the books stop summing to zero, quietly.
  *
- * Restricted to synthetic senders (escrow_*, bridge_*, project_*) on purpose. Member-facing debits belong
- * in `transfer()`, where the send gate, floor policy and fee policy live; this is a plumbing move for value
- * already held in a system account, and it deliberately implements none of those policies.
+ * WHO MAY SEND. Synthetic accounts (escrow_*, bridge_*, project_*) and community TREASURIES. Ordinary
+ * member-facing debits belong in `transfer()`, where the send gate, floor policy and fee policy live; this
+ * is a plumbing move for value already held in a community-owned account and it implements none of those.
+ *
+ * A treasury is a member row with `is_treasury = 1`, so it is not synthetic — but a treasury sweeping its
+ * own surplus into the shared Commons is a community bookkeeping move, not a peer-to-peer gift, and routing
+ * it through `transfer()` was what destroyed the beans (#126). It also means the sweep is no longer subject
+ * to the completed-trade send gate, which had been refusing sweeps from treasuries that had never traded
+ * with a bare "Sweep failed".
+ *
+ * FLOOR. Synthetic senders are unbounded (an escrow account is drained to exactly zero by design, and a
+ * bridge must be able to go negative — that negative IS the extended credit). A treasury is floored at 0:
+ * it may only sweep surplus it actually holds, and must never be driven into debt by a sweep.
  *
  * #104 uses it for the cross-node fee, which the buyer pays on top of the price (§2.1) and which lands in
  * the buyer node's own Commons because that is the node carrying the write-off if the buyer is ever pruned.
  */
-export function moveToCommons(from: string, amount: number, memo: string): Transaction | null {
-    if (!isSyntheticAccount(from)) {
-        throw new Error(`moveToCommons is for synthetic accounts only, got ${from}`);
+export function moveToCommons(
+    from: string,
+    amount: number,
+    memo: string,
+    // `allowMemberDebit` opts an ORDINARY member's account into this path, and exists for exactly one
+    // caller: `adminPruneUser` confiscating a departing member's surplus so the network still sums to zero.
+    //
+    // It is an explicit flag rather than a relaxed guard because the guard's whole job is to stop this
+    // becoming a back door around `transfer()`'s send gate and floor policy. A prune is different in kind —
+    // an admin action on a member being removed, taking a positive balance to exactly zero — so the gate is
+    // moot rather than bypassed. Anything else moving a member's value belongs in `transfer()`.
+    opts?: { allowMemberDebit?: boolean },
+): Transaction | null {
+    const synthetic = isSyntheticAccount(from);
+    const treasury = !synthetic
+        && (db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(from) as any)?.is_treasury === 1;
+    if (!synthetic && !treasury && !opts?.allowMemberDebit) {
+        throw new Error(`moveToCommons is for synthetic accounts and treasuries only, got ${from}`);
     }
     if (amount <= 0) return null;
-    if (!ledger.moveToCommons(from, amount, -Infinity)) return null;
+    // Synthetic senders are unbounded (escrow drains to zero by design; a bridge must be able to go
+    // negative). A treasury or a member is floored at 0 — neither may be driven into debt by this path.
+    if (!ledger.moveToCommons(from, amount, synthetic ? -Infinity : 0)) return null;
 
     const txn: Transaction = {
         id: crypto.randomUUID(),
@@ -2635,23 +2662,23 @@ export function adminPruneUser(publicKey: string) {
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
 
-        // KNOWN BUG — tracked in issue #124, deliberately not fixed here.
+        // #124. These used to go through `transfer(..., 'COMMONS_POOL', ...)`, which moves the COMMONS_POOL
+        // *account* — only the persisted shadow of the `COMMONS_BALANCE` global, rewritten from that global
+        // after every transfer. So the confiscation was discarded and the write-off was funded from nowhere,
+        // minting beans. Both directions broke conservation; only the direction differed.
         //
-        // Both of these move the COMMONS_POOL *account*, which is only the persisted shadow of the
-        // `COMMONS_BALANCE` global; `persistCommonsBalance()` rewrites the row from the global after every
-        // transfer, so the confiscation is discarded and the write-off is funded from nowhere (creating
-        // beans). `moveToCommons()` / `payFromCommons()` below in this file are the correct primitives and
-        // are what #124 will switch these to.
-        //
-        // Left alone in #104's PR on purpose: it is a live admin money path, and `payFromCommons` REFUSES
-        // when the pot cannot cover the debt — where today the write-off always "succeeds" by minting. That
-        // is the right behaviour but it is a product decision (pruning a deeply negative member can now
-        // fail and the admin UI has to say something useful), and it needs its own conservation test.
+        // `allowDeficit` on the write-off is required by the documented Solvency Rule
+        // (docs/commons-pool-transparency.md): "to delete the account and maintain the zero-sum invariant,
+        // the community must pay off the debt". So a prune must ALWAYS balance the books, even when the pot
+        // is empty — that document names an empty pot as a threat to balance, not a reason to refuse. A
+        // negative Commons is the honest record of a community that has written off more than it collected,
+        // and the network still sums to zero, which is the invariant that matters.
         if (balance < 0) {
             const D = Math.abs(balance);
-            transfer('COMMONS_POOL', publicKey, D, `Settle bad debt for pruned user: ${publicKey}`, 'direct', true);
+            payFromCommons(publicKey, D, `Settle bad debt for pruned user: ${publicKey}`, { allowDeficit: true });
         } else if (balance > 0) {
-            transfer(publicKey, 'COMMONS_POOL', balance, `Confiscate credit for pruned user: ${publicKey}`, 'direct', true);
+            moveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${publicKey}`,
+                { allowMemberDebit: true });
         }
 
         adminSetUserStatus(publicKey, 'pruned');

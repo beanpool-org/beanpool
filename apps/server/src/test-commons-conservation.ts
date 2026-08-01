@@ -1,0 +1,189 @@
+/**
+ * Conservation across the Commons pot (#124, #126).
+ *
+ * THE INVARIANT. BeanPool is mutual credit: there is no money supply, and the network always sums to zero.
+ * Every path that moves value into or out of the Commons must preserve that, including across a restart.
+ *
+ * WHY THIS FILE EXISTS. Two live paths were destroying beans, and both had the same cause: they moved the
+ * `COMMONS_POOL` *account*, which is only the persisted shadow of the `COMMONS_BALANCE` global.
+ * `persistCommonsBalance()` rewrites that row from the global after every transfer, so a transfer INTO it is
+ * written and immediately overwritten, and a transfer OUT of it is funded from nowhere.
+ *
+ *   • `POST /api/treasury/:treasury/sweep` — a Keeper sweeping surplus into the Commons. Measured before the
+ *     fix: 40 beans in, 40 beans gone, node total 100 → 60. (#126)
+ *   • `adminPruneUser` — both directions. A confiscation vanished; a debt write-off MINTED. (#124)
+ *
+ * Neither had any test asserting the books still balanced, which is how both shipped. The checks below are
+ * deliberately written as "sum of every account, before and after" rather than as assertions about the
+ * particular accounts involved — a test that only inspects the two accounts it expects to move is exactly
+ * the test that misses value leaving through a third.
+ *
+ * The reboot check matters as much as the arithmetic: the original defect was invisible until the next
+ * restart reloaded the clobbered row.
+ *
+ *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-commons-conservation.ts
+ */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+delete process.env.CF_RECORD_NAME;
+
+import crypto from 'node:crypto';
+import { db } from './db/db.js';
+import { ledger } from './engine/ledger.js';
+import {
+    initStateEngine, reconcileLedgerFromDb, moveToCommons, payFromCommons,
+    getCommonsBalanceExact, adminPruneUser, persistCommonsBalance,
+} from './state-engine.js';
+import { setCommonsBalance } from '@beanpool/core';
+
+let run = 0, passed = 0;
+function assert(cond: boolean, msg: string): void {
+    run++;
+    if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
+}
+function throws(fn: () => unknown, re: RegExp, msg: string) {
+    let m = '';
+    try { fn(); } catch (e: any) { m = e.message; }
+    assert(re.test(m), `${msg} (got "${m}")`);
+}
+
+const r4 = (n: number) => Math.round(n * 10000) / 10000;
+const bal = (k: string) => r4((db.prepare('SELECT balance FROM accounts WHERE public_key=?').get(k) as any)?.balance ?? 0);
+
+/**
+ * The whole node, as one number.
+ *
+ * Sums every account row EXCEPT `COMMONS_POOL`, then adds the Commons pot from the global — because the row
+ * is a shadow of the global and counting both would double-count, while counting only the row would miss any
+ * un-flushed value. This is the figure that must not move.
+ */
+const nodeTotal = () => {
+    const accounts = (db.prepare(
+        `SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`,
+    ).get() as any).t;
+    return r4(accounts + getCommonsBalanceExact());
+};
+
+/** Simulate a restart: flush the pot, drop in-memory state, reload from the rows. */
+const reboot = () => {
+    persistCommonsBalance();
+    setCommonsBalance(0);
+    const row = db.prepare("SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'").get() as any;
+    if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
+    reconcileLedgerFromDb();
+};
+
+function makeMember(callsign: string, balance: number, opts?: { treasury?: boolean }): string {
+    const pk = crypto.randomBytes(32).toString('hex');
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, is_treasury)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
+        .run(pk, callsign, opts?.treasury ? 1 : 0);
+    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
+        .run(pk, balance, ledger.getCurrentEpoch());
+    reconcileLedgerFromDb();
+    return pk;
+}
+
+function main() {
+    console.log('Running Commons conservation tests (#124, #126)...\n');
+    initStateEngine();
+
+    // ── 1. A treasury sweep conserves value (#126) ────────────────────────────────────────────────
+    const treasury = makeMember('Community Eggs', 100, { treasury: true });
+    const before = nodeTotal();
+    const commonsBefore = getCommonsBalanceExact();
+
+    const swept = moveToCommons(treasury, 40, 'Surplus swept to Commons');
+    assert(!!swept, 'a treasury may sweep surplus into the Commons');
+    assert(bal(treasury) === 60, 'the treasury is debited');
+    assert(r4(getCommonsBalanceExact()) === r4(commonsBefore + 40), 'and the Commons POT actually receives it');
+    assert(nodeTotal() === before, `and the node still sums to the same total (${before})`);
+
+    reboot();
+    assert(r4(getCommonsBalanceExact()) === r4(commonsBefore + 40), 'the credit SURVIVES a restart');
+    assert(nodeTotal() === before, 'and the total is unchanged across the restart');
+    assert(bal(treasury) === 60, 'with the treasury still debited, not silently restored');
+
+    // A sweep is recorded, so it is auditable rather than a bare balance change.
+    const sweepTxn = db.prepare(
+        `SELECT COUNT(*) n FROM transactions WHERE from_pubkey=? AND to_pubkey='COMMONS_POOL'`,
+    ).get(treasury) as any;
+    assert(sweepTxn.n === 1, 'and the sweep left exactly one ledger row behind');
+
+    // ── 2. A treasury cannot sweep itself into debt ───────────────────────────────────────────────
+    const t2 = makeMember('Small Treasury', 5, { treasury: true });
+    const beforeOverdraw = nodeTotal();
+    assert(moveToCommons(t2, 50, 'too much') === null, 'sweeping more than it holds is refused');
+    assert(bal(t2) === 5, 'the treasury is untouched by the refusal');
+    assert(nodeTotal() === beforeOverdraw, 'and nothing moved anywhere');
+
+    // ── 3. An ordinary member still cannot use this path ──────────────────────────────────────────
+    // Member-facing debits belong in transfer(), where the send gate and floor policy live. Widening
+    // moveToCommons to treasuries must not have widened it to everyone.
+    const ordinary = makeMember('Ordinary Member', 100);
+    throws(() => moveToCommons(ordinary, 10, 'nope'), /synthetic accounts and treasuries only/,
+        'an ordinary member is refused — this is not a back door around the send gate');
+
+    // ── 4. Pruning a member in CREDIT conserves value (#124) ──────────────────────────────────────
+    const rich = makeMember('Leaving With Credit', 200);
+    const beforePrune = nodeTotal();
+    const commonsBeforePrune = getCommonsBalanceExact();
+    adminPruneUser(rich);
+
+    assert(bal(rich) === 0, 'the pruned member ends at zero');
+    assert(r4(getCommonsBalanceExact()) === r4(commonsBeforePrune + 200),
+        'and the community RECLAIMS the surplus rather than it vanishing');
+    assert(nodeTotal() === beforePrune, 'the node still sums to the same total');
+    reboot();
+    assert(nodeTotal() === beforePrune, 'across a restart too');
+
+    // ── 5. Pruning a member in DEBT conserves value (#124) ────────────────────────────────────────
+    // The dangerous direction: this used to MINT the write-off from nowhere.
+    const debtor = makeMember('Leaving In Debt', -120);
+    const beforeDebt = nodeTotal();
+    const commonsBeforeDebt = getCommonsBalanceExact();
+    adminPruneUser(debtor);
+
+    assert(bal(debtor) === 0, 'the debt is settled and the member ends at zero');
+    assert(r4(getCommonsBalanceExact()) === r4(commonsBeforeDebt - 120),
+        'and the COMMUNITY absorbs it — the write-off is funded, not minted');
+    assert(nodeTotal() === beforeDebt, 'so the node total does not move: no beans created');
+    reboot();
+    assert(nodeTotal() === beforeDebt, 'and it holds across a restart');
+
+    // ── 6. A write-off larger than the pot still balances, and the deficit is visible ──────────────
+    // docs/commons-pool-transparency.md's Solvency Rule: a prune must ALWAYS balance the books. That
+    // document names an empty pot as a threat to balance, not a reason to refuse — so the pot goes negative
+    // and says so, rather than the prune failing or beans being minted.
+    setCommonsBalance(10);
+    persistCommonsBalance();
+    reconcileLedgerFromDb();
+    const bigDebtor = makeMember('Deep Debt', -500);
+    const beforeBig = nodeTotal();
+    adminPruneUser(bigDebtor);
+
+    assert(bal(bigDebtor) === 0, 'a debt far larger than the pot is still settled');
+    assert(getCommonsBalanceExact() < 0, 'the Commons goes into DEFICIT — the honest record of the write-off');
+    assert(nodeTotal() === beforeBig, 'and conservation holds: no beans were invented to cover it');
+    reboot();
+    assert(getCommonsBalanceExact() < 0, 'the deficit survives a restart rather than resetting to zero');
+    assert(nodeTotal() === beforeBig, 'and so does the total');
+
+    // ── 7. payFromCommons refuses an unfunded draw unless a deficit is explicitly allowed ─────────
+    setCommonsBalance(10);
+    persistCommonsBalance();
+    const payee = makeMember('Payee', 0);
+    const beforePay = nodeTotal();
+    assert(payFromCommons(payee, 50, 'unfunded') === null,
+        'an ordinary draw beyond the pot is refused — the Commons does not quietly overdraw');
+    assert(bal(payee) === 0 && nodeTotal() === beforePay, 'and nothing moved');
+    assert(!!payFromCommons(payee, 50, 'write-off', { allowDeficit: true }),
+        'while an explicit allowDeficit draw succeeds, for the Solvency Rule');
+    assert(nodeTotal() === beforePay, 'and even that conserves value');
+
+    console.log(`\n${passed}/${run} checks passed.`);
+    if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
+    console.log('⭐️ Commons conservation checks PASSED (#124, #126).');
+}
+
+main();
+process.exit(0);

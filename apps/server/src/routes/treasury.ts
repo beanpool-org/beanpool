@@ -15,7 +15,7 @@ import {
     createTreasury, adminSetOperator, canOperateTreasury,
     treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     createPost, approvePostRequest, completePostTransaction,
-    transfer, getBalance,
+    getBalance, moveToCommons,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
@@ -232,8 +232,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const amt = Number((ctx as any).requestBody?.amount);
         if (!amt || amt <= 0) { ctx.status = 400; ctx.body = { error: 'amount must be positive' }; return; }
         if (amt > getBalance(treasury).balance) { ctx.status = 400; ctx.body = { error: 'Cannot sweep more than the treasury holds' }; return; }
-        const ok = transfer(treasury, 'COMMONS_POOL', amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`, 'direct', true);
-        if (!ok) { ctx.status = 400; ctx.body = { error: 'Sweep failed' }; return; }
+        // moveToCommons, NOT transfer(..., 'COMMONS_POOL', ...) — #126. The latter debited the treasury and
+        // then had the Commons credit overwritten by the next persistCommonsBalance() flush, DESTROYING the
+        // beans and breaking the node's zero-sum invariant. Measured: 40 in, 40 gone.
+        const ok = moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`);
+        if (!ok) {
+            ctx.status = 400;
+            ctx.body = { error: 'That sweep could not be completed — check the treasury still holds this amount.' };
+            return;
+        }
         ctx.body = { success: true, swept: amt, balance: getBalance(treasury).balance };
     });
 

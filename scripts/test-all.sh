@@ -95,9 +95,22 @@ run_check "test"          pnpm turbo run test
 # suite's rows leak into the next. ENABLE_PEER_CONNECTORS=true because connector reads short-circuit
 # without it, which would make the checks pass vacuously rather than fail.
 #
-# This is what HAS_SERVER_CHANGES was computed for; until now nothing consumed it.
-if [ $HAS_SERVER_CHANGES -eq 1 ]; then
-  run_check "federation" bash -c '
+# Triggered by SERVER **or** CORE changes. The suites exercise @beanpool/core's ledger and fee behaviour,
+# so a core-only change could otherwise break settlement conservation with nothing running these (review
+# finding) — and `turbo run test` still does not see them.
+#
+# Runs AFTER build rather than alongside it. `tsx` resolves @beanpool/core to its dist, and `turbo run build`
+# rewrites that dist — running both concurrently gives non-deterministic module resolution. This is the same
+# stale/half-written core-dist hazard that has bitten us before, in CI form.
+if [ $HAS_SERVER_CHANGES -eq 1 ] || [ $HAS_CORE_CHANGES -eq 1 ]; then
+  FEDERATION_QUEUED=1
+else
+  FEDERATION_QUEUED=0
+  skip_check "federation"
+fi
+
+run_federation_suites() {
+  bash -c '
     set -e
     cd apps/server
     for t in test-federation-bridge test-settlement-state test-settlement-exchange test-federation-settlement; do
@@ -111,9 +124,7 @@ if [ $HAS_SERVER_CHANGES -eq 1 ]; then
       trap - EXIT
     done
   '
-else
-  skip_check "federation"
-fi
+}
 
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
@@ -121,6 +132,13 @@ run_check "secrets_guard" bash -c '
     echo "❌ Error: Hardcoded secret keys found in codebase" && exit 1
   fi
 '
+
+# The federation suites need @beanpool/core's dist to be settled, so they start only once `build` has
+# finished. Waiting on that one PID keeps lint/test/secrets_guard running in parallel meanwhile.
+if [ $FEDERATION_QUEUED -eq 1 ]; then
+  wait "${PIDS[0]}" 2>/dev/null
+  run_check "federation" run_federation_suites
+fi
 
 # Wait for parallel checks and collect results
 PASS=0

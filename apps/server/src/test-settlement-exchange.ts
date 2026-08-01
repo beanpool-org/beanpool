@@ -32,7 +32,9 @@ import { initStateEngine, reconcileLedgerFromDb } from './state-engine.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { addConnector, setConnectorCreditCap } from './connector-manager.js';
-import { bridgeAccountId, getEnergyBalance } from './federation-bridge.js';
+import {
+    bridgeAccountId, getEnergyBalance, ensureBridgeAccount, settlementCapacityForPeer,
+} from './federation-bridge.js';
 import { signReceipt, verifyReceipt, type SettlementReceipt } from './federation-receipt.js';
 import {
     getSettlement, memberForeignExposure, receiptStatus,
@@ -177,17 +179,19 @@ async function main() {
     assert(FEE === 0.075, 'the fee on a 5-bean crossing is 0.075 (1.5%)');
 
     const opened = beginOutboundSettlement({
-        key: KEY, peerId: BRIS, buyerPublicKey: buyer, sellerPublicKey: seller, postId: 'post-1', amount: AMOUNT,
+        key: KEY, peerId: BRIS, buyerPublicKey: buyer, buyerHomeNode: 'https://brisbane.beanpool.org',
+        sellerPublicKey: seller, postId: 'post-1', amount: AMOUNT,
     });
     assert(opened.state === 'escrowed', 'a purchase opens in escrow — nothing has crossed the border');
     assert(near(balanceOf(`escrow_${KEY}`), AMOUNT + FEE), 'escrow holds price AND fee — the buyer pays the fee on top');
     assert(near(balanceOf(buyer), buyerBefore - AMOUNT - FEE), 'and it has left the buyer\'s spendable balance');
     assert(beginOutboundSettlement({
-        key: KEY, peerId: BRIS, buyerPublicKey: buyer, sellerPublicKey: seller, amount: AMOUNT,
+        key: KEY, peerId: BRIS, buyerPublicKey: buyer, buyerHomeNode: 'https://brisbane.beanpool.org',
+        sellerPublicKey: seller, postId: 'post-1', amount: AMOUNT,
     }).state === 'escrowed', 'a retried purchase reuses the same hold rather than taking twice');
     assert(near(balanceOf(`escrow_${KEY}`), AMOUNT + FEE), 'confirmed: the retry did not double-charge');
 
-    const { signature: sig1 } = await commitOutboundSettlement(KEY, BRIS, brisKey, 'https://brisbane.beanpool.org');
+    const { receipt: rc1, signature: sig1 } = await commitOutboundSettlement(KEY, BRIS, brisKey, 'https://brisbane.beanpool.org');
 
     assert(near(balanceOf(buyer), buyerBefore - AMOUNT - FEE), 'buyer is debited price + fee (−5.075)');
     assert(feeTxnAmount(KEY) === FEE, 'the fee entry records EXACTLY 0.075 — not a rounded stand-in');
@@ -197,9 +201,18 @@ async function main() {
     assert(balanceOf(`escrow_${KEY}`) === 0, 'escrow closes to exactly zero — no dust left behind');
     assert(getSettlement(KEY)!.state === 'committed', 'and the row is committed BEFORE the receipt is handed out');
 
-    const { signature: sig2 } = await commitOutboundSettlement(KEY, BRIS, brisKey);
+    const { receipt: rc2, signature: sig2 } = await commitOutboundSettlement(KEY, BRIS, brisKey);
     assert(sig1 === sig2, 'a re-commit returns the SAME receipt — never a second valid one for one key');
     assert(near(getEnergyBalance(BRIS), AMOUNT), 'and writes no second set of entries');
+
+    // The replayed pair must actually VERIFY. Rebuilding the receipt from the row returned the old
+    // signature next to different bytes (committedAt came from a different clock, buyerHomeNode was never
+    // stored), so the retry — the path that runs after a network failure — produced a receipt the peer
+    // would reject. The exact signed object is persisted now.
+    assert(await verifyReceipt(rc2, sig2, BRIS) === true,
+        'and the replayed receipt+signature still verify as a pair — the retry path is the one that matters');
+    assert(rc2.committedAt === rc1.committedAt && rc2.buyerHomeNode === 'https://brisbane.beanpool.org',
+        'because the exact signed object is replayed, not reconstructed from the row');
 
     // ── 3. A reversal compensates; it never deletes ──────────────────────────────────────────────
     const txnsBeforeReversal = txnsFor(KEY);
@@ -464,6 +477,30 @@ async function main() {
     assert(near(ledger.getAccount(escrowFor(R10)).balance, balanceOf(escrowFor(R10))),
         'and the IN-MEMORY ledger agrees with them — a rollback resyncs memory instead of leaving it ahead');
 
+    // ── 10e. A reservation actually REDUCES headroom (§2.5) ───────────────────────────────────────
+    // "A reservation is a hint that reduces headroom" was prose only: capacity read the bridge balance and
+    // ignored open reservations, so N concurrent purchases were each measured against the same full
+    // headroom, all accepted, and their receipts then predictably lapsed AFTER their buyers had committed.
+    setConnectorCreditCap(BRIS_ADDR, r4(-getEnergyBalance(BRIS)) + 10);   // exactly 10 of headroom
+    assert(ask('k-res-a', 7).accepted === true, 'the first purchase fits inside the headroom');
+    const second = ask('k-res-b', 7);
+    assert(second.accepted === false && (second as any).reason === 'cap_exhausted',
+        'a second purchase that only fits if the first is ignored is REFUSED, not accepted then lapsed later');
+    assert(ask('k-res-c', 3).accepted === true, 'while one that fits in what actually remains is accepted');
+
+    // ── 10f. The cap is enforced on the UNROUNDED balance ─────────────────────────────────────────
+    // getEnergyBalance rounds to 2dp but prices are carried at 4dp, so an exposure of 99.994 read as 99.99
+    // let another 0.01 through against a 100 cap — past the number the operator chose.
+    const FRAC = '12D3KooWFractionalPeer';
+    addConnector(`/dns4/frac.beanpool.org/tcp/4001/p2p/${FRAC}`, 'peer', 'Frac', 'https://frac.beanpool.org');
+    ensureBridgeAccount(FRAC);
+    db.prepare('UPDATE accounts SET balance = ? WHERE public_key = ?').run(-99.994, bridgeAccountId(FRAC));
+    reconcileLedgerFromDb();
+    setConnectorCreditCap(`/dns4/frac.beanpool.org/tcp/4001/p2p/${FRAC}`, 100);
+    assert(getEnergyBalance(FRAC) === -99.99, 'the DISPLAY balance rounds to 2dp, as it should');
+    assert(settlementCapacityForPeer(FRAC, 0.01).ok === false,
+        'but enforcement uses the stored value, so the last 0.01 against a 100 cap is refused');
+
     // ── 11. The pair nets to zero (§2.1) ─────────────────────────────────────────────────────────
     // Both halves of one crossing, run against this single database. That proves the ARITHMETIC of the
     // four entries and that the pair sums to zero. It does NOT prove two live nodes agree — the bridge
@@ -515,21 +552,30 @@ async function main() {
     // ── 13. The protocol boundary refuses while the flag is off ──────────────────────────────────
     assert(FEDERATION_SETTLEMENT_ENABLED === false,
         'settlement ships OFF — the mechanism lands before the switch, not with it');
-    const gated = settlementGateRefusal('peer', BRIS);
+    const gated = settlementGateRefusal('peer', BRIS, SETTLE_PURCHASE);
     assert(gated !== null && gated.code === 'federation_settlement_disabled',
-        'so every settlement action is refused at the wire, even from a fully trusted peer');
+        'a NEW purchase is refused at the wire, even from a fully trusted peer');
     assert(SETTLEMENT_ACTIONS.has(SETTLE_PURCHASE) && SETTLEMENT_ACTIONS.has(SETTLE_RECEIPT)
         && SETTLEMENT_ACTIONS.has(SETTLE_RECEIPT_STATUS) && SETTLEMENT_ACTIONS.size === 3,
         'and all three actions are in the gated set — an ungated fourth is the mistake this shape prevents');
 
-    // The branches that start mattering the day the flag flips, asserted now rather than then.
-    assert(settlementGateRefusal('peer', BRIS, true) === null, 'once enabled, a trading peer is admitted');
-    assert(settlementGateRefusal('mirror', BRIS, true)?.code === 'federation_settlement_disabled',
-        'a MIRROR is refused — a backup replica is not a trading partner, and the outer trust check admits both');
-    assert(settlementGateRefusal(null, BRIS, true) !== null, 'an untrusted connection is refused');
-    assert(settlementGateRefusal('peer', 'unknown', true) !== null,
-        'an unidentified peer is refused — every settlement decision is keyed on the peer id');
-    assert(settlementGateRefusal('peer', '', true) !== null, 'and an empty peer id is not a peer id');
+    // The flag stops NEW trades; it must not strand ones already in flight. Refusing a receipt we already
+    // issued would leave the seller unable to accept it and the buyer's recovery reading every answer as
+    // UNKNOWN — which contradicts the recovery policy this module states.
+    assert(settlementGateRefusal('peer', BRIS, SETTLE_RECEIPT) === null,
+        'but a receipt for a trade already in flight is still accepted with the flag off');
+    assert(settlementGateRefusal('peer', BRIS, SETTLE_RECEIPT_STATUS) === null,
+        'and so is a status query — otherwise switching settlement off strands committed beans');
+
+    // Trust and identity are checked for EVERY action, flag or no flag.
+    for (const action of [SETTLE_PURCHASE, SETTLE_RECEIPT, SETTLE_RECEIPT_STATUS]) {
+        assert(settlementGateRefusal('mirror', BRIS, action, true)?.code === 'federation_settlement_disabled',
+            `a MIRROR is refused for ${action} — a backup replica is not a trading partner`);
+        assert(settlementGateRefusal(null, BRIS, action, true) !== null, `an untrusted connection is refused for ${action}`);
+        assert(settlementGateRefusal('peer', 'unknown', action, true) !== null, `an unidentified peer is refused for ${action}`);
+        assert(settlementGateRefusal('peer', '', action, true) !== null, `an empty peer id is refused for ${action}`);
+    }
+    assert(settlementGateRefusal('peer', BRIS, SETTLE_PURCHASE, true) === null, 'once enabled, a trading peer is admitted');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

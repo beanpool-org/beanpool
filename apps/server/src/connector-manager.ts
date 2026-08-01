@@ -546,7 +546,14 @@ export function removeConnector(address: string): boolean {
  * the operator had configured correctly.
  */
 function peerIdFromAddress(address?: string): string | null {
-    return address?.match(/\/(?:p2p|ipfs)\/([^/]+)/)?.[1] ?? null;
+    if (!address) return null;
+    const all = [...address.matchAll(/\/(?:p2p|ipfs)\/([^/]+)/g)].map(m => m[1]);
+    if (all.length === 0) return null;
+    // The LAST component, not the first (review finding). A circuit-relay multiaddr names two peers —
+    // `/ip4/…/p2p/<RELAY>/p2p-circuit/p2p/<TARGET>` — and the one we are actually talking to is the target.
+    // Taking the first would key this peer's credit cap, trust level and bridge account to the RELAY, so
+    // several peers behind one relay would silently share a single credit line.
+    return all[all.length - 1] ?? null;
 }
 
 /**

@@ -33,7 +33,10 @@
 
 import { db } from './db/db.js';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
-import { transfer, registerVisitor, getMember, moveToCommons, payFromCommons, reconcileLedgerFromDb } from './state-engine.js';
+import {
+    transfer, registerVisitor, getMember, moveToCommons, payFromCommons, reconcileLedgerFromDb,
+    getCommonsBalanceExact, setCommonsBalance,
+} from './state-engine.js';
 import { bridgeAccountId, ensureBridgeAccount, settlementCapacityForPeer } from './federation-bridge.js';
 import {
     openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, expiredReservations,
@@ -87,6 +90,10 @@ export const crossNodeFee = (amount: number): number => round4(amount * TRANSACT
 /** The local escrow account holding a pending cross-node purchase. Derived from the key, so no column. */
 const escrowAccountFor = (key: string): string => `escrow_${key}`;
 
+/** Read a balance straight from the rows. Used to tell "already funded" from "not yet". */
+const balanceOfAccount = (id: string): number =>
+    round4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id) as any)?.balance ?? 0);
+
 export class SettlementError extends Error {
     constructor(message: string, readonly reason: string) { super(message); }
 }
@@ -118,16 +125,24 @@ function mustTransfer(from: string, to: string, amount: number, memo: string): v
  * *after* the ledger moves in every write path here — so hardening the state machine introduced exactly
  * this hazard at exactly the wrong point.
  *
- * `reconcileLedgerFromDb()` is the existing cure: it rebuilds the in-memory ledger from the rows, which
- * after a rollback are the truth. Cheap, and only ever runs on a failure path.
+ * `reconcileLedgerFromDb()` rebuilds in-memory ACCOUNT balances from the rows, which after a rollback are
+ * the truth. But it deliberately does NOT reseed `COMMONS_BALANCE` (state-engine documents why: the
+ * crowdfund paths own that global), so the Commons has to be restored separately — a review finding against
+ * the first version of this wrapper, which resynced accounts and left the Commons global ahead of the DB.
+ * That was the worse half: the next `persistCommonsBalance()` would then write the mutated value back over
+ * the rolled-back row, turning a clean rollback into a permanent overstatement of the Commons.
+ *
+ * Both halves, or neither is any use.
  */
 function settlementTransaction<T>(fn: () => T): T {
+    const commonsBefore = getCommonsBalanceExact();
     try {
         return db.transaction(fn)();
     } catch (e) {
         // The DB has rolled back; resync memory to it rather than leaving the two disagreeing.
         try {
             reconcileLedgerFromDb();
+            setCommonsBalance(commonsBefore);
         } catch (resyncError: any) {
             console.error('[Federation] Ledger resync after a failed settlement write FAILED:', resyncError?.message || resyncError);
         }
@@ -155,20 +170,45 @@ export function beginOutboundSettlement(input: {
     key: string;
     peerId: string;
     buyerPublicKey: string;
+    /** Persisted so the receipt can be replayed byte-identically after a retry. */
+    buyerHomeNode?: string | null;
     sellerPublicKey: string;
     postId?: string | null;
     amount: number;
 }): SettlementRow {
     requireAmount(input.amount);
 
-    const existing = getSettlement(input.key);
-    if (existing) return existing;          // idempotent: a retried purchase reuses the same hold
-
     const amount = round4(input.amount);
     const fee = crossNodeFee(amount);
     const escrowAccount = escrowAccountFor(input.key);
 
     return settlementTransaction(() => {
+        // Claim the KEY FIRST, inside the transaction, and only debit the buyer if this call is the one
+        // that created the row.
+        //
+        // The previous order — check `getSettlement` outside the transaction, transfer, then insert — could
+        // debit the buyer TWICE (review finding): two calls with the same key both see no row, both
+        // transfer, and then one `ON CONFLICT DO NOTHING` quietly discards the second row while its escrow
+        // debit stands. The row's PRIMARY KEY is a perfectly good mutex; use it as one rather than checking
+        // and hoping. `openSettlement` also validates the payload, so a mismatched retry throws here instead
+        // of being treated as an idempotent hit.
+        const row = openSettlement({
+            key: input.key,
+            direction: 'outbound',
+            peerId: input.peerId,
+            buyerPubkey: input.buyerPublicKey,
+            sellerPubkey: input.sellerPublicKey,
+            buyerHomeNode: input.buyerHomeNode ?? null,
+            postId: input.postId ?? null,
+            amount,
+            fee,
+            state: 'escrowed',
+        });
+
+        // Not ours to fund: either an earlier call already escrowed for this key, or it has moved on.
+        if (row.state !== 'escrowed' || row.createdAt !== row.updatedAt) return row;
+        if (balanceOfAccount(escrowAccount) > 0) return row;   // already funded by an earlier attempt
+
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`)
             .run(escrowAccount);
 
@@ -183,18 +223,7 @@ export function beginOutboundSettlement(input: {
                 'Not enough credit to cover this purchase and its fee', 'insufficient_credit',
             );
         }
-
-        return openSettlement({
-            key: input.key,
-            direction: 'outbound',
-            peerId: input.peerId,
-            buyerPubkey: input.buyerPublicKey,
-            sellerPubkey: input.sellerPublicKey,
-            postId: input.postId ?? null,
-            amount,
-            fee,
-            state: 'escrowed',
-        });
+        return row;
     });
 }
 
@@ -221,6 +250,24 @@ export async function commitOutboundSettlement(
         throw new SettlementError(`${key} is not ours to commit`, 'wrong_direction');
     }
 
+    // Already committed: replay the STORED receipt object verbatim, alongside its stored signature.
+    //
+    // Rebuilding it from the row does NOT work, and this was broken (review finding). `committedAt` was
+    // reconstructed from `row.updatedAt` — a different clock and a different string format from the
+    // `new Date().toISOString()` that was actually signed — and `buyerHomeNode` was never persisted on the
+    // outbound row at all. So a retry returned the old signature next to a *different* receipt, and the
+    // peer's `verifyReceipt` rejected it. The retry path is precisely the path that runs after a network
+    // failure, so it was broken exactly when it was needed.
+    if (row.state === 'committed' || row.state === 'settled') {
+        if (!row.receipt || !row.receiptPayload) {
+            throw new SettlementError(`${key} is ${row.state} with no stored receipt`, 'receipt_missing');
+        }
+        return { receipt: JSON.parse(row.receiptPayload) as SettlementReceipt, signature: row.receipt };
+    }
+    if (row.state !== 'escrowed') {
+        throw new SettlementError(`${key} is ${row.state}, not awaiting commit`, 'wrong_state');
+    }
+
     const receipt: SettlementReceipt = {
         key: row.key,
         issuerPeerId: ourPeerId,
@@ -229,21 +276,8 @@ export async function commitOutboundSettlement(
         sellerPublicKey: row.sellerPubkey ?? '',
         postId: row.postId,
         amount: row.amount,
-        committedAt: row.state === 'committed' ? row.updatedAt : new Date().toISOString(),
+        committedAt: new Date().toISOString(),
     };
-
-    // Already committed: re-issue exactly what we stored. Re-signing would be harmless for a
-    // deterministic payload, but `committedAt` is not deterministic, so a second signature would be over
-    // different bytes — two valid receipts for one settlement, which is precisely what idempotency is for.
-    if (row.state === 'committed' || row.state === 'settled') {
-        if (!row.receipt) {
-            throw new SettlementError(`${key} is ${row.state} with no stored receipt`, 'receipt_missing');
-        }
-        return { receipt, signature: row.receipt };
-    }
-    if (row.state !== 'escrowed') {
-        throw new SettlementError(`${key} is ${row.state}, not awaiting commit`, 'wrong_state');
-    }
 
     // Signing is async and better-sqlite3 transactions are synchronous, so sign first, then write. Safe in
     // this order: a crash between the two leaves the row `escrowed`, which boot recovery refunds.
@@ -262,7 +296,8 @@ export async function commitOutboundSettlement(
         if (row.fee > 0 && !moveToCommons(escrowAccount, row.fee, `Cross-community purchase fee (${key})`)) {
             throw new SettlementError(`Could not move the fee for ${key} to the Commons`, 'fee_failed');
         }
-        advanceSettlement(key, 'committed', { receipt: signature });
+        // Persist the payload as well as the signature, so a retry can hand back byte-identical bytes.
+        advanceSettlement(key, 'committed', { receipt: signature, receiptPayload: JSON.stringify(receipt) });
         return { receipt, signature };
     });
 }
@@ -294,12 +329,21 @@ export function reverseOutboundSettlement(key: string, reason: string): Settleme
     const bridge = bridgeAccountId(row.peerId);
 
     return settlementTransaction(() => {
-        mustTransfer(bridge, row.buyerPubkey, row.amount, `Reversed cross-community purchase (${key})`);
+        // The PRINCIPAL always goes back. Naming the reason in the memo so a member sees why their purchase
+        // reversed rather than only that it did.
+        mustTransfer(bridge, row.buyerPubkey, row.amount, `Reversed cross-community purchase — ${reason} (${key})`);
+
         // Drawn from the Commons pot, not from the shadow account — otherwise the refund is funded from
-        // nowhere and the node's books stop balancing. Refusing here (rather than skipping the fee) keeps
-        // the reversal all-or-nothing: a partial refund is worse than a retry.
-        if (row.fee > 0 && !payFromCommons(row.buyerPubkey, row.fee, `Refunded cross-community fee (${key})`)) {
-            throw new SettlementError(`Commons cannot cover the fee refund for ${key}`, 'fee_refund_failed');
+        // nowhere and the node's books stop balancing.
+        //
+        // `allowDeficit`, and NOT a throw (review finding). Throwing rolled the whole transaction back
+        // including the principal refund, so a depleted Commons held the buyer's entire purchase hostage in
+        // `committed` — a far worse outcome than the fractional fee it was protecting. Letting the pot go
+        // negative also matches the documented Solvency Rule for write-offs
+        // (docs/commons-pool-transparency.md): a negative Commons is the honest record of a community that
+        // has paid out more than it has collected, and the network still sums to zero.
+        if (row.fee > 0) {
+            payFromCommons(row.buyerPubkey, row.fee, `Refunded cross-community fee (${key})`, { allowDeficit: true });
         }
         return advanceSettlement(key, 'reversed', { failureReason: reason });
     });
@@ -385,13 +429,19 @@ export function handlePurchaseRequest(input: {
                 message: 'That settlement reference is already in use.',
             };
         }
-        // Re-asking with the SAME key but a different amount is refused, not silently accepted at the old
-        // figure (review finding). It would otherwise return `accepted: true` for 500 against a 5-bean
-        // reservation — the receipt check at step 4 would catch it, but the peer would have been told yes.
-        if (round4(existing.amount) !== round4(input.amount)) {
+        // Re-asking with the same key must match the WHOLE reserved trade, not just peer and direction
+        // (review finding). Amount alone was not enough: a key reused with a different buyer, seller or post
+        // returned `accepted: true`, the buyer then committed against those new terms, and receipt delivery
+        // compared them to the old row and refused — a compensating reversal that need never have happened.
+        // Idempotency has to mean "the same trade", and a trade is the whole tuple.
+        const sameTrade = round4(existing.amount) === round4(input.amount)
+            && existing.buyerPubkey === input.buyerPublicKey
+            && (existing.sellerPubkey ?? null) === input.sellerPublicKey
+            && (existing.postId ?? null) === (input.postId ?? null);
+        if (!sameTrade) {
             return {
                 accepted: false, reason: 'key_conflict',
-                message: 'That settlement reference is already in use for a different amount.',
+                message: 'That settlement reference is already in use for a different purchase.',
             };
         }
         if (existing.state === 'reserved' || existing.state === 'held' || existing.state === 'settled') {
@@ -543,7 +593,9 @@ export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean
         return { settled: false, reason: 'seller_unknown', message: 'No seller recorded for that settlement.' };
     }
 
-    const capacity = settlementCapacityForPeer(row.peerId, row.amount);
+    // excludeKey: this row's own reservation already counts toward `reservedAgainstPeer`, so without
+    // excluding it the check would measure the payment against itself and always lapse.
+    const capacity = settlementCapacityForPeer(row.peerId, row.amount, row.key);
     if (!capacity.ok) {
         // Do NOT pay. Whether to LATCH that refusal depends on who is asking, and the distinction matters
         // (review finding):

@@ -568,7 +568,7 @@ CREATE TABLE IF NOT EXISTS settlements (
     -- separate figure from `amount` — the bridge entries carry the price alone, never price plus fee.
     -- Stored rather than recomputed so a reversal refunds exactly what was taken, even if the fee rate
     -- changes between the commit and the reversal.
-    fee             REAL NOT NULL DEFAULT 0,
+    fee             REAL NOT NULL DEFAULT 0 CHECK (fee >= 0),
     -- Inbound only. When the cap reservation lapses. A reservation moves no beans, so expiry is free —
     -- but a receipt arriving after it must be re-validated against the cap, never honoured on trust.
     reserved_until  DATETIME,
@@ -584,6 +584,13 @@ CREATE TABLE IF NOT EXISTS settlements (
                         'abandoned'    -- refused/expired before any entries were written
                     )),
     receipt         TEXT,
+    -- Outbound only: the EXACT canonical receipt object that was signed, as JSON.
+    --
+    -- Storing the signature alone is not enough. A retried commit has to return a byte-identical payload
+    -- or the stored signature fails to verify on the peer's side, and `committedAt` is not reproducible
+    -- from `updated_at` (a different clock and format). Keeping the whole object rather than the two
+    -- missing fields also means a future payload field can't silently break replay.
+    receipt_payload TEXT,
     failure_reason  TEXT,
     created_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -596,3 +603,7 @@ CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, state);
 -- otherwise full-scan a table that only ever grows. Column order matches the query's selectivity:
 -- buyer_pubkey narrows to one member first, then direction and state.
 CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, direction, state);
+-- Reservation expiry runs on every recovery cycle and would otherwise scan every reserved row. Partial,
+-- because only inbound reservations ever carry a `reserved_until`.
+CREATE INDEX IF NOT EXISTS idx_settlements_reserved_until ON settlements(reserved_until)
+    WHERE direction = 'inbound' AND state = 'reserved';

@@ -64,6 +64,8 @@ export interface SettlementRow {
     reservedUntil: string | null;
     state: SettlementState;
     receipt: string | null;
+    /** Outbound: the exact canonical receipt object that was signed, as JSON. Replayed verbatim. */
+    receiptPayload: string | null;
     failureReason: string | null;
     createdAt: string;
     updatedAt: string;
@@ -82,6 +84,7 @@ const rowToSettlement = (r: any): SettlementRow => ({
     reservedUntil: r.reserved_until ?? null,
     state: r.state,
     receipt: r.receipt ?? null,
+    receiptPayload: r.receipt_payload ?? null,
     failureReason: r.failure_reason ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -170,7 +173,7 @@ export function openSettlement(input: {
 export function advanceSettlement(
     key: string,
     to: SettlementState,
-    extra?: { receipt?: string; failureReason?: string },
+    extra?: { receipt?: string; receiptPayload?: string; failureReason?: string },
 ): SettlementRow {
     const row = getSettlement(key);
     if (!row) throw new Error(`Unknown settlement ${key}`);
@@ -179,8 +182,9 @@ export function advanceSettlement(
     // silently dropped it (review finding) — so a row that reached `held` without its receipt could never
     // have one attached afterwards, and the receipt is the only thing that makes the payment replayable.
     const newReceipt = extra?.receipt !== undefined && extra.receipt !== row.receipt;
+    const newPayload = extra?.receiptPayload !== undefined && extra.receiptPayload !== row.receiptPayload;
     const newReason = extra?.failureReason !== undefined && extra.failureReason !== row.failureReason;
-    if (row.state === to && !newReceipt && !newReason) return row;      // idempotent replay
+    if (row.state === to && !newReceipt && !newPayload && !newReason) return row;   // idempotent replay
 
     if (row.state !== to && !LEGAL[row.state].includes(to)) {
         throw new Error(`Illegal settlement transition ${row.state} → ${to} for ${key}`);
@@ -192,10 +196,11 @@ export function advanceSettlement(
     // resting on the read and the write staying adjacent.
     const result = db.prepare(`
         UPDATE settlements
-        SET state = ?, receipt = COALESCE(?, receipt), failure_reason = COALESCE(?, failure_reason),
+        SET state = ?, receipt = COALESCE(?, receipt), receipt_payload = COALESCE(?, receipt_payload),
+            failure_reason = COALESCE(?, failure_reason),
             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
         WHERE key = ? AND state = ?
-    `).run(to, extra?.receipt ?? null, extra?.failureReason ?? null, key, row.state);
+    `).run(to, extra?.receipt ?? null, extra?.receiptPayload ?? null, extra?.failureReason ?? null, key, row.state);
 
     if (result.changes === 0) {
         const current = getSettlement(key);
@@ -205,15 +210,53 @@ export function advanceSettlement(
     return getSettlement(key)!;
 }
 
+/**
+ * The unfinalised state list as a SQL literal.
+ *
+ * Bound placeholders defeat the partial index (review finding, and my previous test for this was
+ * VACUOUS — it EXPLAINed a literal query while production bound parameters). SQLite matches a partial
+ * index by proving the query's predicate implies the index's WHERE condition, and it does that at PREPARE
+ * time, when a bound parameter's value is still unknown. So `state IN (?,?,?,?)` cannot be proven to imply
+ * `state IN ('escrowed',…)` and the index is skipped.
+ *
+ * Safe to interpolate: the values come from a `const` tuple in this file, never from input.
+ */
+const UNFINALISED_SQL = UNFINALISED.map(s => `'${s}'`).join(',');
+
 /** Unfinalised settlements, oldest first — what boot recovery iterates. */
 export function unfinalisedSettlements(direction?: SettlementDirection): SettlementRow[] {
-    const placeholders = UNFINALISED.map(() => '?').join(',');
-    const sql = `SELECT * FROM settlements WHERE state IN (${placeholders})`
+    const sql = `SELECT * FROM settlements WHERE state IN (${UNFINALISED_SQL})`
         + (direction ? ' AND direction = ?' : '')
         + ' ORDER BY created_at';
-    const params: any[] = [...UNFINALISED];
-    if (direction) params.push(direction);
-    return (db.prepare(sql).all(...params) as any[]).map(rowToSettlement);
+    const rows = direction
+        ? db.prepare(sql).all(direction)
+        : db.prepare(sql).all();
+    return (rows as any[]).map(rowToSettlement);
+}
+
+/** The exact SQL production runs, so a test can EXPLAIN the real thing rather than a lookalike. */
+export const unfinalisedSettlementsSql = (direction?: SettlementDirection): string =>
+    `SELECT * FROM settlements WHERE state IN (${UNFINALISED_SQL})`
+    + (direction ? ' AND direction = ?' : '')
+    + ' ORDER BY created_at';
+
+/**
+ * Beans already promised to a peer by open reservations and unpaid held receipts.
+ *
+ * §2.5 calls a reservation "a hint that reduces headroom", and this is what makes that true (review
+ * finding). Without it every concurrent PURCHASE is measured against the same full headroom, so several
+ * can be accepted that together exceed the cap — and their receipts then predictably lapse *after* the
+ * buyers have committed, forcing compensating reversals that were avoidable.
+ *
+ * @param excludeKey the reservation being re-checked at payment time, which must not count against itself.
+ */
+export function reservedAgainstPeer(peerId: string, excludeKey?: string): number {
+    const row = db.prepare(`
+        SELECT COALESCE(SUM(amount), 0) AS total FROM settlements
+        WHERE direction = 'inbound' AND peer_id = ? AND state IN ('reserved', 'held')
+          AND (? IS NULL OR key != ?)
+    `).get(peerId, excludeKey ?? null, excludeKey ?? '') as any;
+    return Math.round((row?.total ?? 0) * 10000) / 10000;
 }
 
 /**

@@ -116,16 +116,35 @@ async function main() {
     //
     // A delay rather than a connection-ready event because libp2p exposes none for "the peers I configured
     // are reachable", and waiting is always the safe side here — an unresolved row is retried next boot.
+    // ...and then PERIODICALLY, not only at boot (review finding). A peer that was unreachable during the
+    // startup window, a receipt lost in flight, or a held receipt blocked by a cap an operator has since
+    // raised, would otherwise wait for the next process restart — which on a stable node could be months.
+    // The escalation threshold is also crossed during uptime, so nothing would ever report it.
     const RECOVERY_PEER_DELAY_MS = 15_000;
+    const RECOVERY_INTERVAL_MS = 15 * 60_000;
     const logRecoveryFailure = (e: any) => console.warn('[Federation] Settlement recovery failed:', e?.message || e);
 
+    const askPeerForStatus = async (peerId: string, key: string) => {
+        const { peerIdFromString } = await import('@libp2p/peer-id');
+        return federatedReceiptStatus(p2pNode, peerIdFromString(peerId), key);
+    };
+
     recoverSettlements().catch(logRecoveryFailure);
-    setTimeout(() => {
-        recoverSettlements(async (peerId, key) => {
-            const { peerIdFromString } = await import('@libp2p/peer-id');
-            return federatedReceiptStatus(p2pNode, peerIdFromString(peerId), key);
-        }).catch(logRecoveryFailure);
-    }, RECOVERY_PEER_DELAY_MS).unref();
+
+    // Non-overlapping: each run schedules the next only once it has finished, so a slow sweep against an
+    // unresponsive peer can never pile up concurrent passes over the same rows.
+    let recoveryRunning = false;
+    const scheduleRecovery = (delay: number) => setTimeout(async () => {
+        if (!recoveryRunning) {
+            recoveryRunning = true;
+            try { await recoverSettlements(askPeerForStatus); }
+            catch (e) { logRecoveryFailure(e); }
+            finally { recoveryRunning = false; }
+        }
+        scheduleRecovery(RECOVERY_INTERVAL_MS);
+    }, delay).unref();
+
+    scheduleRecovery(RECOVERY_PEER_DELAY_MS);
 
     // Step 8.5: Backup puller (one-directional live backup). On a node with
     // NODE_ROLE=backup, periodically pull the primary's signed snapshot over

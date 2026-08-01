@@ -1240,9 +1240,23 @@ export function moveToCommons(from: string, amount: number, memo: string): Trans
  * from nowhere) rather than drawing on the pot, so the draw has to go through `deductFromCommons`. Returns
  * null if the pot cannot cover it — the Commons never goes into debt.
  */
-export function payFromCommons(to: string, amount: number, memo: string): Transaction | null {
+export function payFromCommons(
+    to: string,
+    amount: number,
+    memo: string,
+    // `allowDeficit` lets the pot go NEGATIVE rather than refusing. Needed wherever refusing would be worse
+    // than a visible deficit — a reversal that can't refund a fee would otherwise strand the whole purchase,
+    // and docs/commons-pool-transparency.md's Solvency Rule requires a prune to always balance the books.
+    // A negative Commons is the honest record of a community that has paid out more than it has collected;
+    // the network still sums to zero, which is the invariant that matters.
+    opts?: { allowDeficit?: boolean },
+): Transaction | null {
     if (amount <= 0) return null;
-    if (!ledger.deductFromCommons(amount)) return null;
+    if (!ledger.deductFromCommons(amount)) {
+        if (!opts?.allowDeficit) return null;
+        setCommonsBalance(getCommonsBalanceExact() - amount);
+        console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+    }
 
     const toAcc = ledger.getAccount(to);
     toAcc.balance += amount;
@@ -3004,6 +3018,18 @@ export function getActiveRound(): VotingRound | null {
 export function getCommonsBalance(): number {
     return Math.round(COMMONS_BALANCE * 100) / 100;
 }
+
+/**
+ * The Commons pot UNROUNDED. For snapshot/restore, not for display.
+ *
+ * `getCommonsBalance()` rounds to 2dp for presentation, so restoring a snapshot taken through it would
+ * itself lose up to half a cent — the pot must be put back exactly as it was found.
+ */
+export function getCommonsBalanceExact(): number {
+    return COMMONS_BALANCE;
+}
+
+export { setCommonsBalance };
 
 /**
  * Persist the in-memory COMMONS_BALANCE to SQLite so it survives restarts.

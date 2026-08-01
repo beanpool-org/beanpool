@@ -28,8 +28,13 @@ import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { bridgeAccountId, peerFromBridgeAccountId } from '@beanpool/core';
 import { getConnectorCreditCap, getConnectors } from './connector-manager.js';
+import { reservedAgainstPeer } from './federation-settlement-state.js';
 
 export { bridgeAccountId, peerFromBridgeAccountId };
+
+/** Beans are quoted to members at 2dp; cap arithmetic works at 4dp and rounds only for presentation. */
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+const round4 = (n: number): number => Math.round(n * 10000) / 10000;
 
 /**
  * Ensure the bridge account for a peer exists and is demurrage-exempt.
@@ -68,13 +73,25 @@ export function registerBridgeDecayExemptions(): number {
  * Positive = we owe them work. Negative = they owe us work (we extended credit).
  */
 export function getEnergyBalance(peerId: string): number {
+    return Math.round(energyBalanceExact(peerId) * 100) / 100;
+}
+
+/**
+ * The same balance UNROUNDED. For enforcement, never for display.
+ *
+ * Rounding to 2dp while settlement prices are carried at 4dp let the cap be exceeded (review finding): an
+ * actual exposure of 99.994 reads as 99.99, so another 0.01 is accepted against a 100 cap and the bridge
+ * lands at 100.004 — past the number the operator chose. Small, but the cap exists precisely to be the
+ * number that is not exceeded, so the check has to use the stored value and rounding stays presentational.
+ */
+export function energyBalanceExact(peerId: string): number {
     const row = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(bridgeAccountId(peerId)) as any;
-    return Math.round((row?.balance ?? 0) * 100) / 100;
+    return row?.balance ?? 0;
 }
 
 /** How much credit we have currently extended to a peer — the magnitude of the negative side only. */
 export function creditExtendedTo(peerId: string): number {
-    return Math.max(0, -getEnergyBalance(peerId));
+    return Math.max(0, -energyBalanceExact(peerId));
 }
 
 export type SettlementCapacity =
@@ -96,9 +113,22 @@ export type SettlementCapacity =
  *
  * @param address the connector address (the cap lives on the connector record, keyed by address)
  */
-export function settlementCapacity(peerId: string, address: string, amount = 0): SettlementCapacity {
+export function settlementCapacity(
+    peerId: string,
+    address: string,
+    amount = 0,
+    // The reservation being re-checked at payment time, so it is not counted against itself.
+    excludeKey?: string,
+): SettlementCapacity {
     const cap = getConnectorCreditCap(address);
-    const extended = creditExtendedTo(peerId);
+    // Committed exposure PLUS what open reservations and unpaid held receipts have already promised.
+    // §2.5 says a reservation "reduces headroom"; without the second term that was only prose (review
+    // finding) — several concurrent purchases would each be measured against the same full headroom, be
+    // accepted, and then predictably lapse after their buyers had committed, forcing avoidable reversals.
+    //
+    // Kept UNROUNDED. Rounding here is what let the cap be exceeded in the first place, and rounding the
+    // sum re-introduces it just as effectively as rounding the balance did.
+    const extended = creditExtendedTo(peerId) + reservedAgainstPeer(peerId, excludeKey);
 
     if (cap === null) {
         return {
@@ -108,19 +138,23 @@ export function settlementCapacity(peerId: string, address: string, amount = 0):
         };
     }
 
-    const headroom = Math.round((cap - extended) * 100) / 100;
-    if (amount > headroom) {
+    // Enforce at 4dp — the precision the settlement module actually carries prices at — and present at 2dp.
+    // Comparing raw floats would refuse an exact fit on binary noise (10 − 7.1 renders as 2.9000000000000004);
+    // comparing at 2dp would let 0.006 of headroom look like 0.01. 4dp is the honest middle, and it is the
+    // same precision `round4` uses everywhere else in the settlement path.
+    const headroom = round4(cap - extended);
+    if (round4(amount) > headroom) {
         return {
             ok: false,
             reason: 'cap_exhausted',
             cap,
-            extended,
+            extended: round2(extended),
             headroom: 0,
-            message: `This community has reached the credit limit set for them (${extended} of ${cap}). They can buy from us — which is what brings the balance back — but we can't extend more until it does.`,
+            message: `This community has reached the credit limit set for them (${round2(extended)} of ${cap}). They can buy from us — which is what brings the balance back — but we can't extend more until it does.`,
         };
     }
 
-    return { ok: true, headroom, cap, extended };
+    return { ok: true, headroom, cap, extended: round2(extended) };
 }
 
 /**
@@ -133,7 +167,7 @@ export function settlementCapacity(peerId: string, address: string, amount = 0):
  *   • it is configured, but not at trust level `peer` (a `mirror` is a backup replica, not a trading
  *     partner) → refuse. Trust level and credit cap are separate decisions and both must be affirmative.
  */
-export function settlementCapacityForPeer(peerId: string, amount = 0): SettlementCapacity {
+export function settlementCapacityForPeer(peerId: string, amount = 0, excludeKey?: string): SettlementCapacity {
     const connector = getConnectors().find(c => c.peerId === peerId);
     if (!connector || connector.trustLevel !== 'peer') {
         return {
@@ -142,7 +176,7 @@ export function settlementCapacityForPeer(peerId: string, amount = 0): Settlemen
             message: `This community isn't a trading partner of ours, so purchases can't be settled with them.`,
         };
     }
-    return settlementCapacity(peerId, connector.address, amount);
+    return settlementCapacity(peerId, connector.address, amount, excludeKey);
 }
 
 /**

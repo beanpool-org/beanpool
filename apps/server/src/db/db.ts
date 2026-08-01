@@ -171,6 +171,13 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE settlements ADD COLUMN reserved_until DATETIME`).run(); } catch { }
     // Rule 4's per-member aggregate exposure read would otherwise full-scan `settlements`.
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, direction, state)`).run(); } catch { }
+    // Reservation expiry runs every recovery cycle; without this it scans every reserved row.
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_reserved_until ON settlements(reserved_until) WHERE direction = 'inbound' AND state = 'reserved'`).run(); } catch { }
+    // The exact signed receipt object, so a retried commit replays byte-identical bytes (see schema.sql).
+    // NOTE: a CHECK constraint cannot be added by ALTER TABLE in SQLite, so `fee >= 0` is enforced only on
+    // tables created from schema.sql. Pre-existing rows are all fee = 0, and every writer goes through
+    // crossNodeFee(), which cannot return a negative for a positive amount.
+    try { db.prepare(`ALTER TABLE settlements ADD COLUMN receipt_payload TEXT`).run(); } catch { }
     // Moderation: Add status tracking to abuse reports
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     // Marketplace hygiene: track when a lingering escrow deal was last nudged

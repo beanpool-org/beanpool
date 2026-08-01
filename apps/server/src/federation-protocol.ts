@@ -108,14 +108,23 @@ export const SETTLEMENT_ACTIONS = new Set<string>([SETTLE_PURCHASE, SETTLE_RECEI
 export function settlementGateRefusal(
     trustLevel: string | null,
     remotePeerId: string,
+    action: string,
     // Defaulted from the module const, so production behaviour is unchanged and there is one source of
     // truth — but passing it explicitly lets the trust-level and peer-id branches be asserted now, rather
     // than shipping untested until the day the flag flips.
     enabled: boolean = FEDERATION_SETTLEMENT_ENABLED,
 ): { error: string; code?: string } | null {
-    if (!enabled) {
+    // The FLAG gates only OPENING a new purchase. It must NOT gate receipt delivery or a status query
+    // (review finding): those finish trades that are already in flight, and refusing them would leave a
+    // seller unable to accept a receipt we already issued, and the buyer's recovery reading every answer as
+    // UNKNOWN — stranding committed beans. That directly contradicts the recovery policy this module states,
+    // which is that switching settlement off must never strand value already committed.
+    //
+    // Turning the flag off therefore means "accept no NEW cross-node trades", which is what it should mean.
+    if (!enabled && action === SETTLE_PURCHASE) {
         return { error: 'Cross-community settlement is not enabled on this node', code: SETTLEMENT_REFUSED_CODE };
     }
+    // Trust and identity are checked for EVERY action, flag or no flag.
     if (trustLevel !== 'peer') {
         return { error: 'This connection is not a trading peer', code: SETTLEMENT_REFUSED_CODE };
     }
@@ -262,7 +271,7 @@ export function registerFederationHandler(node: Libp2p): void {
             }
             // ── Cross-node settlement (#104 §2.5) ────────────────────────────────────────────────
             else if (SETTLEMENT_ACTIONS.has(request.action)) {
-                response = settlementGateRefusal(trustLevel, remotePeerId)
+                response = settlementGateRefusal(trustLevel, remotePeerId, request.action)
                     ?? await routeSettlementAction(request, remotePeerId);
             }
 
@@ -372,9 +381,18 @@ export async function federatedReceiptStatus(
     targetPeerId: any,
     key: string,
 ): Promise<ReceiptStatus> {
-    const reply = await settlementRoundTrip(
-        node, targetPeerId, { action: SETTLE_RECEIPT_STATUS, key }, PURCHASE_ASK_TIMEOUT_MS,
-    );
+    let reply: any;
+    try {
+        reply = await settlementRoundTrip(
+            node, targetPeerId, { action: SETTLE_RECEIPT_STATUS, key }, PURCHASE_ASK_TIMEOUT_MS,
+        );
+    } catch (e: any) {
+        // A peer that is offline or unreachable is not an answer, and specifically not NOT_FOUND. §2.5 makes
+        // "we could not find out" mean WAIT, so the transport failure maps to UNKNOWN here rather than
+        // propagating and being handled differently by each caller (review finding).
+        console.warn(`[Federation] Receipt status for ${key} unavailable: ${e?.message || e}`);
+        return 'UNKNOWN';
+    }
     const status = reply?.status;
     return status === 'NOT_FOUND' || status === 'HELD' || status === 'SETTLED' ? status : 'UNKNOWN';
 }

@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS members (
     -- drive a treasury (post its offers/needs, approve/release its escrow) from the Commons tab.
     -- Named 'operate' to dodge the 'Steward' tier and 'node role' (topology) name collisions.
     can_operate INTEGER DEFAULT 0,
+    -- #127: declared HERE as well as by the guarded ALTER in db.ts, because the ALTER now runs BEFORE
+    -- db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
+    -- this line is the only thing that creates the column. Both are needed: this one for a fresh install, the
+    -- ALTER for a node that already has data. A hoisted ALTER without a declaration here silently gives fresh
+    -- installs a table missing the column, which is caught by test-schema-upgrade.ts.
+    -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
+    earned_credit REAL DEFAULT 0,
+    -- Profile mutation timestamp, for cache-busting.
+    profile_updated_at DATETIME,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);

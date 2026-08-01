@@ -116,54 +116,44 @@ describe('demurrage accounting', () => {
         expect(ledger.drainDecayEvents()).toHaveLength(0);
     });
 
-    it('DEFERS a decay too small to record, rather than crediting it unaccounted', () => {
+    it('FORFEITS a decay too small to record, and closes the interval anyway', () => {
         // 0.2 beans in the 1%/month bracket over one day ≈ 0.000067 — below the 0.0001 recording threshold.
         ledger.loadState([stale(ledger, 'sliver', JUST_OVER_GREEN_ZONE, 1)]);
         const account = ledger.getAccount('sliver');
 
-        expect(account.balance).toBe(JUST_OVER_GREEN_ZONE);   // untouched
+        expect(account.balance).toBe(JUST_OVER_GREEN_ZONE);   // not decayed
         expect(core.COMMONS_BALANCE).toBe(0);                 // and no unaccounted credit
         expect(ledger.drainDecayEvents()).toHaveLength(0);
-        // The epoch is deliberately NOT advanced, so the interval is not consumed — the decay accumulates
-        // until it is worth a ledger row instead of being rounded away on every read.
-        expect(account.lastDemurrageEpoch).toBe(ledger.getCurrentEpoch() - 1);
+        // The epoch IS stamped. Forfeiting costs at most this one sub-threshold decay; carrying the interval
+        // instead would let it be charged later against whatever the balance has become by then.
+        expect(account.lastDemurrageEpoch).toBe(ledger.getCurrentEpoch());
     });
 
-    it('still decays that balance once enough time has accumulated', () => {
-        ledger.loadState([stale(ledger, 'sliver', JUST_OVER_GREEN_ZONE, 1)]);
-        ledger.getAccount('sliver');
+    it('does not charge a carried interval against a LATER, larger balance', () => {
+        // The regression that made forfeiting the right answer instead of deferring. With the interval left
+        // open, this measured 465.33 beans taken from a 10,000 deposit — 4.6% of it — for a window during
+        // which the account held 200.005. Demurrage is principal × time × rate, so an interval cannot be
+        // carried across a change of principal.
+        // 0.005 above the Green Zone over 60 days decays by 0.0000995 — just under the threshold. (0.2 over
+        // the same interval would be 0.00398, comfortably recordable, so the sliver has to be this thin.)
+        const THIN_SLIVER = 200.005;
+        ledger.loadState([
+            stale(ledger, 'sliver', THIN_SLIVER, 60),
+            { id: 'whale', balance: 50_000, lastDemurrageEpoch: ledger.getCurrentEpoch() },
+        ]);
+        ledger.getAccount('sliver');                       // sub-threshold: forfeited, interval closed
         expect(core.COMMONS_BALANCE).toBe(0);
 
-        // Same balance, a full month: 0.2 × 1% = 0.002, comfortably recordable.
-        ledger.loadState([stale(ledger, 'sliver', JUST_OVER_GREEN_ZONE, 30)]);
-        const account = ledger.getAccount('sliver');
-        expect(account.balance).toBeLessThan(JUST_OVER_GREEN_ZONE);
-        expect(core.COMMONS_BALANCE).toBeGreaterThan(0.0001);
-        expect(ledger.drainDecayEvents()).toHaveLength(1);
-        expect(round4(account.balance + core.COMMONS_BALANCE)).toBe(JUST_OVER_GREEN_ZONE);
-    });
+        expect(ledger.transfer('whale', 'sliver', 10_000, -100, /* isFeeExempt */ true)).toBe(true);
+        const after = ledger.getAccount('sliver');
 
-    it('a DEFERRED interval survives a transfer instead of being stamped away', () => {
-        // Deferring only works if nothing else advances the epoch behind its back. `transfer()` used to set
-        // `lastDemurrageEpoch = currentEpoch` on both accounts after `getAccount()` had already settled it —
-        // redundant before deferral existed, and afterwards it consumed the deferred interval without
-        // collecting anything. Demurrage silently under-charged every account transacting just above the
-        // Green Zone (review finding).
-        const staleEpoch = ledger.getCurrentEpoch() - 1;
-        ledger.loadState([
-            { id: 'sliver', balance: JUST_OVER_GREEN_ZONE, lastDemurrageEpoch: staleEpoch },
-            { id: 'payee', balance: 0, lastDemurrageEpoch: staleEpoch },
-        ]);
-
-        expect(ledger.transfer('sliver', 'payee', 1, -100, /* isFeeExempt */ true)).toBe(true);
-
-        // The interval is still owed, so the epoch must not have moved.
-        expect(ledger.getAccount('sliver').lastDemurrageEpoch).toBe(staleEpoch);
+        // No retrospective charge: the only decay owed is on the interval since the deposit, which is zero.
+        expect(after.balance).toBeCloseTo(THIN_SLIVER + 10_000, 6);
         expect(core.COMMONS_BALANCE).toBe(0);
         expect(ledger.drainDecayEvents()).toHaveLength(0);
     });
 
-    it('collects the deferred decay once it is worth recording, even after transfers', () => {
+    it('collects a recordable decay on the read inside a transfer, and still balances', () => {
         const staleEpoch = ledger.getCurrentEpoch() - 30;
         ledger.loadState([
             { id: 'sliver', balance: JUST_OVER_GREEN_ZONE, lastDemurrageEpoch: staleEpoch },
@@ -173,14 +163,14 @@ describe('demurrage accounting', () => {
 
         ledger.transfer('sliver', 'payee', 1, -100, true);
 
-        // A month of interval on the 0.2 beans above the Green Zone is recordable, so it was collected on
-        // the read inside transfer() rather than deferred.
+        // A month of interval on the 0.2 beans above the Green Zone IS recordable, so it is collected rather
+        // than forfeited — the threshold is about size, not about being inside a transfer.
         expect(core.COMMONS_BALANCE).toBeGreaterThan(0.0001);
         expect(ledger.drainDecayEvents()).toHaveLength(1);
         expect(total(ledger, ['sliver', 'payee'])).toBeCloseTo(opening, 10);
     });
 
-    it('DEFERS decay at the pending-events cap instead of crediting without an event', () => {
+    it('FORFEITS decay at the pending-events cap instead of crediting without an event', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         try {
             // Fill the queue. Each of these is a real decay with a real event.
@@ -191,9 +181,11 @@ describe('demurrage accounting', () => {
             const creditAtCap = core.COMMONS_BALANCE;
             const overflow = ledger.getAccount('overflow');
 
-            expect(overflow.balance).toBe(500);                   // deferred, not decayed
+            expect(overflow.balance).toBe(500);                   // forfeited, not decayed
             expect(core.COMMONS_BALANCE).toBe(creditAtCap);       // and the Commons did not move
-            expect(overflow.lastDemurrageEpoch).toBe(ledger.getCurrentEpoch() - 60);
+            // Interval closed here too — carrying it would risk charging it against a later, larger balance.
+            // The forfeited amount can be material at the cap, which is why this path warns.
+            expect(overflow.lastDemurrageEpoch).toBe(ledger.getCurrentEpoch());
             expect(warn).toHaveBeenCalledTimes(1);                // logged once, not per read
             ledger.getAccount('overflow');
             expect(warn).toHaveBeenCalledTimes(1);

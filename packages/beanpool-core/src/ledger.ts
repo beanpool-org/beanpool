@@ -162,20 +162,32 @@ export class LedgerManager {
             return account;
         }
 
-        // EVERY CREDIT MUST HAVE EXACTLY ONE EVENT, which is what makes `loadState` able to unwind it and the
-        // host able to write a ledger row for it. Both guards below therefore DEFER the decay — returning
-        // without touching the balance or the epoch — rather than applying a decay they cannot record.
+        // EVERY CREDIT MUST HAVE EXACTLY ONE EVENT, which is what lets `loadState` unwind it and the host
+        // write a ledger row for it. Where a decay cannot be recorded, it is FORFEITED — not applied, not
+        // credited — and the epoch is still stamped to close the interval.
         //
-        // Deferring is not losing: `epochsPassed` is measured from the stored `lastDemurrageEpoch`, so leaving
-        // it alone means the same decay is simply computed again on the next read, over a longer interval.
+        // FORFEIT, NOT DEFER (two review rounds, in opposite directions — this is the resolution).
+        //
+        // Deferring looked better: leave the epoch alone and the interval survives to be collected later.
+        // But demurrage is principal × time × rate, and an interval CANNOT be carried across a change of
+        // principal. An account holding 200.005 with a deferred 60-day interval that then receives 10,000
+        // gets the whole 60 days charged against 10,200 on the next read. Measured: **465.33 beans**, 4.6% of
+        // the deposit, taken instantly. Against the ~0.0001 that deferring was protecting.
+        //
+        // Forfeiting costs at most one sub-threshold decay per read — bounded by the very threshold that
+        // says it is not worth recording — and it is conservation-safe by construction: no debit and no
+        // credit, so the books cannot move. Nothing else in the ledger has to know about it either, which is
+        // what makes it safe against the server paths that adjust `balance` directly after a `getAccount()`.
         if (this.decayEvents.length >= this.MAX_PENDING_DECAY_EVENTS) {
             // Previously the credit was applied and the event silently skipped past this cap, so the host
             // could never write the matching row and the Commons held a credit with no traceable source.
+            // Loud, because unlike the threshold case the forfeited amount here can be large.
             if (!this.decayCapWarned) {
                 console.warn(`[Ledger] ${this.MAX_PENDING_DECAY_EVENTS} decay events pending and undrained — `
-                    + 'deferring further demurrage until the host persists them.');
+                    + 'forfeiting further demurrage until the host persists them.');
                 this.decayCapWarned = true;
             }
+            account.lastDemurrageEpoch = currentEpoch;
             return account;
         }
 
@@ -183,10 +195,12 @@ export class LedgerManager {
         const newBalance = this._calculateProgressiveDecay(account.balance, monthsPassed);
         const decayedAmount = account.balance - newBalance;
 
-        // Below the recording threshold, defer too. The old form advanced the epoch and credited the Commons
-        // for an amount too small to record, so the interval was consumed and the credit left unaccounted —
-        // a tiny leak, but on every read of every small balance, and one `loadState` could not unwind.
-        if (decayedAmount <= 0.0001) return account;
+        // Too small to record: forfeit it. The old form credited the Commons anyway and skipped the event,
+        // leaving a credit with no traceable source that `loadState` could not unwind.
+        if (decayedAmount <= 0.0001) {
+            account.lastDemurrageEpoch = currentEpoch;
+            return account;
+        }
 
         COMMONS_BALANCE += decayedAmount;
         account.balance = newBalance;
@@ -279,12 +293,14 @@ export class LedgerManager {
             COMMONS_BALANCE += fee;
         }
 
-        // The epoch is NOT touched here (review finding). `getAccount()` above already ran `applyDecay`,
-        // which sets it in every case where it should be set — after decaying, and after finding nothing to
-        // decay. Setting it again was redundant then, and actively wrong once `applyDecay` learned to DEFER:
-        // a deferred decay leaves the old epoch precisely so the interval survives to be collected later, and
-        // stamping `currentEpoch` over it here consumed that interval without collecting anything. Demurrage
-        // quietly under-charged on every account that transacted while just above the Green Zone.
+        // The epoch is not touched here, and does not need to be: `getAccount()` above ran `applyDecay`, which
+        // stamps it on EVERY path — decayed, nothing to decay, or forfeited. Both accounts therefore arrive
+        // here with their interval already closed, so the balance change below cannot carry a stale window
+        // onto a new principal.
+        //
+        // That property lives in `applyDecay` rather than being repeated at each mutation site on purpose: the
+        // server also adjusts `balance` directly after a `getAccount()` (payFromCommons, the voting-round
+        // grant), and stamping here would not have covered those.
         return true;
     }
 
@@ -311,7 +327,7 @@ export class LedgerManager {
 
         fromAccount.balance -= amount;
         COMMONS_BALANCE += amount;
-        // Epoch deliberately untouched — see the note in `transfer()`. `getAccount()` has already settled it.
+        // Epoch already settled by `getAccount()` above — see the note in `transfer()`.
         return true;
     }
 

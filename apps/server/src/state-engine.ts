@@ -5,7 +5,7 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -323,6 +323,13 @@ export function initStateEngine(): void {
     // preventing a stale in-memory balance from being written back over the DB by
     // the next transfer() (which would erase the mutation = credit minting).
     setBalanceMutationHook(reconcileLedgerFromDb);
+
+    // #138: and the mirror of it. Those same raw-SQL paths also RAISE balances (the escrow sweep to a
+    // project creator, a refund to every backer) without closing the demurrage window, so the account's
+    // next read charges the whole stale interval against the newly larger balance. db.ts settles the
+    // affected accounts through this hook first — same dependency inversion, for the same module-cycle
+    // reason as above.
+    setDemurrageSettleHook(settleDemurrage);
 
     // CRITICAL: Restore persisted commons balance from DB
     // Without this, COMMONS_BALANCE resets to 0 on every restart, destroying accumulated demurrage
@@ -1193,6 +1200,76 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         txn: { ...txn, fromCallsign: fromMember?.callsign || 'Unknown', toCallsign: toMember?.callsign || 'Unknown' },
     }, [from, to]); // A2-20: a transfer is visible only to its two parties on the live feed
     return txn;
+}
+
+/**
+ * Close the demurrage window on these accounts and make it DURABLE. Call this immediately before any path
+ * that RAISES a balance without going through `transfer()` / `payFromCommons()`.
+ *
+ * WHY (#138). Demurrage is principal × time × rate, so an interval cannot be carried across a change of
+ * principal. If an account's stored `last_demurrage_epoch` is stale and its balance then increases with the
+ * window left open, the account's next read charges the WHOLE old interval against the new, larger balance.
+ * Measured at the core level: an account holding 200.005 with a 60-day open window that receives 10,000 is
+ * charged 465.33 beans — 4.6% of the deposit, instantly, for time during which it held almost nothing.
+ *
+ * This does not merely stamp the epoch — it SETTLES. `ledger.getAccount()` charges what the old principal
+ * genuinely owes (debiting the account, crediting the Commons, queueing an event), and the epoch is stamped
+ * on every branch of `applyDecay`, including the ones that collect nothing. So the value that was owed is
+ * still collected; only the retrospective over-charge goes away.
+ *
+ * WHY IT WRITES THE ROW ITSELF rather than leaning on `persistDecayEvents()`. That function returns early
+ * when the queue is empty, and the queue is empty in exactly the cases that matter most: a balance inside
+ * the tax-free Green Zone, a decay too small to record, and a decay forfeited at the pending-events cap all
+ * stamp the epoch in memory and queue nothing. The stale epoch would then survive in the row, the raw-SQL
+ * credit would land on top of it, and the balance-mutation hook would reload the stale pair straight back
+ * into memory — the bug, intact, in the quietest cases. So every named account's epoch is persisted here
+ * whether or not it produced an event.
+ *
+ * Call it OUTSIDE any surrounding `db.transaction` — it opens its own, and settling is independently correct:
+ * it must not be undone by an unrelated later failure in a caller's transaction.
+ *
+ * ON THE PAYER SIDE TOO, where a path is already settling (review finding). A balance that merely FALLS under
+ * an open window only under-collects, which is the safe direction, so this is not swept across every debit
+ * path. But an affordability check reading a pre-decay row lets a member spend beans demurrage has already
+ * taken, and that is not a direction question — `pledgeToProject` settles both the creator and the backer for
+ * exactly that reason.
+ */
+export function settleDemurrage(publicKeys: string[]): void {
+    // De-duplicated: a refund run can name the same backer twice, and when a project's creator pledges to
+    // their own project both names are the same account.
+    const accountIds = Array.from(new Set(publicKeys)).filter(Boolean);
+    if (accountIds.length === 0) return;
+
+    const persistAccount = db.prepare(`
+        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(public_key) DO UPDATE SET
+            balance = excluded.balance,
+            last_demurrage_epoch = excluded.last_demurrage_epoch,
+            last_updated_at = excluded.last_updated_at
+    `);
+    const nowIso = new Date().toISOString();
+
+    // ONE transaction, not one per account (review finding). A refund settles every backer of a project, so
+    // an un-batched loop is a separate WAL commit per member. Atomicity is the better half of the argument
+    // though: a failure partway through left some windows closed and some open, with the decay applied in
+    // memory for every one of them.
+    //
+    // `conservingTransaction`, not a bare `db.transaction`, because the work here is half in memory —
+    // `getAccount()` debits the account and credits `COMMONS_BALANCE`, neither of which a SQLite rollback
+    // touches. Without the resync a rollback would leave memory holding decay that no row records.
+    //
+    // Both persists are INSIDE. `persistCommonsBalance()` is what makes the credit durable, so committing the
+    // account debits without it would mean a restart restoring the pot from its pre-decay row: debits durable,
+    // matching credit gone, beans destroyed.
+    conservingTransaction(() => {
+        for (const publicKey of accountIds) {
+            const account = ledger.getAccount(publicKey);   // applies + queues any decay, and stamps the epoch
+            persistAccount.run(publicKey, account.balance, account.lastDemurrageEpoch, nowIso);
+        }
+        persistDecayEvents();
+        persistCommonsBalance();
+    });
 }
 
 /**
@@ -3077,21 +3154,58 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
         // drifted. Perform it atomically: debit commons, credit the proposer in
         // memory AND in the DB, and record a COMMONS_POOL→proposer transaction — so
         // the grant is durable, auditable, and conservation-consistent.
-        if (ledger.deductFromCommons(winner.requestedAmount)) {
+        const ts = new Date().toISOString();
+        const txId = crypto.randomUUID();
+        // #138 review: the grant now commits as ONE unit — the Commons debit, the proposer's credit, both
+        // rows, the decay rows and the Commons row. `persistDecayEvents()` and `persistCommonsBalance()` used
+        // to run after the transaction had already committed, leaving a window in which the proposer's credit
+        // was durable while the Commons debit was not. A restart in that window restores the pot from its
+        // unwritten, pre-grant row — so the grant becomes newly minted beans, which is the one thing a mutual
+        // credit ledger must never do.
+        //
+        // `conservingTransaction` rather than `db.transaction`, and the DEDUCT moved inside it. Both halves of
+        // this grant live in memory as well as in rows, and a SQLite rollback touches only the rows; the
+        // snapshot has to be taken before the deduct, or a rollback would restore an already-debited pot
+        // alongside a reverted credit and destroy the beans instead.
+        const funded = conservingTransaction(() => {
+            if (!ledger.deductFromCommons(winner.requestedAmount)) return false;
             const account = ledger.getAccount(winner.proposerPubkey);
             account.balance += winner.requestedAmount;
+                // #138: the epoch travels with the balance, on BOTH arms. This wrote a literal 0 on insert
+                // and omitted the column entirely from the DO UPDATE, so the grant landed on a row whose
+                // demurrage window was still open — and the proposer's next read charged the whole stale
+                // interval against the granted amount. `account` came from ledger.getAccount() above, which
+                // already settled what was genuinely owed and stamped the epoch, so this just carries that
+                // settlement into the row. The old `VALUES (…, 0)` was worse than stale on the insert arm:
+                // epoch 0 is 1970, which invites ~56 years of compound decay against a balance that is NOT
+                // zero here. (Elsewhere an epoch-0 insert is harmless because the balance is 0 and
+                // applyDecay's no-decay branch stamps the epoch before anything can be charged.)
+                db.prepare(`
+                    INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(public_key) DO UPDATE SET
+                        balance = excluded.balance,
+                        last_demurrage_epoch = excluded.last_demurrage_epoch,
+                        last_updated_at = excluded.last_updated_at
+                `).run(winner.proposerPubkey, account.balance, account.lastDemurrageEpoch, ts);
+            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
+                .run(txId, 'COMMONS_POOL', winner.proposerPubkey, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
+            // The getAccount() above may have queued a decay event, and this path DESTROYS BEANS without
+            // draining it. Measured by reverting this line: 1.99 beans gone. #137 made `loadState` unwind an
+            // undrained Commons credit along with its debit, which is right when the debit lives only in
+            // memory — but the UPSERT above has already written the post-decay balance to the row, so the
+            // debit is durable and the unwind takes back a credit that had a real counterpart. Draining here
+            // settles both halves before anything can resync. It also gives the collection its `demurrage_`
+            // transaction row, without which the demurrage is invisible to an audit.
+            persistDecayEvents();
+            persistCommonsBalance(); // flush the debited COMMONS_BALANCE to the COMMONS_POOL row
+            return true;
+        });
+        // Marked funded only once the money has actually moved and been committed. Setting it beforehand meant
+        // a rolled-back grant could still leave the project reading as funded to everyone looking at it.
+        if (funded) {
             winner.status = 'funded';
             winner.fundedAt = new Date().toISOString();
-            const ts = new Date().toISOString();
-            const txId = crypto.randomUUID();
-            db.transaction(() => {
-                db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)
-                            ON CONFLICT(public_key) DO UPDATE SET balance=excluded.balance, last_updated_at=?`)
-                    .run(winner.proposerPubkey, account.balance, ts);
-                db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
-                    .run(txId, 'COMMONS_POOL', winner.proposerPubkey, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
-            })();
-            persistCommonsBalance(); // flush the debited COMMONS_BALANCE to the COMMONS_POOL row
         } else {
             winner.status = 'proposed';
         }

@@ -32,6 +32,23 @@ export function setBalanceMutationHook(fn: (() => void) | null): void {
     onBalanceMutation = fn;
 }
 
+// #138: the mirror of the hook above, and it must run BEFORE the mutation rather than after.
+//
+// The raw-SQL writes below also RAISE balances — the escrow sweep to a project creator, a refund to every
+// backer of a deleted project — and `balance = balance + ?` leaves `last_demurrage_epoch` untouched. Since
+// demurrage is principal × time × rate, an account with a stale window then has that whole interval charged
+// against its new, larger balance on the next read: a creator who has not traded for months is taxed on the
+// amount their community just raised for them. Measured at the core level, a 60-day window over a balance of
+// 200.005 receiving 10,000 costs 465.33 beans.
+//
+// state-engine registers settleDemurrage() here — it charges what the old principal actually owes and
+// persists the closed window, so the credit lands on a settled row. Inverted through a hook for the same
+// reason as onBalanceMutation: state-engine imports db, not the other way round.
+let onSettleDemurrage: ((publicKeys: string[]) => void) | null = null;
+export function setDemurrageSettleHook(fn: ((publicKeys: string[]) => void) | null): void {
+    onSettleDemurrage = fn;
+}
+
 // Enable WAL mode for better concurrency and performance
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
@@ -679,6 +696,18 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     if (!project) throw new Error("Project not found");
     if (project.status === 'COMPLETED' || project.status === 'FAILED') throw new Error("Project is not accepting pledges");
 
+    // #138: close the creator's demurrage window before this pledge can complete the goal and sweep escrow
+    // into their balance. Settled unconditionally rather than only inside the FUNDED branch, because the
+    // branch is decided from a row this same transaction is about to move — and settling an account that
+    // turns out not to be paid is free (it collects what was already owed and stamps the epoch).
+    //
+    // THE BACKER TOO (review finding), and deliberately BEFORE the affordability read below rather than just
+    // before the write. That read is a raw `SELECT balance`, so against an unsettled row it approves a pledge
+    // out of beans demurrage has already taken — the member spends them once and is charged for them again on
+    // their next read. Settling the payer was already unavoidable in the creator-pledges-to-their-own-project
+    // case, so excluding it for everyone else would only have made the same path behave two different ways.
+    onSettleDemurrage?.([project.creator_pubkey, fromPubkey]);
+
     const sender = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(fromPubkey) as { balance: number } | undefined;
     if (!sender) throw new Error("Sender account not found");
     if (sender.balance < amount) throw new Error("Insufficient balance for pledge");
@@ -747,6 +776,21 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== requesterPubkey) throw new Error("Unauthorized to delete this project");
+
+    // #138: close every backer's demurrage window before the refunds raise their balances. This is the
+    // widest of the three paths — one deleted project refunds all of its pledgers at once, so an open window
+    // on any of them becomes a retrospective tax on money they are merely getting back.
+    //
+    // Read out here and settled OUTSIDE executeDelete on purpose. Settling is independently correct and must
+    // not be undone by an unrelated failure later in the delete; and a decay credit taken in memory inside a
+    // transaction that then rolls back is the exact conservation hazard conservingTransaction exists for
+    // (state-engine.ts) — which this module cannot reach.
+    if (project.status === 'ACTIVE') {
+        const backers = db.prepare(`
+            SELECT DISTINCT from_pubkey FROM transactions WHERE to_pubkey = ? AND project_id = ?
+        `).all(`escrow_${projectId}`, projectId) as { from_pubkey: string }[];
+        if (backers.length > 0) onSettleDemurrage?.(backers.map(b => b.from_pubkey));
+    }
 
     const executeDelete = db.transaction(() => {
         // If still ACTIVE, funds are locked in Escrow. Refund them to backers.

@@ -5,7 +5,7 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -323,6 +323,13 @@ export function initStateEngine(): void {
     // preventing a stale in-memory balance from being written back over the DB by
     // the next transfer() (which would erase the mutation = credit minting).
     setBalanceMutationHook(reconcileLedgerFromDb);
+
+    // #138: and the mirror of it. Those same raw-SQL paths also RAISE balances (the escrow sweep to a
+    // project creator, a refund to every backer) without closing the demurrage window, so the account's
+    // next read charges the whole stale interval against the newly larger balance. db.ts settles the
+    // affected accounts through this hook first — same dependency inversion, for the same module-cycle
+    // reason as above.
+    setDemurrageSettleHook(settleDemurrage);
 
     // CRITICAL: Restore persisted commons balance from DB
     // Without this, COMMONS_BALANCE resets to 0 on every restart, destroying accumulated demurrage
@@ -1193,6 +1200,58 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         txn: { ...txn, fromCallsign: fromMember?.callsign || 'Unknown', toCallsign: toMember?.callsign || 'Unknown' },
     }, [from, to]); // A2-20: a transfer is visible only to its two parties on the live feed
     return txn;
+}
+
+/**
+ * Close the demurrage window on these accounts and make it DURABLE. Call this immediately before any path
+ * that RAISES a balance without going through `transfer()` / `payFromCommons()`.
+ *
+ * WHY (#138). Demurrage is principal × time × rate, so an interval cannot be carried across a change of
+ * principal. If an account's stored `last_demurrage_epoch` is stale and its balance then increases with the
+ * window left open, the account's next read charges the WHOLE old interval against the new, larger balance.
+ * Measured at the core level: an account holding 200.005 with a 60-day open window that receives 10,000 is
+ * charged 465.33 beans — 4.6% of the deposit, instantly, for time during which it held almost nothing.
+ *
+ * This does not merely stamp the epoch — it SETTLES. `ledger.getAccount()` charges what the old principal
+ * genuinely owes (debiting the account, crediting the Commons, queueing an event), and the epoch is stamped
+ * on every branch of `applyDecay`, including the ones that collect nothing. So the value that was owed is
+ * still collected; only the retrospective over-charge goes away.
+ *
+ * WHY IT WRITES THE ROW ITSELF rather than leaning on `persistDecayEvents()`. That function returns early
+ * when the queue is empty, and the queue is empty in exactly the cases that matter most: a balance inside
+ * the tax-free Green Zone, a decay too small to record, and a decay forfeited at the pending-events cap all
+ * stamp the epoch in memory and queue nothing. The stale epoch would then survive in the row, the raw-SQL
+ * credit would land on top of it, and the balance-mutation hook would reload the stale pair straight back
+ * into memory — the bug, intact, in the quietest cases. So every named account's epoch is persisted here
+ * whether or not it produced an event.
+ *
+ * Call it OUTSIDE any surrounding `db.transaction`: settling is independently correct and must not be rolled
+ * back by an unrelated later failure, and an in-memory decay credit captured inside a transaction that then
+ * rolls back is the conservation hazard `conservingTransaction` exists to handle.
+ *
+ * Not exposed for the DEBIT direction. A balance that falls under an open window under-collects rather than
+ * over-charges, which is the safe direction, and settling first there would change what a member can afford
+ * to spend — a separate decision from fixing an over-charge.
+ */
+export function settleDemurrage(publicKeys: string[]): void {
+    const persistAccount = db.prepare(`
+        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(public_key) DO UPDATE SET
+            balance = excluded.balance,
+            last_demurrage_epoch = excluded.last_demurrage_epoch,
+            last_updated_at = excluded.last_updated_at
+    `);
+    const nowIso = new Date().toISOString();
+    // De-duplicated: a refund run can name the same backer twice, and the second write would be a no-op
+    // against an already-settled account anyway.
+    for (const publicKey of new Set(publicKeys)) {
+        if (!publicKey) continue;
+        const account = ledger.getAccount(publicKey);   // applies + queues any decay, and stamps the epoch
+        persistAccount.run(publicKey, account.balance, account.lastDemurrageEpoch, nowIso);
+    }
+    persistDecayEvents();
+    persistCommonsBalance();
 }
 
 /**
@@ -3085,12 +3144,32 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
             const ts = new Date().toISOString();
             const txId = crypto.randomUUID();
             db.transaction(() => {
-                db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)
-                            ON CONFLICT(public_key) DO UPDATE SET balance=excluded.balance, last_updated_at=?`)
-                    .run(winner.proposerPubkey, account.balance, ts);
+                // #138: the epoch travels with the balance, on BOTH arms. This wrote a literal 0 on insert
+                // and omitted the column entirely from the DO UPDATE, so the grant landed on a row whose
+                // demurrage window was still open — and the proposer's next read charged the whole stale
+                // interval against the granted amount. `account` came from ledger.getAccount() above, which
+                // already settled what was genuinely owed and stamped the epoch, so this just carries that
+                // settlement into the row. The old `VALUES (…, 0)` was worse than stale on the insert arm:
+                // epoch 0 is 1970, which invites ~56 years of compound decay against a balance that is NOT
+                // zero here. (Elsewhere an epoch-0 insert is harmless because the balance is 0 and
+                // applyDecay's no-decay branch stamps the epoch before anything can be charged.)
+                db.prepare(`
+                    INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(public_key) DO UPDATE SET
+                        balance = excluded.balance,
+                        last_demurrage_epoch = excluded.last_demurrage_epoch,
+                        last_updated_at = excluded.last_updated_at
+                `).run(winner.proposerPubkey, account.balance, account.lastDemurrageEpoch, ts);
                 db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
                     .run(txId, 'COMMONS_POOL', winner.proposerPubkey, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
             })();
+            // The getAccount() above may have queued a decay event. Without this it is stranded: the debit
+            // is durable in the row this path just wrote, but no `demurrage_` transaction row is ever
+            // recorded for it, so `transactions` drifts from balances and the collection is unauditable.
+            // Conservation itself is safe either way since #137 (loadState unwinds an undrained credit with
+            // its debit) — this is about the audit trail, which is the other half of the promise.
+            persistDecayEvents();
             persistCommonsBalance(); // flush the debited COMMONS_BALANCE to the COMMONS_POOL row
         } else {
             winner.status = 'proposed';

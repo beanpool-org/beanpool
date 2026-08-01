@@ -85,7 +85,12 @@ async function main() {
     const local = makeIdentity('LocalLou', 100);
     const payee = makeIdentity('PayeePat', 0);
 
-    assert(FEDERATION_SETTLEMENT_ENABLED === false, 'settlement flag is OFF until #104 lands');
+    // Opt-in per node now, not a hardcoded constant, so this pins the DEFAULT rather than the value: with
+    // FEDERATION_SETTLEMENT unset, a node still refuses to move a visitor's beans.
+    assert(FEDERATION_SETTLEMENT_ENABLED === (process.env.FEDERATION_SETTLEMENT === 'true'),
+        'the settlement flag reflects FEDERATION_SETTLEMENT, and is OFF unless a node opts in');
+    assert(process.env.FEDERATION_SETTLEMENT === 'true' || FEDERATION_SETTLEMENT_ENABLED === false,
+        'and with the env unset — every node today — it is OFF');
     assert(isVisitor(visitor.pubKeyHex) === true, 'a member with a home_node_url is a visitor');
     assert(isVisitor(local.pubKeyHex) === false, 'a local member is not a visitor');
 

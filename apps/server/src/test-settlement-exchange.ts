@@ -707,9 +707,11 @@ async function main() {
     assert(reversedExposure === 0, 'a member who has bought nothing abroad has no exposure');
 
     // ── 13. The protocol boundary refuses while the flag is off ──────────────────────────────────
-    assert(FEDERATION_SETTLEMENT_ENABLED === false,
-        'settlement ships OFF — the mechanism lands before the switch, not with it');
-    const gated = settlementGateRefusal('peer', BRIS, SETTLE_PURCHASE);
+    // Asserted through the gate's explicit `enabled` parameter rather than the module const, so this holds
+    // whether or not the harness running it has opted the node in (the flag is now env-driven).
+    assert(FEDERATION_SETTLEMENT_ENABLED === (process.env.FEDERATION_SETTLEMENT === 'true'),
+        'settlement is opt-in per node — the mechanism lands before the switch, not with it');
+    const gated = settlementGateRefusal('peer', BRIS, SETTLE_PURCHASE, 'primary', false);
     assert(gated !== null && gated.code === 'federation_settlement_disabled',
         'a NEW purchase is refused at the wire, even from a fully trusted peer');
     assert(SETTLEMENT_ACTIONS.has(SETTLE_PURCHASE) && SETTLEMENT_ACTIONS.has(SETTLE_RECEIPT)

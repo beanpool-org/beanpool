@@ -33,8 +33,24 @@
 import { getMember } from '@beanpool/engine';
 import { db } from './db/db.js';
 
-/** Off until charge-home settlement exists (#104). Typed as boolean so the guards stay reachable. */
-export const FEDERATION_SETTLEMENT_ENABLED: boolean = false;
+/**
+ * Off until charge-home settlement exists (#104). Typed as boolean so the guards stay reachable.
+ *
+ * NOW OPT-IN PER NODE rather than a hardcoded constant, and still **off by default** — an operator has to
+ * set `FEDERATION_SETTLEMENT=true` deliberately, so no existing node's behaviour changes. Two reasons it had
+ * to become reachable:
+ *
+ *   • The responder half refuses `settle_purchase` while this is false, so with a literal `false` there was
+ *     no way to exercise a cross-node purchase against a real second node at all — the acceptance criteria
+ *     in #104 were unreachable by construction, not just unimplemented.
+ *   • It is the cutover mechanism this needs anyway. Flipping a committed constant to enable a community is
+ *     a release; an env var is a decision an operator can make and reverse on their own node.
+ *
+ * Turning it ON only accepts NEW cross-node trades — `settlementGateRefusal` deliberately leaves receipt
+ * delivery and status queries ungated either way, so turning it back OFF never strands value already
+ * committed.
+ */
+export const FEDERATION_SETTLEMENT_ENABLED: boolean = process.env.FEDERATION_SETTLEMENT === 'true';
 
 /** The user-facing refusal. Says what is true, and that nothing was taken. */
 export const SETTLEMENT_REFUSED_MESSAGE =

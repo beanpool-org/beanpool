@@ -97,6 +97,7 @@ import { createCommunityRoutes } from './routes/community.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createBackupRoutes } from './routes/backup.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
+import { createFederationPurchaseRoutes } from './routes/federation-purchase.js';
 import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
@@ -863,6 +864,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createAdminRoutes(deps),
         createBackupRoutes(deps),
         createMarketplaceRoutes(deps),
+        createFederationPurchaseRoutes(deps),
         createMessagingRoutes(deps),
         createCommonsRoutes(deps),
         createTreasuryRoutes(deps),

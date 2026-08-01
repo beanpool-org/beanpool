@@ -15,7 +15,7 @@ import {
     createTreasury, adminSetOperator, canOperateTreasury,
     treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     createPost, approvePostRequest, completePostTransaction,
-    transfer, getBalance,
+    getBalance, moveToCommons, conservingTransaction,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
@@ -34,12 +34,36 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // treasury — never that the two were related, so any keeper could drive every enterprise on
     // the node. The 404-before-403 order is deliberate: a non-treasury target is not a permission
     // problem, and reporting it as one sends people hunting for the wrong thing.
+    //
+    // It also checks that both parties are ACTIVE (review finding). Most operator actions reach that check
+    // by accident, inside `createPost`/`approvePostRequest`/`completePostTransaction` — but the sweep does
+    // not: it moved through `transfer()`, which begins with `assertMemberActive(from)`, and #126 replaced
+    // that with `moveToCommons()`, whose job is plumbing rather than policy. So the check has to be stated
+    // here, where the *authority* to act is decided, rather than left to whichever primitive happens to
+    // repeat it. A pruned enterprise's funds are settled by the prune itself; a suspended keeper has had
+    // their authority withdrawn. Neither should be able to move value.
+    const statusOf = (pk: string): string | undefined =>
+        (db.prepare('SELECT status FROM members WHERE public_key=?').get(pk) as any)?.status;
     const requireOperator = (ctx: any, treasury: string): string | null => {
         const actor = ctx.state?.actor;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
         if (!actor || !canOperateTreasury(actor, treasury)) {
             ctx.status = 403;
             ctx.body = { error: 'You are not a keeper of this enterprise' };
+            return null;
+        }
+        // Only an EXPLICIT suspension refuses. A missing row means "not a suspended member" — the admin
+        // override in canOperateTreasury does not require the admin to hold a member row, and reading a
+        // missing status as inactive would lock them out of their own node.
+        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
+            return null;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
             return null;
         }
         return actor;
@@ -232,8 +256,41 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const amt = Number((ctx as any).requestBody?.amount);
         if (!amt || amt <= 0) { ctx.status = 400; ctx.body = { error: 'amount must be positive' }; return; }
         if (amt > getBalance(treasury).balance) { ctx.status = 400; ctx.body = { error: 'Cannot sweep more than the treasury holds' }; return; }
-        const ok = transfer(treasury, 'COMMONS_POOL', amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`, 'direct', true);
-        if (!ok) { ctx.status = 400; ctx.body = { error: 'Sweep failed' }; return; }
+        // moveToCommons, NOT transfer(..., 'COMMONS_POOL', ...) — #126. The latter debited the treasury and
+        // then had the Commons credit overwritten by the next persistCommonsBalance() flush, DESTROYING the
+        // beans and breaking the node's zero-sum invariant. Measured: 40 in, 40 gone.
+        //
+        // Wrapped in `conservingTransaction` like the prune and federation callers (review finding).
+        // `moveToCommons` mutates the in-memory ledger and the COMMONS_BALANCE global BEFORE its several
+        // SQLite writes, so a failure part-way through would otherwise leave memory mutated against partial
+        // rows — and the next flush would make the phantom credit durable. The wrapper makes the whole move
+        // atomic in both halves, so a failure really does mean nothing moved.
+        //
+        // The two failure kinds are answered differently. `moveToCommons` returns null for a REFUSAL (the
+        // balance will not cover it) and THROWS for an invariant violation (wrong account type) or a storage
+        // error. A refusal is the caller's problem: 400. A throw is ours: the message names internal detail
+        // the caller has no use for, so it goes to the log and the caller gets a 500 — reporting a storage
+        // failure as a 400 would tell someone their input was wrong when the node is what is broken.
+        let ok;
+        try {
+            ok = conservingTransaction(() =>
+                moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`));
+        } catch (e: any) {
+            const invariant = /moveToCommons is for/.test(e?.message || '');
+            console.error(`[Treasury] Sweep from ${treasury.slice(0, 8)} failed:`, e?.message || e);
+            ctx.status = invariant ? 400 : 500;
+            ctx.body = {
+                error: invariant
+                    ? 'That sweep could not be completed. Nothing has been moved.'
+                    : 'Something went wrong saving that sweep. Nothing has been moved — please try again.',
+            };
+            return;
+        }
+        if (!ok) {
+            ctx.status = 400;
+            ctx.body = { error: 'That sweep could not be completed — check the treasury still holds that much.' };
+            return;
+        }
         ctx.body = { success: true, swept: amt, balance: getBalance(treasury).balance };
     });
 

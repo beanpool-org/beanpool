@@ -87,6 +87,42 @@ node scripts/bp-diagnose.mjs dashboard --port 3000
 
 ---
 
+## ⚖️ 3. Ledger Conservation Audit (`audit-conservation.mjs`)
+
+Answers one question per node: **do the books still sum to zero, and has this node ever run a path that destroyed beans?**
+
+BeanPool is mutual credit — there is no money supply, and the network always sums to zero. Two merged paths broke that by moving the `COMMONS_POOL` *account*, which is only the persisted shadow of the `COMMONS_BALANCE` global: the treasury sweep (#126) destroyed beans, and `adminPruneUser` (#124) destroyed on confiscation and *minted* on a debt write-off. Both are fixed, but a fix cannot repair a node that already ran them — hence this.
+
+### How to Run
+
+Strictly read-only (every database is opened `mode=ro`). Needs the `sqlite3` CLI on `PATH`.
+
+```bash
+# Every node snapshot the fleet manager holds
+node scripts/audit-conservation.mjs
+
+# A specific snapshot directory, or specific database files
+node scripts/audit-conservation.mjs --backups /path/to/backups
+node scripts/audit-conservation.mjs /var/lib/beanpool/state.db
+```
+
+### Exit codes
+
+Everything found is always reported; only the exit code is prioritised, and unreadable wins.
+
+| Code | Meaning |
+| ---- | ------- |
+| `3` | A database was unreadable, or there was nothing to audit — **the run proves nothing** |
+| `2` | Drift that the bug-era rows explain — this node destroyed or minted beans and needs repair |
+| `1` | Drift they don't explain — out of balance for some other reason; investigate, don't repair blind |
+| `0` | Every audited node sums to zero |
+
+Code `3` outranks the rest because the dangerous failure mode of an audit is a green result that actually means "checked nothing".
+
+**A matching memo is not by itself damage.** The fix kept the same memos — the accounting changed, not the description — so a healthy post-fix sweep is indistinguishable from a bug-era one by memo alone. Conservation is what separates them: the verdict comes from the sum, and matched rows only explain it. Reporting a balanced node as damaged would have had an operator credit the Commons twice, which is the corruption this tool exists to catch.
+
+---
+
 ## 🚀 4. Version Bumper Utility (`bump-version.mjs`)
 
 A utility script to automatically increment versions across all workspace `package.json` files, commit the changes, and create the matching Git release tag in a single step.

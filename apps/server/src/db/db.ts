@@ -701,11 +701,12 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // branch is decided from a row this same transaction is about to move — and settling an account that
     // turns out not to be paid is free (it collects what was already owed and stamps the epoch).
     //
-    // Deliberately BEFORE the affordability read below, not just before the write. When the creator is also
-    // the backer — the common case for a small project, and what test-crowdfund-ledger-sync exercises — a
-    // settlement that lands after this read would let the pledge be approved against beans demurrage had
-    // already taken.
-    onSettleDemurrage?.([project.creator_pubkey]);
+    // THE BACKER TOO (review finding), and deliberately BEFORE the affordability read below rather than just
+    // before the write. That read is a raw `SELECT balance`, so against an unsettled row it approves a pledge
+    // out of beans demurrage has already taken — the member spends them once and is charged for them again on
+    // their next read. Settling the payer was already unavoidable in the creator-pledges-to-their-own-project
+    // case, so excluding it for everyone else would only have made the same path behave two different ways.
+    onSettleDemurrage?.([project.creator_pubkey, fromPubkey]);
 
     const sender = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(fromPubkey) as { balance: number } | undefined;
     if (!sender) throw new Error("Sender account not found");

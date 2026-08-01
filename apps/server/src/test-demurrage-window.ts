@@ -64,6 +64,16 @@ const PAYOUT = 5_000;       // large enough that taxing it retrospectively is un
  * member is here today, so it is the most likely shape of the bug, not an edge case.
  */
 const GREEN_ZONE_HOLDING = 199;
+/**
+ * More than an unsettled `OPENING + PAYOUT` row can honestly afford, less than the row says. 5,300 held for
+ * 60 days owes ~223.40, so the true balance is ~5,076.60 and this sits in the gap — the only band in which a
+ * pledge's affordability check can be caught reading a pre-decay row.
+ */
+const PLEDGE_OVER_SETTLED = 5_200;
+/** Small enough that two backers each keep a decayable OPENING after pledging (path 2b). */
+const PLEDGE_SMALL = 100;
+/** Matched by the temporary abort trigger in path 3d, via the memo the grant writes. */
+const DOOMED_GRANT = 'Doomed grant';
 
 function seedMember(pk: string, balance: number, staleDays: number): void {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
@@ -101,21 +111,31 @@ async function main() {
     const creator = id('creator');      // path 1 — receives the escrow sweep
     const quiet = id('quiet');          // path 1b — same, but inside the Green Zone: settling collects NOTHING
     const backer = id('backer');        // path 1/1b — funds both, seeded fresh so it adds no decay noise
+    const spender = id('spender');      // path 1c — tries to pledge beans demurrage has already taken
     const refundee = id('refundee');    // path 2 — pledges, then gets refunded
     const emptyHanded = id('emptyhand'); // path 2 — creator of the deleted project, never paid
     const proposer = id('proposer');    // path 3 — granted, with an existing accounts row
     const quietProposer = id('quietprop'); // path 3c — the same, from inside the Green Zone
     const rowless = id('rowless');      // path 3b — granted, with NO accounts row (the epoch-0 insert)
+    const backerOne = id('backerone');   // path 2b — two backers of one project, settled as one batch
+    const backerTwo = id('backertwo');
+    const failProposer = id('failprop'); // path 3d — a grant whose transaction aborts part-way
     const admin = id('admin');          // invited_by NULL → eligible round creator
 
     seedMember(control, OPENING, STALE_DAYS);
     seedMember(creator, OPENING, STALE_DAYS);
     seedMember(quiet, GREEN_ZONE_HOLDING, STALE_DAYS);
     seedMember(backer, PAYOUT * 2, 0);   // funds both path 1 and path 1b
-    seedMember(refundee, OPENING + PAYOUT, STALE_DAYS);
+    seedMember(spender, OPENING + PAYOUT, STALE_DAYS);
+    // Fresh: path 2 ages this account itself, at the point in the story where the ageing belongs.
+    seedMember(refundee, OPENING + PAYOUT, 0);
+    seedMember(backerOne, OPENING + PLEDGE_SMALL, 0);
+    seedMember(backerTwo, OPENING + PLEDGE_SMALL, 0);
     seedMember(emptyHanded, 0, 0);
     seedMember(proposer, OPENING, STALE_DAYS);
     seedMember(quietProposer, GREEN_ZONE_HOLDING, STALE_DAYS);
+    // Stale, so the failed grant also has real demurrage in flight to unwind.
+    seedMember(failProposer, OPENING, STALE_DAYS);
     // Seeded EMPTY on purpose. Path 3b deletes this account's row to reach the UPSERT's INSERT arm, and
     // deleting a row that holds beans destroys them — the conservation check below caught exactly that, off
     // by the 300 an earlier version of this fixture seeded here. The assertion was right and the fixture was
@@ -169,18 +189,44 @@ async function main() {
         'path 1b: and the next read charges nothing either — the payout pushed them out of the Green Zone, so '
         + 'a carried window would have taxed a balance that had never owed a bean');
 
+    // ── Path 1c: the payer side — a pledge may not be afforded out of beans demurrage has taken ─────
+    // The affordability check is a raw `SELECT balance`, so against an unsettled row it reads the PRE-decay
+    // figure. This account holds 5,300 on a 60-day window and genuinely owes ~223.40, leaving ~5,076.60 — so a
+    // 5,200 pledge is affordable on the row and unaffordable in truth. Unsettled it went through, and the
+    // member was charged for the same beans again on their next read.
+    const overspend = PLEDGE_OVER_SETTLED;
+    const spendProject = id('proj');
+    createCrowdfundProject(spendProject, emptyHanded, 'Overspend', 'must be refused', [], PAYOUT * 20, null);
+    let refusal: string | null = null;
+    try { pledgeToProject(crypto.randomUUID(), spendProject, spender, overspend, 'pledge'); }
+    catch (e: any) { refusal = e?.message || String(e); }
+
+    const spenderRow = row(spender)!;
+    assert(refusal === 'Insufficient balance for pledge',
+        `path 1c: a ${overspend} pledge against a settled balance of ${spenderRow.balance.toFixed(2)} is REFUSED `
+        + `— the row said ${OPENING + PAYOUT}, which is the pre-decay figure (got: ${refusal ?? 'no error'})`);
+    assert(spenderRow.epoch === nowEpoch() && spenderRow.balance < overspend,
+        'path 1c: and the settlement is durable even though the pledge was refused — settling runs before the '
+        + 'affordability read and outside the pledge transaction, so the refusal does not undo it');
+
     // ── Path 2: refund to a backer of a deleted project ────────────────────────────────────────────
     // Goal far above the pledge so the sweep does NOT fire and the value stays parked in escrow.
     const doomed = id('proj');
     createCrowdfundProject(doomed, emptyHanded, 'Abandoned', 'refunds its backers', [], PAYOUT * 20, null);
     pledgeToProject(crypto.randomUUID(), doomed, refundee, PAYOUT, 'pledge');
 
-    // The pledge DEBIT deliberately does not settle: a falling balance under an open window under-collects,
-    // which is the safe direction. So the refundee reaches the refund holding OPENING with a stale window —
-    // exactly the state the refund used to tax.
+    // TIME PASSES between the pledge and the project being abandoned — which is the whole scenario, and the
+    // fixture has to say so explicitly now that pledging settles the backer as well as the creator (review
+    // finding). Without this the refundee's window would be closed by their own pledge and the refund would
+    // have nothing to land on. Epochs are whole days, so the only way to age an account inside one process is
+    // to write the row back.
+    db.prepare(`UPDATE accounts SET last_demurrage_epoch=? WHERE public_key=?`).run(nowEpoch() - STALE_DAYS, refundee);
+    reconcileLedgerFromDb();
+
     const beforeRefund = row(refundee)!;
     assert(Math.abs(beforeRefund.balance - OPENING) < 1e-9 && beforeRefund.epoch === nowEpoch() - STALE_DAYS,
-        `path 2 setup: the backer sits on ${OPENING} with a ${STALE_DAYS}-day window still open after pledging`);
+        `path 2 setup: the backer sits on ${OPENING} with a ${STALE_DAYS}-day window open when the project is `
+        + 'abandoned — pledged long ago, refunded today');
 
     // SEPARATE PRE-EXISTING BUG, found while writing this (#139): deleting a project that has pledges ALWAYS
     // fails. `transactions.project_id REFERENCES projects(id)` is added by ALTER with the default
@@ -213,6 +259,42 @@ async function main() {
     assert(Math.abs(refundCharge - fairCharge) < SAME_CHARGE,
         `path 2: the backer is charged ${refundCharge.toFixed(4)} — the fair cost of the ${OPENING} they `
         + `actually held, with ${refunded} refunded on top and taxed at nothing`);
+
+    // ── Path 2b: settling a whole refund batch is ALL-OR-NOTHING ───────────────────────────────────
+    // A refund settles every backer of the project, so the loop was one WAL commit per member (review
+    // finding). The stronger half of that finding is atomicity: un-batched, a failure part-way left some
+    // windows closed and some open, with the decay applied in memory for every one of them — memory and rows
+    // disagreeing in a way nothing would later reconcile.
+    const shared = id('proj');
+    createCrowdfundProject(shared, emptyHanded, 'Two backers', 'settled as one batch', [], PAYOUT * 20, null);
+    pledgeToProject(crypto.randomUUID(), shared, backerOne, PLEDGE_SMALL, 'pledge');
+    pledgeToProject(crypto.randomUUID(), shared, backerTwo, PLEDGE_SMALL, 'pledge');
+    // Age both, so settling them is an observable write rather than a no-op.
+    for (const pk of [backerOne, backerTwo]) {
+        db.prepare(`UPDATE accounts SET last_demurrage_epoch=? WHERE public_key=?`).run(nowEpoch() - STALE_DAYS, pk);
+    }
+    reconcileLedgerFromDb();
+
+    // Block the SECOND account the settle will reach, read through the same query db.ts uses so the target is
+    // the real one rather than a guess — blocking the first would abort before any write and prove nothing.
+    const settleOrder = (db.prepare(`SELECT DISTINCT from_pubkey FROM transactions WHERE to_pubkey=? AND project_id=?`)
+        .all(`escrow_${shared}`, shared) as { from_pubkey: string }[]).map(b => b.from_pubkey);
+    const firstSettled = settleOrder[0], blockedSettle = settleOrder[1];
+    const before2b = [firstSettled, blockedSettle].map(pk => row(pk)!);
+    db.exec(`CREATE TRIGGER zz_block_settle BEFORE UPDATE ON accounts
+             WHEN NEW.public_key = '${blockedSettle}'
+             BEGIN SELECT RAISE(ABORT, 'settle blocked by test'); END;`);
+    let settleFailed: string | null = null;
+    try { deleteCrowdfundProject(shared, emptyHanded); }
+    catch (e: any) { settleFailed = e?.message || String(e); }
+    db.exec(`DROP TRIGGER zz_block_settle`);
+
+    assert(settleFailed === 'settle blocked by test',
+        `path 2b: the batch aborted on the second account, not on the delete's own FK (${settleFailed})`);
+    const after2b = [firstSettled, blockedSettle].map(pk => row(pk)!);
+    assert(after2b.every((r, i) => r.epoch === before2b[i].epoch && Math.abs(r.balance - before2b[i].balance) < 1e-9),
+        `path 2b: NEITHER window was closed — settling ${settleOrder.length} backers is one transaction, so the `
+        + 'first is rolled back with the second instead of being left settled beside an unsettled peer');
 
     // ── Path 3: commons voting-round grant, proposer WITH an existing row ──────────────────────────
     const grantCharge = await grantTo(proposer, admin, 'Existing row', OPENING);
@@ -261,10 +343,53 @@ async function main() {
         `path 3b: the grant survives the next read intact (${rowlessBalance}) — epoch 0 is 1970, and ~56 years `
         + `of compound decay would have left roughly the 200-bean Green Zone of a ${PAYOUT} grant`);
 
+    // ── Path 3d: a grant that FAILS must leave the ledger exactly as it was ─────────────────────────
+    // The grant moves value in memory (`deductFromCommons`, the balance credit, and any demurrage the
+    // proposer's read collects) as well as in rows, and a SQLite rollback touches only the rows. So the whole
+    // thing runs inside `conservingTransaction` with the deduct INSIDE the snapshot. Previously the deduct and
+    // the credit happened before a bare `db.transaction`, and a failed grant left the pot debited in memory
+    // with nothing credited anywhere — beans destroyed, and the project already marked funded.
+    //
+    // Forced with a temporary trigger rather than a stub, so the failure arrives from SQLite the way a real
+    // constraint violation would, part-way through the transaction.
+    const blocked = createProject(failProposer, DOOMED_GRANT, 'must roll back cleanly', PAYOUT);
+    if (!blocked) throw new Error('setup: createProject failed for the blocked grant');
+    db.exec(`CREATE TRIGGER zz_block_grant BEFORE INSERT ON transactions
+             WHEN NEW.memo = 'Commons grant: ${DOOMED_GRANT}'
+             BEGIN SELECT RAISE(ABORT, 'grant blocked by test'); END;`);
+    const commonsBeforeFail = getCommonsBalanceExact();
+    const rowBeforeFail = row(failProposer)!;
+    let grantFailed: string | null = null;
+    try { await closeRoundFor(blocked.id, admin); }
+    catch (e: any) { grantFailed = e?.message || String(e); }
+    db.exec(`DROP TRIGGER zz_block_grant`);
+
+    assert(!!grantFailed, `path 3d: the blocked grant really did fail, so the rest of this means something (${grantFailed})`);
+    assert(Math.abs(getCommonsBalanceExact() - commonsBeforeFail) < 1e-9,
+        `path 3d: the Commons pot is back where it started (${getCommonsBalanceExact().toFixed(4)}) — a debit `
+        + `taken in memory for a grant that never landed destroys ${PAYOUT} beans`);
+    const rowAfterFail = row(failProposer)!;
+    assert(Math.abs(rowAfterFail.balance - rowBeforeFail.balance) < 1e-9 && rowAfterFail.epoch === rowBeforeFail.epoch,
+        'path 3d: and the proposer\'s row is untouched, window included — the decay collected inside the failed '
+        + 'transaction was unwound with it, not left as a credit with no debit');
+
     // ── Conservation: none of the above may move the ledger ────────────────────────────────────────
     assert(Math.abs(nodeTotal() - baseline) < 0.005,
         `conservation: sum(accounts) + Commons is unchanged (${nodeTotal().toFixed(4)} vs ${baseline.toFixed(4)}) — `
         + 'every settlement moved value between an account and the pot, and minted none');
+
+    // ── And it survives a restart, which is where an un-persisted half shows up ─────────────────────
+    // The live COMMONS_BALANCE is thrown away and rebuilt from the COMMONS_POOL row, exactly as
+    // initStateEngine does on boot. Any decay debit or grant that was committed to an account row while its
+    // matching Commons movement stayed in memory reappears here as drift — which is what makes the grant's
+    // persists having to be INSIDE its transaction (review finding) an assertion rather than an argument.
+    const commonsRow = (db.prepare(`SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'`)
+        .get() as { balance: number }).balance;
+    setCommonsBalance(commonsRow);
+    reconcileLedgerFromDb();
+    assert(Math.abs(nodeTotal() - baseline) < 0.005,
+        `durability: rebuilding the pot from its row conserves too (${nodeTotal().toFixed(4)} vs `
+        + `${baseline.toFixed(4)}) — every credit taken in memory reached a row`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

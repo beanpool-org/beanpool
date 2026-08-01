@@ -463,6 +463,42 @@ at the next restart — the node stops summing to zero, silently. The cross-node
 `moveToCommons` / `payFromCommons` pair instead. (The pre-existing `adminPruneUser` path has this bug and is
 tracked separately; it is not settlement's to fix.)
 
+**The Commons figure is stored exactly, not rounded.** It used to be persisted at 2dp, and that broke
+conservation across a restart in a way settlement makes reachable: a 1.5% fee on a 5-bean crossing is
+`0.075`, stored as `0.08`; the node restarts, loads `0.08`, and a reversal refunds `0.075` — leaving `0.005`
+minted from nothing. 2dp is a *presentation* choice and every reader already applies it, so rounding at the
+storage layer was lossy for no benefit. The same applies to the figure in a sync payload: a replica that
+loads a rounded pot cannot balance against the primary's books.
+
+### 2.7 Headroom is measured from the signed balance
+
+> **Rule 5a — A peer's headroom is `cap + balance − reserved`, not `cap − credit_extended`.**
+
+The cap bounds how far *negative* `bridge_<peer>` may go. State the rule as the arithmetic it actually is:
+
+```
+resulting balance = balance − reserved − amount     must be  ≥  −cap
+⇒  amount  ≤  cap + balance − reserved
+```
+
+Computing it as `cap − max(0, −balance)` looks equivalent and is not: it **discards a positive balance**,
+and a positive balance is precisely the state in which paying the peer's seller *reduces* what we owe. With
+a `+5` position and a cap of `0`, paying a 5-bean seller ends at `0` and extends no credit whatsoever — yet
+that form computes zero headroom and refuses it, closing the rebalancing direction §3.2 insists must stay
+open. A community sitting in surplus could not be paid back down.
+
+Two consequences worth stating, because both are load-bearing:
+
+- **The one-way property falls out of the arithmetic** rather than being asserted alongside code that
+  contradicts it. There is no `abs()`, and no special case for the positive side.
+- **`reserved` belongs in the same expression**, not in a separate check. Open reservations and unpaid held
+  receipts have already promised headroom; leaving them out lets concurrent purchases each be measured
+  against the same room, all be accepted, and then predictably lapse *after* their buyers have committed —
+  manufacturing the compensating reversals this document calls the rare path.
+
+`extended` survives only as a *reported* figure — how much we are on the hook for — and never as the basis
+of the decision.
+
 ---
 
 ## 3. Exposure limits

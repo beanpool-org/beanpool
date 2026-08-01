@@ -145,7 +145,25 @@ async function main() {
     const wayPositive = settlementCapacity(PEER_ID, PEER, 50);
     assert(wayPositive.ok === true, 'a large POSITIVE balance does not trip the cap — it is not abs(balance)');
     assert(wayPositive.ok && wayPositive.extended === 0, 'credit extended is 0 while the balance is positive');
-    assert(wayPositive.ok && wayPositive.headroom === 100, 'full headroom is available again once they owe us nothing');
+
+    // Headroom is `cap + balance`, not `cap`. The rule is that the balance may not fall BELOW −cap, so a
+    // +250 position with a cap of 100 can absorb 350 of payments before it would extend any credit at all.
+    //
+    // This assertion previously expected 100, which quietly encoded the bug a reviewer later found: taking
+    // `max(0, −balance)` discarded the positive side, so with a small cap the REBALANCING direction — the
+    // one §3.2 insists must stay open — was refused. A test can make a bug look deliberate; this is what
+    // that looks like.
+    assert(wayPositive.ok && wayPositive.headroom === 350,
+        'headroom is measured from the signed balance: 250 owed outward plus a 100 cap = 350');
+    assert(settlementCapacity(PEER_ID, PEER, 350).ok === true, 'so a payment that lands exactly on −cap is allowed');
+    assert(settlementCapacity(PEER_ID, PEER, 350.01).ok === false, 'and one bean past it is not');
+
+    // The case that matters most: a ZERO cap must still let the balance be paid back down to zero.
+    setConnectorCreditCap(PEER, 0);
+    assert(settlementCapacity(PEER_ID, PEER, 250).ok === true,
+        'with a cap of ZERO, paying the whole positive balance down to zero is still allowed — it extends nothing');
+    assert(settlementCapacity(PEER_ID, PEER, 250.01).ok === false, 'while a single bean beyond zero is refused');
+    setConnectorCreditCap(PEER, 100);
 
     // Clearing the cap returns to fail-closed — an operator kill switch that keeps discovery open.
     setConnectorCreditCap(PEER, null);

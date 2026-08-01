@@ -28,12 +28,12 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { generateKeyPair } from '@libp2p/crypto/keys';
 import { peerIdFromPrivateKey } from '@libp2p/peer-id';
-import { initStateEngine, reconcileLedgerFromDb } from './state-engine.js';
+import { initStateEngine, reconcileLedgerFromDb, exportSyncState } from './state-engine.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { addConnector, setConnectorCreditCap } from './connector-manager.js';
 import {
-    bridgeAccountId, getEnergyBalance, ensureBridgeAccount, settlementCapacityForPeer,
+    bridgeAccountId, getEnergyBalance, energyBalanceExact, ensureBridgeAccount, settlementCapacityForPeer,
 } from './federation-bridge.js';
 import { signReceipt, verifyReceipt, type SettlementReceipt } from './federation-receipt.js';
 import {
@@ -43,7 +43,7 @@ import {
     beginOutboundSettlement, commitOutboundSettlement, reverseOutboundSettlement,
     abandonOutboundSettlement, finaliseOutboundSettlement,
     handlePurchaseRequest, handleReceiptDelivery, settleHeldReceipt, answerReceiptStatus,
-    expireStaleReservations, recoverSettlements, crossNodeFee, stuckSettlements,
+    expireStaleReservations, recoverSettlements, crossNodeFee, stuckSettlements, verifyStoredReceipt,
     RESERVATION_TTL_MS, PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS, STUCK_SETTLEMENT_AFTER_MS,
 } from './federation-settlement-exchange.js';
 import {
@@ -80,17 +80,14 @@ const feeTxnAmount = (key: string): number | null =>
         .get(`%fee (${key})%`) as any)?.amount ?? null;
 
 /**
- * The Commons row is persisted at 2dp (`persistCommonsBalance`), while a 1.5% fee on an odd price is a
- * 3dp figure. So the DB row can differ from the exact pot by up to half a cent.
+ * The Commons row is now persisted EXACTLY, so these are equalities rather than tolerances.
  *
- * That is PRE-EXISTING and applies identically to the ordinary local fee — 1.5% of 5 beans is 0.075
- * whether the trade crosses a border or not. Recorded here rather than smoothed over, because a test that
- * quietly widened its tolerance would hide the fact that the persisted Commons figure is lossy at all.
+ * The earlier version of this file carried a 0.005 tolerance and justified it as pre-existing rounding in
+ * `persistCommonsBalance`. That was wrong to accept: it hid a real conservation failure this very PR
+ * introduces — a 0.075 fee persisted as 0.08, reloaded after a restart, then reversed by refunding 0.075,
+ * leaves 0.005 minted from nothing. A tolerance in a conservation test is how that stays invisible.
  */
-const COMMONS_PERSIST_TOLERANCE = 0.005;
-/** Rounds the difference before comparing — 0.08 − 0.075 is 0.0050000000000000044 in binary floats. */
-const withinPersistTolerance = (a: number, b: number): boolean =>
-    r4(Math.abs(a - b)) <= COMMONS_PERSIST_TOLERANCE;
+const exactly = (a: number, b: number): boolean => r4(a) === r4(b);
 
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
@@ -195,8 +192,8 @@ async function main() {
 
     assert(near(balanceOf(buyer), buyerBefore - AMOUNT - FEE), 'buyer is debited price + fee (−5.075)');
     assert(feeTxnAmount(KEY) === FEE, 'the fee entry records EXACTLY 0.075 — not a rounded stand-in');
-    assert(withinPersistTolerance(balanceOf('COMMONS_POOL'), commonsBefore + FEE),
-        'and it lands in OUR Commons, to the 2dp the Commons row is stored at');
+    assert(exactly(balanceOf('COMMONS_POOL'), commonsBefore + FEE),
+        'and it lands in OUR Commons EXACTLY — not rounded to 2dp on the way to disk');
     assert(near(getEnergyBalance(BRIS), AMOUNT), 'the bridge carries the PRICE ONLY (+5.000), never price plus fee');
     assert(balanceOf(`escrow_${KEY}`) === 0, 'escrow closes to exactly zero — no dust left behind');
     assert(getSettlement(KEY)!.state === 'committed', 'and the row is committed BEFORE the receipt is handed out');
@@ -252,7 +249,7 @@ async function main() {
         'and the member-visible memo explains it in plain language, not an internal enum');
     assert(near(balanceOf(buyer), buyerBefore), 'the buyer is made whole — fee refunded too, since no crossing happened');
     assert(getEnergyBalance(BRIS) === 0, 'the bridge is back to square');
-    assert(withinPersistTolerance(balanceOf('COMMONS_POOL'), commonsBefore),
+    assert(exactly(balanceOf('COMMONS_POOL'), commonsBefore),
         'and the Commons gives the fee back');
     assert(txnsFor(KEY) > txnsBeforeReversal,
         'the reversal ADDS ledger rows — deleting them would make a settled trade look like one that never happened');
@@ -409,8 +406,8 @@ async function main() {
     const R4 = 'k-in-held';
     assert(ask(R4, 4).accepted === true, 'reserve one to strand at held');
     const heldReceipt: SettlementReceipt = { ...lapseReceipt, key: R4, amount: 4 };
-    db.prepare(`UPDATE settlements SET state='held', receipt=? WHERE key=?`)
-        .run(await signReceipt(heldReceipt, brisKey), R4);
+    db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=? WHERE key=?`)
+        .run(await signReceipt(heldReceipt, brisKey), JSON.stringify(heldReceipt), R4);
     const sellerBeforeRecovery = balanceOf(seller);
 
     // An outbound row stuck at 'escrowed' — we took the beans and crashed before asking the peer.
@@ -473,8 +470,10 @@ async function main() {
     setConnectorCreditCap(BRIS_ADDR, 1000);
     assert(ask(R9, 6).accepted === true, 'a reservation made while the cap is healthy');
     const r9Receipt: SettlementReceipt = { ...lapseReceipt, key: R9, amount: 6 };
-    db.prepare(`UPDATE settlements SET state='held', receipt=? WHERE key=?`)
-        .run(await signReceipt(r9Receipt, brisKey), R9);
+    // Both the signature AND the payload: recovery re-verifies before paying, so a row carrying only a
+    // signature is (correctly) not payable — `committedAt` would live nowhere and could not be rebuilt.
+    db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=? WHERE key=?`)
+        .run(await signReceipt(r9Receipt, brisKey), JSON.stringify(r9Receipt), R9);
 
     setConnectorCreditCap(BRIS_ADDR, 1);            // operator lowers it during maintenance
     const recoverUnderLowCap = await recoverSettlements();
@@ -513,7 +512,9 @@ async function main() {
     // "A reservation is a hint that reduces headroom" was prose only: capacity read the bridge balance and
     // ignored open reservations, so N concurrent purchases were each measured against the same full
     // headroom, all accepted, and their receipts then predictably lapsed AFTER their buyers had committed.
-    setConnectorCreditCap(BRIS_ADDR, r4(-getEnergyBalance(BRIS)) + 10);   // exactly 10 of headroom
+    // Derived from the EXACT balance: headroom is now `cap + balance − reserved`, and the display helper
+    // rounds to 2dp, which would leave the target headroom slightly off.
+    setConnectorCreditCap(BRIS_ADDR, r4(-energyBalanceExact(BRIS)) + 10);   // exactly 10 of headroom
     assert(ask('k-res-a', 7).accepted === true, 'the first purchase fits inside the headroom');
     const second = ask('k-res-b', 7);
     assert(second.accepted === false && (second as any).reason === 'cap_exhausted',
@@ -532,6 +533,67 @@ async function main() {
     assert(getEnergyBalance(FRAC) === -99.99, 'the DISPLAY balance rounds to 2dp, as it should');
     assert(settlementCapacityForPeer(FRAC, 0.01).ok === false,
         'but enforcement uses the stored value, so the last 0.01 against a 100 cap is refused');
+
+    // ── 10g. The cap must not block the REBALANCING direction (§3.2) ──────────────────────────────
+    // The cap bounds how far NEGATIVE the bridge may go. Measuring headroom from "credit extended so far"
+    // threw away a POSITIVE balance — and a positive balance is exactly the state where paying their seller
+    // reduces what we owe. With +5 and a cap of 0, paying a 5-bean seller ends at 0 and extends no credit at
+    // all, yet the old arithmetic refused it, closing the one direction §3.2 insists stays open.
+    const REBAL = '12D3KooWRebalancePeer';
+    const REBAL_ADDR = `/dns4/rebal.beanpool.org/tcp/4001/p2p/${REBAL}`;
+    addConnector(REBAL_ADDR, 'peer', 'Rebalance', 'https://rebal.beanpool.org');
+    ensureBridgeAccount(REBAL);
+    db.prepare('UPDATE accounts SET balance = 5 WHERE public_key = ?').run(bridgeAccountId(REBAL));
+    reconcileLedgerFromDb();
+    setConnectorCreditCap(REBAL_ADDR, 0);
+
+    const rebal = settlementCapacityForPeer(REBAL, 5);
+    assert(rebal.ok === true, 'a +5 position with a ZERO cap still allows a 5-bean payment — it ends at zero');
+    assert(rebal.ok === true && rebal.headroom === 5, 'headroom is measured from the signed balance, not from zero');
+    assert(settlementCapacityForPeer(REBAL, 5.01).ok === false,
+        'but a hair beyond that WOULD extend credit past the cap, so it is refused');
+    setConnectorCreditCap(REBAL_ADDR, 10);
+    assert(settlementCapacityForPeer(REBAL, 15).ok === true, 'and a cap of 10 on a +5 position allows 15');
+    assert(settlementCapacityForPeer(REBAL, 15.01).ok === false, 'while 15.01 is one hair too far');
+
+    // ── 10h. A held receipt is re-verifiable after a reboot ───────────────────────────────────────
+    // §2.6 says the persisted signature is the evidence authorising the payment and stays checkable in an
+    // audit. Storing only the signature made that false on the seller's side: `committedAt` lived nowhere
+    // else, so the payload could not be rebuilt and the receipt could never be re-checked.
+    const heldRow = getSettlement(R4)!;
+    assert(!!heldRow.receiptPayload, 'the seller side stores the receipt OBJECT, not just its signature');
+    assert(await verifyStoredReceipt(heldRow) === true, 'so it can be re-verified with no live connection');
+    assert(await verifyStoredReceipt({ ...heldRow, peerId: OTHER }) === false,
+        'and it does not verify against a different peer — the binding survives persistence');
+    assert(await verifyStoredReceipt({ ...heldRow, receiptPayload: null }) === false,
+        'a row with no stored payload is NOT payable — fail closed rather than pay on a mutable row');
+
+    // ── 10i. Settlements survive into a backup snapshot ──────────────────────────────────────────
+    // A promoted backup inherits the LEDGER EFFECTS of an in-flight settlement — escrow held, a bridge
+    // credited — so without the row it cannot query, reverse or pay it. recoverSettlements() would find
+    // nothing while the beans sat in escrow forever.
+    // A row deliberately left IN FLIGHT at snapshot time — the case that matters, since a settled row needs
+    // nothing from the replica. (R1/R4 have since been resolved by the recovery sections above.)
+    const INFLIGHT = 'k-snapshot-held';
+    setConnectorCreditCap(BRIS_ADDR, 1000);
+    assert(ask(INFLIGHT, 9).accepted === true, 'a reservation to leave in flight across the snapshot');
+    const snapReceipt: SettlementReceipt = { ...lapseReceipt, key: INFLIGHT, amount: 9 };
+    db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=? WHERE key=?`)
+        .run(await signReceipt(snapReceipt, brisKey), JSON.stringify(snapReceipt), INFLIGHT);
+
+    const snapshot = await exportSyncState('test-node');
+    assert(Array.isArray(snapshot.settlements) && snapshot.settlements.length > 0,
+        'a full snapshot carries the settlement outbox');
+    const snapKeys = snapshot.settlements!.map(s => s.key);
+    assert(snapKeys.includes(R1) && snapKeys.includes(INFLIGHT),
+        'including both finalised and in-flight rows');
+    const snapHeld = snapshot.settlements!.find(s => s.key === INFLIGHT)!;
+    assert(!!snapHeld.receiptPayload && !!snapHeld.receipt,
+        'and carries the receipt a promoted node needs in order to pay its seller');
+    assert(snapHeld.state === 'held' && snapHeld.direction === 'inbound' && snapHeld.amount === 9,
+        'with the state, direction and amount that decide what recovery does with it');
+    assert(snapshot.commonsBalance === undefined || r4(snapshot.commonsBalance) === r4(balanceOf('COMMONS_POOL')),
+        'and the snapshot Commons figure is exact, so a replica can balance against the primary');
 
     // ── 11. The pair nets to zero (§2.1) ─────────────────────────────────────────────────────────
     // Both halves of one crossing, run against this single database. That proves the ARITHMETIC of the
@@ -571,8 +633,8 @@ async function main() {
     // Commons row's 2dp delta, so this asserts conservation of beans and not the persistence precision.
     assert(r4(dBuyer + 0.075 + dOutBridge + dSeller + dInBridge) === 0,
         'and the whole crossing nets to exactly zero — no beans created, none destroyed');
-    assert(withinPersistTolerance(dCommons, 0.075),
-        'with the persisted Commons figure agreeing to the 2dp it is stored at');
+    assert(exactly(dCommons, 0.075),
+        'with the persisted Commons figure agreeing exactly');
 
     // ── 12. Rule 4: foreign exposure is reported, and enforced by the escrow floor check ──────────
     const exposure = memberForeignExposure(buyer);

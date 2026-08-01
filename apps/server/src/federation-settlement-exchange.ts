@@ -604,7 +604,17 @@ export async function handleReceiptDelivery(input: {
         return { settled: false, reason: 'RECEIPT_MISMATCH', message: 'That receipt does not match the reserved purchase.' };
     }
 
-    if (row.state === 'reserved') advanceSettlement(row.key, 'held', { receipt: input.signature });
+    // Persist the receipt OBJECT as well as its signature (review finding). Storing only the signature
+    // meant that after a reboot the seller's node could no longer verify what it holds — `committedAt` lived
+    // nowhere else, so the payload could not be rebuilt — and `settleHeldReceipt` paid from the row's own
+    // mutable fields instead. That contradicted §2.6's claim that the persisted receipt is the evidence
+    // authorising the payment and stays checkable in an audit. Now it genuinely is.
+    if (row.state === 'reserved') {
+        advanceSettlement(row.key, 'held', {
+            receipt: input.signature,
+            receiptPayload: JSON.stringify(input.receipt),
+        });
+    }
 
     // Answer with a structured refusal rather than letting a throw escape (review finding). A ledger error
     // here would propagate to the stream handler, which logs and closes WITHOUT writing a response — so the
@@ -698,6 +708,22 @@ export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean
     });
 }
 
+/**
+ * Re-verify the receipt stored on an inbound settlement against the peer recorded on that row.
+ *
+ * Returns false for a row that has no stored payload — which is what a settlement written by an older build
+ * looks like. That is deliberately fail-closed: such a row is not payable without evidence, and an operator
+ * seeing it reported is a much better outcome than paying on the strength of a mutable database row.
+ */
+export async function verifyStoredReceipt(row: SettlementRow): Promise<boolean> {
+    if (!row.receipt || !row.receiptPayload) return false;
+    try {
+        return await verifyReceipt(JSON.parse(row.receiptPayload) as SettlementReceipt, row.receipt, row.peerId);
+    } catch {
+        return false;
+    }
+}
+
 /** The `GET_RECEIPT_STATUS(key)` answer. Scoped to the asking peer so no peer can probe another's keys. */
 export function answerReceiptStatus(key: string, askingPeerId: string): ReceiptStatus {
     const row = getSettlement(key);
@@ -788,6 +814,19 @@ export async function recoverSettlements(
                 // latchOnRefusal: false — nobody is waiting on an answer here, so a cap that is temporarily
                 // too low must not permanently reverse a receipt we hold (see settleHeldReceipt).
                 if (row.state === 'held') {
+                    // RE-VERIFY before paying. The receipt is the authority for this payment (§2.6), and on
+                    // this path we are acting on it minutes or a reboot later with no live connection to
+                    // re-authenticate against — so the signature is the only evidence, and evidence that is
+                    // never checked is not evidence. A row whose stored receipt does not verify against the
+                    // peer recorded on it is left alone for an operator rather than paid or reversed.
+                    if (!(await verifyStoredReceipt(row))) {
+                        console.error(
+                            `[Federation] Held receipt ${row.key} FAILED verification against peer `
+                            + `${row.peerId.slice(-8)} — not paying. This needs an operator.`,
+                        );
+                        result.stillOpen++;
+                        continue;
+                    }
                     if (settleHeldReceipt(row.key, { latchOnRefusal: false }).settled) result.paid++;
                     else result.stillOpen++;
                 } else {

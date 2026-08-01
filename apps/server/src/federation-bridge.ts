@@ -121,14 +121,6 @@ export function settlementCapacity(
     excludeKey?: string,
 ): SettlementCapacity {
     const cap = getConnectorCreditCap(address);
-    // Committed exposure PLUS what open reservations and unpaid held receipts have already promised.
-    // §2.5 says a reservation "reduces headroom"; without the second term that was only prose (review
-    // finding) — several concurrent purchases would each be measured against the same full headroom, be
-    // accepted, and then predictably lapse after their buyers had committed, forcing avoidable reversals.
-    //
-    // Kept UNROUNDED. Rounding here is what let the cap be exceeded in the first place, and rounding the
-    // sum re-introduces it just as effectively as rounding the balance did.
-    const extended = creditExtendedTo(peerId) + reservedAgainstPeer(peerId, excludeKey);
 
     if (cap === null) {
         return {
@@ -138,11 +130,33 @@ export function settlementCapacity(
         };
     }
 
+    // HEADROOM IS MEASURED FROM THE SIGNED BALANCE, not from "credit extended so far" (review finding, and
+    // this was a spec violation rather than an inefficiency).
+    //
+    // The rule §3.2 actually states is that the balance may not go BELOW −cap. So:
+    //
+    //     resulting balance = balance − reserved − amount     must be  ≥  −cap
+    //     ⇒  amount  ≤  cap + balance − reserved
+    //
+    // The previous form used `max(0, −balance)`, which THREW AWAY a positive balance — and a positive
+    // balance is precisely the state where we owe them work and paying their seller *reduces* what we owe.
+    // With a +5 position and a cap of 0, paying a 5-bean seller ends at 0 and extends no credit at all, yet
+    // the old arithmetic computed zero headroom and refused it. That blocks the rebalancing direction §3.2
+    // insists must stay open, and it made this module's own "flow in the other direction is never blocked
+    // here" comment false. Measuring from the signed balance makes the one-way property fall out of the
+    // arithmetic instead of being asserted next to code that contradicted it.
+    //
+    // Unrounded inputs: rounding here is what let the cap be exceeded before, and rounding the sum
+    // re-introduces it just as effectively as rounding the balance did.
+    const balance = energyBalanceExact(peerId);
+    const reserved = reservedAgainstPeer(peerId, excludeKey);
+    const extended = Math.max(0, -balance) + reserved;   // reported figure: how much we are on the hook for
+
     // Enforce at 4dp — the precision the settlement module actually carries prices at — and present at 2dp.
     // Comparing raw floats would refuse an exact fit on binary noise (10 − 7.1 renders as 2.9000000000000004);
     // comparing at 2dp would let 0.006 of headroom look like 0.01. 4dp is the honest middle, and it is the
     // same precision `round4` uses everywhere else in the settlement path.
-    const headroom = round4(cap - extended);
+    const headroom = round4(cap + balance - reserved);
     if (round4(amount) > headroom) {
         return {
             ok: false,

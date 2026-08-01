@@ -129,6 +129,34 @@ export interface SyncMarketplaceTransaction {
     ratedBySeller?: boolean;
 }
 
+/**
+ * A cross-node settlement row (#104 §2.5).
+ *
+ * Replicated because a backup that is promoted to primary inherits the LEDGER EFFECTS of an in-flight
+ * settlement — escrow held, a bridge credited — without the row that explains them (review finding). It
+ * would then have no way to query, reverse, or pay out that settlement: `recoverSettlements()` would find
+ * nothing to recover while the beans sat in escrow forever, and `promotionSanityCheck` would see balances
+ * with no counterpart. The whole point of the outbox is that it survives the node.
+ */
+export interface SyncSettlement {
+    key: string;
+    direction: string;
+    peerId: string;
+    buyerPubkey: string;
+    buyerHomeNode: string | null;
+    sellerPubkey: string | null;
+    postId: string | null;
+    amount: number;
+    fee: number;
+    reservedUntil: string | null;
+    state: string;
+    receipt: string | null;
+    receiptPayload: string | null;
+    failureReason: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -148,6 +176,7 @@ export interface SyncPayload {
     abuseReports?: SyncAbuseReport[];
     recoveryRequests?: SyncRecoveryRequest[];
     recoveryApprovals?: SyncRecoveryApproval[];
+    settlements?: SyncSettlement[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     nodeId: string;
     generatedAt?: string;
@@ -349,6 +378,28 @@ export function exportSyncState(
         createdAt: row.created_at,
     }));
 
+    // Settlements. Uses the same `sel` cursor helper as every other table, so delta sync picks up a row
+    // whose state has moved without re-sending the whole outbox.
+    const settlementRows = sel('settlements', 'updated_at');
+    const settlements: SyncSettlement[] = settlementRows.map(row => ({
+        key: row.key,
+        direction: row.direction,
+        peerId: row.peer_id,
+        buyerPubkey: row.buyer_pubkey,
+        buyerHomeNode: row.buyer_home_node ?? null,
+        sellerPubkey: row.seller_pubkey ?? null,
+        postId: row.post_id ?? null,
+        amount: row.amount,
+        fee: row.fee ?? 0,
+        reservedUntil: row.reserved_until ?? null,
+        state: row.state,
+        receipt: row.receipt ?? null,
+        receiptPayload: row.receipt_payload ?? null,
+        failureReason: row.failure_reason ?? null,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at || row.created_at,
+    }));
+
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
@@ -371,10 +422,13 @@ export function exportSyncState(
         conversations,
         conversationParticipants,
         messages,
-        commonsBalance: Math.round(commonsBalance * 100) / 100,
+        // EXACT, not rounded to 2dp: a replica that loads a rounded pot cannot balance against the
+        // primary's books, and after promotion it would reverse trades using a figure it never held.
+        commonsBalance,
         abuseReports,
         recoveryRequests,
         recoveryApprovals,
+        settlements,
         tombstones,
     };
 }

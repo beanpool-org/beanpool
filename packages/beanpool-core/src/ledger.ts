@@ -256,9 +256,7 @@ export class LedgerManager {
         if (amount === 0) return true; // 0-credit transfer is always a no-op success
         if (fromId === toId) return false;
 
-        const currentEpoch = this.getCurrentEpoch();
-
-        // Apply decays first to ensure accurate balances
+        // Apply decays first to ensure accurate balances — this also settles each account's epoch.
         const fromAccount = this.getAccount(fromId);
         const toAccount = this.getAccount(toId);
 
@@ -281,10 +279,12 @@ export class LedgerManager {
             COMMONS_BALANCE += fee;
         }
 
-        // Update timestamps
-        fromAccount.lastDemurrageEpoch = currentEpoch;
-        toAccount.lastDemurrageEpoch = currentEpoch;
-
+        // The epoch is NOT touched here (review finding). `getAccount()` above already ran `applyDecay`,
+        // which sets it in every case where it should be set — after decaying, and after finding nothing to
+        // decay. Setting it again was redundant then, and actively wrong once `applyDecay` learned to DEFER:
+        // a deferred decay leaves the old epoch precisely so the interval survives to be collected later, and
+        // stamping `currentEpoch` over it here consumed that interval without collecting anything. Demurrage
+        // quietly under-charged on every account that transacted while just above the Green Zone.
         return true;
     }
 
@@ -304,15 +304,14 @@ export class LedgerManager {
         if (amount < 0) return false;
         if (amount === 0) return true;
 
-        const currentEpoch = this.getCurrentEpoch();
-        const fromAccount = this.getAccount(fromId);      // applies any pending decay first
+        const fromAccount = this.getAccount(fromId);      // applies any pending decay, and settles the epoch
         const floor = floorOverride ?? this.DEFAULT_CREDIT_LIMIT;
 
         if (fromAccount.balance - amount < floor) return false;
 
         fromAccount.balance -= amount;
         COMMONS_BALANCE += amount;
-        fromAccount.lastDemurrageEpoch = currentEpoch;
+        // Epoch deliberately untouched — see the note in `transfer()`. `getAccount()` has already settled it.
         return true;
     }
 

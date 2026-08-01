@@ -143,6 +143,43 @@ describe('demurrage accounting', () => {
         expect(round4(account.balance + core.COMMONS_BALANCE)).toBe(JUST_OVER_GREEN_ZONE);
     });
 
+    it('a DEFERRED interval survives a transfer instead of being stamped away', () => {
+        // Deferring only works if nothing else advances the epoch behind its back. `transfer()` used to set
+        // `lastDemurrageEpoch = currentEpoch` on both accounts after `getAccount()` had already settled it —
+        // redundant before deferral existed, and afterwards it consumed the deferred interval without
+        // collecting anything. Demurrage silently under-charged every account transacting just above the
+        // Green Zone (review finding).
+        const staleEpoch = ledger.getCurrentEpoch() - 1;
+        ledger.loadState([
+            { id: 'sliver', balance: JUST_OVER_GREEN_ZONE, lastDemurrageEpoch: staleEpoch },
+            { id: 'payee', balance: 0, lastDemurrageEpoch: staleEpoch },
+        ]);
+
+        expect(ledger.transfer('sliver', 'payee', 1, -100, /* isFeeExempt */ true)).toBe(true);
+
+        // The interval is still owed, so the epoch must not have moved.
+        expect(ledger.getAccount('sliver').lastDemurrageEpoch).toBe(staleEpoch);
+        expect(core.COMMONS_BALANCE).toBe(0);
+        expect(ledger.drainDecayEvents()).toHaveLength(0);
+    });
+
+    it('collects the deferred decay once it is worth recording, even after transfers', () => {
+        const staleEpoch = ledger.getCurrentEpoch() - 30;
+        ledger.loadState([
+            { id: 'sliver', balance: JUST_OVER_GREEN_ZONE, lastDemurrageEpoch: staleEpoch },
+            { id: 'payee', balance: 0, lastDemurrageEpoch: staleEpoch },
+        ]);
+        const opening = JUST_OVER_GREEN_ZONE;
+
+        ledger.transfer('sliver', 'payee', 1, -100, true);
+
+        // A month of interval on the 0.2 beans above the Green Zone is recordable, so it was collected on
+        // the read inside transfer() rather than deferred.
+        expect(core.COMMONS_BALANCE).toBeGreaterThan(0.0001);
+        expect(ledger.drainDecayEvents()).toHaveLength(1);
+        expect(total(ledger, ['sliver', 'payee'])).toBeCloseTo(opening, 10);
+    });
+
     it('DEFERS decay at the pending-events cap instead of crediting without an event', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         try {

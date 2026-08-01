@@ -326,6 +326,38 @@ async function routeChecks() {
     const suspended = await sweep(treasury, keeper, 10);
     assert(suspended.status === 403, 'and a DISABLED keeper cannot sweep a live one');
     assert(bal(treasury) === 60 && nodeTotal() === before, 'with the books unchanged throughout');
+    db.prepare("UPDATE members SET status='active' WHERE public_key=?").run(keeper);
+
+    // ── The BLAST RADIUS of that gate ─────────────────────────────────────────────────────────────
+    // The active check went into `requireOperator`, which all six operator routes share — so the fix for
+    // one route changed the authority rules for five others that no test drives. Only the sweep needed it;
+    // none of them must be BROKEN by it. Enumerated off the router itself rather than hand-listed, so an
+    // operator route added later is covered here without anyone remembering to add it.
+    const operatorRoutes = (router as any).stack.filter((l: any) =>
+        l.path.includes(':treasury') && !l.path.includes('/local/admin/') && l.methods.includes('POST'));
+    assert(operatorRoutes.length >= 5,
+        `the gate is shared by ${operatorRoutes.length} operator routes, so all of them are checked here`);
+
+    const call = async (l: any, actor: string) => {
+        const ctx: any = { params: { treasury }, state: { actor }, requestBody: {}, status: 200, body: undefined };
+        try { await l.stack[l.stack.length - 1](ctx, async () => {}); } catch { ctx.status = 500; }
+        return ctx;
+    };
+
+    for (const l of operatorRoutes) {
+        const name = l.path.split('/').pop();
+        // An ACTIVE keeper must get past the gate. The body is empty, so each route then refuses on its own
+        // terms (400 "title is required", "transactionId is required", "amount must be positive") — the point
+        // is that it is the ROUTE refusing, not the gate.
+        const allowed = await call(l, keeper);
+        assert(allowed.status !== 403, `an active keeper still gets past the gate on /${name} (got ${allowed.status})`);
+
+        db.prepare("UPDATE members SET status='disabled' WHERE public_key=?").run(keeper);
+        const blocked = await call(l, keeper);
+        assert(blocked.status === 403, `and a suspended keeper is refused on /${name}`);
+        db.prepare("UPDATE members SET status='active' WHERE public_key=?").run(keeper);
+    }
+    assert(nodeTotal() === before, 'and none of that moved a single bean');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

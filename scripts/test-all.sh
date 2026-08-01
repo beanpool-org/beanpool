@@ -86,6 +86,51 @@ run_check "build"         pnpm turbo run build
 run_check "lint"          pnpm turbo run lint
 run_check "test"          pnpm turbo run test
 
+# Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
+# so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
+# invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the
+# kind that must not depend on someone remembering.
+#
+# Each needs its OWN data dir: they share the module-level sqlite singleton, so a reused dir would let one
+# suite's rows leak into the next. ENABLE_PEER_CONNECTORS=true because connector reads short-circuit
+# without it, which would make the checks pass vacuously rather than fail.
+#
+# Triggered by SERVER **or** CORE changes. The suites exercise @beanpool/core's ledger and fee behaviour,
+# so a core-only change could otherwise break settlement conservation with nothing running these (review
+# finding) — and `turbo run test` still does not see them.
+#
+# Runs AFTER build rather than alongside it. `tsx` resolves @beanpool/core to its dist, and `turbo run build`
+# rewrites that dist — running both concurrently gives non-deterministic module resolution. This is the same
+# stale/half-written core-dist hazard that has bitten us before, in CI form.
+if [ $HAS_SERVER_CHANGES -eq 1 ] || [ $HAS_CORE_CHANGES -eq 1 ]; then
+  FEDERATION_QUEUED=1
+else
+  FEDERATION_QUEUED=0
+  skip_check "federation"
+fi
+
+run_federation_suites() {
+  bash -c '
+    cd apps/server
+    # NO `set -e`, and every suite runs even after one fails (review finding). Aborting on the first failure
+    # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
+    # cycle only revealed the next problem. Statuses are collected and all failures reported together.
+    FAILED=""
+    for t in test-schema-upgrade test-federation-bridge test-settlement-state test-settlement-exchange test-federation-settlement; do
+      echo "━━━ $t ━━━"
+      TMP_DIR=$(mktemp -d)
+      ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" pnpm exec tsx "src/$t.ts"
+      if [ $? -ne 0 ]; then FAILED="$FAILED $t"; fi
+      rm -rf "$TMP_DIR"
+    done
+    if [ -n "$FAILED" ]; then
+      echo ""
+      echo "❌ Federation suites failed:$FAILED"
+      exit 1
+    fi
+  '
+}
+
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
   if grep -rE "sk_test_|sk_live_|pk_live_" apps/ packages/ --exclude-dir=node_modules --exclude-dir=dist 2>/dev/null; then
@@ -93,14 +138,31 @@ run_check "secrets_guard" bash -c '
   fi
 '
 
+# The federation suites need @beanpool/core's dist to be settled, so they start only once `build` has
+# finished. Waiting on that one PID keeps lint/test/secrets_guard running in parallel meanwhile.
+BUILD_STATUS=""
+if [ $FEDERATION_QUEUED -eq 1 ]; then
+  wait "${PIDS[0]}"
+  # CACHED, because the collection loop below waits on every PID again and waiting twice on one child is
+  # not portable — POSIX leaves it undefined once the child has been reaped. bash 3.2 happens to return the
+  # real status, so this is a latent portability trap rather than an observed failure, and a TEST GATE that
+  # can silently invert its own verdict is the last place to rely on shell-version behaviour.
+  BUILD_STATUS=$?
+  run_check "federation" run_federation_suites
+fi
+
 # Wait for parallel checks and collect results
 PASS=0
 FAIL=0
 FAILED_NAMES=()
 
 for i in "${!PIDS[@]}"; do
-  wait "${PIDS[$i]}"
-  EXIT_CODE=$?
+  if [ $i -eq 0 ] && [ -n "$BUILD_STATUS" ]; then
+    EXIT_CODE=$BUILD_STATUS      # already reaped above; reuse its real status
+  else
+    wait "${PIDS[$i]}"
+    EXIT_CODE=$?
+  fi
   if [ $EXIT_CODE -eq 0 ]; then
     PASS=$((PASS + 1))
   else

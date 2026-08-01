@@ -189,11 +189,10 @@ export function initConnectorManager(node: Libp2p): void {
         // Initialize status for this peer ID if we have a connector
         for (const connector of connectors) {
             let matches = false;
-            if (connector.address) {
-                const match = connector.address.match(/\/p2p\/([^/]+)/);
-                if (match && match[1] === peerId) {
-                    matches = true;
-                }
+            // Same resolution rule as materialise()/isPeerTrusted — one place decides what address
+            // names a peer, so /ipfs/ and /p2p/ can't be treated differently in different checks.
+            if (connector.address && peerIdFromAddress(connector.address) === peerId) {
+                matches = true;
             }
             const status = statuses.get(connector.address);
             if (status?.peerId === peerId) {
@@ -538,28 +537,57 @@ export function removeConnector(address: string): boolean {
     return true;
 }
 
+/**
+ * The peer id an operator wrote into a connector address, when the address is a full multiaddr.
+ *
+ * Accepts `/ipfs/` as well as `/p2p/` — they are aliases for the same component, and `/ipfs/` is what older
+ * tooling and copied-from-docs addresses still emit (review finding). Missing it meant a peer configured
+ * that way stayed unidentified, so every peer-id-keyed settlement lookup fail-closed against a connector
+ * the operator had configured correctly.
+ */
+function peerIdFromAddress(address?: string): string | null {
+    // typeof, not just truthiness: connector records are loaded from JSON on disk, so a hand-edited or
+    // corrupted file can put a number or object here, and `.matchAll` would throw a TypeError during boot.
+    if (!address || typeof address !== 'string') return null;
+    const all = [...address.matchAll(/\/(?:p2p|ipfs)\/([^/]+)/g)].map(m => m[1]);
+    if (all.length === 0) return null;
+    // The LAST component, not the first (review finding). A circuit-relay multiaddr names two peers —
+    // `/ip4/…/p2p/<RELAY>/p2p-circuit/p2p/<TARGET>` — and the one we are actually talking to is the target.
+    // Taking the first would key this peer's credit cap, trust level and bridge account to the RELAY, so
+    // several peers behind one relay would silently share a single credit line.
+    return all[all.length - 1] ?? null;
+}
+
+/**
+ * Merge a connector's config with its live status.
+ *
+ * `peerId` falls back to the one embedded in the address. `isPeerTrusted()` has always accepted a peer
+ * identified either way, but `getConnectors()` used to report `peerId: null` until a live connection
+ * populated the statuses map — so a peer added by full multiaddr was trusted by the protocol gate while
+ * every peer-id-keyed lookup (#104's per-peer cap, energy balance, ledger label) still saw an unknown
+ * node. Those disagreed about the same connector. One resolution rule, used everywhere.
+ *
+ * The observed id wins over the configured one when both exist: what actually connected is a fact, what
+ * was typed is an intention.
+ */
+function materialise(c: ConnectorConfig): ConnectorStatus {
+    const status = statuses.get(c.address) || newStatus();
+    return { ...c, ...status, peerId: status.peerId ?? peerIdFromAddress(c.address) };
+}
+
 export function getConnectors(): ConnectorStatus[] {
-    return connectors.map(c => {
-        const status = statuses.get(c.address) || newStatus();
-        return { ...c, ...status };
-    });
+    return connectors.map(materialise);
 }
 
 export function getConnectorByAddress(address: string): ConnectorStatus | null {
     const connector = connectors.find(c => c.address === address);
-    if (!connector) return null;
-
-    const status = statuses.get(connector.address) || newStatus();
-    return { ...connector, ...status };
+    return connector ? materialise(connector) : null;
 }
 
 // ⚡ Bolt: O(1) allocation lookup instead of calling getConnectors().find() which maps the whole array
 export function getConnectorByPublicUrl(publicUrl: string): ConnectorStatus | null {
     const connector = connectors.find(c => c.publicUrl === publicUrl);
-    if (!connector) return null;
-
-    const status = statuses.get(connector.address) || newStatus();
-    return { ...connector, ...status };
+    return connector ? materialise(connector) : null;
 }
 
 /**
@@ -576,11 +604,8 @@ export function isPeerTrusted(peerId: string): { trusted: boolean; trustLevel: T
             return { trusted: true, trustLevel: c.trustLevel, enabled: c.enabled };
         }
 
-        if (c.address) {
-            const match = c.address.match(/\/p2p\/([^/]+)/);
-            if (match && match[1] === peerId) {
-                return { trusted: true, trustLevel: c.trustLevel, enabled: c.enabled };
-            }
+        if (c.address && peerIdFromAddress(c.address) === peerId) {
+            return { trusted: true, trustLevel: c.trustLevel, enabled: c.enabled };
         }
     }
 
@@ -594,7 +619,7 @@ export function getConnectorsByLevel(level: TrustLevel): ConnectorStatus[] {
     const result: ConnectorStatus[] = [];
     for (const c of connectors) {
         if (c.trustLevel !== level) continue;
-        result.push({ ...c, ...(statuses.get(c.address) || newStatus()) });
+        result.push(materialise(c));
     }
     return result;
 }
@@ -628,11 +653,8 @@ export function updateInboundHandshakeStatus(
 ): void {
     for (const connector of connectors) {
         let matches = false;
-        if (connector.address) {
-            const match = connector.address.match(/\/p2p\/([^/]+)/);
-            if (match && match[1] === peerId) {
-                matches = true;
-            }
+        if (connector.address && peerIdFromAddress(connector.address) === peerId) {
+            matches = true;
         }
         const status = statuses.get(connector.address);
         if (status?.peerId === peerId) {

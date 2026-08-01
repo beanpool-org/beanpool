@@ -561,8 +561,17 @@ CREATE TABLE IF NOT EXISTS settlements (
     peer_id         TEXT NOT NULL,
     buyer_pubkey    TEXT NOT NULL,
     buyer_home_node TEXT,
+    seller_pubkey   TEXT,
     post_id         TEXT,
     amount          REAL NOT NULL CHECK (amount > 0),
+    -- Outbound only. The cross-node fee is paid by the buyer ON TOP of the price (§2.1), so it is a
+    -- separate figure from `amount` — the bridge entries carry the price alone, never price plus fee.
+    -- Stored rather than recomputed so a reversal refunds exactly what was taken, even if the fee rate
+    -- changes between the commit and the reversal.
+    fee             REAL NOT NULL DEFAULT 0 CHECK (fee >= 0),
+    -- Inbound only. When the cap reservation lapses. A reservation moves no beans, so expiry is free —
+    -- but a receipt arriving after it must be re-validated against the cap, never honoured on trust.
+    reserved_until  DATETIME,
     -- Deliberately NOT a foreign key and NOT reused from marketplace_transactions: a settlement outlives
     -- the trade it came from, and must remain auditable after a post is deleted.
     state           TEXT NOT NULL CHECK (state IN (
@@ -575,11 +584,37 @@ CREATE TABLE IF NOT EXISTS settlements (
                         'abandoned'    -- refused/expired before any entries were written
                     )),
     receipt         TEXT,
+    -- Outbound only: the EXACT canonical receipt object that was signed, as JSON.
+    --
+    -- Storing the signature alone is not enough. A retried commit has to return a byte-identical payload
+    -- or the stored signature fails to verify on the peer's side, and `committedAt` is not reproducible
+    -- from `updated_at` (a different clock and format). Keeping the whole object rather than the two
+    -- missing fields also means a future payload field can't silently break replay.
+    receipt_payload TEXT,
     failure_reason  TEXT,
     created_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 -- Boot recovery scans for unfinalised rows, so index the states it looks for.
-CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(state, updated_at)
+-- Keyed on created_at ALONE, with the state set in the partial WHERE.
+--
+-- Recovery runs `WHERE state IN (4 values) ORDER BY created_at`. A (state, created_at) index is used, but
+-- still needs a TEMP B-TREE: an IN over the leading column becomes four separate index seeks, and merging
+-- four created_at-ordered ranges is not globally ordered. Measured, not assumed — EXPLAIN QUERY PLAN said
+-- `USE TEMP B-TREE FOR ORDER BY`.
+--
+-- Putting the state set in the partial condition instead means the index contains EXACTLY the unfinalised
+-- rows, already in created_at order, so the scan needs no filter and no sort. The test asserts both.
+CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(created_at)
     WHERE state IN ('escrowed', 'reserved', 'committed', 'held');
-CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, state);
+-- Covers reservedAgainstPeer(), which filters peer_id and direction by EQUALITY and state by IN. Equality
+-- columns come first: a range/IN predicate stops the index being usable for anything after it.
+CREATE INDEX IF NOT EXISTS idx_settlements_peer ON settlements(peer_id, direction, state);
+-- memberForeignExposure() sums a member's outbound settlements (Rule 4's aggregate figure) and would
+-- otherwise full-scan a table that only ever grows. Column order matches the query's selectivity:
+-- buyer_pubkey narrows to one member first, then direction and state.
+CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, direction, state);
+-- Reservation expiry runs on every recovery cycle and would otherwise scan every reserved row. Partial,
+-- because only inbound reservations ever carry a `reserved_until`.
+CREATE INDEX IF NOT EXISTS idx_settlements_reserved_until ON settlements(reserved_until)
+    WHERE direction = 'inbound' AND state = 'reserved';

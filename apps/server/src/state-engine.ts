@@ -326,10 +326,18 @@ export function initStateEngine(): void {
 
     // CRITICAL: Restore persisted commons balance from DB
     // Without this, COMMONS_BALANCE resets to 0 on every restart, destroying accumulated demurrage
+    //
+    // Restores ANY recorded figure, including a NEGATIVE one (review finding). The old `> 0` test silently
+    // reset a deficit to zero on every restart — which would erase the record of a write-off the community
+    // has actually made and break conservation across a reboot, in the one direction where the books are
+    // already strained. A deficit is a real state now that `payFromCommons({ allowDeficit })` exists, and
+    // docs/commons-pool-transparency.md's Solvency Rule requires the pot to absorb write-offs even when
+    // empty. It has to survive a restart to mean anything.
     const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-    if (commonsRow && commonsRow.balance > 0) {
+    if (commonsRow && typeof commonsRow.balance === 'number') {
         setCommonsBalance(commonsRow.balance);
-        console.log(`🏛️ Restored Commons Pool balance: ${commonsRow.balance.toFixed(2)}`);
+        const note = commonsRow.balance < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
+        console.log(`🏛️ Restored Commons Pool balance: ${commonsRow.balance.toFixed(2)}${note}`);
     } else {
         // Seed the COMMONS_POOL account if it doesn't exist
         db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', 0, 0)").run();
@@ -1184,6 +1192,104 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         type: 'transaction',
         txn: { ...txn, fromCallsign: fromMember?.callsign || 'Unknown', toCallsign: toMember?.callsign || 'Unknown' },
     }, [from, to]); // A2-20: a transfer is visible only to its two parties on the live feed
+    return txn;
+}
+
+/**
+ * Move value from a SYNTHETIC account into the Commons pot, and record it.
+ *
+ * `transfer(x, 'COMMONS_POOL', n)` does NOT do this, and the difference is not cosmetic. The Commons pot
+ * is the `COMMONS_BALANCE` global; the `COMMONS_POOL` account row is only its persisted shadow, rewritten
+ * from the global by `persistCommonsBalance()` after every transfer. So a transfer INTO that account is
+ * persisted and then overwritten a moment later, and the value is gone from the node's books at the next
+ * restart — the books stop summing to zero, quietly.
+ *
+ * Restricted to synthetic senders (escrow_*, bridge_*, project_*) on purpose. Member-facing debits belong
+ * in `transfer()`, where the send gate, floor policy and fee policy live; this is a plumbing move for value
+ * already held in a system account, and it deliberately implements none of those policies.
+ *
+ * #104 uses it for the cross-node fee, which the buyer pays on top of the price (§2.1) and which lands in
+ * the buyer node's own Commons because that is the node carrying the write-off if the buyer is ever pruned.
+ */
+export function moveToCommons(from: string, amount: number, memo: string): Transaction | null {
+    if (!isSyntheticAccount(from)) {
+        throw new Error(`moveToCommons is for synthetic accounts only, got ${from}`);
+    }
+    if (amount <= 0) return null;
+    if (!ledger.moveToCommons(from, amount, -Infinity)) return null;
+
+    const txn: Transaction = {
+        id: crypto.randomUUID(),
+        from, to: 'COMMONS_POOL', amount, taxFee: 0,
+        memo: memo || '', timestamp: new Date().toISOString(),
+    };
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp);
+
+    const fromAcc = ledger.getAccount(from);
+    db.prepare(`
+        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(public_key) DO UPDATE SET
+            balance = excluded.balance,
+            last_demurrage_epoch = excluded.last_demurrage_epoch,
+            last_updated_at = excluded.last_updated_at
+    `).run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, txn.timestamp);
+
+    persistDecayEvents();
+    persistCommonsBalance();   // must come last — it is what makes the credit durable
+    return txn;
+}
+
+/**
+ * Pay a member OUT of the Commons pot, and record it. The mirror of `moveToCommons`.
+ *
+ * Same reasoning: `transfer('COMMONS_POOL', x, n)` moves the shadow account (pushing it negative, funded
+ * from nowhere) rather than drawing on the pot, so the draw has to go through `deductFromCommons`. Returns
+ * null if the pot cannot cover it — the Commons never goes into debt.
+ */
+export function payFromCommons(
+    to: string,
+    amount: number,
+    memo: string,
+    // `allowDeficit` lets the pot go NEGATIVE rather than refusing. Needed wherever refusing would be worse
+    // than a visible deficit — a reversal that can't refund a fee would otherwise strand the whole purchase,
+    // and docs/commons-pool-transparency.md's Solvency Rule requires a prune to always balance the books.
+    // A negative Commons is the honest record of a community that has paid out more than it has collected;
+    // the network still sums to zero, which is the invariant that matters.
+    opts?: { allowDeficit?: boolean },
+): Transaction | null {
+    if (amount <= 0) return null;
+    if (!ledger.deductFromCommons(amount)) {
+        if (!opts?.allowDeficit) return null;
+        setCommonsBalance(getCommonsBalanceExact() - amount);
+        console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+    }
+
+    const toAcc = ledger.getAccount(to);
+    toAcc.balance += amount;
+
+    const txn: Transaction = {
+        id: crypto.randomUUID(),
+        from: 'COMMONS_POOL', to, amount, taxFee: 0,
+        memo: memo || '', timestamp: new Date().toISOString(),
+    };
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp);
+    db.prepare(`
+        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(public_key) DO UPDATE SET
+            balance = excluded.balance,
+            last_demurrage_epoch = excluded.last_demurrage_epoch,
+            last_updated_at = excluded.last_updated_at
+    `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, txn.timestamp);
+
+    // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this
+    // they are stranded and the transactions table drifts from account balances — `moveToCommons` persists
+    // them and this must too (review finding).
+    persistDecayEvents();
+    persistCommonsBalance();
     return txn;
 }
 
@@ -2529,6 +2635,18 @@ export function adminPruneUser(publicKey: string) {
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
 
+        // KNOWN BUG — tracked in issue #124, deliberately not fixed here.
+        //
+        // Both of these move the COMMONS_POOL *account*, which is only the persisted shadow of the
+        // `COMMONS_BALANCE` global; `persistCommonsBalance()` rewrites the row from the global after every
+        // transfer, so the confiscation is discarded and the write-off is funded from nowhere (creating
+        // beans). `moveToCommons()` / `payFromCommons()` below in this file are the correct primitives and
+        // are what #124 will switch these to.
+        //
+        // Left alone in #104's PR on purpose: it is a live admin money path, and `payFromCommons` REFUSES
+        // when the pot cannot cover the debt — where today the write-off always "succeeds" by minting. That
+        // is the right behaviour but it is a product decision (pruning a deeply negative member can now
+        // fail and the admin UI has to say something useful), and it needs its own conservation test.
         if (balance < 0) {
             const D = Math.abs(balance);
             transfer('COMMONS_POOL', publicKey, D, `Settle bad debt for pruned user: ${publicKey}`, 'direct', true);
@@ -2910,6 +3028,18 @@ export function getCommonsBalance(): number {
 }
 
 /**
+ * The Commons pot UNROUNDED. For snapshot/restore, not for display.
+ *
+ * `getCommonsBalance()` rounds to 2dp for presentation, so restoring a snapshot taken through it would
+ * itself lose up to half a cent — the pot must be put back exactly as it was found.
+ */
+export function getCommonsBalanceExact(): number {
+    return COMMONS_BALANCE;
+}
+
+export { setCommonsBalance };
+
+/**
  * Persist the in-memory COMMONS_BALANCE to SQLite so it survives restarts.
  * Called periodically (every 5 min) and after significant balance events.
  */
@@ -3041,7 +3171,7 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports',
-        'recovery_requests', 'recovery_approvals', 'tombstones',
+        'recovery_requests', 'recovery_approvals', 'settlements', 'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {

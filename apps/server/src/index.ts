@@ -39,7 +39,8 @@ import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
 import { initConnectorManager, connectAll } from './connector-manager.js';
 import { registerHandshakeHandler } from './handshake.js';
-import { registerFederationHandler } from './federation-protocol.js';
+import { registerFederationHandler, federatedReceiptStatus } from './federation-protocol.js';
+import { recoverSettlements } from './federation-settlement-exchange.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, promotionSanityCheck } from './state-engine.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initPublicAddress } from './services/public-address-agent.js';
@@ -100,6 +101,51 @@ async function main() {
     registerHandshakeHandler(p2pNode);
     registerFederationHandler(p2pNode);
     connectAll().catch((e) => console.warn('[Connectors] Initial connect failed:', e));
+
+    // Step 8.1: Resolve settlements that were in flight when this node last stopped (#104 §2.5).
+    //
+    // Deliberately NOT gated on FEDERATION_SETTLEMENT_ENABLED: turning settlement off is a decision about
+    // accepting NEW cross-node trades, and must not strand beans already in escrow or a seller already owed.
+    //
+    // Two passes, because the two halves have different prerequisites (review finding):
+    //   1. Immediately, with no peer resolver — releases lapsed reservations, replays payments we already
+    //      owe, and refunds holds interrupted before the ask. All local; none of it needs the network.
+    //   2. After a delay, with the resolver — `connectAll()` above is fired detached, so dialling a peer
+    //      right now fails for every row and leaves each one unresolved on every single boot. The pass is
+    //      idempotent by design, so running it twice costs nothing.
+    //
+    // A delay rather than a connection-ready event because libp2p exposes none for "the peers I configured
+    // are reachable", and waiting is always the safe side here — an unresolved row is retried next boot.
+    // ...and then PERIODICALLY, not only at boot (review finding). A peer that was unreachable during the
+    // startup window, a receipt lost in flight, or a held receipt blocked by a cap an operator has since
+    // raised, would otherwise wait for the next process restart — which on a stable node could be months.
+    // The escalation threshold is also crossed during uptime, so nothing would ever report it.
+    const RECOVERY_PEER_DELAY_MS = 15_000;
+    const RECOVERY_INTERVAL_MS = 15 * 60_000;
+    const logRecoveryFailure = (e: any) => console.warn('[Federation] Settlement recovery failed:', e?.message || e);
+
+    // Imported once, not per row: recovery now runs on a timer over every unfinalised settlement, so a
+    // dynamic import inside the callback would repeat for each one on every cycle.
+    const { peerIdFromString } = await import('@libp2p/peer-id');
+    const askPeerForStatus = async (peerId: string, key: string) =>
+        federatedReceiptStatus(p2pNode, peerIdFromString(peerId), key);
+
+    recoverSettlements().catch(logRecoveryFailure);
+
+    // Non-overlapping: each run schedules the next only once it has finished, so a slow sweep against an
+    // unresponsive peer can never pile up concurrent passes over the same rows.
+    let recoveryRunning = false;
+    const scheduleRecovery = (delay: number) => setTimeout(async () => {
+        if (!recoveryRunning) {
+            recoveryRunning = true;
+            try { await recoverSettlements(askPeerForStatus); }
+            catch (e) { logRecoveryFailure(e); }
+            finally { recoveryRunning = false; }
+        }
+        scheduleRecovery(RECOVERY_INTERVAL_MS);
+    }, delay).unref();
+
+    scheduleRecovery(RECOVERY_PEER_DELAY_MS);
 
     // Step 8.5: Backup puller (one-directional live backup). On a node with
     // NODE_ROLE=backup, periodically pull the primary's signed snapshot over

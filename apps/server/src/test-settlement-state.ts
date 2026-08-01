@@ -18,10 +18,11 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import { initStateEngine } from './state-engine.js';
+import { db } from './db/db.js';
 import { addConnector } from './connector-manager.js';
 import { bridgeAccountId, resolveCounterpartyLabel, bridgeDisplayName } from './federation-bridge.js';
 import {
-    openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements,
+    openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, unfinalisedSettlementsSql,
     receiptStatus, actionForReceiptStatus,
 } from './federation-settlement-state.js';
 
@@ -55,13 +56,39 @@ async function main() {
     advanceSettlement('k-out-1', 'committed', { receipt: 'sig-abc' });
     const replay = openSettlement({
         key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
-        buyerPubkey: 'buyerpk', amount: 5, state: 'escrowed',
+        buyerPubkey: 'buyerpk', postId: 'post-1', amount: 5, state: 'escrowed',
     });
     assert(replay.state === 'committed', 'reopening an existing key does NOT reset it — a retry is safe');
     assert(replay.receipt === 'sig-abc', 'and the receipt survives the retry');
 
     assert(advanceSettlement('k-out-1', 'committed').state === 'committed',
         're-applying the current state is an idempotent no-op, not an error');
+
+    // Idempotent for the SAME trade only. Returning the existing row for a different payload would be
+    // silent trade aliasing: the caller proceeds believing the new terms were registered.
+    throws(() => openSettlement({
+        key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
+        buyerPubkey: 'buyerpk', amount: 500, state: 'escrowed',
+    }), /key collision/, 'reusing a key with a DIFFERENT amount is refused, not silently accepted');
+    throws(() => openSettlement({
+        key: 'k-out-1', direction: 'outbound', peerId: 'someone-else',
+        buyerPubkey: 'buyerpk', postId: 'post-1', amount: 5, state: 'escrowed',
+    }), /key collision/, 'and reusing it for a different peer is refused too');
+    throws(() => openSettlement({
+        key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
+        buyerPubkey: 'buyerpk', postId: 'a-different-post', amount: 5, state: 'escrowed',
+    }), /key collision/,
+        'and for a different POST — otherwise the caller proceeds on new terms while the receipt is built from the old row');
+    assert(getSettlement('k-out-1')!.amount === 5, 'the original row is untouched by the rejected reuse');
+
+    // A same-state call carrying NEW metadata must still write it. An early return on state === to dropped
+    // it, so a row that reached `held` without its receipt could never have one attached — and the receipt
+    // is the only thing that makes the payment replayable.
+    openSettlement({ key: 'k-meta', direction: 'inbound', peerId: PEER_ID, buyerPubkey: 'b', amount: 1, state: 'reserved' });
+    advanceSettlement('k-meta', 'held');
+    assert(getSettlement('k-meta')!.receipt === null, 'a held row can exist with no receipt yet');
+    assert(advanceSettlement('k-meta', 'held', { receipt: 'late-sig' }).receipt === 'late-sig',
+        'attaching a receipt to a row already in that state WRITES it rather than dropping it');
 
     // ── 2. Illegal transitions throw ────────────────────────────────────────────
     throws(() => advanceSettlement('k-out-1', 'escrowed'), /Illegal settlement transition/,
@@ -95,6 +122,18 @@ async function main() {
     assert(!keys.includes('k-out-2'), 'reversed is finalised and excluded');
     assert(unfinalisedSettlements('inbound').every(r => r.direction === 'inbound'), 'recovery can scan one side');
 
+    // The recovery scan must be able to use idx_settlements_unfinalised, which is a PARTIAL index keyed on
+    // `state IN (...)`. SQLite cannot match a NOT IN predicate against a partial index's condition, so the
+    // equivalent-looking negative form full-scans a table that only ever grows.
+    // EXPLAINs the EXACT production SQL, via the exported builder — not a hand-written lookalike. The first
+    // version of this check wrote its own literal query and passed while production still bound placeholders
+    // and skipped the index entirely. A test that constructs its own subject proves nothing about the caller.
+    const plan = db.prepare(`EXPLAIN QUERY PLAN ${unfinalisedSettlementsSql()}`).all() as any[];
+    assert(plan.some(r => /idx_settlements_unfinalised/.test(r.detail ?? '')),
+        'and the scan uses the partial index rather than reading every settlement ever made');
+    assert(!plan.some(r => /TEMP B-TREE|USE TEMP/i.test(r.detail ?? '')),
+        'without a temp sort — the index carries created_at so the ORDER BY is free');
+
     // ── 5. GET_RECEIPT_STATUS — three states, and UNKNOWN means WAIT ─────────────
     assert(receiptStatus('k-in-1') === 'HELD', 'a persisted-but-unpaid receipt reports HELD');
     advanceSettlement('k-in-1', 'settled');
@@ -115,17 +154,36 @@ async function main() {
     const bridge = bridgeAccountId(PEER_ID);
     assert(bridgeDisplayName(bridge) === '🌐 Another community', 'an unmet peer gets an honest generic label, not a peer id');
 
+    // A bare host:port connector names no peer, so it cannot claim this bridge even with a callsign set.
     addConnector('byron.beanpool.org', 'peer', 'Byron Community', 'https://byron.beanpool.org');
-    // A configured-but-never-connected peer still has no peerId — that only arrives via libp2p's
-    // peer:connect handler, which populates the statuses map. So it correctly stays generic.
     assert(bridgeDisplayName(bridge) === '🌐 Another community',
-        'configured but never connected is still generic — a callsign alone does not identify the peer');
+        'a host:port connector stays generic — a callsign alone does not identify the peer');
 
-    // NOT COVERED HERE: the resolved-callsign path needs a live connection to populate peerId, and
-    // getConnectors() returns a merged copy so a test cannot inject it. Deliberately not adding a
-    // production seam for a test — the step-3b multi-node harness exercises it against a real handshake.
+    // A full multiaddr DOES name the peer, so the callsign resolves without ever connecting. (Step 3b
+    // made getConnectors() derive peerId from the address, matching what isPeerTrusted already accepted.)
+    addConnector(`/dns4/byron.beanpool.org/tcp/4001/p2p/${PEER_ID}`, 'peer', 'Byron Bay', 'https://byron2.beanpool.org');
+    assert(bridgeDisplayName(bridge) === '🌐 Byron Bay', 'a peer named by multiaddr resolves to its callsign');
+
     assert(resolveCounterpartyLabel(bridge) !== null, 'the resolver claims bridge accounts');
     assert(!bridgeDisplayName(bridge)!.includes(PEER_ID), 'the raw peer id never reaches a member');
+
+    // A member's ledger must never show a raw account string. Every one of these previously returned null,
+    // which sent the caller to a member lookup that fails, leaking `bridge_…` into the UI.
+    assert(bridgeDisplayName('bridge_') === '🌐 Another community',
+        'a malformed bridge id still gets a label rather than falling through to the raw string');
+    assert(resolveCounterpartyLabel('bridge_') === '🌐 Another community', 'and the resolver agrees');
+    assert(bridgeDisplayName(undefined) === null, 'a missing account id returns null instead of throwing');
+    assert(resolveCounterpartyLabel(null) === null, 'and so does the resolver');
+    assert(resolveCounterpartyLabel('COMMONS_POOL') === null, 'non-bridge accounts are still left to the caller');
+
+    // Operator-entered callsigns are messy: whitespace-only rendered as "🌐    ", and a callsign the
+    // operator had already decorated rendered as "🌐 🌐 Byron".
+    addConnector(`/dns4/blank.beanpool.org/tcp/4001/p2p/12D3KooWBlankName`, 'peer', '   ', 'https://blank.beanpool.org');
+    assert(bridgeDisplayName(bridgeAccountId('12D3KooWBlankName')) === '🌐 Another community',
+        'a whitespace-only callsign falls back instead of rendering an empty name');
+    addConnector(`/dns4/dupe.beanpool.org/tcp/4001/p2p/12D3KooWDupeGlobe`, 'peer', '🌐 Mullum', 'https://dupe.beanpool.org');
+    assert(bridgeDisplayName(bridgeAccountId('12D3KooWDupeGlobe')) === '🌐 Mullum',
+        'a callsign that already carries a globe is not given a second one');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -28,8 +28,13 @@ import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { bridgeAccountId, peerFromBridgeAccountId } from '@beanpool/core';
 import { getConnectorCreditCap, getConnectors } from './connector-manager.js';
+import { reservedAgainstPeer } from './federation-settlement-state.js';
 
 export { bridgeAccountId, peerFromBridgeAccountId };
+
+/** Beans are quoted to members at 2dp; cap arithmetic works at 4dp and rounds only for presentation. */
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+const round4 = (n: number): number => Math.round(n * 10000) / 10000;
 
 /**
  * Ensure the bridge account for a peer exists and is demurrage-exempt.
@@ -68,13 +73,25 @@ export function registerBridgeDecayExemptions(): number {
  * Positive = we owe them work. Negative = they owe us work (we extended credit).
  */
 export function getEnergyBalance(peerId: string): number {
+    return Math.round(energyBalanceExact(peerId) * 100) / 100;
+}
+
+/**
+ * The same balance UNROUNDED. For enforcement, never for display.
+ *
+ * Rounding to 2dp while settlement prices are carried at 4dp let the cap be exceeded (review finding): an
+ * actual exposure of 99.994 reads as 99.99, so another 0.01 is accepted against a 100 cap and the bridge
+ * lands at 100.004 — past the number the operator chose. Small, but the cap exists precisely to be the
+ * number that is not exceeded, so the check has to use the stored value and rounding stays presentational.
+ */
+export function energyBalanceExact(peerId: string): number {
     const row = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(bridgeAccountId(peerId)) as any;
-    return Math.round((row?.balance ?? 0) * 100) / 100;
+    return row?.balance ?? 0;
 }
 
 /** How much credit we have currently extended to a peer — the magnitude of the negative side only. */
 export function creditExtendedTo(peerId: string): number {
-    return Math.max(0, -getEnergyBalance(peerId));
+    return Math.max(0, -energyBalanceExact(peerId));
 }
 
 export type SettlementCapacity =
@@ -96,9 +113,14 @@ export type SettlementCapacity =
  *
  * @param address the connector address (the cap lives on the connector record, keyed by address)
  */
-export function settlementCapacity(peerId: string, address: string, amount = 0): SettlementCapacity {
+export function settlementCapacity(
+    peerId: string,
+    address: string,
+    amount = 0,
+    // The reservation being re-checked at payment time, so it is not counted against itself.
+    excludeKey?: string,
+): SettlementCapacity {
     const cap = getConnectorCreditCap(address);
-    const extended = creditExtendedTo(peerId);
 
     if (cap === null) {
         return {
@@ -108,19 +130,67 @@ export function settlementCapacity(peerId: string, address: string, amount = 0):
         };
     }
 
-    const headroom = Math.round((cap - extended) * 100) / 100;
-    if (amount > headroom) {
+    // HEADROOM IS MEASURED FROM THE SIGNED BALANCE, not from "credit extended so far" (review finding, and
+    // this was a spec violation rather than an inefficiency).
+    //
+    // The rule §3.2 actually states is that the balance may not go BELOW −cap. So:
+    //
+    //     resulting balance = balance − reserved − amount     must be  ≥  −cap
+    //     ⇒  amount  ≤  cap + balance − reserved
+    //
+    // The previous form used `max(0, −balance)`, which THREW AWAY a positive balance — and a positive
+    // balance is precisely the state where we owe them work and paying their seller *reduces* what we owe.
+    // With a +5 position and a cap of 0, paying a 5-bean seller ends at 0 and extends no credit at all, yet
+    // the old arithmetic computed zero headroom and refused it. That blocks the rebalancing direction §3.2
+    // insists must stay open, and it made this module's own "flow in the other direction is never blocked
+    // here" comment false. Measuring from the signed balance makes the one-way property fall out of the
+    // arithmetic instead of being asserted next to code that contradicted it.
+    //
+    // Unrounded inputs: rounding here is what let the cap be exceeded before, and rounding the sum
+    // re-introduces it just as effectively as rounding the balance did.
+    const balance = energyBalanceExact(peerId);
+    const reserved = reservedAgainstPeer(peerId, excludeKey);
+    const extended = Math.max(0, -balance) + reserved;   // reported figure: how much we are on the hook for
+
+    // Enforce at 4dp — the precision the settlement module actually carries prices at — and present at 2dp.
+    // Comparing raw floats would refuse an exact fit on binary noise (10 − 7.1 renders as 2.9000000000000004);
+    // comparing at 2dp would let 0.006 of headroom look like 0.01. 4dp is the honest middle, and it is the
+    // same precision `round4` uses everywhere else in the settlement path.
+    const headroom = round4(cap + balance - reserved);
+    if (round4(amount) > headroom) {
         return {
             ok: false,
             reason: 'cap_exhausted',
             cap,
-            extended,
+            extended: round2(extended),
             headroom: 0,
-            message: `This community has reached the credit limit set for them (${extended} of ${cap}). They can buy from us — which is what brings the balance back — but we can't extend more until it does.`,
+            message: `This community has reached the credit limit set for them (${round2(extended)} of ${cap}). They can buy from us — which is what brings the balance back — but we can't extend more until it does.`,
         };
     }
 
-    return { ok: true, headroom, cap, extended };
+    return { ok: true, headroom, cap, extended: round2(extended) };
+}
+
+/**
+ * `settlementCapacity` addressed by peer id alone, which is what the settlement path actually has.
+ *
+ * The cap lives on the connector record, keyed by address (§3.2) — but a libp2p stream knows only the
+ * remote peer id. Resolving here keeps every caller from re-deriving it, and puts the fail-closed cases in
+ * one place:
+ *   • the peer is not a configured connector at all → refuse
+ *   • it is configured, but not at trust level `peer` (a `mirror` is a backup replica, not a trading
+ *     partner) → refuse. Trust level and credit cap are separate decisions and both must be affirmative.
+ */
+export function settlementCapacityForPeer(peerId: string, amount = 0, excludeKey?: string): SettlementCapacity {
+    const connector = getConnectors().find(c => c.peerId === peerId);
+    if (!connector || connector.trustLevel !== 'peer') {
+        return {
+            ok: false,
+            reason: 'no_cap_configured',
+            message: `This community isn't a trading partner of ours, so purchases can't be settled with them.`,
+        };
+    }
+    return settlementCapacity(peerId, connector.address, amount, excludeKey);
 }
 
 /**
@@ -146,9 +216,10 @@ export function listEnergyBalances(): Array<{
             // moves host or DNS. You cannot rename a ledger account without migrating balances, so the
             // key has to be the stable one.
             //
-            // The consequence is that a connector we have never connected to has no peerId yet, and
-            // therefore no balance to report. Do NOT fall back to the address — that would read a
-            // DIFFERENT account and report someone else's position as this peer's.
+            // A connector resolves its peer id from a live connection or from its own multiaddr, so one
+            // added as a bare `host:port` has none until it connects, and therefore no balance to report.
+            // Do NOT fall back to the address in that case — that would read a DIFFERENT account and
+            // report someone else's position as this peer's.
             const peerId = c.peerId ?? null;
             const balance = peerId ? getEnergyBalance(peerId) : 0;
             const cap = c.creditCap ?? null;
@@ -192,15 +263,30 @@ export function totalEnergyPosition(): number {
  * enterprise ("Community Eggs") and another whole community stay visually distinct in the same list —
  * they are very different facts and would otherwise read alike.
  */
-export function bridgeDisplayName(accountId: string): string | null {
+export function bridgeDisplayName(accountId?: string | null): string | null {
+    // Tolerate a missing id: counterparty fields are optional on some rows, and a label helper must not
+    // be the thing that throws on one (review finding).
+    if (!accountId || typeof accountId !== 'string') return null;
+    if (!accountId.startsWith('bridge_')) return null;
+
     const peerId = peerFromBridgeAccountId(accountId);
-    if (!peerId) return null;
 
-    const byPeer = getConnectors().find(c => c.peerId === peerId);
-    if (byPeer?.callsign) return `🌐 ${byPeer.callsign}`;
+    // A malformed `bridge_` id still gets a label. Returning null here let the caller fall back to its
+    // normal member lookup, which fails, and the raw `bridge_12D3Koo…` string reached a member's ledger
+    // (review finding). Every bridge account is *some* other community, whether we can name it or not.
+    if (peerId) {
+        // Trim, and strip a globe the operator may have typed into the callsign themselves — otherwise a
+        // community called "🌐 Byron" renders as "🌐 🌐 Byron", and a callsign of "   " renders as "🌐    ".
+        const callsign = getConnectors().find(c => c.peerId === peerId)?.callsign?.replace(/^🌐\s*/, '').trim();
+        if (callsign) return `🌐 ${callsign}`;
+    }
 
-    // Connected but unnamed, or configured and never met. Say what we know rather than leaking a peer id:
-    // "another community" is honest and readable, where a truncated hash is neither.
+    // Connected but unnamed, configured and never met, or unparseable. Say what we know rather than leaking
+    // a peer id: "another community" is honest and readable, where a truncated hash is neither.
+    //
+    // TODO(clients): screen readers read the globe verbatim ("Globe showing Americas, Byron Bay"). This
+    // returns a plain string because nothing renders it yet; when a client wires it up, wrap the emoji in
+    // an aria-hidden span and give the row an aria-label naming the community.
     return '🌐 Another community';
 }
 
@@ -211,6 +297,9 @@ export function bridgeDisplayName(accountId: string): string | null {
  * Only bridge accounts are handled here. `escrow_*` and `COMMONS_POOL` already have client-side copy
  * treatments, and duplicating them would create two places to change one label.
  */
-export function resolveCounterpartyLabel(accountId: string): string | null {
-    return accountId.startsWith('bridge_') ? bridgeDisplayName(accountId) : null;
+export function resolveCounterpartyLabel(accountId?: string | null): string | null {
+    // Delegates entirely: bridgeDisplayName now owns both the prefix test and the "cannot name it" case, so
+    // there is one place that decides what a bridge account looks like to a member. A `bridge_` id can no
+    // longer fall through to a raw-string fallback in the caller.
+    return bridgeDisplayName(accountId);
 }

@@ -21,10 +21,24 @@ export type { ReplicaConsistency, AuditSyncPayload };
 
 /**
  * Persist the in-memory COMMONS_BALANCE to SQLite so it survives restarts.
+ *
+ * Persists the EXACT value. It used to round to 2dp, which quietly broke conservation across a restart
+ * (review finding), and the failure is concrete rather than theoretical:
+ *
+ *   a 1.5% fee on a 5-bean cross-node trade is 0.075 → persisted as 0.08 → the node restarts and loads
+ *   0.08 → boot recovery reverses that trade and refunds 0.075 → 0.005 is left minted in the Commons,
+ *   from nothing.
+ *
+ * The 2dp figure is a PRESENTATION choice and every reader already applies it (`getCommonsBalance`,
+ * `getCommunityInfo`, `getBalance().commonsBalance`, the audit export). Rounding at the storage layer as
+ * well meant the stored number was lossy for no benefit — and demurrage brackets produce fractional
+ * amounts constantly, so this was accumulating drift long before settlement existed.
+ *
+ * Wider precision here is safe for sync and backup: the column is REAL, and importers compare balances
+ * rather than string forms.
  */
 export function persistCommonsBalance(): void {
-    const rounded = Math.round(COMMONS_BALANCE * 100) / 100;
-    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(rounded);
+    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(COMMONS_BALANCE);
 }
 
 /**

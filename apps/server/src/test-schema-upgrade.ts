@@ -99,8 +99,18 @@ function schemaObjects(): { kind: string; name: string; table?: string; body: st
         const [, kind, name, rest] = m;
         let body = rest;
         if (kind.toUpperCase() === 'TRIGGER') {
-            const end = schema.toUpperCase().indexOf('END;', m.index!);
-            body = schema.slice(m.index!, end + 4);
+            // Tolerant of `END ;` and of case, and LOUD when it finds nothing (review finding). The previous
+            // `indexOf('END;')` returned -1 on any variation, and `slice(index, -1 + 4)` then produced an
+            // EMPTY body — so the dependency check below found no column references and silently passed.
+            // A false negative in a safety check is worse than no check, so this throws instead.
+            const tail = /END\s*;/gi;
+            tail.lastIndex = m.index!;
+            const found = tail.exec(schema);
+            if (!found) {
+                throw new Error(`Could not find the closing END; of TRIGGER ${name} in schema.sql — `
+                    + 'this parser needs updating before it can be trusted');
+            }
+            body = schema.slice(m.index!, found.index + found[0].length);
         }
         out.push({ kind: kind.toUpperCase(), name, table: (body.match(/\bON\s+(\w+)/i) || [])[1], body });
     }
@@ -157,7 +167,7 @@ function main() {
 
     const upgraded = bootInto(step3aDir);
     assert(upgraded.ok, 'and a node holding one still BOOTS on the current schema');
-    if (!upgraded.ok) console.error(upgraded.output.split('\n').slice(-6).join('\n'));
+    if (!upgraded.ok) console.error(upgraded.output.split('\n').slice(-20).join('\n'));
 
     const upgradedDb = new Database(path.join(step3aDir, 'state.db'), { readonly: true });
     assert(JSON.stringify(columns(upgradedDb, 'settlements')) === JSON.stringify(freshColumns),
@@ -177,7 +187,7 @@ function main() {
 
         const result = bootInto(dir);
         assert(result.ok, `a database missing only ${missing} boots`);
-        if (!result.ok) console.error(result.output.split('\n').slice(-6).join('\n'));
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
 
         const check = new Database(path.join(dir, 'state.db'), { readonly: true });
         assert(columns(check, 'settlements').includes(missing), `and gains ${missing}`);
@@ -270,7 +280,7 @@ function main() {
 
     assert(defensive.length === 0,
         defensive.length
-            ? `a schema.sql TRIGGER depends on a column added after the exec (${defensive.length}):\n     `
+            ? `ORDERING RULE — a schema.sql TRIGGER depends on a column added after the exec (${defensive.length}):\n     `
               + defensive.join('\n     ')
               + '\n     Not fatal on this SQLite build — triggers resolve columns when they fire — but do not'
               + '\n     rely on that. Move the ALTERs above the exec so the rule stays one rule.'
@@ -296,16 +306,35 @@ function main() {
 
         const result = bootInto(dir);
         assert(result.ok, `and a node holding one still BOOTS (${table})`);
-        if (!result.ok) console.error(result.output.split('\n').slice(-8).join('\n'));
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
 
         const check = new Database(path.join(dir, 'state.db'), { readonly: true });
         const after = columns(check, table);
         assert(missing.every(c => after.includes(c)), `gaining every missing column on ${table}`);
-        // The objects are the point: a boot that skipped them would leave delta sync silently broken.
-        const objectCount = (check.prepare(
-            `SELECT COUNT(*) n FROM sqlite_master WHERE type IN ('index','trigger') AND tbl_name=? AND name NOT LIKE 'sqlite_%'`,
-        ).get(table) as any).n;
-        assert(objectCount > 0, `with its indexes and triggers created, not skipped (${objectCount} on ${table})`);
+
+        // EVERY object schema.sql defines on this table, BY NAME (review finding).
+        //
+        // This was `objectCount > 0`, which proved almost nothing: `posts` also carries idx_active_posts and
+        // idx_posts_category, and `members` carries idx_members_updated_at — all defined over columns that
+        // were never missing. So a boot that created those and skipped `idx_posts_updated_at` still counted
+        // above zero and passed. Since the entire point of the fixture is the objects over the LATE columns,
+        // the assertion has to name them.
+        //
+        // The expected set is derived from schema.sql rather than listed here, so an object added later is
+        // covered without anyone remembering to add it.
+        const expected = schemaObjects()
+            .filter(o => o.table === table && o.kind !== 'VIEW')
+            .map(o => o.name)
+            .sort();
+        const present = new Set((check.prepare(
+            `SELECT name FROM sqlite_master WHERE type IN ('index','trigger') AND tbl_name=? AND name NOT LIKE 'sqlite_%'`,
+        ).all(table) as any[]).map(r => r.name));
+        const absent = expected.filter(n => !present.has(n));
+        assert(expected.length > 0 && absent.length === 0,
+            absent.length
+                ? `${absent.length} of ${expected.length} schema.sql objects on ${table} were SKIPPED: ${absent.join(', ')}`
+                  + ' — the boot survived but delta sync would be quietly broken'
+                : `with all ${expected.length} of its schema.sql indexes and triggers created, not skipped (${table})`);
         check.close();
         fs.rmSync(dir, { recursive: true, force: true });
     }

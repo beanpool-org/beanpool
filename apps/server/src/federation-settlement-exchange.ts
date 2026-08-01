@@ -395,6 +395,180 @@ export function finaliseOutboundSettlement(key: string): SettlementRow {
     return advanceSettlement(key, 'settled');
 }
 
+/**
+ * What the buyer is told, and it is deliberately about THEIR BEANS rather than about our state machine.
+ *
+ *   settled  — done, the seller has been paid.
+ *   refused  — the other community said no before anything crossed. Beans already back.
+ *   reversed — it crossed and could not be completed. Beans back, by compensating entries.
+ *   pending  — still in flight. Beans held, and recovery will resolve it either way.
+ *
+ * `pending` covers two different internal states on purpose: `escrowed` (the commit never landed, so boot
+ * recovery refunds) and `committed` (we owe outward and only the peer knows whether it paid). Both mean the
+ * same thing to the person waiting — held, not lost, no action from you.
+ */
+export type OutboundOutcome =
+    | { status: 'settled'; key: string }
+    | { status: 'refused' | 'reversed' | 'pending'; key: string; reason: string; message: string };
+
+/**
+ * The wire, injected rather than imported.
+ *
+ * `federation-protocol.ts` already imports this module for the responder half, so importing its dialling
+ * functions back would be a cycle. Injecting also means the orchestration below — which is where the
+ * money-losing mistakes live — can be driven without libp2p at all.
+ */
+export interface SettlementWire {
+    ask(payload: {
+        key: string;
+        buyerPublicKey: string;
+        buyerCallsign?: string;
+        buyerHomeNode?: string | null;
+        sellerPublicKey: string;
+        postId?: string | null;
+        amount: number;
+    }): Promise<any>;
+    deliver(payload: { key: string; receipt: SettlementReceipt; signature: string }): Promise<any>;
+}
+
+/**
+ * A refusal we may act on by REVERSING. Anything else means "not yet", and must be left to recovery.
+ *
+ * This asymmetry is the most important line in the file. Waiting on an ambiguous answer costs a delay;
+ * reversing on one risks compensating a trade the peer actually completed — paying its seller from the
+ * bridge while we hand the buyer their beans back, so the pair no longer sums to zero and the difference is
+ * real beans. So only answers that mean "we will never pay this" are allowed to trigger a reversal:
+ *
+ *   CAPACITY_LAPSED   — they latched it `reversed`; terminal on their side.
+ *   NOT_FOUND         — no reservation exists for the key, so no payment can ever be made against it.
+ *   BAD_SIGNATURE     — they cannot verify our receipt, so they will never honour it.
+ *   RECEIPT_MISMATCH  — the receipt describes a different trade from the one they reserved.
+ *
+ * Notably ABSENT: `settlement_error`. That is `handleReceiptDelivery` failing to pay a receipt it has
+ * already persisted as `held` — it will retry on its next boot, so reversing would be the double-spend
+ * above. It maps to `pending`.
+ */
+const TERMINAL_REFUSALS = new Set(['CAPACITY_LAPSED', 'NOT_FOUND', 'BAD_SIGNATURE', 'RECEIPT_MISMATCH']);
+
+/**
+ * Drive one cross-node purchase end to end, from the BUYER's node. Steps 1–4 of §2.5.
+ *
+ * This is the piece that was missing: both halves of the wire existed and the whole local state machine
+ * existed, but nothing composed them, so no cross-node purchase was reachable in production and the
+ * acceptance criteria in #104 could not be met by any code path a member could trigger.
+ *
+ * Throws only if step 1 fails — the local escrow. Nothing has happened at that point, and the reason (they
+ * cannot afford it, the amount is invalid) is the buyer's to see. Everything after step 1 returns an
+ * outcome, because once beans are held, "what happened to them" is the only useful answer.
+ */
+export async function runOutboundSettlement(
+    input: {
+        key: string;
+        peerId: string;
+        buyerPublicKey: string;
+        buyerCallsign?: string;
+        buyerHomeNode?: string | null;
+        sellerPublicKey: string;
+        postId?: string | null;
+        amount: number;
+    },
+    wire: SettlementWire,
+    ourPeerId: string,
+    privateKey: any,
+): Promise<OutboundOutcome> {
+    const { key } = input;
+
+    // Step 1 — hold the buyer's beans locally. Throws if they cannot cover it; nothing to undo.
+    beginOutboundSettlement(input);
+
+    // Step 2 — ask the seller's node. Their cap is the only authority, and this is where it is applied.
+    let decision: any;
+    try {
+        decision = await wire.ask({
+            key,
+            buyerPublicKey: input.buyerPublicKey,
+            buyerCallsign: input.buyerCallsign,
+            buyerHomeNode: input.buyerHomeNode ?? null,
+            sellerPublicKey: input.sellerPublicKey,
+            postId: input.postId ?? null,
+            amount: input.amount,
+        });
+    } catch (e: any) {
+        // A LOST ASK IS SAFE TO ABANDON, and this is the one transport failure that is. Step 2 moves no beans
+        // on either side — the seller's node reserves headroom and nothing more — so releasing our hold cannot
+        // leave the two ledgers disagreeing. The buyer gets their beans back immediately and can retry, which
+        // beats holding them for the two minutes a reservation takes to lapse.
+        //
+        // If the ask did in fact arrive and only the reply was lost, their reservation expires on its own via
+        // `expireStaleReservations`, and a retry on the SAME key is idempotent there anyway.
+        abandonOutboundSettlement(key, 'ASK_UNREACHABLE');
+        return {
+            status: 'refused', key, reason: 'ASK_UNREACHABLE',
+            message: 'That community could not be reached just now, so nothing was charged. Please try again.',
+        };
+    }
+
+    if (!decision || decision.accepted !== true) {
+        const reason = decision?.reason ?? decision?.code ?? 'REFUSED';
+        abandonOutboundSettlement(key, reason);
+        return {
+            status: 'refused', key, reason,
+            message: decision?.message ?? decision?.error ?? 'That community did not accept this purchase.',
+        };
+    }
+
+    // Step 3 — commit: sign the receipt and move the hold into the bridge. The border is crossed here.
+    let committed: { receipt: SettlementReceipt; signature: string };
+    try {
+        committed = await commitOutboundSettlement(key, ourPeerId, privateKey, input.buyerHomeNode ?? null);
+    } catch (e: any) {
+        // The row is still `escrowed`, which boot recovery refunds. Reported as pending rather than refused
+        // because the refund has not happened yet, and telling someone their beans are back before they are
+        // is worse than telling them to wait.
+        console.error(`[Federation] Committing ${key} failed:`, e?.message || e);
+        return {
+            status: 'pending', key, reason: e?.reason ?? 'commit_failed',
+            message: 'This purchase could not be completed. Your beans are held and will be returned.',
+        };
+    }
+
+    // Step 4 — deliver the receipt, which is what authorises their local payment.
+    let outcome: any;
+    try {
+        outcome = await wire.deliver({ key, receipt: committed.receipt, signature: committed.signature });
+    } catch (e: any) {
+        // AMBIGUOUS, AND THE ONE PLACE NOT TO ACT. We are committed and they may already have paid their
+        // seller — the failure could be the reply, not the request. Reversing here is the double-spend
+        // described on TERMINAL_REFUSALS. `recoverSettlements(askPeer)` resolves it with GET_RECEIPT_STATUS,
+        // whose UNKNOWN answer means wait.
+        console.warn(`[Federation] Receipt delivery for ${key} unresolved: ${e?.message || e}`);
+        return {
+            status: 'pending', key, reason: 'DELIVERY_UNRESOLVED',
+            message: 'This purchase is still completing. It will finish on its own, or your beans will be returned.',
+        };
+    }
+
+    if (outcome?.settled === true) {
+        finaliseOutboundSettlement(key);
+        return { status: 'settled', key };
+    }
+
+    const reason = outcome?.reason ?? outcome?.code ?? 'DELIVERY_REFUSED';
+    if (TERMINAL_REFUSALS.has(reason)) {
+        reverseOutboundSettlement(key, reason);
+        return {
+            status: 'reversed', key, reason,
+            message: outcome?.message ?? reversalMemo(reason),
+        };
+    }
+    // Not a terminal refusal: they hold the receipt and will retry. Leave it committed for recovery.
+    console.warn(`[Federation] ${key} not settled yet (${reason}) — left committed for recovery.`);
+    return {
+        status: 'pending', key, reason,
+        message: outcome?.message ?? 'This purchase is still completing.',
+    };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // SELLER'S NODE (inbound) — steps 2 and 4
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────

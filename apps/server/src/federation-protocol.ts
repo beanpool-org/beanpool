@@ -12,8 +12,8 @@ import { getMember, getBalance, createConversation, sendMessage, registerVisitor
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 import { getNodeRole } from './state-engine.js';
 import {
-    handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus,
-    PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS,
+    handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus, runOutboundSettlement,
+    PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS, type OutboundOutcome,
 } from './federation-settlement-exchange.js';
 import type { SettlementReceipt } from './federation-receipt.js';
 import type { ReceiptStatus } from './federation-settlement-state.js';
@@ -407,6 +407,41 @@ export async function federatedReceiptStatus(
     }
     const status = reply?.status;
     return status === 'NOT_FOUND' || status === 'HELD' || status === 'SETTLED' ? status : 'UNKNOWN';
+}
+
+/**
+ * The whole buyer-side purchase, over a real connection. Steps 1–4 of §2.5 in one call.
+ *
+ * `runOutboundSettlement` holds the sequencing and every compensation decision; this supplies the transport
+ * and nothing else. The split is what lets the money logic be driven without libp2p, and it is also the only
+ * way round the module cycle — the exchange module cannot import this one, because this one imports it for
+ * the responder half.
+ */
+export async function settleCrossNodePurchase(
+    node: Libp2p,
+    targetPeerId: any,
+    ourPeerId: string,
+    privateKey: any,
+    input: {
+        key: string;
+        peerId: string;
+        buyerPublicKey: string;
+        buyerCallsign?: string;
+        buyerHomeNode?: string | null;
+        sellerPublicKey: string;
+        postId?: string | null;
+        amount: number;
+    },
+): Promise<OutboundOutcome> {
+    return runOutboundSettlement(
+        input,
+        {
+            ask: payload => federatedPurchase(node, targetPeerId, payload),
+            deliver: payload => federatedDeliverReceipt(node, targetPeerId, payload),
+        },
+        ourPeerId,
+        privateKey,
+    );
 }
 
 /**

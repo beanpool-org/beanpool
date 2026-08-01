@@ -35,9 +35,10 @@ import { db } from './db/db.js';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
 import {
     transfer, registerVisitor, getMember, moveToCommons, payFromCommons, reconcileLedgerFromDb,
-    getCommonsBalanceExact, setCommonsBalance,
+    getCommonsBalanceExact, setCommonsBalance, getNodeRole,
 } from './state-engine.js';
 import { bridgeAccountId, ensureBridgeAccount, settlementCapacityForPeer } from './federation-bridge.js';
+import { getConnectors } from './connector-manager.js';
 import {
     openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, expiredReservations,
     receiptStatus, actionForReceiptStatus, type SettlementRow, type ReceiptStatus,
@@ -534,8 +535,27 @@ export function handlePurchaseRequest(input: {
     // The seller needs to know who they are serving, and a visitor record is how a cross-community
     // counterparty already renders in the clients. Tagged with their home node so it is never confused
     // with a local member.
+    // The home node must be NON-EMPTY, and we fall back to the peer's own configured URL rather than
+    // trusting the payload to carry one (review finding).
+    //
+    // `registerVisitor(pk, callsign, undefined)` inserts `home_node_url = NULL` — a row indistinguishable
+    // from a LOCAL member. That is bad in both directions: the member appears local (so their next purchase
+    // trips the `buyer_is_local` guard and is refused forever), and a remote key has entered the member
+    // table without going through the normal local membership path at all.
+    //
+    // Deriving it from the connector is also strictly better than believing the payload: we know who the
+    // peer is from the authenticated connection, whereas `buyerHomeNode` is just a string they sent.
+    const resolvedHomeNode = input.buyerHomeNode?.trim()
+        || getConnectors().find(c => c.peerId === input.peerId)?.publicUrl
+        || null;
+    if (!resolvedHomeNode) {
+        return {
+            accepted: false, reason: 'unknown_home_node',
+            message: 'We cannot tell which community that buyer belongs to, so this purchase cannot be settled.',
+        };
+    }
     try {
-        registerVisitor(input.buyerPublicKey, input.buyerCallsign, input.buyerHomeNode ?? undefined);
+        registerVisitor(input.buyerPublicKey, input.buyerCallsign, resolvedHomeNode);
     } catch (e: any) {
         console.warn('[Federation] Visitor record for cross-node buyer failed:', e?.message || e);
     }
@@ -545,7 +565,7 @@ export function handlePurchaseRequest(input: {
         direction: 'inbound',
         peerId: input.peerId,
         buyerPubkey: input.buyerPublicKey,
-        buyerHomeNode: input.buyerHomeNode ?? null,
+        buyerHomeNode: resolvedHomeNode,
         sellerPubkey: input.sellerPublicKey,
         postId: input.postId ?? null,
         amount: round4(input.amount),
@@ -599,13 +619,7 @@ export async function handleReceiptDelivery(input: {
     if (!ok) {
         return { settled: false, reason: 'BAD_SIGNATURE', message: 'That settlement receipt could not be verified.' };
     }
-    const r = input.receipt;
-    const matches = r.key === row.key
-        && round4(r.amount) === round4(row.amount)
-        && r.buyerPublicKey === row.buyerPubkey
-        && r.sellerPublicKey === (row.sellerPubkey ?? '')
-        && (r.postId ?? null) === (row.postId ?? null);
-    if (!matches) {
+    if (!receiptMatchesRow(input.receipt, row)) {
         return { settled: false, reason: 'RECEIPT_MISMATCH', message: 'That receipt does not match the reserved purchase.' };
     }
 
@@ -721,16 +735,40 @@ export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean
 }
 
 /**
- * Re-verify the receipt stored on an inbound settlement against the peer recorded on that row.
+ * Does a receipt describe the same trade as the settlement row it claims to settle?
  *
- * Returns false for a row that has no stored payload — which is what a settlement written by an older build
- * looks like. That is deliberately fail-closed: such a row is not payable without evidence, and an operator
- * seeing it reported is a much better outcome than paying on the strength of a mutable database row.
+ * Shared by live delivery and by re-verification on recovery. A signature only proves WHO signed; this is
+ * what proves WHAT they signed for — and payment is made from the ROW's fields, so if the two disagree the
+ * signature is authorising terms nobody agreed to.
+ */
+function receiptMatchesRow(r: SettlementReceipt, row: SettlementRow): boolean {
+    return !!r
+        && r.key === row.key
+        && round4(r.amount) === round4(row.amount)
+        && r.buyerPublicKey === row.buyerPubkey
+        && r.sellerPublicKey === (row.sellerPubkey ?? '')
+        && (r.postId ?? null) === (row.postId ?? null);
+}
+
+/**
+ * Re-verify the receipt stored on an inbound settlement: signed by the recorded peer, AND for this trade.
+ *
+ * Both halves are needed (review finding). Checking only the signature proved that *some* valid receipt was
+ * stored, not that it describes the settlement we are about to pay — and `settleHeldReceipt` pays from the
+ * ROW's amount and seller. A row that drifted from its receipt, by corruption or by a bug, would turn a
+ * genuinely signed receipt into authorisation for different terms. So recovery reapplies exactly the match
+ * live delivery applies.
+ *
+ * Returns false for a row with no stored payload — what a settlement written by an older build looks like.
+ * Deliberately fail-closed: such a row is not payable without evidence, and having an operator see it
+ * reported is far better than paying on the strength of a mutable database row.
  */
 export async function verifyStoredReceipt(row: SettlementRow): Promise<boolean> {
     if (!row.receipt || !row.receiptPayload) return false;
     try {
-        return await verifyReceipt(JSON.parse(row.receiptPayload) as SettlementReceipt, row.receipt, row.peerId);
+        const receipt = JSON.parse(row.receiptPayload) as SettlementReceipt;
+        if (!receiptMatchesRow(receipt, row)) return false;
+        return await verifyReceipt(receipt, row.receipt, row.peerId);
     } catch {
         return false;
     }
@@ -816,6 +854,12 @@ export async function recoverSettlements(
     const result: RecoveryResult = {
         expired: 0, paid: 0, refunded: 0, reversed: 0, finalised: 0, stillOpen: 0, stuck: [],
     };
+
+    // PRIMARY ONLY (review finding). A backup's settlement rows arrive by snapshot import, and its ledger is
+    // replaced by the next one — so recovery here would write entries that are about to be overwritten,
+    // while telling a peer its trade was resolved. The rows stay untouched and are resolved by whichever
+    // node is actually primary; after a promotion, this node becomes that node.
+    if (getNodeRole() !== 'primary') return result;
 
     result.expired = expireStaleReservations();
 

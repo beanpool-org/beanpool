@@ -10,6 +10,7 @@ import type { Libp2p } from 'libp2p';
 import { isPeerTrusted } from './connector-manager.js';
 import { getMember, getBalance, createConversation, sendMessage, registerVisitor } from './state-engine.js';
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
+import { getNodeRole } from './state-engine.js';
 import {
     handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus,
     PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS,
@@ -109,6 +110,12 @@ export function settlementGateRefusal(
     trustLevel: string | null,
     remotePeerId: string,
     action: string,
+    // Defaulted from the live node role. A BACKUP replica must refuse every settlement action (review
+    // finding): `registerFederationHandler` is installed on backups too, so a backup that happens to have a
+    // `peer` connector would accept a receipt and write ledger entries into a database that gets REPLACED by
+    // the next snapshot import. The entries would vanish, the peer would believe it had been paid, and the
+    // bridge rows would silently disagree. A replica mirrors a ledger; it does not author one.
+    nodeRole: string = getNodeRole(),
     // Defaulted from the module const, so production behaviour is unchanged and there is one source of
     // truth — but passing it explicitly lets the trust-level and peer-id branches be asserted now, rather
     // than shipping untested until the day the flag flips.
@@ -123,6 +130,9 @@ export function settlementGateRefusal(
     // Turning the flag off therefore means "accept no NEW cross-node trades", which is what it should mean.
     if (!enabled && action === SETTLE_PURCHASE) {
         return { error: 'Cross-community settlement is not enabled on this node', code: SETTLEMENT_REFUSED_CODE };
+    }
+    if (nodeRole !== 'primary') {
+        return { error: 'This node is a backup replica and does not settle', code: SETTLEMENT_REFUSED_CODE };
     }
     // Trust and identity are checked for EVERY action, flag or no flag.
     if (trustLevel !== 'peer') {

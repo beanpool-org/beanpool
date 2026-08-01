@@ -140,8 +140,14 @@ run_check "secrets_guard" bash -c '
 
 # The federation suites need @beanpool/core's dist to be settled, so they start only once `build` has
 # finished. Waiting on that one PID keeps lint/test/secrets_guard running in parallel meanwhile.
+BUILD_STATUS=""
 if [ $FEDERATION_QUEUED -eq 1 ]; then
-  wait "${PIDS[0]}" 2>/dev/null
+  wait "${PIDS[0]}"
+  # CACHED, because the collection loop below waits on every PID again and waiting twice on one child is
+  # not portable — POSIX leaves it undefined once the child has been reaped. bash 3.2 happens to return the
+  # real status, so this is a latent portability trap rather than an observed failure, and a TEST GATE that
+  # can silently invert its own verdict is the last place to rely on shell-version behaviour.
+  BUILD_STATUS=$?
   run_check "federation" run_federation_suites
 fi
 
@@ -151,8 +157,12 @@ FAIL=0
 FAILED_NAMES=()
 
 for i in "${!PIDS[@]}"; do
-  wait "${PIDS[$i]}"
-  EXIT_CODE=$?
+  if [ $i -eq 0 ] && [ -n "$BUILD_STATUS" ]; then
+    EXIT_CODE=$BUILD_STATUS      # already reaped above; reuse its real status
+  else
+    wait "${PIDS[$i]}"
+    EXIT_CODE=$?
+  fi
   if [ $EXIT_CODE -eq 0 ]; then
     PASS=$((PASS + 1))
   else

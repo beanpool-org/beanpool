@@ -597,6 +597,40 @@ async function main() {
     assert(!!getSettlement(LEGACY)!.receiptPayload, 'and repairs the missing payload while it has it in hand');
     assert(near(balanceOf(seller), sellerBeforeRepair + 3), 'so the seller is finally paid');
 
+    // ── 10h3. A stored receipt must match the ROW, not merely be signed ───────────────────────────
+    // Payment is made from the ROW's amount and seller. A signature only proves who signed — so if the row
+    // and its receipt disagree, a genuinely signed receipt authorises terms nobody agreed to.
+    const DRIFT = 'k-drift';
+    assert(ask(DRIFT, 5).accepted === true, 'a reservation whose row we will then tamper with');
+    const driftReceipt: SettlementReceipt = { ...lapseReceipt, key: DRIFT, amount: 5 };
+    db.prepare(`UPDATE settlements SET state='held', receipt=?, receipt_payload=? WHERE key=?`)
+        .run(await signReceipt(driftReceipt, brisKey), JSON.stringify(driftReceipt), DRIFT);
+    assert(await verifyStoredReceipt(getSettlement(DRIFT)!) === true, 'row and receipt agree, so it verifies');
+
+    db.prepare(`UPDATE settlements SET amount = 500 WHERE key = ?`).run(DRIFT);   // row drifts from receipt
+    assert(await verifyStoredReceipt(getSettlement(DRIFT)!) === false,
+        'but once the row says 500 and the signed receipt says 5, verification FAILS — the signature is still valid');
+    const sellerBeforeDrift = balanceOf(seller);
+    assert((await recoverSettlements()).paid === 0, 'so recovery does not pay it');
+    assert(near(balanceOf(seller), sellerBeforeDrift), 'and the seller is not paid 500 on a receipt for 5');
+
+    // ── 10h4. A cross-node buyer is never registered as a LOCAL member ────────────────────────────
+    // registerVisitor(pk, callsign, undefined) writes home_node_url = NULL, which is indistinguishable from
+    // a local member: the buyer then trips the buyer_is_local guard forever, and a remote key has entered the
+    // member table without going through local membership at all.
+    const NOHOME = 'k-no-home';
+    const orphanBuyer = crypto.randomBytes(32).toString('hex');
+    const noHome = handlePurchaseRequest({
+        key: NOHOME, peerId: BRIS, buyerPublicKey: orphanBuyer, buyerCallsign: 'No Home',
+        buyerHomeNode: '   ', sellerPublicKey: seller, postId: 'post-9', amount: 2,
+    });
+    assert(noHome.accepted === true, 'a blank home node falls back to the peer\'s own configured URL');
+    const orphanRow = db.prepare('SELECT home_node_url AS h FROM members WHERE public_key=?').get(orphanBuyer) as any;
+    assert(orphanRow.h === 'https://brisbane.beanpool.org',
+        'so the buyer is recorded against the community we are actually talking to, never as local');
+    assert(getSettlement(NOHOME)!.buyerHomeNode === 'https://brisbane.beanpool.org',
+        'and the settlement row agrees with the visitor record');
+
     // ── 10i. Settlements survive into a backup snapshot ──────────────────────────────────────────
     // A promoted backup inherits the LEDGER EFFECTS of an in-flight settlement — escrow held, a bridge
     // credited — so without the row it cannot query, reverse or pay it. recoverSettlements() would find
@@ -692,13 +726,21 @@ async function main() {
 
     // Trust and identity are checked for EVERY action, flag or no flag.
     for (const action of [SETTLE_PURCHASE, SETTLE_RECEIPT, SETTLE_RECEIPT_STATUS]) {
-        assert(settlementGateRefusal('mirror', BRIS, action, true)?.code === 'federation_settlement_disabled',
+        assert(settlementGateRefusal('mirror', BRIS, action, 'primary', true)?.code === 'federation_settlement_disabled',
             `a MIRROR is refused for ${action} — a backup replica is not a trading partner`);
-        assert(settlementGateRefusal(null, BRIS, action, true) !== null, `an untrusted connection is refused for ${action}`);
-        assert(settlementGateRefusal('peer', 'unknown', action, true) !== null, `an unidentified peer is refused for ${action}`);
-        assert(settlementGateRefusal('peer', '', action, true) !== null, `an empty peer id is refused for ${action}`);
+        assert(settlementGateRefusal(null, BRIS, action, 'primary', true) !== null, `an untrusted connection is refused for ${action}`);
+        assert(settlementGateRefusal('peer', 'unknown', action, 'primary', true) !== null, `an unidentified peer is refused for ${action}`);
+        assert(settlementGateRefusal('peer', '', action, 'primary', true) !== null, `an empty peer id is refused for ${action}`);
     }
-    assert(settlementGateRefusal('peer', BRIS, SETTLE_PURCHASE, true) === null, 'once enabled, a trading peer is admitted');
+    assert(settlementGateRefusal('peer', BRIS, SETTLE_PURCHASE, 'primary', true) === null, 'once enabled, a trading peer is admitted');
+
+    // A BACKUP replica refuses EVERY settlement action, even fully enabled and from a trusted peer. Its
+    // ledger is replaced by the next snapshot import, so entries written here would vanish while the peer
+    // believed it had been paid — and the two nodes' bridge rows would silently disagree.
+    for (const action of [SETTLE_PURCHASE, SETTLE_RECEIPT, SETTLE_RECEIPT_STATUS]) {
+        assert(settlementGateRefusal('peer', BRIS, action, 'backup', true)?.code === 'federation_settlement_disabled',
+            `a backup replica refuses ${action} — a replica mirrors a ledger, it does not author one`);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

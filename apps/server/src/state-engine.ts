@@ -1221,6 +1221,42 @@ export function transfer(from: string, to: string, amount: number, memo: string,
  * #104 uses it for the cross-node fee, which the buyer pays on top of the price (§2.1) and which lands in
  * the buyer node's own Commons because that is the node carrying the write-off if the buyer is ever pruned.
  */
+/**
+ * Run ledger writes in a DB transaction that also unwinds the IN-MEMORY ledger on failure.
+ *
+ * `transfer()`, `moveToCommons()` and `payFromCommons()` mutate two things: the SQLite rows, and the
+ * in-memory `ledger` (account balances plus the `COMMONS_BALANCE` global). `db.transaction()` rolls back
+ * only the SQLite half. So if any later statement in the same transaction throws, the rows revert and
+ * memory keeps the mutation — the two disagree permanently, until a restart, with every subsequent read
+ * served from the wrong number. Worse, the next `persistCommonsBalance()` writes the stale global back over
+ * the rolled-back row, turning a clean rollback into a durable overstatement of the Commons.
+ *
+ * `reconcileLedgerFromDb()` rebuilds in-memory ACCOUNT balances from the rows, which after a rollback are
+ * the truth. It deliberately does NOT reseed `COMMONS_BALANCE` (the crowdfund paths own that global), so the
+ * pot is snapshotted and restored separately. Both halves, or neither is any use — a review finding against
+ * an earlier version of this wrapper was that it resynced accounts and left the Commons global ahead of
+ * the DB, which is the more damaging half.
+ *
+ * Lives here rather than beside a caller because the hazard belongs to the primitives, not to any one
+ * feature: #104's settlement writes and `adminPruneUser` hit it identically, and anything else that
+ * composes several ledger moves under one transaction will too.
+ */
+export function conservingTransaction<T>(fn: () => T): T {
+    const commonsBefore = getCommonsBalanceExact();
+    try {
+        return db.transaction(fn)();
+    } catch (e) {
+        // The DB has rolled back; resync memory to it rather than leaving the two disagreeing.
+        try {
+            reconcileLedgerFromDb();
+            setCommonsBalance(commonsBefore);
+        } catch (resyncError: any) {
+            console.error('[Ledger] Resync after a failed write FAILED:', resyncError?.message || resyncError);
+        }
+        throw e;
+    }
+}
+
 export function moveToCommons(
     from: string,
     amount: number,
@@ -2658,7 +2694,13 @@ export function adminDeletePost(postId: string) {
 }
 
 export function adminPruneUser(publicKey: string) {
-    db.transaction(() => {
+    // `conservingTransaction`, not a bare `db.transaction` (review finding). Both branches below mutate the
+    // in-memory ledger and the COMMONS_BALANCE global as well as the rows, and two statements run AFTER
+    // them — `adminSetUserStatus` and the posts cancellation. If either throws, SQLite rolls the rows back
+    // and memory would keep the write-off or the confiscation: a permanent split between the two, and the
+    // next persistCommonsBalance() would make the wrong figure durable. Reachable, not theoretical —
+    // adminPruneBranch drives this recursively over a whole invite subtree.
+    conservingTransaction(() => {
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
 
@@ -2673,17 +2715,21 @@ export function adminPruneUser(publicKey: string) {
         // is empty — that document names an empty pot as a threat to balance, not a reason to refuse. A
         // negative Commons is the honest record of a community that has written off more than it collected,
         // and the network still sums to zero, which is the invariant that matters.
+        // Memos carry the SHORT pubkey: these rows surface in activity feeds and the CSV audit export,
+        // where a 64-character hex string wraps and buries the sentence. Nothing is lost — the full key is
+        // already the row's `from_pubkey`/`to_pubkey`, which is what any audit actually joins on.
+        const who = publicKey.slice(0, 8);
         if (balance < 0) {
             const D = Math.abs(balance);
-            payFromCommons(publicKey, D, `Settle bad debt for pruned user: ${publicKey}`, { allowDeficit: true });
+            payFromCommons(publicKey, D, `Settle bad debt for pruned user: ${who}`, { allowDeficit: true });
         } else if (balance > 0) {
-            moveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${publicKey}`,
+            moveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${who}`,
                 { allowMemberDebit: true });
         }
 
         adminSetUserStatus(publicKey, 'pruned');
         db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
-    })();
+    });
     broadcast({ type: 'user_pruned', publicKey });
 }
 

@@ -87,6 +87,38 @@ node scripts/bp-diagnose.mjs dashboard --port 3000
 
 ---
 
+## ⚖️ 3. Ledger Conservation Audit (`audit-conservation.mjs`)
+
+Answers one question per node: **do the books still sum to zero, and has this node ever run a path that destroyed beans?**
+
+BeanPool is mutual credit — there is no money supply, and the network always sums to zero. Two merged paths broke that by moving the `COMMONS_POOL` *account*, which is only the persisted shadow of the `COMMONS_BALANCE` global: the treasury sweep (#126) destroyed beans, and `adminPruneUser` (#124) destroyed on confiscation and *minted* on a debt write-off. Both are fixed, but a fix cannot repair a node that already ran them — hence this.
+
+### How to Run
+
+Strictly read-only (every database is opened `mode=ro`). Needs the `sqlite3` CLI on `PATH`.
+
+```bash
+# Every node snapshot the fleet manager holds
+node scripts/audit-conservation.mjs
+
+# A specific snapshot directory, or specific database files
+node scripts/audit-conservation.mjs --backups /path/to/backups
+node scripts/audit-conservation.mjs /var/lib/beanpool/state.db
+```
+
+### Exit codes
+
+| Code | Meaning |
+| ---- | ------- |
+| `0` | Clean — books balance and neither path has ever run |
+| `1` | Out of balance for some **other** reason — investigate, don't repair blind |
+| `2` | Affected rows found — this node destroyed or minted beans and needs repair |
+| `3` | One or more databases were unreadable, so they are **unaudited** |
+
+Code `3` exists because the dangerous failure mode of an audit is a green result that actually means "checked nothing".
+
+---
+
 ## 🚀 4. Version Bumper Utility (`bump-version.mjs`)
 
 A utility script to automatically increment versions across all workspace `package.json` files, commit the changes, and create the matching Git release tag in a single step.

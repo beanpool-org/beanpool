@@ -31,8 +31,9 @@ import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import {
     initStateEngine, reconcileLedgerFromDb, moveToCommons, payFromCommons,
-    getCommonsBalanceExact, adminPruneUser, persistCommonsBalance,
+    getCommonsBalanceExact, adminPruneUser, persistCommonsBalance, conservingTransaction,
 } from './state-engine.js';
+import { createTreasuryRoutes } from './routes/treasury.js';
 import { setCommonsBalance } from '@beanpool/core';
 
 let run = 0, passed = 0;
@@ -63,9 +64,18 @@ const nodeTotal = () => {
     return r4(accounts + getCommonsBalanceExact());
 };
 
-/** Simulate a restart: flush the pot, drop in-memory state, reload from the rows. */
+/**
+ * Simulate a restart: drop in-memory state, reload from the rows. Mirrors `initStateEngine()`.
+ *
+ * It deliberately does NOT flush first (review finding). An earlier version called
+ * `persistCommonsBalance()` here, which made every durability check below pass whether or not the code
+ * under test persisted anything — the helper was writing the row it then asserted on. A real restart reloads
+ * only what was ALREADY stored, so this must too, or the checks measure the test instead of the code.
+ *
+ * Verified by mutation: with the flush removed, deleting `persistCommonsBalance()` from `moveToCommons`
+ * fails these checks. With the flush in place, it did not.
+ */
 const reboot = () => {
-    persistCommonsBalance();
     setCommonsBalance(0);
     const row = db.prepare("SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'").get() as any;
     if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
@@ -180,10 +190,148 @@ function main() {
         'while an explicit allowDeficit draw succeeds, for the Solvency Rule');
     assert(nodeTotal() === beforePay, 'and even that conserves value');
 
+    // ── 8. A failed write unwinds the IN-MEMORY ledger, not just the rows ─────────────────────────
+    // `db.transaction()` rolls back SQLite. It does NOT roll back the in-memory ledger or the
+    // COMMONS_BALANCE global, which these primitives also mutate — so a throw in a later statement leaves
+    // memory and rows disagreeing, and the next flush writes the phantom value over the rolled-back row,
+    // making it durable. `conservingTransaction` exists for that, and this asserts both halves.
+    setCommonsBalance(25);
+    persistCommonsBalance();
+    reconcileLedgerFromDb();
+    const t3 = makeMember('Rollback Treasury', 50, { treasury: true });
+    const beforeRollback = nodeTotal();
+    const commonsAtStart = getCommonsBalanceExact();
+
+    throws(() => conservingTransaction(() => {
+        moveToCommons(t3, 30, 'swept — then a later statement fails');
+        throw new Error('a later statement failed');
+    }), /a later statement failed/, 'the failure propagates rather than being swallowed');
+
+    assert(bal(t3) === 50, 'the treasury ROW is rolled back by SQLite');
+    assert(r4(ledger.getAccount(t3).balance) === 50, 'and the IN-MEMORY balance is rolled back with it');
+    assert(r4(getCommonsBalanceExact()) === r4(commonsAtStart),
+        'and the Commons global is restored, not left ahead of the rows');
+    assert(nodeTotal() === beforeRollback, 'so conservation survives the failure');
+
+    // The damaging part is what the NEXT flush writes. A stale global becomes durable here or nowhere.
+    persistCommonsBalance();
+    reboot();
+    assert(r4(getCommonsBalanceExact()) === r4(commonsAtStart),
+        'and the next flush cannot make the phantom credit durable');
+    assert(nodeTotal() === beforeRollback, 'with the node total still intact across the restart');
+
+    // ── 9. adminPruneUser is actually WIRED to that, on its real failure path ──────────────────────
+    // Section 8 proves the helper; this proves the prune uses it. The prune moves value FIRST and runs two
+    // more statements afterwards, so a failure in either is the reachable case. A trigger makes the posts
+    // cancellation abort — the last statement in the transaction, and the one furthest from the ledger move.
+    const stubborn = makeMember('Cannot Be Pruned', -75);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+                VALUES ('post-prune-fail', 'offer', 'food', 'Eggs', '', 1, ?, 'active')`).run(stubborn);
+    db.exec(`CREATE TRIGGER t_fail_posts BEFORE UPDATE ON posts
+             BEGIN SELECT RAISE(ABORT, 'simulated failure after the ledger move'); END;`);
+    const beforeFailedPrune = nodeTotal();
+    const commonsBeforeFailedPrune = getCommonsBalanceExact();
+
+    throws(() => adminPruneUser(stubborn), /simulated failure/, 'a prune that fails late reports it');
+    db.exec('DROP TRIGGER t_fail_posts');
+
+    assert(bal(stubborn) === -75, 'the member keeps their debt — the write-off was rolled back');
+    assert(r4(ledger.getAccount(stubborn).balance) === -75, 'in memory as well as in the row');
+    assert(r4(getCommonsBalanceExact()) === r4(commonsBeforeFailedPrune),
+        'the Commons was NOT charged for a write-off that did not happen');
+    assert(nodeTotal() === beforeFailedPrune, 'and no beans were created by the half-completed prune');
+    const stillActive = (db.prepare('SELECT status FROM members WHERE public_key=?').get(stubborn) as any)?.status;
+    assert(stillActive !== 'pruned', 'and the member is not left marked pruned with their debt intact');
+    reboot();
+    assert(nodeTotal() === beforeFailedPrune, 'all of which holds across a restart');
+
+    console.log(`\n${passed}/${run} direct-call checks passed.`);
+}
+
+/**
+ * The same conservation checks, driven through the REAL HTTP route (review finding).
+ *
+ * Everything above calls `moveToCommons` directly, so re-wiring the sweep route back to
+ * `transfer(..., 'COMMONS_POOL', ...)` — the exact defect #126 fixed — would leave the suite green. The
+ * route wiring IS the bug, so the route has to be what gets exercised.
+ *
+ * It drives the router the server actually mounts rather than a re-implementation of it, so the keeper gate,
+ * the amount validation, the active-status check and the ledger call are all the production ones.
+ */
+async function routeChecks() {
+    console.log('\n── through the real sweep route ──');
+    const router = createTreasuryRoutes({
+        checkAdminAuth: async () => false,
+        rateLimit: () => true,
+        clampLimit: (v: unknown, def = 20) => def,
+        clampOffset: () => 0,
+        activeConnections: new Map(),
+        calculateAnalytics: () => ({}),
+        enforceReadAuth: false,
+    });
+
+    const layer = (router as any).stack.find((l: any) =>
+        l.path === '/api/treasury/:treasury/sweep' && l.methods.includes('POST'));
+    if (!layer) throw new Error('The sweep route is not mounted — this test is looking at the wrong path');
+
+    /** Invoke the mounted handler with a hand-built ctx, the way Koa would. */
+    const sweep = async (treasury: string, actor: string, amount: unknown) => {
+        const ctx: any = {
+            params: { treasury }, state: { actor }, requestBody: { amount },
+            status: 200, body: undefined,
+        };
+        await layer.stack[layer.stack.length - 1](ctx, async () => {});
+        return ctx;
+    };
+
+    const treasury = makeMember('Route Treasury', 100, { treasury: true });
+    const keeper = makeMember('Keeper', 0);
+    db.prepare('UPDATE members SET can_operate=1 WHERE public_key=?').run(keeper);
+    db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(treasury, keeper);
+
+    const before = nodeTotal();
+    const commonsBefore = getCommonsBalanceExact();
+
+    const ok = await sweep(treasury, keeper, 40);
+    assert(ok.status === 200 && ok.body?.success === true, 'a keeper can sweep surplus through the route');
+    assert(bal(treasury) === 60, 'the treasury is debited');
+    assert(r4(getCommonsBalanceExact()) === r4(commonsBefore + 40), 'the Commons POT receives it');
+    assert(nodeTotal() === before, 'and the route conserves value — no beans destroyed');
+    reboot();
+    assert(r4(getCommonsBalanceExact()) === r4(commonsBefore + 40), 'which survives a restart');
+    assert(nodeTotal() === before, 'still summing to the same total');
+
+    // Overdraw: refused with a message, and nothing moved.
+    const over = await sweep(treasury, keeper, 500);
+    assert(over.status === 400, 'sweeping more than the treasury holds is refused');
+    assert(bal(treasury) === 60 && nodeTotal() === before, 'and nothing moved on the refusal');
+
+    const zero = await sweep(treasury, keeper, 0);
+    assert(zero.status === 400, 'a zero sweep is refused');
+
+    // A stranger is not a keeper. Seeded at zero deliberately: `nodeTotal()` is compared against `before`
+    // below, and a fixture that mints itself 50 beans mid-suite breaks that comparison rather than the code.
+    const stranger = makeMember('Stranger', 0);
+    const denied = await sweep(treasury, stranger, 10);
+    assert(denied.status === 403, 'a non-keeper is refused');
+
+    // Suspended parties cannot move value — the check that moving off transfer() dropped.
+    db.prepare("UPDATE members SET status='disabled' WHERE public_key=?").run(treasury);
+    const closed = await sweep(treasury, keeper, 10);
+    assert(closed.status === 403, 'a keeper cannot sweep a DISABLED enterprise');
+    assert(bal(treasury) === 60, 'and its funds are untouched');
+    db.prepare("UPDATE members SET status='active' WHERE public_key=?").run(treasury);
+
+    db.prepare("UPDATE members SET status='disabled' WHERE public_key=?").run(keeper);
+    const suspended = await sweep(treasury, keeper, 10);
+    assert(suspended.status === 403, 'and a DISABLED keeper cannot sweep a live one');
+    assert(bal(treasury) === 60 && nodeTotal() === before, 'with the books unchanged throughout');
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Commons conservation checks PASSED (#124, #126).');
 }
 
 main();
+await routeChecks();
 process.exit(0);

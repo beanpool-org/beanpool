@@ -34,8 +34,8 @@
 import { db } from './db/db.js';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
 import {
-    transfer, registerVisitor, getMember, moveToCommons, payFromCommons, reconcileLedgerFromDb,
-    getCommonsBalanceExact, setCommonsBalance, getNodeRole,
+    transfer, registerVisitor, getMember, moveToCommons, payFromCommons,
+    conservingTransaction, getNodeRole,
 } from './state-engine.js';
 import { bridgeAccountId, ensureBridgeAccount, settlementCapacityForPeer } from './federation-bridge.js';
 import { getConnectors } from './connector-manager.js';
@@ -115,41 +115,18 @@ function mustTransfer(from: string, to: string, amount: number, memo: string): v
 /**
  * Run a settlement's writes in a DB transaction that also unwinds the IN-MEMORY ledger on failure.
  *
- * THE PROBLEM THIS SOLVES (review finding, and the most consequential one in this PR). `transfer()`,
- * `moveToCommons()` and `payFromCommons()` mutate the in-memory `ledger` — account balances and the
- * `COMMONS_BALANCE` global — as well as writing SQLite. `db.transaction()` rolls back only the SQLite half.
- * So if any later statement in the same transaction throws, the rows revert and the in-memory ledger keeps
- * the mutation: the two disagree permanently, until a restart, with every subsequent read served from the
- * wrong number.
+ * THE PROBLEM THIS SOLVES (review finding, and the most consequential one in #123). `transfer()`,
+ * `moveToCommons()` and `payFromCommons()` mutate the in-memory `ledger` as well as writing SQLite, and
+ * `db.transaction()` rolls back only the SQLite half — so a later throw leaves the two disagreeing
+ * permanently. `conservingTransaction` in state-engine unwinds both halves; its comment carries the full
+ * reasoning, and it lives there because the hazard belongs to the ledger primitives rather than to
+ * federation (a later review found `adminPruneUser` had exactly the same hole).
  *
- * It is reachable. The compare-and-swap added to `advanceSettlement` throws on a lost race, and it runs
- * *after* the ledger moves in every write path here — so hardening the state machine introduced exactly
- * this hazard at exactly the wrong point.
- *
- * `reconcileLedgerFromDb()` rebuilds in-memory ACCOUNT balances from the rows, which after a rollback are
- * the truth. But it deliberately does NOT reseed `COMMONS_BALANCE` (state-engine documents why: the
- * crowdfund paths own that global), so the Commons has to be restored separately — a review finding against
- * the first version of this wrapper, which resynced accounts and left the Commons global ahead of the DB.
- * That was the worse half: the next `persistCommonsBalance()` would then write the mutated value back over
- * the rolled-back row, turning a clean rollback into a permanent overstatement of the Commons.
- *
- * Both halves, or neither is any use.
+ * It is reachable HERE specifically because the compare-and-swap in `advanceSettlement` throws on a lost
+ * race, and it runs *after* the ledger moves in every write path in this file — so hardening the state
+ * machine introduced this hazard at exactly the wrong point.
  */
-function settlementTransaction<T>(fn: () => T): T {
-    const commonsBefore = getCommonsBalanceExact();
-    try {
-        return db.transaction(fn)();
-    } catch (e) {
-        // The DB has rolled back; resync memory to it rather than leaving the two disagreeing.
-        try {
-            reconcileLedgerFromDb();
-            setCommonsBalance(commonsBefore);
-        } catch (resyncError: any) {
-            console.error('[Federation] Ledger resync after a failed settlement write FAILED:', resyncError?.message || resyncError);
-        }
-        throw e;
-    }
-}
+const settlementTransaction = conservingTransaction;
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // BUYER'S NODE (outbound) — steps 1, 3, and the compensating reversal

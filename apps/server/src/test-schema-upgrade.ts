@@ -332,8 +332,9 @@ function main() {
         const absent = expected.filter(n => !present.has(n));
         assert(expected.length > 0 && absent.length === 0,
             absent.length
-                ? `${absent.length} of ${expected.length} schema.sql objects on ${table} were SKIPPED: ${absent.join(', ')}`
-                  + ' — the boot survived but delta sync would be quietly broken'
+                ? `${absent.length} of ${expected.length} schema.sql objects on ${table} were SKIPPED:\n     `
+                  + absent.join('\n     ')
+                  + '\n     The boot survived, but delta sync would be quietly broken.'
                 : `with all ${expected.length} of its schema.sql indexes and triggers created, not skipped (${table})`);
         check.close();
         fs.rmSync(dir, { recursive: true, force: true });

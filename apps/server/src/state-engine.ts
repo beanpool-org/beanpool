@@ -1196,6 +1196,67 @@ export function transfer(from: string, to: string, amount: number, memo: string,
 }
 
 /**
+ * Run ledger writes in a DB transaction that also unwinds the IN-MEMORY ledger on failure.
+ *
+ * `transfer()`, `moveToCommons()` and `payFromCommons()` mutate two things: the SQLite rows, and the
+ * in-memory `ledger` (account balances plus the `COMMONS_BALANCE` global). `db.transaction()` rolls back
+ * only the SQLite half. So if any later statement in the same transaction throws, the rows revert and
+ * memory keeps the mutation — the two disagree permanently, until a restart, with every subsequent read
+ * served from the wrong number. Worse, the next `persistCommonsBalance()` writes the stale global back over
+ * the rolled-back row, turning a clean rollback into a durable overstatement of the Commons.
+ *
+ * `reconcileLedgerFromDb()` rebuilds in-memory ACCOUNT balances from the rows, which after a rollback are
+ * the truth. It deliberately does NOT reseed `COMMONS_BALANCE` (the crowdfund paths own that global), so the
+ * pot is snapshotted and restored separately. Both halves, or neither is any use — a review finding against
+ * an earlier version of this wrapper was that it resynced accounts and left the Commons global ahead of
+ * the DB, which is the more damaging half.
+ *
+ * WHY IT FLUSHES DECAY FIRST (review finding, and the subtle one). Demurrage is applied LAZILY inside
+ * `ledger.getAccount()`: it debits the account and does `COMMONS_BALANCE += decayed` in memory, queues a
+ * decay event, and touches no row until `persistDecayEvents()` runs. If that has happened but not yet been
+ * flushed when the snapshot is taken, the snapshot contains a Commons credit whose matching account debit
+ * exists only in memory. A rollback then reloads the PRE-decay account row and `loadState()` clears the
+ * decay queue (ledger.ts) — so restoring the snapshotted Commons keeps a credit with no debit anywhere, and
+ * the next flush mints it. Flushing first makes memory and rows agree before there is anything to restore,
+ * which is the only version of this wrapper that is safe to use.
+ *
+ * Assumes it is the OUTERMOST transaction: the pre-flush commits, so nesting this inside another
+ * `db.transaction` would put that commit at risk of the outer rollback. No caller nests it today.
+ *
+ * Lives here rather than beside a caller because the hazard belongs to the primitives, not to any one
+ * feature: #104's settlement writes, `adminPruneUser` and the treasury sweep hit it identically, and
+ * anything else that composes several ledger moves under one transaction will too.
+ */
+export function conservingTransaction<T>(fn: () => T): T {
+    // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair.
+    persistDecayEvents();
+    const commonsBefore = getCommonsBalanceExact();
+    try {
+        return db.transaction(fn)();
+    } catch (e) {
+        // The DB has rolled back; resync memory to it rather than leaving the two disagreeing.
+        try {
+            reconcileLedgerFromDb();
+            setCommonsBalance(commonsBefore);
+        } catch (resyncError: any) {
+            // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
+            // read would be served from the wrong number — a mutual-credit ledger silently minting is worse
+            // than an outage. Halting is also self-healing here: the fleet runs under a restart policy, and
+            // boot rebuilds the ledger from the rows, which are the truth after a rollback.
+            //
+            // Genuinely pathological rather than transient. This is a plain SELECT, the database is in WAL
+            // mode, and WAL readers do not block on writers — so a failure here means SQLite itself is
+            // failing, not that something held a lock.
+            console.error('[Ledger] FATAL: resync after a failed write FAILED. Halting to protect ledger '
+                + 'consistency — restart rebuilds from the rows.', resyncError?.message || resyncError);
+            console.error('[Ledger] The write that triggered it:', (e as any)?.message || e);
+            process.exit(1);
+        }
+        throw e;
+    }
+}
+
+/**
  * Move value from a SYNTHETIC account into the Commons pot, and record it.
  *
  * `transfer(x, 'COMMONS_POOL', n)` does NOT do this, and the difference is not cosmetic. The Commons pot
@@ -1221,42 +1282,6 @@ export function transfer(from: string, to: string, amount: number, memo: string,
  * #104 uses it for the cross-node fee, which the buyer pays on top of the price (§2.1) and which lands in
  * the buyer node's own Commons because that is the node carrying the write-off if the buyer is ever pruned.
  */
-/**
- * Run ledger writes in a DB transaction that also unwinds the IN-MEMORY ledger on failure.
- *
- * `transfer()`, `moveToCommons()` and `payFromCommons()` mutate two things: the SQLite rows, and the
- * in-memory `ledger` (account balances plus the `COMMONS_BALANCE` global). `db.transaction()` rolls back
- * only the SQLite half. So if any later statement in the same transaction throws, the rows revert and
- * memory keeps the mutation — the two disagree permanently, until a restart, with every subsequent read
- * served from the wrong number. Worse, the next `persistCommonsBalance()` writes the stale global back over
- * the rolled-back row, turning a clean rollback into a durable overstatement of the Commons.
- *
- * `reconcileLedgerFromDb()` rebuilds in-memory ACCOUNT balances from the rows, which after a rollback are
- * the truth. It deliberately does NOT reseed `COMMONS_BALANCE` (the crowdfund paths own that global), so the
- * pot is snapshotted and restored separately. Both halves, or neither is any use — a review finding against
- * an earlier version of this wrapper was that it resynced accounts and left the Commons global ahead of
- * the DB, which is the more damaging half.
- *
- * Lives here rather than beside a caller because the hazard belongs to the primitives, not to any one
- * feature: #104's settlement writes and `adminPruneUser` hit it identically, and anything else that
- * composes several ledger moves under one transaction will too.
- */
-export function conservingTransaction<T>(fn: () => T): T {
-    const commonsBefore = getCommonsBalanceExact();
-    try {
-        return db.transaction(fn)();
-    } catch (e) {
-        // The DB has rolled back; resync memory to it rather than leaving the two disagreeing.
-        try {
-            reconcileLedgerFromDb();
-            setCommonsBalance(commonsBefore);
-        } catch (resyncError: any) {
-            console.error('[Ledger] Resync after a failed write FAILED:', resyncError?.message || resyncError);
-        }
-        throw e;
-    }
-}
-
 export function moveToCommons(
     from: string,
     amount: number,
@@ -2577,8 +2602,22 @@ export function getAdminPubkey(): string {
     return row ? row.public_key : 'system';
 }
 
-export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
+/**
+ * Write the status row only, with no broadcast.
+ *
+ * Split out because a WebSocket broadcast cannot be rolled back (review finding). `adminPruneUser` runs
+ * inside a transaction that can still fail after this point, and a `profile_updated` sent from inside it
+ * would tell every connected client the member was pruned while the database reverted — the clients would
+ * be showing a state the node does not have, until something refreshed them.
+ *
+ * The row write and the announcement are therefore separate, and the prune announces after it commits.
+ */
+export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+}
+
+export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
+    setUserStatusRow(publicKey, status);
     broadcast({ type: 'profile_updated', publicKey });
 }
 
@@ -2727,9 +2766,14 @@ export function adminPruneUser(publicKey: string) {
                 { allowMemberDebit: true });
         }
 
-        adminSetUserStatus(publicKey, 'pruned');
+        // `setUserStatusRow`, not `adminSetUserStatus` — the latter broadcasts, and a broadcast cannot be
+        // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
+        // client the member was pruned while the database reverted.
+        setUserStatusRow(publicKey, 'pruned');
         db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
     });
+    // Both announcements happen only once the transaction has committed.
+    broadcast({ type: 'profile_updated', publicKey });
     broadcast({ type: 'user_pruned', publicKey });
 }
 

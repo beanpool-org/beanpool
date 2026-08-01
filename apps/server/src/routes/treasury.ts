@@ -15,7 +15,7 @@ import {
     createTreasury, adminSetOperator, canOperateTreasury,
     treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     createPost, approvePostRequest, completePostTransaction,
-    getBalance, moveToCommons,
+    getBalance, moveToCommons, conservingTransaction,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
@@ -260,16 +260,30 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // then had the Commons credit overwritten by the next persistCommonsBalance() flush, DESTROYING the
         // beans and breaking the node's zero-sum invariant. Measured: 40 in, 40 gone.
         //
-        // `moveToCommons` answers a refused move with null, but THROWS if handed an account type it is not
-        // for — an invariant violation rather than a runtime refusal. Caught here so a mis-wiring surfaces as
-        // a controlled response and a server log rather than an unhandled 500 (review finding).
+        // Wrapped in `conservingTransaction` like the prune and federation callers (review finding).
+        // `moveToCommons` mutates the in-memory ledger and the COMMONS_BALANCE global BEFORE its several
+        // SQLite writes, so a failure part-way through would otherwise leave memory mutated against partial
+        // rows — and the next flush would make the phantom credit durable. The wrapper makes the whole move
+        // atomic in both halves, so a failure really does mean nothing moved.
+        //
+        // The two failure kinds are answered differently. `moveToCommons` returns null for a REFUSAL (the
+        // balance will not cover it) and THROWS for an invariant violation (wrong account type) or a storage
+        // error. A refusal is the caller's problem: 400. A throw is ours: the message names internal detail
+        // the caller has no use for, so it goes to the log and the caller gets a 500 — reporting a storage
+        // failure as a 400 would tell someone their input was wrong when the node is what is broken.
         let ok;
         try {
-            ok = moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`);
+            ok = conservingTransaction(() =>
+                moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`));
         } catch (e: any) {
-            console.error(`[Treasury] Sweep from ${treasury.slice(0, 8)} was refused by the ledger:`, e?.message || e);
-            ctx.status = 400;
-            ctx.body = { error: 'That sweep could not be completed. Nothing has been moved.' };
+            const invariant = /moveToCommons is for/.test(e?.message || '');
+            console.error(`[Treasury] Sweep from ${treasury.slice(0, 8)} failed:`, e?.message || e);
+            ctx.status = invariant ? 400 : 500;
+            ctx.body = {
+                error: invariant
+                    ? 'That sweep could not be completed. Nothing has been moved.'
+                    : 'Something went wrong saving that sweep. Nothing has been moved — please try again.',
+            };
             return;
         }
         if (!ok) {

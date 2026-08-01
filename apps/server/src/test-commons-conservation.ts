@@ -245,6 +245,43 @@ function main() {
     reboot();
     assert(nodeTotal() === beforeFailedPrune, 'all of which holds across a restart');
 
+    // ── 10. A rollback with UNFLUSHED demurrage in the snapshot ────────────────────────────────────
+    // The subtle one, and it is a hazard the wrapper could CREATE rather than one it inherits.
+    //
+    // Demurrage is applied lazily inside `ledger.getAccount()`: it debits the account, does
+    // `COMMONS_BALANCE += decayed` in memory, queues a decay event, and touches no row until
+    // `persistDecayEvents()` runs. If that has happened but not been flushed when `conservingTransaction`
+    // snapshots the pot, the snapshot holds a Commons credit whose matching account debit exists only in
+    // memory. The rollback then reloads the PRE-decay row and `loadState()` clears the decay queue — so
+    // restoring the snapshotted Commons leaves a credit with no debit anywhere, and the next flush mints it.
+    //
+    // `conservingTransaction` flushes decay before snapshotting for exactly this reason.
+    const t4 = makeMember('Decay Era Treasury', 50, { treasury: true });
+    const decayer = makeMember('Has Decayed', 500);
+    const baseline = nodeTotal();
+
+    // Backdate two months so the next read of this account applies real demurrage.
+    db.prepare('UPDATE accounts SET last_demurrage_epoch=? WHERE public_key=?')
+        .run(ledger.getCurrentEpoch() - 60, decayer);
+    reconcileLedgerFromDb();   // last reconcile: from here on, the decay queue must survive
+
+    // Touching the account is what applies it — in memory only, with the row left stale.
+    const decayedTo = ledger.getAccount(decayer).balance;
+    assert(decayedTo < 500, `reading the account applied demurrage lazily (500 → ${r4(decayedTo)})`);
+    assert(bal(decayer) === 500, 'and the ROW is still stale, so memory and rows disagree at this point');
+
+    throws(() => conservingTransaction(() => {
+        moveToCommons(t4, 10, 'a sweep that fails, with decay pending');
+        throw new Error('a later statement failed');
+    }), /a later statement failed/, 'the failure propagates');
+
+    // What matters is the durable outcome: flush, restart, and see whether the books still add up.
+    persistCommonsBalance();
+    reboot();
+    assert(nodeTotal() === baseline,
+        `no beans were minted by the pending decay (expected ${baseline}, got ${nodeTotal()})`);
+    assert(bal(t4) === 50, 'the failed sweep left the treasury alone');
+
     console.log(`\n${passed}/${run} direct-call checks passed.`);
 }
 

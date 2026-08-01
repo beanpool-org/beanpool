@@ -607,12 +607,23 @@ export async function runOutboundSettlement(
     try {
         committed = await commitOutboundSettlement(key, ourPeerId, privateKey, input.buyerHomeNode ?? null);
     } catch (e: any) {
-        // The row is still `escrowed`, which boot recovery refunds. Reported as pending rather than refused
-        // because the refund has not happened yet, and telling someone their beans are back before they are
-        // is worse than telling them to wait.
         console.error(`[Federation] Committing ${key} failed:`, e?.message || e);
+        const reason = e?.reason ?? 'commit_failed';
+        // Read the state back before answering (review finding). This one IS reachable: the commit awaits
+        // `signReceipt`, and recovery runs on a timer, so it can refund this row during that await. Recovery
+        // ignores terminal states, so reporting `pending` for a row it has already ABANDONED would promise a
+        // refund that has in fact already happened and leave the caller waiting for it forever.
+        const fresh = getSettlement(key);
+        if (fresh?.state === 'abandoned') {
+            return { status: 'refused', key, reason: fresh.failureReason ?? reason, message: refusalMessage(reason) };
+        }
+        if (fresh?.state === 'reversed') {
+            return { status: 'reversed', key, reason: fresh.failureReason ?? reason, message: reversalMemo(reason) };
+        }
+        // Still `escrowed`, which boot recovery refunds. Pending rather than refused, because the refund has
+        // not happened yet and telling someone their beans are back before they are is worse than waiting.
         return {
-            status: 'pending', key, reason: e?.reason ?? 'commit_failed',
+            status: 'pending', key, reason,
             message: 'This purchase could not be completed. Your beans are held and will be returned.',
         };
     }

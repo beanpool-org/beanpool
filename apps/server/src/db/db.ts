@@ -140,6 +140,41 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE settlements ADD COLUMN reserved_until DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE settlements ADD COLUMN receipt_payload TEXT`).run(); } catch { }
 
+    // #127: columns that schema.sql OBJECTS reference, so they have to exist before the exec.
+    //
+    // Same failure as the settlements block above, found by auditing for the class rather than waiting for
+    // the next report. `db.exec()` runs the whole file as one unit, and one failing statement aborts all of
+    // it — so the node will not start. `CREATE TABLE IF NOT EXISTS` no-ops against an existing table, so only
+    // nodes that ALREADY HAVE DATA are affected: every deployed node, and no test suite, because they all
+    // start from an empty data dir.
+    //
+    // ONE of these was the actual boot failure. Measured, not assumed — each reference kind was probed
+    // against a legacy `posts` table:
+    //
+    //   posts.updated_at        → INDEX idx_posts_updated_at        FATAL: "no such column: updated_at"
+    //   posts.search_keywords   → TRIGGERS posts_ai / ad / au       boots fine (FTS5 mirror, body reference)
+    //   members.earned_credit   → TRIGGER members_touch_updated_at  boots fine, and later FIRES correctly
+    //   members.profile_updated_at → same trigger                   boots fine
+    //
+    // Indexes resolve their columns at CREATE time; triggers resolve theirs when they fire. Only the index
+    // breaks. The other three are hoisted anyway: trigger tolerance is an implementation detail of the SQLite
+    // build we ship rather than a documented guarantee, and "if schema.sql names it, add it before the exec"
+    // is a cheaper rule to keep than an exception list.
+    //
+    // test-schema-upgrade.ts enforces this statically for EVERY late-added column — separating the fatal
+    // index case from the defensive trigger one — so a column added below the exec fails in CI rather than on
+    // somebody's node.
+    try {
+        db.prepare(`ALTER TABLE posts ADD COLUMN updated_at DATETIME`).run();
+        db.prepare(`UPDATE posts SET updated_at = created_at WHERE updated_at IS NULL`).run();
+    } catch { }
+    // FTS5 search: the posts_ai/ad/au triggers mirror this into posts_fts.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
+    // Protocol v1: pre-seeded earned credit for the dynamic floor formula.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
+    // Profile sync: profile mutation timestamp for cache-busting.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
+
     // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
     // column-whitelist form that excludes last_active_at heartbeats from cursor sync.
     // CREATE TRIGGER IF NOT EXISTS is a no-op against an existing trigger.
@@ -168,18 +203,11 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signer TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signature TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
-    try {
-        db.prepare(`ALTER TABLE posts ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE posts SET updated_at = created_at WHERE updated_at IS NULL`).run();
-    } catch { }
+    // posts.updated_at, posts.search_keywords, members.earned_credit and members.profile_updated_at used to
+    // be added HERE. They moved above the exec (#127) because schema.sql objects depend on them.
+    //
     // Protocol v1: Admin Genesis Invites — store invite tier type
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN genesis_type TEXT DEFAULT 'standard'`).run(); } catch { }
-    // Protocol v1: Track pre-seeded earned credit for dynamic floor formula
-    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
-    // Profile sync: Track profile mutation timestamp for cache-busting
-    try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
-    // FTS5 Search: Add search_keywords column to posts
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
     // #108: a listing may carry a real cash outlay (fuel/consumables). Flag only, no amount —
     // the app never touches the money, so it must not imply a figure it holds or settles.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }

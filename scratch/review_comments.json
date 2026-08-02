@@ -1,8 +1,0 @@
-[
-  {
-    "path": "apps/server/src/federation-settlement-exchange.ts",
-    "position": 561,
-    "side": "RIGHT",
-    "body": "### UX & Copywriting\n**Risk:** `TERMINAL_REFUSALS` includes `'NOT_FOUND'`, but `reversalMemo` matches on `'RECEIPT_NOT_FOUND'`. When a terminal reversal occurs with reason `'NOT_FOUND'` and no custom `outcome.message` is supplied, `reversalMemo` falls through to generic fallback copy (`'Refunded — this cross-community purchase could not be completed'`) instead of explaining that the other community did not complete the sale. Similarly, `'BAD_SIGNATURE'` and `'RECEIPT_MISMATCH'` lack specific memo entries.\n\n**Suggested Fix:**\nUpdate `reversalMemo` to include `'NOT_FOUND'`, `'BAD_SIGNATURE'`, and `'RECEIPT_MISMATCH'`:\n```typescript\nfunction reversalMemo(reason: string): string {\n    switch (reason) {\n        case 'CAPACITY_LAPSED':\n            return 'Refunded — the other community had reached its credit limit';\n        case 'NOT_FOUND':\n        case 'RECEIPT_NOT_FOUND':\n            return 'Refunded — the other community did not complete the sale';\n        case 'BAD_SIGNATURE':\n        case 'RECEIPT_MISMATCH':\n            return 'Refunded — invalid transaction verification from peer community';\n        default:\n            return 'Refunded — this cross-community purchase could not be completed';\n    }\n}\n```"
-  }
-]

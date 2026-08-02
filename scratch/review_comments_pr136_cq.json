@@ -1,8 +1,0 @@
-[
-  {
-    "path": "apps/server/src/test-schema-upgrade.ts",
-    "position": 103,
-    "side": "RIGHT",
-    "body": "### Code Quality & Logic\n**Risk:** If a trigger in `schema.sql` uses alternative formatting or spacing (e.g. `END ;` or lower-case), `schema.toUpperCase().indexOf('END;', m.index!)` returns `-1`. Adding 4 yields `3`, resulting in an invalid `slice` range that silently truncates the trigger body analysis instead of throwing an explicit error.\n\n**Suggested Fix:**\n```typescript\n            const end = schema.toUpperCase().indexOf('END;', m.index!);\n            if (end === -1) throw new Error(`Could not find 'END;' for TRIGGER ${name} in schema.sql`);\n            body = schema.slice(m.index!, end + 4);\n```"
-  }
-]

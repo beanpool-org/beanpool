@@ -168,6 +168,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Detail view
     const [selectedPost, setSelectedPost] = useState<MarketplacePost | null>(null);
+
+    // Clear the last commission's message when a DIFFERENT listing is opened (review finding — a real bug).
+    // `commissionResult` is page-level state, so commissioning listing A and then opening listing B showed A's
+    // "Commissioned. 60 🫘 to eastgippy" under B's panel before anything had been done to B. On a screen whose
+    // whole job is telling a keeper what happened to the community's beans, that is the worst possible place
+    // for a stale success message.
+    //
+    // NOT folded into the capacity refresh, as suggested: that would refetch the allowance on every card a
+    // member opens, and the allowance only moves when a commission or a settlement lands — both of which
+    // already refresh it explicitly.
+    useEffect(() => { setCommissionResult(null); }, [selectedPost?.id]);
+
     const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
 
     // Reset detail view when bottom tab is double-tapped
@@ -1036,7 +1048,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </button>
                                 </div>
                                 {isRemotePost && (
-                                    <p className="mt-2 text-xs text-nature-600 text-center">
+                                    <p className="mt-2 text-xs text-nature-700 dark:text-nature-400 text-center">
                                         This listing belongs to another community. Buying it takes a cross-community
                                         purchase so both communities record it — not this button, yet.
                                     </p>
@@ -1060,10 +1072,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 {commissionLink && (
                                     <div className="mt-3 pt-3 border-t border-nature-800">
                                         <div className="flex items-baseline justify-between gap-2 mb-1">
-                                            <span className="text-xs font-semibold text-sky-300">
+                                            <span className="text-xs font-semibold text-sky-700 dark:text-sky-300">
                                                 <span aria-hidden="true">🔗 </span>{commissionLink.name}
                                             </span>
-                                            <span className="text-xs text-nature-400 tabular-nums">
+                                            <span className="text-xs text-nature-700 dark:text-nature-400 tabular-nums">
                                                 {commissionLink.allowance} 🫘 available
                                             </span>
                                         </div>
@@ -1071,26 +1083,43 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             allowance that is credit already earned, and it is the reason a
                                             keeper would act at all — "they owe us 480" is a different decision
                                             from "we have discretion to spend 500 we do not have yet". */}
-                                        <p className="text-[13px] leading-snug text-nature-400 mb-2">
+                                        <p className="text-[13px] leading-snug text-nature-700 dark:text-nature-400 mb-2">
                                             {commissionLink.redeemable > 0
                                                 ? `${commissionLink.name.replace(/ Link$/, '')} owes this community ${commissionLink.redeemable} beans of work. Commissioning this listing calls some of that in — the beans come from the Commons pot, and the tab comes down.`
                                                 : `Nothing is owed either way right now, so this would open a new tab of ${commissionLink.ceiling > 0 ? `up to ${commissionLink.ceiling} beans` : 'beans'} — within the ceiling set for this link.`}
                                         </p>
+                                        {/* CONTRAST, measured rather than eyeballed. This panel sits on
+                                            `bg-oat-50 dark:bg-nature-950`, and the review flagged amber-500 as
+                                            failing AA on the DARK ground while suggesting amber-400. Both halves
+                                            were wrong and the concern was still right — on nature-950 amber-500
+                                            is 7.46:1, comfortably AA; the failure is in LIGHT mode, where
+                                            amber-500 on oat-50 is 2.06:1 and the suggested amber-400 is 1.60:1,
+                                            i.e. worse. amber-700/amber-400 is 4.81:1 and 9.60:1 — AA in both.
+                                            One step darker than the house `amber-600 dark:amber-400`, which is
+                                            itself only 3.05:1 on this ground and so not a pattern to copy at
+                                            13px.
+
+                                            ⚠️ is aria-hidden: a screen reader saying "warning sign" before the
+                                            sentence adds nothing the words do not. */}
                                         {commissionNeeded > commissionLink.allowance ? (
-                                            <p className="text-[13px] leading-snug text-amber-500 font-medium">
-                                                ⚠️ This listing needs {commissionNeeded} 🫘 with the fee, which is
+                                            <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-400 font-medium">
+                                                <span aria-hidden="true">⚠️ </span>This listing needs {commissionNeeded} 🫘 with the fee, which is
                                                 more than the {commissionLink.allowance} available. An operator can
                                                 raise the ceiling in Settings.
                                             </p>
                                         ) : commissionNeeded > commissionLink.commonsBalance ? (
-                                            <p className="text-[13px] leading-snug text-amber-500 font-medium">
-                                                ⚠️ The Commons pot holds {commissionLink.commonsBalance} 🫘, less than
+                                            <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-400 font-medium">
+                                                <span aria-hidden="true">⚠️ </span>The Commons pot holds {commissionLink.commonsBalance} 🫘, less than
                                                 the {commissionNeeded} this needs. The pot fills from fees and demurrage.
                                             </p>
                                         ) : (
                                             <button
                                                 onClick={async () => {
                                                     if (!selectedPost) return;
+                                                    // Captured, not read through the closure: `commissionLink` is
+                                                    // narrowed by the JSX guard above but that narrowing does not
+                                                    // survive into an async callback.
+                                                    const community = commissionLink.name.replace(/ Link$/, '');
                                                     setCommissioning(true);
                                                     setCommissionResult(null);
                                                     try {
@@ -1098,9 +1127,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         // 202 is a real outcome, not a failure: the beans are in
                                                         // flight and boot recovery finishes or refunds them. Saying
                                                         // "done" would be a lie and saying "failed" a worse one.
+                                                        //
+                                                        // NAMED FROM THE LINK, not from `r.peer`. The review called
+                                                        // r.peer a raw cryptographic identifier, which it is not —
+                                                        // the route sends `connector.callsign ?? connector.address`,
+                                                        // so it is the operator's own label. But that FALLBACK is a
+                                                        // multiaddr, and a member would meet
+                                                        // "/ip4/172.18.0.4/tcp/4001/p2p/12D3Koo…" in a sentence about
+                                                        // their community's beans. The better reason to use the link
+                                                        // name is that it is what the card two lines above already
+                                                        // says: the confirmation should agree with what was pressed.
                                                         setCommissionResult(
                                                             r.status === 'settled'
-                                                                ? `Commissioned. ${r.amount} 🫘 to ${r.peer}, ${r.drawnFromCommons} of it drawn from the Commons.`
+                                                                ? `Commissioned. ${r.amount} 🫘 to ${community}, ${r.drawnFromCommons} of it drawn from the Commons.`
                                                                 : r.status === 'pending'
                                                                     ? 'Sent — still completing. It will finish on its own, or the beans come back.'
                                                                     : 'That did not go through, and nothing was spent.'
@@ -1123,8 +1162,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     : `Commission for the community — ${commissionNeeded} 🫘`}
                                             </button>
                                         )}
+                                        {/* aria-live alongside role="status", which already implies polite — so
+                                            this is belt-and-braces rather than a fix. Worth the redundancy here:
+                                            the announcement is the only confirmation that beans moved, and
+                                            TalkBack on the low-end Android this app targets is the least
+                                            reliable place to depend on an implicit default. */}
                                         {commissionResult && (
-                                            <p className="mt-2 text-[13px] leading-snug text-nature-300" role="status">
+                                            <p className="mt-2 text-[13px] leading-snug text-nature-700 dark:text-nature-300" role="status" aria-live="polite">
                                                 {commissionResult}
                                             </p>
                                         )}

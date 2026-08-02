@@ -17,6 +17,15 @@
 
 import Router from '@koa/router';
 import crypto from 'node:crypto';
+// Top-level, not `await import(...)` inside the handler (review finding, accepted — though not for the reason
+// given). ESM caches a module after its first import, so a dynamic import in a handler is a resolved-promise
+// await on an already-loaded module, not "per-request module loading overhead". And libp2p is loaded at boot by
+// p2p.ts regardless, so nothing is being deferred. Hoisted because a needless await in the middle of the one
+// line that spends the community's beans is worth removing on clarity alone.
+//
+// The purchase route still does it dynamically. Left alone here rather than swept up: it is a different file
+// with no coverage in this PR, and a one-line drive-by in the path that debits members is not free.
+import { peerIdFromString } from '@libp2p/peer-id';
 import { getMember, getNodeConfig, canOperateTreasury } from '../state-engine.js';
 import {
     getConnectorByPublicUrl, peerIdFromAddress, ENABLE_PEER_CONNECTORS,
@@ -245,7 +254,6 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         }
 
         try {
-            const { peerIdFromString } = await import('@libp2p/peer-id');
             const outcome = await settleCrossNodePurchase(node, peerIdFromString(peerId), node.peerId.toString(), privateKey, {
                 key,
                 peerId,

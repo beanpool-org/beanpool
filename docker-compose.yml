@@ -30,6 +30,17 @@ services:
       - ENFORCE_READ_AUTH=${ENFORCE_READ_AUTH:-}
       - ENFORCE_WS_AUTH=${ENFORCE_WS_AUTH:-}
       - ENFORCE_LEDGER_AUTH=${ENFORCE_LEDGER_AUTH:-}
+      # Federation (#143). Both EMPTY by default, which is off — the state every node ships in and stays in
+      # until an operator opts that node in through its own preserved .env. Neither was passed through here
+      # before, so the flags existed in the code and could not be set on a deployed node at all: federation
+      # was unreachable in production for want of two lines, which is why nothing has ever exercised it
+      # between two real nodes.
+      #
+      # They are separate switches on purpose. ENABLE_PEER_CONNECTORS decides whether this node talks to
+      # peers at all; FEDERATION_SETTLEMENT decides whether it accepts NEW cross-node trades, and turning
+      # that one back off still finishes trades already in flight (federation-settlement.ts).
+      - ENABLE_PEER_CONNECTORS=${ENABLE_PEER_CONNECTORS:-}
+      - FEDERATION_SETTLEMENT=${FEDERATION_SETTLEMENT:-}
       # Diagnostics: on SIGUSR2 (sent by the host watchdog when a node's event
       # loop hangs) Node writes a diagnostic report — including the blocked JS
       # stack — to /data (persisted), so a freeze like 2026-07-18 is diagnosable

@@ -627,3 +627,41 @@ CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, di
 -- because only inbound reservations ever carry a `reserved_until`.
 CREATE INDEX IF NOT EXISTS idx_settlements_reserved_until ON settlements(reserved_until)
     WHERE direction = 'inbound' AND state = 'reserved';
+
+-- 22. Federation links (#143, slice step 3) — a peer relationship as an ENTERPRISE.
+--
+-- Spec: docs/federation-connector.md §7. "A federation link is an enterprise": each peer we settle with
+-- gets a named enterprise in the Commons tab ("Byron Link") with a treasury, a keeper, and a visible
+-- energy balance. This table is the join between the two halves that already exist — the peer id that
+-- keys `bridge_<peer>`, and the `is_treasury=1` members row that gives an enterprise a face.
+--
+-- WHY A LINK IS NOT JUST THE BRIDGE ROW. The bridge account is the tab and CANNOT be spent
+-- (federation-economics.md §2.2) — it is a record of obligation between two nodes, not a pot. Calling a
+-- favour in needs real beans from this community's own circulation, so the link needs an account of its
+-- own. Two numbers on one card, and conflating them is the mistake §2.4 exists to prevent:
+--
+--   energy balance = balance of `bridge_<peer_id>`   — what we owe / are owed. Not spendable.
+--   treasury       = balance of `treasury_pubkey`     — real beans the keeper may commission with.
+--
+-- Rows are DERIVED, never pushed: a link exists for every connector that has a credit cap, and
+-- `reconcileFederationLinks()` converges that on boot and whenever a cap is set. Setting a cap is
+-- already the deliberate act that enables settlement with a peer (§7), so the enterprise appears at the
+-- same moment rather than being a second thing to remember — and there is no way to end up settling
+-- with a peer that has no visible home and nobody accountable for it.
+CREATE TABLE IF NOT EXISTS federation_links (
+    -- The libp2p peer id, which is what `bridge_<peer>` is keyed on. NOT the connector address: an
+    -- operator may rewrite an address (a moved host, a new port) without it becoming a different peer,
+    -- and the link must survive that — it holds real beans.
+    peer_id            TEXT PRIMARY KEY,
+    treasury_pubkey    TEXT NOT NULL REFERENCES members(public_key),
+    -- The keeper's commissioning ceiling: how much they may commission across the boundary without
+    -- asking anyone (§7, "the ceiling is the safety, and it must be visible alongside the balance").
+    -- Starts at 0 — a link with no ceiling can hold a balance and show it, but cannot spend. Deliberate:
+    -- the link is created automatically, so anything it could do unattended must start switched off.
+    commission_ceiling REAL NOT NULL DEFAULT 0 CHECK (commission_ceiling >= 0),
+    created_at         DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+-- Answers "is this treasury a federation link?" for the Commons list, which reads every treasury and
+-- would otherwise scan this table per row. UNIQUE because one treasury backs exactly one peer: sharing
+-- one across two links would pool two separate obligations into one pot.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_federation_links_treasury ON federation_links(treasury_pubkey);

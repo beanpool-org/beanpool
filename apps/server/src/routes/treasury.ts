@@ -18,6 +18,7 @@ import {
     getBalance, moveToCommons, conservingTransaction,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
+import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import type { RouteDeps } from './types.js';
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
@@ -26,6 +27,21 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const isTreasury = (pk: string): boolean =>
         !!(db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(pk) as any)?.is_treasury;
+
+    /**
+     * The link fields for one enterprise, or null when it is an ordinary treasury (#143 step 3).
+     *
+     * `peerId` is included on the detail read because it is what the ceiling route is keyed on, so a
+     * keeper's screen can act on the link it is already showing without a second lookup.
+     */
+    const linkDetail = (pk: string) => {
+        const link = getLinkByTreasury(pk);
+        return link && {
+            peerId: link.peerId,
+            energyBalance: link.energyBalance,
+            commissionCeiling: link.commissionCeiling,
+        };
+    };
 
     // Gate an operator action: a signed member bound to THIS treasury (#106).
     // Returns the operator pubkey, or null after having written the error response.
@@ -74,15 +90,31 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const rows = db.prepare(
             "SELECT public_key, callsign, avatar_url, earned_credit FROM members WHERE is_treasury=1 ORDER BY callsign COLLATE NOCASE"
         ).all() as any[];
+        // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
+        // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
+        // community with an egg flock and no federation was paying for a feature it does not use.
+        const linksByTreasury = new Map(listFederationLinks().map(l => [l.treasuryPubkey, l]));
         ctx.body = {
             treasuries: rows.map(r => {
                 const b = getBalance(r.public_key);
+                // #143 step 3: a federation link is an enterprise, so it appears in this list like any
+                // other — but it carries a SECOND number that must never be added to its balance. The
+                // energy balance is the `bridge_<peer>` tab: what the two communities owe each other, and
+                // not spendable (federation-economics.md §2.2). `link` is undefined for an ordinary
+                // enterprise, which serialises to an absent field — same thing to a client as the null the
+                // detail read returns.
+                const link = linksByTreasury.get(r.public_key);
                 return {
                     publicKey: r.public_key, name: r.callsign, avatar: r.avatar_url,
                     balance: b.balance, creditLine: r.earned_credit, liveOffers: b.liveOffers,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
                     keepers: treasuryKeepers(r.public_key),
+                    link: link && {
+                        peerId: link.peerId,
+                        energyBalance: link.energyBalance,
+                        commissionCeiling: link.commissionCeiling,
+                    },
                 };
             }),
         };
@@ -108,6 +140,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
             keepers: treasuryKeepers(treasury),
+            // #143 step 3 — see the note in /api/treasuries. Null for an ordinary enterprise.
+            link: linkDetail(treasury),
         };
     });
 

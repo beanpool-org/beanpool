@@ -870,6 +870,18 @@ export interface Treasury {
     balance: number;
     creditLine: number;
     liveOffers: number;
+    /**
+     * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
+     *
+     * `energyBalance` is NOT part of `balance` and the two must never be added: balance is real beans the
+     * keeper can commission with, energyBalance is the `bridge_<peer>` tab between the two communities and
+     * cannot be spent at all.
+     */
+    link?: {
+        peerId: string;
+        energyBalance: number;
+        commissionCeiling: number;
+    } | null;
 }
 
 export async function getTreasuries(): Promise<{ treasuries: Treasury[] }> {

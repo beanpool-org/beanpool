@@ -7,6 +7,7 @@ export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
+import { reconcileFederationLinks } from './federation-link.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -366,6 +367,16 @@ export function initStateEngine(): void {
         const n = registerBridgeDecayExemptions();
         if (n > 0) console.log(`🌉 Registered ${n} bridge account(s) as demurrage-exempt`);
     } catch (e) { console.warn('[Federation] Failed to register bridge demurrage exemptions:', e); }
+
+    // #143 step 3 — every peer with a credit cap has a link enterprise. Convergent rather than
+    // incremental (see federation-link.ts): a cap set by hand-editing connectors.json, or set by a build
+    // that predates links, still produces one, and running this on every boot is a no-op once they exist.
+    // Wrapped because a link is a convenience over machinery that works without it — settlement must not
+    // fail to start because an enterprise could not be named.
+    try {
+        const n = reconcileFederationLinks(createTreasury);
+        if (n > 0) console.log(`🔗 Created ${n} federation link enterprise(s) for capped peers`);
+    } catch (e) { console.warn('[Federation] Failed to reconcile federation links:', e); }
 
     // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes)
     setInterval(() => {
@@ -2771,10 +2782,19 @@ export function adminSetOperator(publicKey: string, granted: boolean): { ok: tru
  * keypair is generated so an operator can load the treasury identity onto a device later; day to
  * day it is driven server-side through operator-authenticated routes.
  */
-export function createTreasury(name: string, avatar: string, creditLine = 0): { publicKey: string } {
+export function createTreasury(
+    name: string,
+    avatar: string,
+    creditLine = 0,
+    // #143 step 3: a federation link is created AUTOMATICALLY when a peer gains a credit cap, so there is
+    // no operator present to choose a picture. The Commons card already falls back to a glyph on a blank
+    // avatar, so an avatarless enterprise renders fine. Opt-in rather than dropping the guard, which stays
+    // as it was for every operator-created treasury.
+    opts: { systemCreated?: boolean } = {},
+): { publicKey: string } {
     const trimmed = (name || '').trim();
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
-    if (!avatar) throw new Error('Treasury needs an avatar image');
+    if (!avatar && !opts.systemCreated) throw new Error('Treasury needs an avatar image');
     if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status!='migrated'").get(trimmed)) {
         throw new Error('That name is already taken');
     }

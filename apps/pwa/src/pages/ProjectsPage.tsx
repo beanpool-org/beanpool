@@ -214,6 +214,29 @@ export function ProjectsPage({ identity }: Props) {
     // Calculate progress helpers
     const getProgress = (current: number, goal: number) => Math.min(100, (current / goal) * 100);
 
+    /**
+     * A federation link's energy balance, in plain language (#143 step 3).
+     *
+     * THE SIGN IS NOT INTUITIVE and is worth stating: `getEnergyBalance` documents positive as "we owe them
+     * work" and negative as "they owe us work (we extended credit)". Our member buying from theirs pushes
+     * the tab POSITIVE — their community did the work, ours has not returned it yet.
+     *
+     * Written as a sentence rather than a signed number because a bare "-5" on a card is exactly the kind of
+     * thing a member has to guess at, and the whole point of surfacing this is that they should not have to.
+     */
+    const energySentence = (energyBalance: number): string => {
+        // Rounded here even though the server already sends 2dp, because a client should not depend on a
+        // server's presentation choices — a raw 12.3456789 arriving would otherwise land on the card.
+        const beans = Math.round(Math.abs(energyBalance) * 100) / 100;
+        if (beans === 0) return 'Square — nothing owed either way';
+        // The WORD "beans" in prose, and the 🫘 glyph only in the numeric badges where it reads as a unit
+        // (review finding). A screen reader saying "we owe them 8 beans of work" is the sentence; "8 beans
+        // symbol of work" is not.
+        return energyBalance > 0
+            ? `We owe them ${beans} bean${beans === 1 ? '' : 's'} of work`
+            : `They owe us ${beans} bean${beans === 1 ? '' : 's'} of work`;
+    };
+
     const getDaysRemaining = (deadline: string | null) => {
         if (!deadline) return null;
         const diff = new Date(deadline).getTime() - new Date().getTime();
@@ -249,18 +272,47 @@ export function ProjectsPage({ identity }: Props) {
                     <h2 className="text-white font-bold text-sm mb-2 flex items-center gap-2"><span>🏛️</span> Community Treasuries</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {treasuries.map(t => (
-                            <div key={t.publicKey} className="bg-nature-900 border border-nature-800 rounded-xl p-3 flex items-center gap-3">
+                            <div key={t.publicKey} className={`bg-nature-900 border rounded-xl p-3 flex items-center gap-3 ${t.link ? 'border-sky-900/60' : 'border-nature-800'}`}>
                                 {t.avatar ? (
                                     <img src={t.avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
                                 ) : (
-                                    <div className="w-10 h-10 rounded-full bg-nature-800 flex items-center justify-center">🏛️</div>
+                                    <div className="w-10 h-10 rounded-full bg-nature-800 flex items-center justify-center" aria-hidden="true">{t.link ? '🔗' : '🏛️'}</div>
                                 )}
                                 <div className="flex-1 min-w-0">
                                     <div className="text-white font-semibold text-sm truncate">{t.name}</div>
-                                    <div className="text-nature-400 text-xs">{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</div>
+                                    {/* A LINK'S HEADLINE IS THE ENERGY BALANCE, not its offer count — #143 §7: "we have
+                                        delivered 480 beans of work to Byron and had none back" is the fact that makes
+                                        anyone call a favour in, and it is the reason the card exists. */}
+                                    {t.link ? (
+                                        <div className="text-nature-400 text-xs">{energySentence(t.link.energyBalance)}</div>
+                                    ) : (
+                                        <div className="text-nature-400 text-xs">{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</div>
+                                    )}
                                 </div>
-                                <div className={`font-bold text-sm ${t.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`} title={t.balance < 0 ? 'Running a deficit on its credit line' : 'In surplus'}>
-                                    {t.balance} 🫘
+                                <div className="text-right">
+                                    {/* aria-label, not title: a `title` on a non-interactive div is invisible
+                                        to touch and unreachable by keyboard, so on a phone — which is how this
+                                        app is used — the deficit/surplus meaning was carried by colour alone. */}
+                                    <div
+                                        className={`font-bold text-sm ${t.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`}
+                                        aria-label={`${t.balance} beans — ${t.balance < 0 ? 'running a deficit on its credit line' : 'in surplus'}`}
+                                    >
+                                        {t.balance} 🫘
+                                    </div>
+                                    {/* The ceiling sits beside the balance because §7 makes it the safety on
+                                        commissioning: "the ceiling is the safety, and it must be visible alongside
+                                        the balance". A link starts at 0, so say so plainly rather than showing "0".
+
+                                        text-xs, not text-[0.65rem] (~10.4px): below the 12px floor, and this app
+                                        targets 320dp at 1.3× font scaling, so a hand-tuned size that small is
+                                        unreadable exactly where it matters most. */}
+                                    {t.link && (
+                                        <div className="text-nature-400 text-xs mt-0.5">
+                                            {t.link.commissionCeiling > 0
+                                                ? `up to ${t.link.commissionCeiling} 🫘 spendable`
+                                                : 'commissioning off'}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}

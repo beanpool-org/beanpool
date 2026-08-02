@@ -225,11 +225,16 @@ export function ProjectsPage({ identity }: Props) {
      * thing a member has to guess at, and the whole point of surfacing this is that they should not have to.
      */
     const energySentence = (energyBalance: number): string => {
-        const beans = Math.abs(energyBalance);
+        // Rounded here even though the server already sends 2dp, because a client should not depend on a
+        // server's presentation choices — a raw 12.3456789 arriving would otherwise land on the card.
+        const beans = Math.round(Math.abs(energyBalance) * 100) / 100;
         if (beans === 0) return 'Square — nothing owed either way';
+        // The WORD "beans" in prose, and the 🫘 glyph only in the numeric badges where it reads as a unit
+        // (review finding). A screen reader saying "we owe them 8 beans of work" is the sentence; "8 beans
+        // symbol of work" is not.
         return energyBalance > 0
-            ? `We owe them ${beans} 🫘 of work`
-            : `They owe us ${beans} 🫘 of work`;
+            ? `We owe them ${beans} bean${beans === 1 ? '' : 's'} of work`
+            : `They owe us ${beans} bean${beans === 1 ? '' : 's'} of work`;
     };
 
     const getDaysRemaining = (deadline: string | null) => {
@@ -271,7 +276,7 @@ export function ProjectsPage({ identity }: Props) {
                                 {t.avatar ? (
                                     <img src={t.avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
                                 ) : (
-                                    <div className="w-10 h-10 rounded-full bg-nature-800 flex items-center justify-center">{t.link ? '🔗' : '🏛️'}</div>
+                                    <div className="w-10 h-10 rounded-full bg-nature-800 flex items-center justify-center" aria-hidden="true">{t.link ? '🔗' : '🏛️'}</div>
                                 )}
                                 <div className="flex-1 min-w-0">
                                     <div className="text-white font-semibold text-sm truncate">{t.name}</div>
@@ -285,14 +290,24 @@ export function ProjectsPage({ identity }: Props) {
                                     )}
                                 </div>
                                 <div className="text-right">
-                                    <div className={`font-bold text-sm ${t.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`} title={t.balance < 0 ? 'Running a deficit on its credit line' : 'In surplus'}>
+                                    {/* aria-label, not title: a `title` on a non-interactive div is invisible
+                                        to touch and unreachable by keyboard, so on a phone — which is how this
+                                        app is used — the deficit/surplus meaning was carried by colour alone. */}
+                                    <div
+                                        className={`font-bold text-sm ${t.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`}
+                                        aria-label={`${t.balance} beans — ${t.balance < 0 ? 'running a deficit on its credit line' : 'in surplus'}`}
+                                    >
                                         {t.balance} 🫘
                                     </div>
                                     {/* The ceiling sits beside the balance because §7 makes it the safety on
                                         commissioning: "the ceiling is the safety, and it must be visible alongside
-                                        the balance". A link starts at 0, so say so plainly rather than showing "0". */}
+                                        the balance". A link starts at 0, so say so plainly rather than showing "0".
+
+                                        text-xs, not text-[0.65rem] (~10.4px): below the 12px floor, and this app
+                                        targets 320dp at 1.3× font scaling, so a hand-tuned size that small is
+                                        unreadable exactly where it matters most. */}
                                     {t.link && (
-                                        <div className="text-nature-500 text-[0.65rem] mt-0.5">
+                                        <div className="text-nature-400 text-xs mt-0.5">
                                             {t.link.commissionCeiling > 0
                                                 ? `up to ${t.link.commissionCeiling} 🫘 spendable`
                                                 : 'commissioning off'}

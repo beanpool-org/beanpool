@@ -35,7 +35,14 @@ export interface FederationLink {
     peerId: string;
     treasuryPubkey: string;
     name: string;
-    /** Balance of `bridge_<peerId>` — the tab. Positive = the peer owes us. NOT spendable. */
+    /**
+     * Balance of `bridge_<peerId>` — the tab. **Positive = WE owe them work**, negative = they owe us
+     * (we extended credit). NOT spendable (§2.2).
+     *
+     * The sign matches `getEnergyBalance`, which is the one definition. Stated emphatically because this
+     * comment shipped INVERTED in review and the reviewer caught it: our member buying from theirs pushes
+     * the tab positive, because their community did the work and ours has not returned it yet.
+     */
     energyBalance: number;
     /** Balance of the link's own account — real beans a keeper may commission with. */
     treasuryBalance: number;
@@ -79,21 +86,34 @@ export function ensureFederationLink(
     ensureBridgeAccount(peerId);
 
     let name = linkNameFor(callsign, peerId);
-    let created: { publicKey: string };
-    try {
-        created = createTreasury(name, '', 0, { systemCreated: true });
-    } catch (e: any) {
-        // `createTreasury` refuses a duplicate name (case-insensitive across all non-migrated members).
-        // Two peers whose operators chose the same callsign is not a configuration error we should
-        // refuse a link over, and neither is an operator having already made a treasury by that name.
-        if (!/already taken/i.test(e?.message ?? '')) throw e;
-        name = `${name} (${peerId.slice(-6)})`;
-        created = createTreasury(name, '', 0, { systemCreated: true });
-        logger.info('P2P', `[Link] Name collision — link for ${peerId.slice(-8)} named "${name}"`);
-    }
+    let created!: { publicKey: string };
 
-    db.prepare('INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES (?, ?)')
-        .run(peerId, created.publicKey);
+    // ONE TRANSACTION over the treasury and the link row (review finding, accepted). Without it, an insert
+    // that failed would leave the treasury behind with nothing pointing at it, and that orphan appears in the
+    // Commons list as a nameless enterprise members cannot account for. `createTreasury` runs its own
+    // transaction, which becomes a savepoint inside this one.
+    //
+    // WHAT A ROLLBACK DOES NOT UNDO, stated so nobody has to re-derive it: `createTreasury` also touches the
+    // in-memory ledger (`initializeGenesisAccount`, `setDecayExempt`) and broadcasts `member_joined`. Both
+    // survive a rollback — and both are harmless here. The phantom ledger account holds a balance of ZERO, so
+    // it cannot move any conservation sum, and it is gone at the next boot because the ledger is rebuilt from
+    // `accounts`. The broadcast resolves itself the moment a client refetches.
+    db.transaction(() => {
+        try {
+            created = createTreasury(name, '', 0, { systemCreated: true });
+        } catch (e: any) {
+            // `createTreasury` refuses a duplicate name (case-insensitive across all non-migrated members).
+            // Two peers whose operators chose the same callsign is not a configuration error we should
+            // refuse a link over, and neither is an operator having already made a treasury by that name.
+            if (!/already taken/i.test(e?.message ?? '')) throw e;
+            name = `${name} (${peerId.slice(-6)})`;
+            created = createTreasury(name, '', 0, { systemCreated: true });
+            logger.info('P2P', `[Link] Name collision — link for ${peerId.slice(-8)} named "${name}"`);
+        }
+        db.prepare('INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES (?, ?)')
+            .run(peerId, created.publicKey);
+    })();
+
     logger.info('P2P', `[Link] Created "${name}" for peer ${peerId.slice(-8)} (treasury ${created.publicKey.slice(0, 12)}…, ceiling 0)`);
 
     return getFederationLink(peerId);
@@ -117,12 +137,44 @@ export function getLinkByTreasury(treasuryPubkey: string): FederationLink | null
     return row ? hydrate(row) : null;
 }
 
+/**
+ * Every link, with both balances, in TWO queries regardless of how many peers there are.
+ *
+ * Was 1+2N — `hydrate` per row, each doing its own two balance reads (review finding, accepted). N is small
+ * (a node has a handful of peers) but this is the call the Commons list uses for every treasury on the page,
+ * so the multiplier is the page's, not federation's.
+ *
+ * NOT the suggested single query with `('bridge_' || l.peer_id)` inlined. `bridgeAccountId()` is deliberately
+ * the one place that decides what a bridge account is named — the same reasoning `bridgeDisplayName` carries —
+ * and a second definition living in SQL is exactly how the two drift apart. One extra round trip is cheaper
+ * than that.
+ */
 export function listFederationLinks(): FederationLink[] {
     const rows = db.prepare(`SELECT l.peer_id, l.treasury_pubkey, l.commission_ceiling, l.created_at, m.callsign
                              FROM federation_links l
                              JOIN members m ON m.public_key = l.treasury_pubkey
                              ORDER BY m.callsign COLLATE NOCASE`).all() as any[];
-    return rows.map(hydrate);
+    if (rows.length === 0) return [];
+
+    const wanted = rows.flatMap(r => [r.treasury_pubkey, bridgeAccountId(r.peer_id)]);
+    const balances = new Map<string, number>(
+        (db.prepare(`SELECT public_key, balance FROM accounts
+                     WHERE public_key IN (${wanted.map(() => '?').join(',')})`).all(...wanted) as any[])
+            .map(a => [a.public_key, a.balance]),
+    );
+    const at = (key: string): number => balances.get(key) ?? 0;
+
+    return rows.map(row => ({
+        peerId: row.peer_id,
+        treasuryPubkey: row.treasury_pubkey,
+        name: row.callsign,
+        // Rounded exactly as the single-link reads do: 2dp for the tab (presentation — enforcement uses
+        // energyBalanceExact), 4dp for a balance.
+        energyBalance: Math.round(at(bridgeAccountId(row.peer_id)) * 100) / 100,
+        treasuryBalance: Math.round(at(row.treasury_pubkey) * 10000) / 10000,
+        commissionCeiling: row.commission_ceiling,
+        createdAt: row.created_at ?? null,
+    }));
 }
 
 function hydrate(row: any): FederationLink {

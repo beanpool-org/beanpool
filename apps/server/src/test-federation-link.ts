@@ -28,6 +28,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import {
     getFederationLink, getLinkByTreasury, listFederationLinks, reconcileFederationLinks, linkNameFor,
+    ensureFederationLink,
 } from './federation-link.js';
 import { bridgeAccountId } from './federation-bridge.js';
 
@@ -220,8 +221,29 @@ async function main() {
         `10b. a peer with no callsign is still nameable, from the id tail every log line already uses (got "${linkNameFor(undefined, '12D3KooWabcdefgh')}")`);
     assert(linkNameFor('   ', 'xyz98765432') === 'Peer 98765432 Link', '10c. and a blank callsign is treated as absent, not used');
 
+    // ── 11. A failed link row must not leave an orphaned treasury. ───────────────────────────────────────
+    // The rollback (review finding). Forced by a createTreasury that really creates one — so there IS a
+    // treasury inside the transaction to roll back — but returns a pubkey another link already holds, which
+    // violates the unique index on treasury_pubkey. That is the shape of the failure the finding described,
+    // with the real `createTreasury` doing the work whose undo is being asserted.
+    const treasuriesBefore = (db.prepare('SELECT COUNT(*) AS n FROM members WHERE is_treasury = 1').get() as any).n;
+    let threw = false;
+    try {
+        ensureFederationLink('12D3KooWRollbackTest0000', 'Rollback', (n, a, c, o) => {
+            createTreasury(n, a, c, o);                      // really created, inside the transaction
+            return { publicKey: link!.treasuryPubkey };       // already linked → unique index fires
+        });
+    } catch { threw = true; }
+    assert(threw, '11a. a link row that cannot be written throws rather than reporting success');
+    assert(getFederationLink('12D3KooWRollbackTest0000') === null, '11b. and no link exists for that peer');
+    const treasuriesAfter = (db.prepare('SELECT COUNT(*) AS n FROM members WHERE is_treasury = 1').get() as any).n;
+    assert(treasuriesAfter === treasuriesBefore,
+        `11c. THE POINT: the treasury created inside the failed transaction was rolled back (${treasuriesBefore} → ${treasuriesAfter}) — no nameless enterprise left in the Commons list for members to puzzle over`);
+    assert(db.prepare("SELECT 1 FROM members WHERE callsign = 'Rollback Link'").get() === undefined,
+        '11d. by name too, so a retry is not blocked by the corpse of the last attempt');
+
     assert(nodeTotal() === baseline,
-        `11. FINALLY: across every link created here the ledger is unchanged (${baseline} → ${nodeTotal()}) — links account, they do not mint`);
+        `12. FINALLY: across every link created here the ledger is unchanged (${baseline} → ${nodeTotal()}) — links account, they do not mint`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -148,7 +148,11 @@ export function cacheRemoteListings(
                 || typeof l.title !== 'string' || !l.title
                 || typeof l.authorPublicKey !== 'string' || !l.authorPublicKey
                 || (l.type !== 'offer' && l.type !== 'need')
-                || !Number.isFinite(Number(l.credits))) {
+                // NEGATIVE is refused, ZERO is kept (review finding, accepted as `< 0` not `<= 0`). The
+                // compose form's own rule is `Number(credits) < 0` → invalid, so a local member may post at
+                // zero — a gift, or "ask me" — and refusing that from a peer would hold their members to a
+                // stricter rule than ours. A negative price is nonsense in either community.
+                || !Number.isFinite(Number(l.credits)) || Number(l.credits) < 0) {
                 dropped++;
                 continue;
             }
@@ -319,6 +323,10 @@ function originNodeFor(peerId: string): string | null {
 }
 
 let pullTimer: ReturnType<typeof setInterval> | null = null;
+// The FIRST pull's handle, tracked separately (review finding). Without it, a shutdown inside the 30-second
+// startup window left the timeout armed, and it fired against a closed libp2p node — an error at exactly the
+// moment nobody is reading logs, on a path whose whole point is that failure is survivable.
+let initialPullTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Start the pull loop. Idempotent, and a no-op when peer connectors are off.
@@ -327,14 +335,19 @@ let pullTimer: ReturnType<typeof setInterval> | null = null;
  * one interval stale is not worth that.
  */
 export function startListingPull(node: Libp2p): void {
-    if (!ENABLE_PEER_CONNECTORS || !node || pullTimer) return;
+    if (!ENABLE_PEER_CONNECTORS || !node || pullTimer || initialPullTimer) return;
     const tick = () => { pullAllPeerListings(node).catch(e => logger.warn('P2P', `[Listings] Pull round failed: ${e?.message || e}`)); };
-    setTimeout(tick, FIRST_PULL_DELAY_MS);
+    // .unref() on both, matching the settlement recovery timers above: a discovery refresh must never be the
+    // reason a process refuses to exit.
+    initialPullTimer = setTimeout(() => { initialPullTimer = null; tick(); }, FIRST_PULL_DELAY_MS);
+    initialPullTimer.unref?.();
     pullTimer = setInterval(tick, LISTING_PULL_INTERVAL_MS);
+    pullTimer.unref?.();
     logger.info('P2P', `[Listings] Pull loop started — every ${LISTING_PULL_INTERVAL_MS / 60_000} min`);
 }
 
-/** Stop the loop. For tests, and so a shutdown does not leave a timer dialling. */
+/** Stop the loop. For tests, and so a shutdown does not leave a timer dialling a closed node. */
 export function stopListingPull(): void {
+    if (initialPullTimer) { clearTimeout(initialPullTimer); initialPullTimer = null; }
     if (pullTimer) { clearInterval(pullTimer); pullTimer = null; }
 }

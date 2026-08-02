@@ -9,6 +9,7 @@
 import type { Libp2p } from 'libp2p';
 import { isPeerTrusted } from './connector-manager.js';
 import { listingsForPeer } from './federation-listings.js';
+import { logger } from './logger.js';
 import { getMember, getBalance, createConversation, sendMessage, registerVisitor } from './state-engine.js';
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 import { getNodeRole } from './state-engine.js';
@@ -316,7 +317,12 @@ export function registerFederationHandler(node: Libp2p): void {
                 } else {
                     const listings = listingsForPeer(remotePeerId);
                     response = { listings };
-                    console.log(`[Federation] → ${remotePeerId.slice(-8)}: served ${listings.length} listing(s)`);
+                    // `logger`, not console (review finding) — this is the line an operator greps for when a
+                    // board looks wrong, so it belongs in the structured stream with the P2P tag the rest of
+                    // federation uses. The console calls elsewhere in this handler predate that and are left
+                    // alone: converting them is right, but not inside a PR that also changes settlement's
+                    // most central file.
+                    logger.info('P2P', `[Federation] → ${remotePeerId.slice(-8)}: served ${listings.length} listing(s)`);
                 }
             }
             // ── Cross-node settlement (#104 §2.5) ────────────────────────────────────────────────

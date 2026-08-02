@@ -164,6 +164,15 @@ async function main() {
     assert(!getMember('COMMONS_POOL')?.homeNodeUrl,
         '3c. in particular a synthetic author never became a member row — registerVisitor would have tried to create one for a ledger account');
 
+    // Credits: NEGATIVE refused, ZERO kept. The compose form's own rule is `< 0` → invalid, so a local member
+    // may post at zero (a gift, or "ask me") and holding a peer's members to a stricter rule than our own
+    // would silently hide their free offers.
+    res = cacheRemoteListings(BYRON, BYRON_URL, [listing({ credits: -50, title: 'Negative price' })]);
+    assert(res.cached === 0 && res.dropped === 1, `3d. a NEGATIVE price is refused (${res.cached}/${res.dropped}) — nonsense in either community`);
+    res = cacheRemoteListings(BYRON, BYRON_URL, [listing({ credits: 0, title: 'A gift' })]);
+    assert(res.cached === 1,
+        `3e. but ZERO is kept (${res.cached} cached) — the local form allows it, so a peer's free offer is not held to a stricter rule than ours`);
+
     // ── 3.5. CALLSIGN COLLISIONS. Unique per node (#83); a remote name was only unique at home. ──────────
     // This threw `UNIQUE constraint failed: idx_members_callsign_unique` on the first run of this suite, and
     // because the round is one transaction, ONE unlucky name meant the peer's entire board never cached.

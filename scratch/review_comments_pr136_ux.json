@@ -1,8 +1,0 @@
-[
-  {
-    "path": "apps/server/src/test-schema-upgrade.ts",
-    "position": 336,
-    "side": "RIGHT",
-    "body": "### UX & Accessibility (Developer Experience)\n**Risk:** Inconsistent error message formatting in `test-schema-upgrade.ts`. Neighboring assertions use block indentation (`\\n     `) to format multi-line diagnostic outputs, whereas this error message concatenates skipped objects inline. If multiple objects are skipped on a table, the inline output can wrap awkwardly in CI logs.\n\n**Suggested Fix:**\n```typescript\n                ? `${absent.length} of ${expected.length} schema.sql objects on ${table} were SKIPPED:\\n     `\n                  + absent.join('\\n     ')\n                  + '\\n     The boot survived but delta sync would be quietly broken.'\n```"
-  }
-]

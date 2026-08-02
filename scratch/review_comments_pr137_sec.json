@@ -1,8 +1,0 @@
-[
-  {
-    "path": "packages/beanpool-core/src/ledger.ts",
-    "position": 81,
-    "side": "RIGHT",
-    "body": "### Security Audit\n**Risk:** Floating point precision drift risk when unwinding queued decay. Accumulating `undoneCredit = reduce((total, e) => total + e.amount, 0)` and subtracting it in one step causes IEEE 754 float precision loss differences compared to the individual `COMMONS_BALANCE += decayedAmount` operations performed during decay application. Across repeated `loadState()` calls on high-volume accounts, this micro-drift can slowly mint or burn fractional bean dust.\n\n**Suggested Fix:**\nSubtract each queued decay amount individually (or in reverse order of addition) to maintain exact float operation parity:\n```typescript\nfor (let i = this.decayEvents.length - 1; i >= 0; i--) {\n    COMMONS_BALANCE -= this.decayEvents[i].amount;\n}\n```"
-  }
-]

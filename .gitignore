@@ -69,3 +69,7 @@ deploy-targets.conf
 HANDOVER.md
 SECURITY-AUDIT.md
 
+
+# Agent scratch space — review diffs, generated reports, throwaway scripts. Kept on disk,
+# never in the repo. Swept into #151 by a `git add -A`; ignored so it cannot recur.
+scratch/

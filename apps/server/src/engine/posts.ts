@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount } from '@beanpool/core';
+import { isSyntheticAccount, parseReachPeers, type PostReach } from '@beanpool/core';
 import { db } from '../db/db.js';
 import crypto from 'node:crypto';
 import {
@@ -47,6 +47,43 @@ function assertNotOnHoliday(publicKey: string): void {
     if (isOnHoliday(publicKey)) throw new Error(HOLIDAY_MODE_ERROR);
 }
 
+/**
+ * Turn whatever a client sent for reach into the two columns, fail-closed (#143 step 4).
+ *
+ * FAIL-CLOSED MEANS 'local' HERE. Everything unrecognised — a typo, a number, a reach the client invented,
+ * `reach: 'peers'` with an empty list — becomes a listing that stays home. The alternative, throwing, would
+ * turn a client bug into a member unable to post at all; and the alternative default, letting it travel, would
+ * export a listing whose author asked for something we did not understand.
+ *
+ * `reach: 'peers'` with NO usable peer ids collapses to 'local' rather than being stored as a 'peers' row with
+ * an empty list. Both behave identically today, but the collapsed form cannot later be misread as "named peers,
+ * we just lost the names" — and it keeps the partial index (which excludes 'local') free of rows that can never
+ * be served.
+ */
+/** The reach currently stored for a post, for an update that changes only the peer list. */
+function existingReach(id: string): PostReach {
+    const row = db.prepare('SELECT reach FROM posts WHERE id = ?').get(id) as any;
+    return (row?.reach ?? 'local') as PostReach;
+}
+
+/** The peer list currently stored, for an update that changes only the reach. */
+function existingReachPeers(id: string): string[] {
+    const row = db.prepare('SELECT reach_peers FROM posts WHERE id = ?').get(id) as any;
+    return parseReachPeers(row?.reach_peers);
+}
+
+function normaliseReach(rawReach: unknown, rawPeers: unknown): { reach: PostReach; reachPeers: string | null } {
+    if (rawReach === 'everywhere') return { reach: 'everywhere', reachPeers: null };
+    if (rawReach === 'peers') {
+        const peers = Array.isArray(rawPeers)
+            ? [...new Set(rawPeers.filter((p): p is string => typeof p === 'string' && p.trim().length > 0).map(p => p.trim()))]
+            : [];
+        if (peers.length === 0) return { reach: 'local', reachPeers: null };
+        return { reach: 'peers', reachPeers: JSON.stringify(peers) };
+    }
+    return { reach: 'local', reachPeers: null };
+}
+
 export function createPost(
     broadcast: BroadcastFn,
     type: 'offer' | 'need',
@@ -61,7 +98,11 @@ export function createPost(
     photos?: string[],
     repeatable?: boolean,
     id?: string,
-    cashAlsoNeeded?: boolean
+    cashAlsoNeeded?: boolean,
+    // #143 step 4. An OPTIONS OBJECT rather than positions 15 and 16: this list is already fourteen
+    // positional parameters deep, and `createPost(…, undefined, undefined, 'peers', [id])` at a call site
+    // is how the wrong argument ends up in the wrong slot.
+    options?: { reach?: unknown; reachPeers?: unknown },
 ): MarketplacePost | null {
     assertMemberActive(authorPublicKey);
     if (!getMember(db, authorPublicKey)) {
@@ -76,11 +117,12 @@ export function createPost(
     const finalId = id || crypto.randomUUID();
     const createdAt = new Date().toISOString();
     const searchKeywords = generateSearchKeywords(title, description, category);
-    
+    const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
+
     db.transaction(() => {
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?)`).run(finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt, repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords, cashAlsoNeeded ? 1 : 0);
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?)`).run(finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt, repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords, cashAlsoNeeded ? 1 : 0, reach, reachPeers);
 
         if (photos && photos.length > 0) {
             const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
@@ -140,6 +182,16 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.cashAlsoNeeded !== undefined) { fields.push('cash_also_needed = ?'); values.push((updates.cashAlsoNeeded === true || (updates.cashAlsoNeeded as any) === 'true') ? 1 : 0); }
     if (updates.lat !== undefined) { fields.push('lat = ?'); values.push(updates.lat); }
     if (updates.lng !== undefined) { fields.push('lng = ?'); values.push(updates.lng); }
+    // #143 step 4. BOTH columns always move together, through the same normaliser the create path uses —
+    // otherwise switching 'peers' → 'everywhere' would leave a stale peer list behind, and a client sending
+    // only `reachPeers` could leave a listing claiming named peers that no longer match the reach.
+    // `reachPeers` alone is accepted so a member can edit the named list without restating the reach.
+    if (updates.reach !== undefined || (updates as any).reachPeers !== undefined) {
+        const nextReach = updates.reach !== undefined ? updates.reach : existingReach(id);
+        const norm = normaliseReach(nextReach, (updates as any).reachPeers ?? existingReachPeers(id));
+        fields.push('reach = ?'); values.push(norm.reach);
+        fields.push('reach_peers = ?'); values.push(norm.reachPeers);
+    }
 
     const now = new Date().toISOString();
     fields.push('updated_at = ?');

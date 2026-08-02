@@ -197,6 +197,21 @@ export function initSchema() {
     // CREATE TRIGGER IF NOT EXISTS is a no-op against an existing trigger.
     try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
 
+    // #143 step 4: per-listing reach. Existing rows take 'local', which is the point — nobody who posted
+    // before federation existed agreed to their listing travelling.
+    //
+    // MUST BE HERE, BEFORE the schema.sql exec below, because schema.sql defines idx_posts_reach over these
+    // columns and CREATE INDEX on a missing column is a hard error, not a no-op. test-schema-upgrade caught
+    // exactly that when these two lines sat with the other posts migrations further down — the suite exists
+    // for this failure and earned its keep.
+    //
+    // NO CHECK CONSTRAINT on the migrated column, unlike the fresh-schema definition: SQLite cannot add one
+    // via ALTER TABLE, and rebuilding `posts` to acquire it would be a table copy on every live node for a
+    // constraint the write paths already enforce. Fresh databases get it; upgraded ones rely on
+    // `normaliseReach` at the boundary, which is where a bad value would come from anyway.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN reach TEXT NOT NULL DEFAULT 'local'`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN reach_peers TEXT`).run(); } catch { }
+
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
 

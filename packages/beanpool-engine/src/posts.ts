@@ -6,7 +6,9 @@ import type Database from 'better-sqlite3';
 import {
     OFFER_BANDS,
     getTier,
-    grantedCreditForTier
+    grantedCreditForTier,
+    parseReachPeers,
+    type PostReach
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
 
@@ -38,6 +40,10 @@ export interface MarketplacePost {
     lng?: number;
     photos?: string[];
     originNode?: string;
+    /** #143 step 4: how far this listing travels. Absent on a row written before the column existed → 'local'. */
+    reach?: PostReach;
+    /** Peer ids named when `reach === 'peers'`. Empty for every other reach. */
+    reachPeers?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
     authorAvatarUrl?: string | null;
@@ -167,6 +173,11 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         lng: row.lng,
         photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => `/api/marketplace/posts/${row.id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`),
         originNode: row.origin_node,
+        // #143 step 4. `reach` falls back to 'local' rather than undefined so a client never has to decide
+        // what an absent value means — on a database upgraded before the column existed, it means "stays
+        // home", and that is the answer the poster is entitled to.
+        reach: (row.reach ?? 'local') as PostReach,
+        reachPeers: parseReachPeers(row.reach_peers),
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
         authorAvatarUrl: row.author_avatar ?? null

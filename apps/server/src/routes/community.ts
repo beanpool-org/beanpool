@@ -41,6 +41,7 @@ import {
 import {
     reconcileFederationLinks, getFederationLink, listFederationLinks, setCommissionCeiling,
 } from '../federation-link.js';
+import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
@@ -447,6 +448,20 @@ router.get('/api/federation/links', async (ctx) => {
             createdAt: l.createdAt,
         })),
     };
+});
+
+/**
+ * The communities a listing can be aimed at (#143 step 4).
+ *
+ * Public, because it is a compose-time read: a member choosing "named communities" needs the list to pick
+ * from. Returns only peers we actually settle with — a capless peer would promise discovery into a community
+ * no purchase could complete from.
+ *
+ * Peer IDS, not addresses. The id is what the trust relationship and the bridge are keyed on; an address is
+ * operator configuration that changes when a host moves, and a listing outlives that.
+ */
+router.get('/api/federation/reachable-peers', async (ctx) => {
+    ctx.body = { peers: reachablePeers() };
 });
 
 /**

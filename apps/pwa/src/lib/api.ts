@@ -546,8 +546,30 @@ export async function createMarketplacePost(post: {
     photos?: string[];
     repeatable?: boolean;
     cashAlsoNeeded?: boolean;
+    /** #143 step 4: how far the listing travels. Omitted → the server defaults it to 'local'. */
+    reach?: PostReach;
+    /** Peer ids, only meaningful with reach 'peers'. An empty list makes the server keep it local. */
+    reachPeers?: string[];
 }): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', '/api/marketplace/posts', post);
+}
+
+/** How far a listing travels (#143 step 4). Mirrors PostReach in @beanpool/core. */
+export type PostReach = 'local' | 'peers' | 'everywhere';
+
+export interface ReachablePeer {
+    peerId: string;
+    callsign: string | null;
+}
+
+/**
+ * The communities a listing can be aimed at — peers this node actually settles with.
+ *
+ * Empty on any node without federation configured, which is most of them, and the compose form uses that to
+ * hide the reach chooser entirely rather than offer a decision about nothing.
+ */
+export async function getReachablePeers(): Promise<{ peers: ReachablePeer[] }> {
+    return request('GET', '/api/federation/reachable-peers');
 }
 
 export async function removeMarketplacePost(id: string, authorPublicKey: string): Promise<{ success: boolean }> {

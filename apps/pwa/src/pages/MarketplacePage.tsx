@@ -1821,7 +1821,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     authorRating={authorRatingsCache[post.authorPublicKey]}
                                                     authorEnergy={(post as any).authorEnergyCycled || 0}
                                                     authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
-                                                    remoteNode={(post as any)._remoteNode}
+                                                    // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
+                                                    // the SERVER pulled and cached (#143 step 4). Same badge either way:
+                                                    // a member wants the community it came from, not the mechanism.
+                                                    remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                 />
@@ -1878,7 +1881,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         authorRating={authorRatingsCache[post.authorPublicKey]}
                                                         authorEnergy={(post as any).authorEnergyCycled || 0}
                                                         authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
-                                                        remoteNode={(post as any)._remoteNode}
+                                                        // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
+                                                    // the SERVER pulled and cached (#143 step 4). Same badge either way:
+                                                    // a member wants the community it came from, not the mechanism.
+                                                    remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                         viewMode={viewMode}
                                                         isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                     />

@@ -545,7 +545,15 @@ export function removeConnector(address: string): boolean {
  * that way stayed unidentified, so every peer-id-keyed settlement lookup fail-closed against a connector
  * the operator had configured correctly.
  */
-function peerIdFromAddress(address?: string): string | null {
+/**
+ * Exported because a cross-node purchase has to resolve a peer id from a CONFIGURED connector rather than
+ * from a live connection (#143). `ConnectorStatus.peerId` is only populated once a peer has actually been
+ * dialled, so keying settlement off it would make a purchase fail purely because nothing had connected yet —
+ * and the peer id in the configured address is the same one, known without touching the network.
+ *
+ * It also means the route can never dial a peer that is not in the operator's connector list.
+ */
+export function peerIdFromAddress(address?: string): string | null {
     // typeof, not just truthiness: connector records are loaded from JSON on disk, so a hand-edited or
     // corrupted file can put a number or object here, and `.matchAll` would throw a TypeError during boot.
     if (!address || typeof address !== 'string') return null;

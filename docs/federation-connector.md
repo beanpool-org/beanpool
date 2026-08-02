@@ -175,6 +175,27 @@ access control.
 **Build the thinnest slice of the whole loop first.** Not Half A to completion, not Half B in isolation — one
 purchase across two nodes and one redemption back the other way, proving the tab goes up *and* comes down.
 
+### Also resolved 2026-08-02 (second round)
+
+**A deliberate redemption is funded from the Commons pot, at the keeper's discretion up to a ceiling.** The
+bridge row cannot be spent (§2.2), so the beans have to come from the community's own circulation — and the
+Commons already holds real beans from demurrage and fees. The keeper of a link may commission across the
+boundary up to a set limit without asking; **the ceiling is the safety, and it must be visible alongside the
+balance**. Rejected: a per-commission community vote (right in principle, but blocks the redemption half
+behind the unbuilt Decision primitive, and a tab needing a vote to move will not move); members' own beans
+only (§5.1 is explicit that Person → Person cannot be willed into happening, so a one-way flow would have no
+correction at all); and a credit line on the link treasury, which creates a negative nobody earns back —
+the stranded-negative problem in reverse.
+
+**Members see the energy balance, on the link's card.** "We have delivered 480 beans of work to Byron and had
+none back" is a governance-grade fact about the community's own economy, and it is the thing that makes anyone
+call a favour in. This closes what was open decision 4.
+
+**A link is created automatically when a peer connector is given a credit cap.** Setting a cap is already the
+deliberate act that enables settlement with a peer, so the enterprise appears at the same moment — named from
+the peer's callsign, keeper unassigned. One decision rather than two, and no way to end up settling with a
+peer that has no visible home and nobody accountable for it.
+
 ## 8. The first slice
 
 The smallest thing that demonstrates the concept working, in order. Each step is only worth doing because of
@@ -183,13 +204,19 @@ the one after it.
 1. **A route for a cross-node purchase.** `settleCrossNodePurchase` exists and is tested but has no HTTP
    caller, so no member can trigger it. Half A is otherwise complete.
 2. **Two live nodes, one purchase.** The four entries, both ledgers summing to zero, bridges equal and
-   opposite. On the real 1 CPU / 1 GB pair, because its latency exposes races localhost hides — and that is
-   also how open decision 3 (reservation timeout) gets measured rather than guessed.
-3. **The "Byron Link" enterprise.** A per-peer treasury, its keeper, and the energy balance shown on it.
+   opposite. Against **melb + gippsland** — both empty, both already on the Binary Lane VMs, so nothing is at
+   risk. On the real 1 CPU / 1 GB pair because its latency exposes races localhost hides, and that is also how
+   open decision 3 (reservation timeout) gets measured rather than guessed. **Never `mullum`** — a live
+   community — and not `test`, which holds the only data we care about.
+3. **The "Byron Link" enterprise.** Auto-created when a peer connector gains a credit cap: a per-peer
+   treasury, its keeper, the energy balance shown to members on the card, and the keeper's commissioning
+   ceiling shown beside it.
 4. **Reach on a listing, and the pull.** Three-tier reach, a periodic pull of each peer's remote-visible
    listings, cached with `origin_node`.
-5. **One redemption.** The keeper of Byron Link commissions a Brisbane member's offer; the tab nets down.
-   This is the step that turns an accounting exercise into the model.
+5. **One redemption.** The keeper of Byron Link commissions a Brisbane member's offer, funded from the
+   Commons pot within the ceiling; the tab nets down. Mechanically this is an ordinary cross-node purchase in
+   the reverse direction — there is no "settlement transaction" to write. This is the step that turns an
+   accounting exercise into the model.
 
 Steps 1–2 are mostly verification of what exists. Steps 3–5 are the half that has no code.
 
@@ -206,13 +233,13 @@ Carried from [§9](federation-economics.md#9-open-questions), still unresolved:
    pending settlement, or written off symmetrically.
 3. **Reservation timeout**, and whether it should scale with peer latency. Tune against the real 1 CPU /
    1 GB pair, not localhost.
-4. **Where the energy balance is surfaced, and to whom.** The form is settled — a scale centred on zero
-   with each cap at an end, in beans. Placement is open: an operator health signal, or a governance-grade
-   fact belonging in the Commons tab.
-5. **Are enterprise stewards appointed by an admin or nominated by the community?** Determines whether an
+4. **Are enterprise stewards appointed by an admin or nominated by the community?** — see below.
+**Are enterprise stewards appointed by an admin or nominated by the community?** Determines whether an
    `appoint` Decision becomes the grantor. Currently admin-appointed with the schema left open. **Federation now
    depends on this the same way #106 does** — a federation link is an enterprise (§7), so its keeper is
    appointed by whatever mechanism this settles on.
+
+*(Resolved and moved to §7: where the energy balance is surfaced — members see it on the link's card.)*
 
 **Settled, and recorded so they aren't relitigated:** the tab lives in `bridge_<peer>` rather than the
 Commons; foreign spending power is carved out of the member's existing home floor; a node's cap on a peer

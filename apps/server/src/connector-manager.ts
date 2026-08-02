@@ -101,6 +101,51 @@ function resolveMultiaddr(address: string): string {
     return `/dns4/${host}/tcp/${port || '4001'}`;
 }
 
+/**
+ * The HTTPS origin a peer's federation API is reachable at, derived from its connector address.
+ *
+ * Both call sites used to do `address.split(':')`, which is right for `host:port` and WRONG for a multiaddr:
+ * a multiaddr contains no colon, so the whole string became the "host" and every multiaddr connector was
+ * assigned `https:///ip4/1.2.3.4/tcp/4001/p2p/12D3Koo…`. Nothing complained, because the only test applied to
+ * it anywhere is non-emptiness — so that string silently became the buyer's recorded home node on a cross-node
+ * purchase (`resolvedHomeNode`) and an entry in the CORS allowlist (`getPeerOrigins`). A multiaddr is the
+ * normal way a connector is added, so this was the normal case, not an edge one.
+ *
+ * Returns undefined when no hostname can be read, so an operator can supply the real URL rather than have a
+ * fabricated one stored. The p2p port is never carried over: 4001 is the libp2p listener, not the HTTPS API.
+ */
+function derivePublicUrl(address: string): string | undefined {
+    if (!address) return undefined;
+
+    if (address.startsWith('/')) {
+        const parts = address.split('/').filter(Boolean);
+        const hostIdx = parts.findIndex(p => ['ip4', 'ip6', 'dns', 'dns4', 'dns6'].includes(p));
+        if (hostIdx < 0) return undefined;
+        const host = parts[hostIdx + 1];
+        if (!host) return undefined;
+        // An IPv6 literal MUST be bracketed in a URL (RFC 3986). Unbracketed, `new URL('https://2001:db8::1')`
+        // throws — which would make the /api/local/connectors validator reject a legitimate peer, and put an
+        // unparseable origin into the CORS allowlist (review finding).
+        const bracketed = parts[hostIdx] === 'ip6' && !host.startsWith('[') ? `[${host}]` : host;
+        return `https://${bracketed}`;
+    }
+
+    // A bracketed IPv6 host:port — `[::1]:8443`. Splitting on ':' would shred the address, so the host is
+    // everything up to the closing bracket and only what follows it can be a port.
+    if (address.startsWith('[')) {
+        const close = address.indexOf(']');
+        if (close === -1) return undefined;
+        const host = address.slice(0, close + 1);
+        const rest = address.slice(close + 1);
+        const port = rest.startsWith(':') ? rest.slice(1) : undefined;
+        return port && port !== '4001' ? `https://${host}:${port}` : `https://${host}`;
+    }
+
+    const [host, port] = address.split(':');
+    if (!host) return undefined;
+    return port && port !== '4001' ? `https://${host}:${port}` : `https://${host}`;
+}
+
 /** Migrate legacy trust levels to new federation model */
 function migrateConnector(c: any): ConnectorConfig {
     // Migrate trust levels
@@ -121,12 +166,20 @@ function migrateConnector(c: any): ConnectorConfig {
         c.address = fixed;
     }
 
-    // Auto-derive publicUrl if missing
-    if (!c.publicUrl && c.address) {
-        const [host, port] = c.address.split(':');
-        c.publicUrl = port && port !== '4001'
-            ? `https://${host}:${port}`
-            : `https://${host}`;
+    // Auto-derive publicUrl if missing. Also REPAIRS the malformed values the old `split(':')` derivation
+    // wrote for every multiaddr connector — `https:///ip4/…` is not a URL anyone can dial, so leaving it in
+    // place would keep feeding a bogus home node into cross-node purchases.
+    // Anything that is not a usable string is treated as ABSENT and re-derived. connectors.json is
+    // operator-editable, so a truthy non-string (`true`, an object) is reachable: it would make `!c.publicUrl`
+    // false and then throw `c.publicUrl.startsWith is not a function` during startup, taking the node down on
+    // boot (review finding).
+    //
+    // Narrowing first, rather than just guarding the startsWith, because merely not throwing would LEAVE the
+    // junk value in place — and it goes on to be recorded as a visiting buyer's home node and pushed into the
+    // CORS allowlist. Not crashing is not the same as being correct.
+    const current = typeof c.publicUrl === 'string' ? c.publicUrl : undefined;
+    if (c.address && (!current || current.startsWith('https:///'))) {
+        c.publicUrl = derivePublicUrl(c.address);
     }
 
     return c as ConnectorConfig;
@@ -136,11 +189,26 @@ function loadConnectors(): void {
     try {
         if (fs.existsSync(CONNECTORS_PATH)) {
             const raw = JSON.parse(fs.readFileSync(CONNECTORS_PATH, 'utf-8'));
-            const needsMigration = raw.some((c: any) =>
-                ['full_sync', 'credit_verification', 'read_only'].includes(c.trustLevel) ||
-                !c.publicUrl ||
-                (c.address && c.address.includes(','))
-            );
+            // TRUE ONLY WHEN migrateConnector WOULD ACTUALLY CHANGE SOMETHING, so a load converges.
+            //
+            // The old test included a bare `!c.publicUrl`. That was harmless while derivation always returned
+            // a string (even a malformed one), but this PR lets `derivePublicUrl` return undefined for an
+            // address carrying no hostname — and for such a connector `!c.publicUrl` stays true forever,
+            // rewriting connectors.json on every single boot without ever converging (review finding).
+            //
+            // Comparing against what the repair would produce covers every case in one test: a missing or
+            // malformed value that CAN be derived saves once and is then settled; one that cannot derive saves
+            // never. Note this deliberately does not simply drop the missing-publicUrl case, which would stop
+            // persisting the repair this PR exists for.
+            const needsMigration = raw.some((c: any) => {
+                if (['full_sync', 'credit_verification', 'read_only'].includes(c.trustLevel)) return true;
+                if (c.address && c.address.includes(',')) return true;
+                const current = typeof c.publicUrl === 'string' ? c.publicUrl : undefined;
+                if (!current || current.startsWith('https:///')) {
+                    return derivePublicUrl(c.address) !== current;
+                }
+                return false;
+            });
             connectors = raw.map(migrateConnector);
             logger.info('P2P', `[Connectors] Loaded ${connectors.length} connector(s) from disk.`);
             if (needsMigration) {
@@ -444,21 +512,23 @@ export async function disconnectFromAddress(address: string): Promise<void> {
 }
 
 export function addConnector(address: string, trustLevel: TrustLevel, callsign?: string, publicUrl?: string, enabled?: boolean): ConnectorConfig {
-    // Auto-derive publicUrl if not provided
-    if (!publicUrl && address) {
-        const [host, port] = address.split(':');
-        publicUrl = port && port !== '4001'
-            ? `https://${host}:${port}`
-            : `https://${host}`;
-    }
-
-    // Prevent duplicates
+    // NOTE THE ORDER: derivation happens only on the INSERT path, below. Deriving up here — as this function
+    // used to — meant `publicUrl` was never undefined by the time the update branch tested it, so any update
+    // that omitted it (changing trust level, toggling enabled) silently overwrote an operator's stated URL with
+    // a guess. That was harmless while nothing could set one; it becomes a regression the moment the route can
+    // (review finding).
     const existing = connectors.find(c => c.address === address);
     if (existing) {
         existing.trustLevel = trustLevel;
         if (callsign !== undefined) existing.callsign = callsign;
-        if (publicUrl !== undefined) existing.publicUrl = publicUrl;
-        
+        if (publicUrl !== undefined) {
+            existing.publicUrl = publicUrl;
+        } else if (typeof existing.publicUrl === 'string' && existing.publicUrl.startsWith('https:///')) {
+            // Repair a malformed stored value in passing, so a node that is reconfigured without being
+            // restarted converges too. Still never replaces a GOOD value with a guess.
+            existing.publicUrl = derivePublicUrl(address);
+        }
+
         // If it was enabled and is now disabled (made passive), automatically disconnect
         if (enabled === false && existing.enabled !== false) {
             disconnectFromAddress(address).catch(err => {
@@ -471,12 +541,13 @@ export function addConnector(address: string, trustLevel: TrustLevel, callsign?:
         return existing;
     }
 
+    // A NEW connector may be derived from, because there is nothing to overwrite.
     const connector: ConnectorConfig = {
         address,
         trustLevel,
         enabled: enabled !== undefined ? enabled : true,
         callsign: callsign || undefined,
-        publicUrl,
+        publicUrl: publicUrl ?? (address ? derivePublicUrl(address) : undefined),
         addedAt: Date.now(),
     };
 

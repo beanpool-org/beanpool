@@ -1,0 +1,8 @@
+[
+  {
+    "path": "packages/beanpool-core/src/ledger.ts",
+    "position": 200,
+    "side": "RIGHT",
+    "body": "### Consequences & Impact\n**Risk:** Blast-radius risk with raw SQL mutations (e.g. crowdfund pledge/refund in `db.ts`). The FORFEIT resolution protects all ledger-mediated operations (`transfer`, `moveToCommons`, `payFromCommons`), but raw SQL updates in `db.ts` mutate `accounts.balance` directly in SQLite. \n\nWhen `reconcileLedgerFromDb()` runs after a raw SQL balance update, `loadState()` loads the newly modified balance along with the *old, stored `last_demurrage_epoch`* from SQLite. If `getAccount()` was not called prior to the raw SQL `UPDATE`, the stored epoch remains stale while the principal balance increases. On the next ledger read, `applyDecay()` will calculate demurrage on the newly enlarged balance against the old epoch window.\n\n**Suggested Fix:**\nIn `apps/server/src/db/db.ts` (e.g., pledge/refund functions), before running raw `UPDATE accounts SET balance = balance + ?` queries, call `ledger.getAccount(pubkey)` first to settle and close any pending demurrage interval, and update `last_demurrage_epoch = currentEpoch` in the SQL `UPDATE` statement so the new principal balance is isolated from the old time window."
+  }
+]

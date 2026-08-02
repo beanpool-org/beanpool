@@ -158,10 +158,27 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
             return;
         }
 
-        // 5. THE PEER MUST BE A CONFIGURED, ENABLED TRADING PEER — resolved from the operator's own connector
-        //    list, never from the request. The client names a node; which credit line that maps to, and
-        //    whether we trade with it at all, is ours to decide. `mirror` is admitted deliberately here and
-        //    then refused: a backup replica is not a trading partner, and the difference must be explicit.
+        // 5. THE PEER MUST BE A CONFIGURED TRADING PEER — resolved from the operator's own connector list,
+        //    never from the request. The client names a node; which credit line that maps to, and whether we
+        //    trade with it at all, is ours to decide. `mirror` is admitted deliberately here and then refused:
+        //    a backup replica is not a trading partner, and the difference must be explicit.
+        //
+        //    THE GATE IS `trustLevel`, NOT `enabled`. These are orthogonal and this route used to conflate
+        //    them, refusing every purchase aimed at a Passive peer. `enabled` is a DIALLING setting and
+        //    nothing else — it decides who maintains the outbound link (see connector-manager's boot
+        //    auto-connect and the disconnect-on-made-passive branch). Exactly one side of a healthy pair is
+        //    Active, by the UI's own guidance, so gating trade on it made cross-node trade permanently
+        //    one-directional: the Passive community could sell but never buy. That is not a policy, it is an
+        //    accident of transport configuration — and it left every bridge tab a ratchet, since a tab only
+        //    nets down when trade flows both ways through the same `bridge_<peer>` account.
+        //
+        //    It was also asymmetric: the INBOUND side (`handlePurchaseRequest`) checks `trusted` and
+        //    `trustLevel` and has never looked at `enabled`, so a Passive node already honoured purchases
+        //    arriving from its Active peer. Only its own members were refused.
+        //
+        //    Nothing is lost by dropping it. `blocked` is the control for "stop trading with them", it is in
+        //    the Settings dropdown, and it is checked right here. And a Passive node can still reach its peer:
+        //    `dialProtocol` is keyed on the peer id and reuses the connection the Active side established.
         const connector = typeof nodeUrl === 'string' && nodeUrl
             ? getConnectorByPublicUrl(nodeUrl)
             : typeof peerAddress === 'string' && peerAddress
@@ -172,12 +189,23 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: 'That community is not one of this node\'s connectors' };
             return;
         }
-        if (!connector.enabled || connector.trustLevel !== 'peer') {
+        if (connector.trustLevel !== 'peer') {
             ctx.status = 403;
             ctx.body = {
+                // NAME THE PEER when we know it. "does not trade with that one" is vague to the one person who
+                // reads it — a member who named a community and got a refusal (review finding, accepted). The
+                // callsign is the operator's own label for that connector and is what the Settings card shows,
+                // so it is the name the member has a chance of recognising. `callsign` is optional on a
+                // connector, hence the fallback.
+                //
+                // Deliberately NOT "Trust Level is not set to peer" (the suggested wording, declined): trust
+                // level is operator vocabulary for an operator's screen. A member cannot act on it, and
+                // `blocked` is a decision their community made on purpose, not a misconfiguration to report.
                 error: connector.trustLevel === 'mirror'
                     ? 'That connection is a backup replica, not a trading partner'
-                    : 'That community is not enabled as a trading partner',
+                    : connector.callsign
+                        ? `This community does not trade with ${connector.callsign}`
+                        : 'This community does not trade with that one',
                 code: SETTLEMENT_REFUSED_CODE,
             };
             return;

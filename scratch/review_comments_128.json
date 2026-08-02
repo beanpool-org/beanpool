@@ -1,0 +1,56 @@
+[
+  {
+    "path": "apps/server/src/routes/treasury.ts",
+    "position": 241,
+    "side": "RIGHT",
+    "body": "### UX & Accessibility\n**Risk:** The error message `\"That sweep could not be completed — check the treasury still holds this amount.\"` is grammatically incomplete and uses inconsistent phrasing for client-facing error banners.\n\n**Suggested Fix:**\n```ts\nctx.body = { error: 'Sweep could not be completed — verify that the treasury holds this amount.' };\n```"
+  },
+  {
+    "path": "apps/server/src/state-engine.ts",
+    "position": 2671,
+    "side": "RIGHT",
+    "body": "### UX & Accessibility\n**Risk:** Transaction memo uses full 64-character `${publicKey}` hex string (`Settle bad debt for pruned user: ${publicKey}`). When rendered in user activity feeds and transaction lists, full public keys cause text overflow and visual layout clutter.\n\n**Suggested Fix:**\n```ts\npayFromCommons(publicKey, D, `Settle bad debt for pruned user: ${publicKey.slice(0, 8)}`, { allowDeficit: true });\n```"
+  },
+  {
+    "path": "apps/server/src/state-engine.ts",
+    "position": 2673,
+    "side": "RIGHT",
+    "body": "### UX & Accessibility\n**Risk:** Transaction memo uses full 64-character `${publicKey}` hex string (`Confiscate credit for pruned user: ${publicKey}`). In user-facing activity feeds and logs, un-truncated keys degrade readability and cause ugly line wraps.\n\n**Suggested Fix:**\n```ts\nmoveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${publicKey.slice(0, 8)}`,\n    { allowMemberDebit: true });\n```"
+  },
+  {
+    "path": "apps/server/src/state-engine.ts",
+    "position": 2678,
+    "side": "RIGHT",
+    "body": "### Consequences & Impact\n**Risk:** `adminPruneUser` executes within a synchronous `db.transaction()` block. `payFromCommons()` and `moveToCommons()` directly mutate in-memory `ledger` account balances and the global `COMMONS_BALANCE`. If a failure occurs later in the transaction (e.g. during `UPDATE posts` or `adminSetUserStatus`), SQLite rolls back the database writes, but the in-memory `ledger` state and `COMMONS_BALANCE` remain mutated. This desynchronizes in-memory balances from persisted SQLite state, violating the zero-sum invariant until node restart.\n\n**Suggested Fix:**\n```typescript\nexport function adminPruneUser(publicKey: string) {\n    const commonsBefore = getCommonsBalanceExact();\n    try {\n        db.transaction(() => {\n            const account = ledger.getAccount(publicKey);\n            const balance = account.balance;\n\n            if (balance < 0) {\n                const D = Math.abs(balance);\n                payFromCommons(publicKey, D, `Settle bad debt for pruned user: ${publicKey}`, { allowDeficit: true });\n            } else if (balance > 0) {\n                moveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${publicKey}`,\n                    { allowMemberDebit: true });\n            }\n\n            adminSetUserStatus(publicKey, 'pruned');\n            db.prepare(\"UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')\").run(publicKey);\n        })();\n    } catch (err) {\n        setCommonsBalance(commonsBefore);\n        reconcileLedgerFromDb();\n        throw err;\n    }\n    broadcast({ type: 'user_pruned', publicKey });\n}\n```"
+  },
+  {
+    "path": "apps/server/src/state-engine.ts",
+    "position": 1241,
+    "side": "RIGHT",
+    "body": "### Consequences & Impact\n**Risk:** `moveToCommons()` throws an unhandled `Error` if `from` is an ordinary member account and `opts?.allowMemberDebit` is omitted. In route handlers or background job callers expecting `moveToCommons()` to return `null` on failure (similar to `transfer()`), an unhandled exception will cause HTTP 500 server errors or uncaught promise rejections instead of clean error responses.\n\n**Suggested Fix:**\n```typescript\n    if (!synthetic && !treasury && !opts?.allowMemberDebit) {\n        console.error(`[moveToCommons] Rejected: account ${from} is neither synthetic nor a treasury`);\n        return null;\n    }\n```"
+  },
+  {
+    "path": "apps/server/src/routes/treasury.ts",
+    "position": 238,
+    "side": "RIGHT",
+    "body": "### Consequences & Impact\n**Risk:** The sweep route delegates balance movement to `moveToCommons()`. While `moveToCommons()` successfully preserves the zero-sum invariant by mutating `COMMONS_BALANCE` directly instead of transferring to the shadow `COMMONS_POOL` account row, calling `moveToCommons()` without wrapping it in a safety check or exception handler leaves the route vulnerable if `moveToCommons()` throws an exception on non-treasury or invalid keys.\n\n**Suggested Fix:**\n```typescript\n        let ok: Transaction | null = null;\n        try {\n            ok = moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`);\n        } catch (e: any) {\n            ctx.status = 400;\n            ctx.body = { error: e.message || 'Sweep failed' };\n            return;\n        }\n        if (!ok) {\n            ctx.status = 400;\n            ctx.body = { error: 'That sweep could not be completed — check the treasury still holds this amount.' };\n            return;\n        }\n```"
+  },
+  {
+    "path": "apps/server/src/state-engine.ts",
+    "position": 1238,
+    "side": "RIGHT",
+    "body": "### Database Architecture\n**Risk:** `db.prepare(...)` is called inside `moveToCommons()` on every invocation to execute `SELECT is_treasury FROM members WHERE public_key = ?`. In `better-sqlite3`, invoking `db.prepare()` inline inside a frequently called function recompiles the SQL statement and allocates statement handles on every call, causing unnecessary GC pressure and CPU overhead in the hot transaction execution path.\n\n**Suggested Fix:**\nMove statement preparation to top-level module scope so SQLite compiles it once:\n```ts\nconst stmtGetIsTreasury = db.prepare('SELECT is_treasury FROM members WHERE public_key = ?');\n\nexport function moveToCommons(\n    from: string,\n    amount: number,\n    memo: string,\n    opts?: { allowMemberDebit?: boolean },\n): Transaction | null {\n    const synthetic = isSyntheticAccount(from);\n    const treasury = !synthetic\n        && (stmtGetIsTreasury.get(from) as any)?.is_treasury === 1;\n```"
+  },
+  {
+    "path": "apps/server/src/state-engine.ts",
+    "position": 2677,
+    "side": "RIGHT",
+    "body": "### Database Architecture\n**Risk:** In `adminPruneUser`, `payFromCommons` and `moveToCommons` are called inside a `db.transaction(() => { ... })()` closure. Both functions immediately mutate in-memory ledger state (`ledger.moveToCommons` / `ledger.deductFromCommons` and global `COMMONS_BALANCE`) before running SQLite DML statements. If a subsequent SQL query in `adminPruneUser` fails or throws an exception (such as `adminSetUserStatus` or updating `posts`), SQLite will roll back database mutations, but in-memory ledger balances will NOT roll back. This leaves in-memory state permanently desynchronized from the SQLite database, breaking mutual credit zero-sum conservation invariants.\n\n**Suggested Fix:**\nWrap the transaction in a try-catch block that resynchronizes in-memory ledger state from SQLite via `reconcileLedgerFromDb()` if an error occurs and the transaction rolls back:\n```ts\nexport function adminPruneUser(publicKey: string) {\n    try {\n        db.transaction(() => {\n            const account = ledger.getAccount(publicKey);\n            const balance = account.balance;\n\n            if (balance < 0) {\n                const D = Math.abs(balance);\n                payFromCommons(publicKey, D, `Settle bad debt for pruned user: ${publicKey}`, { allowDeficit: true });\n            } else if (balance > 0) {\n                moveToCommons(publicKey, balance, `Confiscate credit for pruned user: ${publicKey}`,\n                    { allowMemberDebit: true });\n            }\n\n            adminSetUserStatus(publicKey, 'pruned');\n            db.prepare(\"UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')\").run(publicKey);\n        })();\n    } catch (err) {\n        reconcileLedgerFromDb();\n        throw err;\n    }\n    broadcast({ type: 'user_pruned', publicKey });\n}\n```"
+  },
+  {
+    "path": "apps/server/src/routes/treasury.ts",
+    "position": 238,
+    "side": "RIGHT",
+    "body": "### Database Architecture\n**Risk:** The sweep route in `treasury.ts` checks treasury balance via `getBalance(treasury).balance` prior to invoking `moveToCommons(treasury, amt, ...)`. `moveToCommons` writes transactions and updates account balance rows without transactional isolation or a Compare-And-Swap (CAS) guard against concurrent requests. Concurrent API requests targeting the same treasury could pass balance checks simultaneously and race to debit the treasury, causing unexpected failures or balance mismatches.\n\n**Suggested Fix:**\nEnsure the balance validation and `moveToCommons` execution are executed within an atomic block or CAS check so concurrent sweep requests are properly serialized."
+  }
+]

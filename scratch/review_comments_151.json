@@ -1,0 +1,14 @@
+[
+  {
+    "path": "apps/server/static/settings.html",
+    "position": 905,
+    "side": "RIGHT",
+    "body": "### UX & Accessibility: Screen Reader Announcement for Decorative Emojis\n\n**Risk:** Raw decorative emojis (e.g. `💤`) embedded directly in HTML text are announced verbatim by screen readers (e.g. \"A sleeping symbol Passive peer trades...\"), causing jarring and distracting auditory output for users relying on assistive technology.\n\n**Suggested Fix:**\nWrap decorative emojis in `span` elements with `aria-hidden=\"true\"`:\n\n```html\n<li>Connection Mode only decides <em>who dials</em>. A <span aria-hidden=\"true\">💤</span> Passive peer trades exactly like an Active one — to stop trading with a community, set its Trust Level to <strong style=\"color: #cbd5e1;\">Blocked</strong>.</li>\n```"
+  },
+  {
+    "path": "apps/server/src/routes/federation-purchase.ts",
+    "position": 197,
+    "side": "RIGHT",
+    "body": "### UX & Accessibility: Copy Clarity in Error Feedback\n\n**Risk:** The updated error message `'This community does not trade with that one'` uses vague third-person phrasing (\"This community\", \"that one\") when returned to API consumers or rendered in member-facing error toasts.\n\n**Suggested Fix:**\nUse clear, direct terminology for error feedback:\n\n```ts\nerror: connector.trustLevel === 'mirror'\n    ? 'That connection is a backup replica, not a trading partner'\n    : 'Trading is disabled for this community connector (Trust Level is not set to peer)',\n```"
+  }
+]

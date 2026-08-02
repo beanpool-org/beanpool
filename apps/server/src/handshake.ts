@@ -89,10 +89,12 @@ async function writeToStream(stream: any, data: string): Promise<void> {
  * Register the handshake protocol handler on the libp2p node.
  */
 export function registerHandshakeHandler(node: Libp2p): void {
-    node.handle(PROTOCOL, async (incomingData: any) => {
-        const stream = incomingData.stream || incomingData;
-        const connection = incomingData.connection;
-
+    // Two positional arguments — see the note in federation-protocol.ts. libp2p 3.x passes
+    // `(stream, connection)`, so reading `.connection` off the first argument always gave undefined and every
+    // inbound handshake reported the peer as 'unknown':
+    //   [Handshake] ← unknown: trust=false level=none
+    // which is why `mutualTrust` never became true between two correctly configured peers.
+    node.handle(PROTOCOL, async (stream: any, connection: any) => {
         // Extract remote peer ID from connection
         let remotePeerId = 'unknown';
         if (connection?.remotePeer) {

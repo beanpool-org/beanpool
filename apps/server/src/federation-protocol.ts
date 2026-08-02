@@ -187,10 +187,21 @@ async function routeSettlementAction(request: any, remotePeerId: string): Promis
  * Register the federation protocol handler (Responder side).
  */
 export function registerFederationHandler(node: Libp2p): void {
-    node.handle(PROTOCOL, async (incomingData: any) => {
-        const stream = incomingData.stream || incomingData;
-        const connection = incomingData.connection;
-
+    // TWO POSITIONAL ARGUMENTS, not one `IncomingStreamData` object.
+    //
+    // libp2p 3.x changed StreamHandler to `(stream: Stream, connection: Connection)`. Read as an object, the
+    // first argument still yields a usable stream through the old `incomingData.stream || incomingData`
+    // fallback — but `incomingData.connection` is `undefined`, because the connection is the SECOND argument.
+    //
+    // That left `remotePeerId` at its 'unknown' default on every inbound stream, so `isPeerTrusted('unknown')`
+    // was false and this handler rejected every peer, including a correctly configured and connected one. The
+    // federation transport could not work at all on libp2p 3.x, which is why nothing had ever exercised it
+    // between two real nodes. Confirmed live on gippsland ↔ eastgippy:
+    //   [Federation] Rejected stream from untrusted peer unknown
+    //
+    // The read/write model was already migrated (async iteration in, `stream.send()` out) — only the handler
+    // signature was missed.
+    node.handle(PROTOCOL, async (stream: any, connection: any) => {
         let remotePeerId = 'unknown';
         if (connection?.remotePeer) {
             remotePeerId = connection.remotePeer.toString();

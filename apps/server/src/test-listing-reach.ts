@@ -209,6 +209,33 @@ async function main() {
     assert(local.status === 200 && Array.isArray(local.json),
         '11. the ordinary marketplace read still works — reach is a federation concern and must not disturb the local board');
 
+    // ── 12. THE PUBLIC BOARD DOES NOT NAME A MEMBER'S CHOSEN NEIGHBOURS. ───────────────────────────────
+    //
+    // Found live, not here: browsing eastgippy's board over plain HTTPS returned every listing's reachPeers,
+    // so "she offers this to Gippsland but not to Castlemaine" went to anyone who asked — including the peers
+    // she had not named. §10b already proved the libp2p serve path was clean; this is the other door.
+    //
+    // What is NOT asserted, deliberately: that a 'local' listing is absent from this response. It is present,
+    // and that is the design — the board has always been a public read and reach is a discovery filter, not
+    // an access control (Rule 9). Asserting otherwise would encode a guarantee the protocol cannot make. The
+    // compose copy was reworded to match ("Where does this travel?"), which is the honest half of this fix.
+    const named = createPost('offer', 'other', 'Named neighbours', 'd', 10, 'fixed', author,
+        undefined, undefined, undefined, false, undefined, false, { reach: 'peers', reachPeers: [BYRON] });
+    const board = await get('/api/marketplace/posts');
+    const strangerView = (board.json as any[]).find(p => p.id === named!.id);
+    assert(strangerView !== undefined && strangerView.reach === 'peers',
+        `12a. a stranger still sees the listing and its reach (got ${strangerView?.reach}) — reach is a property of the listing, and the cached copy needs it for loop prevention`);
+    assert(strangerView !== undefined && !('reachPeers' in strangerView),
+        '12b. but NOT which communities were named — that is a fact about third parties, and the poster\'s business');
+
+    const ownView = getPosts({ id: named!.id, viewerPubkey: author })[0];
+    assert(ownView?.reachPeers?.length === 1 && ownView.reachPeers[0] === BYRON,
+        `12c. the AUTHOR still gets their own list (got ${JSON.stringify(ownView?.reachPeers)}) — an edit form that cannot read it back would clear the choice it was opened to change`);
+    const otherMember = makeMember('Nosy');
+    const nosyView = getPosts({ id: named!.id, viewerPubkey: otherMember })[0];
+    assert(nosyView !== undefined && !('reachPeers' in nosyView),
+        '12d. and a signed-in NEIGHBOUR does not — the gate is authorship, not whether you bothered to sign');
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ #143 step 4 (reach): a listing travels only where its author said, and a borrowed one never travels on.');

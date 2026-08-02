@@ -1474,48 +1474,10 @@ export function getTransactions(publicKey?: string, limit = 50, offset = 0): Tra
 }
 // ===================== MARKETPLACE =====================
 
-function rowToPost(row: any, photosByPost: Map<string, any[]>): MarketplacePost {
-    const postPhotos = photosByPost.get(row.id) || [];
-    let trustPoints = 0;
-    try {
-        const trustProfile = getMemberTrustProfile(row.author_pubkey);
-        trustPoints = trustProfile.earnedCredit;
-    } catch (e) {
-        trustPoints = row.author_energy_cycled ?? 0;
-    }
-
-    return {
-        id: row.id,
-        type: row.type,
-        category: row.category,
-        title: row.title,
-        description: row.description,
-        credits: row.credits,
-        priceType: row.price_type || 'fixed',
-        authorPublicKey: row.author_pubkey,
-        authorCallsign: row.author_callsign,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at || row.created_at,
-        active: Boolean(row.active),
-        status: row.status,
-        repeatable: Boolean(row.repeatable),
-        acceptedBy: row.accepted_by,
-        acceptedByCallsign: row.accepted_callsign,
-        acceptedAt: row.accepted_at,
-        pendingTransactionId: row.pending_transaction_id,
-        completedAt: row.completed_at,
-        lat: row.lat,
-        lng: row.lng,
-        // Version the URL with the photo's updated_at so it can be cached immutably: the URL only
-        // changes when the photo actually changes (edit → tombstone/re-insert bumps updated_at),
-        // so clients cache forever yet never show a stale image.
-        photos: postPhotos.sort((a: any, b: any) => a.order_num - b.order_num).map((p: any) => `/api/marketplace/posts/${row.id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`),
-        originNode: row.origin_node,
-        authorEnergyCycled: trustPoints,
-        authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
-        authorAvatarUrl: row.author_avatar ?? null
-    };
-}
+// A local `rowToPost` used to live here. It was a stale duplicate of the one in @beanpool/engine — dead
+// since getPosts started delegating (`getPostsEngine`), and never updated for `cash_also_needed`, `reach` or
+// `reach_peers`. Removed rather than left as a trap: the next person to need a row mapper would have found
+// this one first, and a listing mapped through it would silently lose the poster's reach choice.
 
 // Server-side photo limits. Clients resize to ≤800px JPEG at 0.7 quality, which lands
 // well under this cap — anything bigger is a misbehaving or hostile client. Photos are

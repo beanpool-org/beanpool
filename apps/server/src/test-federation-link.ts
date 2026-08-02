@@ -21,11 +21,14 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { initTls } from './services/tls.js';
 import { initStateEngine, createTreasury } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { loadConnectors } from './connector-manager.js';
 import {
     getFederationLink, getLinkByTreasury, listFederationLinks, reconcileFederationLinks, linkNameFor,
     ensureFederationLink,
@@ -81,14 +84,57 @@ function tiltBridge(peerId: string, amount: number): void {
     })();
 }
 
+/**
+ * A peer with a cap already on disk BEFORE anything boots — which is what every already-configured node looks
+ * like, and the case that shipped broken.
+ *
+ * The reconcile lived in `initStateEngine`, which runs before `initConnectorManager` loads connectors.json, so
+ * it iterated an empty list and created nothing. The rest of this suite added connectors over HTTP *after*
+ * boot, where the cap route's reconcile covers for it — so every check passed and two live nodes came up with
+ * correct caps and no links at all.
+ */
+const PRECONFIGURED = '12D3KooWPreconfiguredOnDiskPeer00000';
+const PRECONFIGURED_ADDR = `/ip4/172.18.0.77/tcp/4001/p2p/${PRECONFIGURED}`;
+
+function writeConnectorsJson(): void {
+    const dir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'connectors.json'), JSON.stringify([{
+        address: PRECONFIGURED_ADDR,
+        trustLevel: 'peer',
+        enabled: true,
+        callsign: 'ondisk',
+        publicUrl: 'https://ondisk.beanpool.org',
+        creditCap: 250,
+        addedAt: 1,
+    }], null, 2));
+}
+
 async function main() {
     console.log('Running federation link enterprise tests (#143 step 3)...\n');
+    // Written BEFORE any init, so the boot path sees it exactly as a real node would.
+    writeConnectorsJson();
     initAdminPassword();
     await initTls();
     initStateEngine();
     await startHttpsServer(PORT);
 
     const baseline = nodeTotal();
+
+    // ── 0. THE BOOT PATH, which is the one that shipped broken. ─────────────────────────────────────────
+    // `initStateEngine()` has now run, and a capped peer has been sitting in connectors.json the whole time.
+    // Nothing should have created its link yet, because nothing has loaded the file — which is exactly the
+    // state the reconcile used to run in.
+    assert(getFederationLink(PRECONFIGURED) === null,
+        '0a. before connectors are loaded there is no link, and no way to make one — the reconcile used to run HERE, against an empty list, which is why two live nodes came up with correct caps and zero links');
+    loadConnectors();
+    const createdAtBoot = reconcileFederationLinks(createTreasury);
+    assert(createdAtBoot === 1,
+        `0b. THE FIX: reconciling AFTER connectors are loaded creates the link (${createdAtBoot}) — the boot order is the whole bug, not the reconcile`);
+    const onDisk = getFederationLink(PRECONFIGURED);
+    assert(onDisk?.name === 'ondisk Link',
+        `0c. named from the on-disk callsign (got "${onDisk?.name}") — an already-configured node needs no operator action to get its enterprise`);
+    assert(reconcileFederationLinks(createTreasury) === 0, '0d. and a second boot creates nothing');
 
     // ── 1. A capless peer has no link. Adding a connector is not the deliberate act; setting a cap is. ────
     const added = await post('/api/local/connectors', {
@@ -123,8 +169,10 @@ async function main() {
         '2i. with a credit line of ZERO (§7: a credit line on a link treasury "creates a negative nobody earns back")');
 
     // ── 3. Idempotence. This runs on every boot, and a cap can be set repeatedly. ────────────────────────
+    const linksBefore = listFederationLinks().length;
     await setCap({ password: PW, address: ADDRESS, cap: 250 });
-    assert(listFederationLinks().length === 1, '3a. re-setting the cap does not create a second link');
+    assert(listFederationLinks().length === linksBefore,
+        `3a. re-setting the cap does not create a second link (${linksBefore} → ${listFederationLinks().length})`);
     assert(getFederationLink(PEER_ID)?.treasuryPubkey === link!.treasuryPubkey,
         '3b. and the treasury is the same account — a link holds real beans, so replacing it would strand them');
     assert(reconcileFederationLinks(createTreasury) === 0, '3c. the reconciler has converged: a second run creates nothing');

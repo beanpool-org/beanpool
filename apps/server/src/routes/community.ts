@@ -34,6 +34,7 @@ import {
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
+    setConnectorCreditCap,
     type TrustLevel,
 } from '../connector-manager.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -284,6 +285,77 @@ router.post('/api/local/connectors/connect', async (ctx) => {
 
     const success = await connectToAddress(address);
     ctx.body = { success };
+});
+
+/**
+ * Set (or clear) the credit cap this community extends to a peer — #143, and the last thing standing between
+ * the settlement code and a real cross-node trade.
+ *
+ * `settlementCapacity` fail-closes on `cap === null` with "An operator needs to choose a limit in Settings
+ * first", and there was no way to choose one: `setConnectorCreditCap` was reachable from nothing but its own
+ * tests. So every cross-node purchase on every deployed node refused with a message pointing at a control that
+ * did not exist. Same shape as the federation flags missing from compose — built, tested, unreachable.
+ *
+ * CLEARING MUST BE DELIBERATE, which is why an ABSENT `cap` is a 400 rather than a clear. Clearing is a real
+ * operator action (the fastest way to stop honouring a peer's purchases without severing discovery, Rule 6),
+ * but it also refuses every future settlement with that peer — so a client that simply forgot the field, or
+ * dropped it in a truncated body, must not be able to freeze a trading relationship by omission. `null` clears;
+ * missing is a mistake.
+ */
+router.post('/api/local/connectors/credit-cap', async (ctx) => {
+    if (!rateLimit(ctx)) return;
+    const config = getLocalConfig();
+    const body = (ctx as any).requestBody || {};
+    const { password, address } = body;
+
+    if (!password || !config.adminHash || !config.salt ||
+        !verifyPassword(password, config.adminHash, config.salt)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid password' };
+        return;
+    }
+
+    if (!address) {
+        ctx.status = 400;
+        ctx.body = { error: 'Address is required' };
+        return;
+    }
+
+    if (!('cap' in body)) {
+        ctx.status = 400;
+        ctx.body = { error: 'cap is required — send a number to set a limit, or null to clear it' };
+        return;
+    }
+
+    // Only `null` clears. `undefined` cannot arrive over JSON, and a string would otherwise reach
+    // setConnectorCreditCap's Number.isFinite check as a throw when a 400 is the honest answer.
+    const raw = body.cap;
+    let cap: number | null;
+    if (raw === null) {
+        cap = null;
+    } else if (typeof raw === 'number') {
+        cap = raw;
+    } else {
+        ctx.status = 400;
+        ctx.body = { error: 'cap must be a number, or null to clear it' };
+        return;
+    }
+
+    try {
+        const connector = setConnectorCreditCap(address, cap);
+        if (!connector) {
+            ctx.status = 404;
+            ctx.body = { error: 'No connector with that address' };
+            return;
+        }
+        logger.info('P2P', `[Connectors] Credit cap for ${address} ${cap === null ? 'cleared' : `set to ${cap}`} by operator`);
+        ctx.body = { success: true, address, creditCap: connector.creditCap ?? null };
+    } catch (e: any) {
+        // A negative or non-finite cap. Rejected rather than coerced, so an operator's mistake is visible
+        // instead of quietly becoming a limit they did not choose.
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Invalid credit cap' };
+    }
 });
 
 router.post('/api/local/connectors/disconnect', async (ctx) => {

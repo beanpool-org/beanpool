@@ -101,6 +101,34 @@ function resolveMultiaddr(address: string): string {
     return `/dns4/${host}/tcp/${port || '4001'}`;
 }
 
+/**
+ * The HTTPS origin a peer's federation API is reachable at, derived from its connector address.
+ *
+ * Both call sites used to do `address.split(':')`, which is right for `host:port` and WRONG for a multiaddr:
+ * a multiaddr contains no colon, so the whole string became the "host" and every multiaddr connector was
+ * assigned `https:///ip4/1.2.3.4/tcp/4001/p2p/12D3Koo…`. Nothing complained, because the only test applied to
+ * it anywhere is non-emptiness — so that string silently became the buyer's recorded home node on a cross-node
+ * purchase (`resolvedHomeNode`) and an entry in the CORS allowlist (`getPeerOrigins`). A multiaddr is the
+ * normal way a connector is added, so this was the normal case, not an edge one.
+ *
+ * Returns undefined when no hostname can be read, so an operator can supply the real URL rather than have a
+ * fabricated one stored. The p2p port is never carried over: 4001 is the libp2p listener, not the HTTPS API.
+ */
+function derivePublicUrl(address: string): string | undefined {
+    if (!address) return undefined;
+
+    if (address.startsWith('/')) {
+        const parts = address.split('/').filter(Boolean);
+        const hostIdx = parts.findIndex(p => ['ip4', 'ip6', 'dns', 'dns4', 'dns6'].includes(p));
+        const host = hostIdx >= 0 ? parts[hostIdx + 1] : undefined;
+        return host ? `https://${host}` : undefined;
+    }
+
+    const [host, port] = address.split(':');
+    if (!host) return undefined;
+    return port && port !== '4001' ? `https://${host}:${port}` : `https://${host}`;
+}
+
 /** Migrate legacy trust levels to new federation model */
 function migrateConnector(c: any): ConnectorConfig {
     // Migrate trust levels
@@ -121,12 +149,11 @@ function migrateConnector(c: any): ConnectorConfig {
         c.address = fixed;
     }
 
-    // Auto-derive publicUrl if missing
-    if (!c.publicUrl && c.address) {
-        const [host, port] = c.address.split(':');
-        c.publicUrl = port && port !== '4001'
-            ? `https://${host}:${port}`
-            : `https://${host}`;
+    // Auto-derive publicUrl if missing. Also REPAIRS the malformed values the old `split(':')` derivation
+    // wrote for every multiaddr connector — `https:///ip4/…` is not a URL anyone can dial, so leaving it in
+    // place would keep feeding a bogus home node into cross-node purchases.
+    if (c.address && (!c.publicUrl || c.publicUrl.startsWith('https:///'))) {
+        c.publicUrl = derivePublicUrl(c.address);
     }
 
     return c as ConnectorConfig;
@@ -139,6 +166,9 @@ function loadConnectors(): void {
             const needsMigration = raw.some((c: any) =>
                 ['full_sync', 'credit_verification', 'read_only'].includes(c.trustLevel) ||
                 !c.publicUrl ||
+                // A `https:///…` value from the old split(':') derivation — repaired by migrateConnector, and
+                // listed here so the repair is WRITTEN BACK rather than recomputed on every boot.
+                (typeof c.publicUrl === 'string' && c.publicUrl.startsWith('https:///')) ||
                 (c.address && c.address.includes(','))
             );
             connectors = raw.map(migrateConnector);
@@ -444,13 +474,8 @@ export async function disconnectFromAddress(address: string): Promise<void> {
 }
 
 export function addConnector(address: string, trustLevel: TrustLevel, callsign?: string, publicUrl?: string, enabled?: boolean): ConnectorConfig {
-    // Auto-derive publicUrl if not provided
-    if (!publicUrl && address) {
-        const [host, port] = address.split(':');
-        publicUrl = port && port !== '4001'
-            ? `https://${host}:${port}`
-            : `https://${host}`;
-    }
+    // Auto-derive publicUrl if the operator did not supply one.
+    if (!publicUrl && address) publicUrl = derivePublicUrl(address);
 
     // Prevent duplicates
     const existing = connectors.find(c => c.address === address);

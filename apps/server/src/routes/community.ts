@@ -242,7 +242,7 @@ router.get('/api/local/connectors', async (ctx) => {
 router.post('/api/local/connectors', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { password, address, trustLevel, callsign, enabled } = (ctx as any).requestBody || {};
+    const { password, address, trustLevel, callsign, enabled, publicUrl } = (ctx as any).requestBody || {};
 
     if (!password || !config.adminHash || !config.salt ||
         !verifyPassword(password, config.adminHash, config.salt)) {
@@ -260,8 +260,42 @@ router.post('/api/local/connectors', async (ctx) => {
     const validTrustLevels: TrustLevel[] = ['mirror', 'peer', 'blocked'];
     const level: TrustLevel = validTrustLevels.includes(trustLevel) ? trustLevel : 'peer';
 
+    // THE PEER'S PUBLIC URL, which the operator may now supply instead of having one guessed from the address.
+    //
+    // It matters more than it looks. On a cross-node purchase the seller decides which community the buyer
+    // belongs to from `buyerHomeNode` or, failing that, from THIS field on its connector record — and a bad
+    // value there is recorded against the visitor as their home community, which is what "charge home" depends
+    // on. It is also the peer's entry in the CORS allowlist (`getPeerOrigins`), and what step 4 will dial to
+    // pull a peer's listings. A guess derived from a libp2p multiaddr cannot know the HTTPS port, so the
+    // operator has to be able to say.
+    //
+    // Normalised to a bare origin: anything with a path, query or trailing slash would silently fail to match
+    // an Origin header, and the CORS comparison is by exact string.
+    let normalisedPublicUrl: string | undefined;
+    if (publicUrl !== undefined && publicUrl !== null && publicUrl !== '') {
+        if (typeof publicUrl !== 'string') {
+            ctx.status = 400;
+            ctx.body = { error: 'publicUrl must be a string' };
+            return;
+        }
+        let parsed: URL;
+        try {
+            parsed = new URL(publicUrl.trim());
+        } catch {
+            ctx.status = 400;
+            ctx.body = { error: 'publicUrl must be a valid URL, e.g. https://eastgippy.beanpool.org:8450' };
+            return;
+        }
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+            ctx.status = 400;
+            ctx.body = { error: 'publicUrl must be http or https' };
+            return;
+        }
+        normalisedPublicUrl = `${parsed.protocol}//${parsed.host}`;
+    }
+
     const isEnabled = enabled !== undefined ? Boolean(enabled) : undefined;
-    const connector = addConnector(address, level, callsign, undefined, isEnabled);
+    const connector = addConnector(address, level, callsign, normalisedPublicUrl, isEnabled);
     ctx.body = { success: true, connector };
 });
 

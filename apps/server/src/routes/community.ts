@@ -26,6 +26,7 @@ import {
     getMemberStats,
     getGuardiansOf, createRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery,
     getNodeRole, exportSyncState,
+    createTreasury,
 } from '../state-engine.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword,
@@ -34,9 +35,12 @@ import {
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
-    setConnectorCreditCap,
+    setConnectorCreditCap, peerIdFromAddress,
     type TrustLevel,
 } from '../connector-manager.js';
+import {
+    reconcileFederationLinks, getFederationLink, listFederationLinks, setCommissionCeiling,
+} from '../federation-link.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
@@ -383,12 +387,111 @@ router.post('/api/local/connectors/credit-cap', async (ctx) => {
             return;
         }
         logger.info('P2P', `[Connectors] Credit cap for ${address} ${cap === null ? 'cleared' : `set to ${cap}`} by operator`);
-        ctx.body = { success: true, address, creditCap: connector.creditCap ?? null };
+
+        // #143 step 3 — setting a cap is the deliberate act that enables settlement with a peer, so the
+        // link enterprise appears at the same moment (docs/federation-connector.md §7). One decision
+        // rather than two, and no way to end up settling with a peer that has no visible home and nobody
+        // accountable for it.
+        //
+        // Reconcile rather than create-this-one: same convergent call the boot path uses, so there is one
+        // definition of "which peers have links" instead of two that can disagree.
+        //
+        // A link failure must NOT fail the cap. The cap is what gates settlement and the operator's
+        // request was to set it; the enterprise is the visible home for it. Reported in the response so a
+        // silent half-success is impossible.
+        let linkError: string | undefined;
+        if (cap !== null) {
+            try {
+                reconcileFederationLinks(createTreasury);
+            } catch (e: any) {
+                linkError = e?.message || 'Could not create the link enterprise for this peer';
+                logger.error('P2P', `[Link] Cap set for ${address} but link creation failed: ${linkError}`);
+            }
+        }
+
+        const peerId = peerIdFromAddress(connector.address);
+        ctx.body = {
+            success: true, address, creditCap: connector.creditCap ?? null,
+            link: peerId ? getFederationLink(peerId) : null,
+            ...(linkError ? { linkError } : {}),
+        };
     } catch (e: any) {
         // A negative or non-finite cap. Rejected rather than coerced, so an operator's mistake is visible
         // instead of quietly becoming a limit they did not choose.
         ctx.status = 400;
         ctx.body = { error: e?.message || 'Invalid credit cap' };
+    }
+});
+
+/**
+ * The link enterprises, one per capped peer (#143 step 3).
+ *
+ * A PUBLIC read, deliberately. §7: "Members see the energy balance, on the link's card" — "we have
+ * delivered 480 beans of work to Byron and had none back" is a governance-grade fact about a community's
+ * own economy, and the thing that makes anyone call a favour in. Hiding it behind the admin password would
+ * keep a community from seeing its own position, which is the failure mode the operator-only alternative
+ * was rejected for.
+ *
+ * Carries no peer ADDRESS and no credit cap — the peer id and callsign are what a member needs to read the
+ * card, and the address is operator configuration.
+ */
+router.get('/api/federation/links', async (ctx) => {
+    ctx.body = {
+        links: listFederationLinks().map(l => ({
+            peerId: l.peerId,
+            treasuryPubkey: l.treasuryPubkey,
+            name: l.name,
+            energyBalance: l.energyBalance,
+            treasuryBalance: l.treasuryBalance,
+            commissionCeiling: l.commissionCeiling,
+            createdAt: l.createdAt,
+        })),
+    };
+});
+
+/**
+ * Set a link's commissioning ceiling — how much its keeper may commission across the boundary without
+ * asking anyone (§7). Admin-gated: this is the safety on step 5, so raising it is an operator act, while
+ * SEEING it is public (the route above) because "the ceiling is the safety, and it must be visible
+ * alongside the balance".
+ */
+router.post('/api/local/federation/links/ceiling', async (ctx) => {
+    if (!rateLimit(ctx)) return;
+    const config = getLocalConfig();
+    const body = (ctx as any).requestBody || {};
+    const { password, peerId } = body;
+
+    if (!password || !config.adminHash || !config.salt ||
+        !verifyPassword(password, config.adminHash, config.salt)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid password' };
+        return;
+    }
+    if (!peerId || typeof peerId !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'peerId is required' };
+        return;
+    }
+    // An absent ceiling is 0, never "no limit" — same reasoning as the credit cap, where unset means
+    // refuse. A missing field here is a mistake, not a request to remove the safety.
+    if (typeof body.ceiling !== 'number') {
+        ctx.status = 400;
+        ctx.body = { error: 'ceiling must be a number — there is no unlimited value, use 0 to stop commissioning' };
+        return;
+    }
+
+    try {
+        const link = setCommissionCeiling(peerId, body.ceiling);
+        if (!link) {
+            ctx.status = 404;
+            ctx.body = { error: 'No federation link for that peer — a link appears when the peer is given a credit cap' };
+            return;
+        }
+        logger.info('P2P', `[Link] Ceiling for ${peerId.slice(-8)} set to ${body.ceiling} by operator`);
+        ctx.body = { success: true, link };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Invalid commissioning ceiling' };
     }
 });
 

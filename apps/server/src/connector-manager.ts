@@ -120,8 +120,25 @@ function derivePublicUrl(address: string): string | undefined {
     if (address.startsWith('/')) {
         const parts = address.split('/').filter(Boolean);
         const hostIdx = parts.findIndex(p => ['ip4', 'ip6', 'dns', 'dns4', 'dns6'].includes(p));
-        const host = hostIdx >= 0 ? parts[hostIdx + 1] : undefined;
-        return host ? `https://${host}` : undefined;
+        if (hostIdx < 0) return undefined;
+        const host = parts[hostIdx + 1];
+        if (!host) return undefined;
+        // An IPv6 literal MUST be bracketed in a URL (RFC 3986). Unbracketed, `new URL('https://2001:db8::1')`
+        // throws — which would make the /api/local/connectors validator reject a legitimate peer, and put an
+        // unparseable origin into the CORS allowlist (review finding).
+        const bracketed = parts[hostIdx] === 'ip6' && !host.startsWith('[') ? `[${host}]` : host;
+        return `https://${bracketed}`;
+    }
+
+    // A bracketed IPv6 host:port — `[::1]:8443`. Splitting on ':' would shred the address, so the host is
+    // everything up to the closing bracket and only what follows it can be a port.
+    if (address.startsWith('[')) {
+        const close = address.indexOf(']');
+        if (close === -1) return undefined;
+        const host = address.slice(0, close + 1);
+        const rest = address.slice(close + 1);
+        const port = rest.startsWith(':') ? rest.slice(1) : undefined;
+        return port && port !== '4001' ? `https://${host}:${port}` : `https://${host}`;
     }
 
     const [host, port] = address.split(':');
@@ -152,7 +169,16 @@ function migrateConnector(c: any): ConnectorConfig {
     // Auto-derive publicUrl if missing. Also REPAIRS the malformed values the old `split(':')` derivation
     // wrote for every multiaddr connector — `https:///ip4/…` is not a URL anyone can dial, so leaving it in
     // place would keep feeding a bogus home node into cross-node purchases.
-    if (c.address && (!c.publicUrl || c.publicUrl.startsWith('https:///'))) {
+    // Anything that is not a usable string is treated as ABSENT and re-derived. connectors.json is
+    // operator-editable, so a truthy non-string (`true`, an object) is reachable: it would make `!c.publicUrl`
+    // false and then throw `c.publicUrl.startsWith is not a function` during startup, taking the node down on
+    // boot (review finding).
+    //
+    // Narrowing first, rather than just guarding the startsWith, because merely not throwing would LEAVE the
+    // junk value in place — and it goes on to be recorded as a visiting buyer's home node and pushed into the
+    // CORS allowlist. Not crashing is not the same as being correct.
+    const current = typeof c.publicUrl === 'string' ? c.publicUrl : undefined;
+    if (c.address && (!current || current.startsWith('https:///'))) {
         c.publicUrl = derivePublicUrl(c.address);
     }
 
@@ -166,9 +192,11 @@ function loadConnectors(): void {
             const needsMigration = raw.some((c: any) =>
                 ['full_sync', 'credit_verification', 'read_only'].includes(c.trustLevel) ||
                 !c.publicUrl ||
-                // A `https:///…` value from the old split(':') derivation — repaired by migrateConnector, and
-                // listed here so the repair is WRITTEN BACK rather than recomputed on every boot.
-                (typeof c.publicUrl === 'string' && c.publicUrl.startsWith('https:///')) ||
+                // Not a usable string, or a `https:///…` value from the old split(':') derivation. Both are
+                // repaired by migrateConnector, and both are listed here so the repair is WRITTEN BACK rather
+                // than recomputed on every boot.
+                typeof c.publicUrl !== 'string' ||
+                c.publicUrl.startsWith('https:///') ||
                 (c.address && c.address.includes(','))
             );
             connectors = raw.map(migrateConnector);
@@ -474,16 +502,23 @@ export async function disconnectFromAddress(address: string): Promise<void> {
 }
 
 export function addConnector(address: string, trustLevel: TrustLevel, callsign?: string, publicUrl?: string, enabled?: boolean): ConnectorConfig {
-    // Auto-derive publicUrl if the operator did not supply one.
-    if (!publicUrl && address) publicUrl = derivePublicUrl(address);
-
-    // Prevent duplicates
+    // NOTE THE ORDER: derivation happens only on the INSERT path, below. Deriving up here — as this function
+    // used to — meant `publicUrl` was never undefined by the time the update branch tested it, so any update
+    // that omitted it (changing trust level, toggling enabled) silently overwrote an operator's stated URL with
+    // a guess. That was harmless while nothing could set one; it becomes a regression the moment the route can
+    // (review finding).
     const existing = connectors.find(c => c.address === address);
     if (existing) {
         existing.trustLevel = trustLevel;
         if (callsign !== undefined) existing.callsign = callsign;
-        if (publicUrl !== undefined) existing.publicUrl = publicUrl;
-        
+        if (publicUrl !== undefined) {
+            existing.publicUrl = publicUrl;
+        } else if (typeof existing.publicUrl === 'string' && existing.publicUrl.startsWith('https:///')) {
+            // Repair a malformed stored value in passing, so a node that is reconfigured without being
+            // restarted converges too. Still never replaces a GOOD value with a guess.
+            existing.publicUrl = derivePublicUrl(address);
+        }
+
         // If it was enabled and is now disabled (made passive), automatically disconnect
         if (enabled === false && existing.enabled !== false) {
             disconnectFromAddress(address).catch(err => {
@@ -496,12 +531,13 @@ export function addConnector(address: string, trustLevel: TrustLevel, callsign?:
         return existing;
     }
 
+    // A NEW connector may be derived from, because there is nothing to overwrite.
     const connector: ConnectorConfig = {
         address,
         trustLevel,
         enabled: enabled !== undefined ? enabled : true,
         callsign: callsign || undefined,
-        publicUrl,
+        publicUrl: publicUrl ?? (address ? derivePublicUrl(address) : undefined),
         addedAt: Date.now(),
     };
 

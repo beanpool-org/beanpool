@@ -152,6 +152,62 @@ async function main() {
     assert(omitted.status === 200 && omitted.json?.connector?.publicUrl === 'https://x4.beanpool.org',
         `4d. an omitted publicUrl still derives, and is not an error (got ${omitted.status} ${omitted.json?.connector?.publicUrl})`);
 
+    // ── 5. AN UPDATE MUST NOT CLOBBER AN OPERATOR'S STATED URL (review finding). ─────────────────────────
+    //    Re-adding the same address is how trust level and enabled are changed, and those calls carry no
+    //    publicUrl. Deriving before the duplicate check meant every such call silently replaced a URL the
+    //    operator had chosen with a guess — invisible until the day the guess is wrong.
+    const stableAddress = '/ip4/172.18.0.3/tcp/4001/p2p/12D3KooWOperatorStated';
+    const toggled = await addConnectorOverHttp({ address: stableAddress, callsign: 'e', enabled: false });
+    assert(toggled.json?.connector?.publicUrl === 'https://gippsland.beanpool.org:8448',
+        `5a. an update that omits publicUrl PRESERVES the operator's value (got ${toggled.json?.connector?.publicUrl})`);
+    assert(toggled.json?.connector?.enabled === false, '5b. and the update it was actually making still applied');
+
+    // Supplying one on an update still replaces it — this is the operator changing their mind.
+    const changed = await addConnectorOverHttp({
+        address: stableAddress, callsign: 'e', enabled: true, publicUrl: 'https://gippsland.beanpool.org:9999',
+    });
+    assert(changed.json?.connector?.publicUrl === 'https://gippsland.beanpool.org:9999',
+        `5c. an update that DOES supply one replaces it (got ${changed.json?.connector?.publicUrl})`);
+
+    // A malformed stored value is still repaired in passing, so a node reconfigured without a restart
+    // converges as well — but only because the value was bad, never because a guess was available.
+    const legacy = cm.getConnectorByAddress(legacyAddress);
+    assert(legacy?.publicUrl === 'https://172.18.0.4', '5d. (the load-time repair from 1a is still in place)');
+
+    // ── 6. IPv6 must be bracketed, or the URL is unparseable (review finding). ───────────────────────────
+    const ip6 = await addConnectorOverHttp({ address: '/ip6/2001:db8::1/tcp/4001/p2p/12D3KooWIp6', callsign: 'k' });
+    assert(ip6.json?.connector?.publicUrl === 'https://[2001:db8::1]',
+        `6a. /ip6/… brackets the literal (got ${ip6.json?.connector?.publicUrl})`);
+
+    // The point of bracketing: an unbracketed IPv6 origin throws in `new URL`, which is what the route's own
+    // validator and every consumer of getPeerOrigins() rely on.
+    let ip6Parses = true;
+    try { new URL(String(ip6.json?.connector?.publicUrl)); } catch { ip6Parses = false; }
+    assert(ip6Parses, '6b. and the derived origin actually parses as a URL');
+    let unbracketedThrows = false;
+    try { new URL('https://2001:db8::1'); } catch { unbracketedThrows = true; }
+    assert(unbracketedThrows, '6c. (confirming the premise: the unbracketed form does throw)');
+
+    const ip6HostPort = await addConnectorOverHttp({ address: '[::1]:8443', callsign: 'l' });
+    assert(ip6HostPort.json?.connector?.publicUrl === 'https://[::1]:8443',
+        `6d. a bracketed host:port is not shredded by the ':' split (got ${ip6HostPort.json?.connector?.publicUrl})`);
+
+    // ── 7. A non-string publicUrl in connectors.json must not take the node down on boot (review finding). ─
+    //    connectors.json is operator-editable, so a truthy non-string is reachable: `!c.publicUrl` is false and
+    //    the startsWith call would throw during startup.
+    fs.writeFileSync(CONNECTORS_PATH, JSON.stringify([
+        { address: '/ip4/10.9.9.9/tcp/4001/p2p/12D3KooWJunkUrl', trustLevel: 'peer', enabled: true, publicUrl: true, addedAt: 2 },
+    ], null, 2));
+    let bootSurvived = true;
+    try {
+        cm.initConnectorManager({ addEventListener() { /* no-op */ } } as any);
+    } catch {
+        bootSurvived = false;
+    }
+    assert(bootSurvived, '7a. a non-string publicUrl does not throw during load');
+    assert(cm.getConnectorByAddress('/ip4/10.9.9.9/tcp/4001/p2p/12D3KooWJunkUrl')?.publicUrl === 'https://10.9.9.9',
+        '7b. and it is replaced with a derived value');
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ ALL CONNECTOR PUBLIC-URL CHECKS PASSED.');

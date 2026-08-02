@@ -116,7 +116,7 @@ run_federation_suites() {
     # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
     # cycle only revealed the next problem. Statuses are collected and all failures reported together.
     FAILED=""
-    for t in test-schema-upgrade test-commons-conservation test-demurrage-window test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-settlement; do
+    for t in test-schema-upgrade test-commons-conservation test-demurrage-window test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" pnpm exec tsx "src/$t.ts"
@@ -124,16 +124,22 @@ run_federation_suites() {
       rm -rf "$TMP_DIR"
     done
 
-    # The purchase route again with settlement ENABLED. FEDERATION_SETTLEMENT_ENABLED is a module const read at
-    # import, so a single process only ever sees one value — the loop above covers the shipped state (off, the
-    # kill switch refusing everything) and this covers the full refusal matrix behind it. Running it once either
-    # way would leave half the route untested, and it is the half that can debit a member.
-    echo "━━━ test-federation-purchase-route (settlement ON) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENABLE_PEER_CONNECTORS=true FEDERATION_SETTLEMENT=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      pnpm exec tsx "src/test-federation-purchase-route.ts"
-    if [ $? -ne 0 ]; then FAILED="$FAILED test-federation-purchase-route(on)"; fi
-    rm -rf "$TMP_DIR"
+    # The two settlement ROUTES again with settlement ENABLED. FEDERATION_SETTLEMENT_ENABLED is a module const
+    # read at import, so a single process only ever sees one value — the loop above covers the shipped state
+    # (off, the kill switch refusing everything) and this covers the full matrix behind it. Running either one
+    # once would leave half the route untested, and it is the half that moves value: the purchase route can
+    # debit a member, and the commission route can draw on the Commons pot.
+    #
+    # NO APOSTROPHES ANYWHERE IN THIS FUNCTION. The whole block is inside `bash -c '...'`, so one in a
+    # comment closes the string and the file fails to parse 100 lines later with "unexpected end of file".
+    for t in test-federation-purchase-route test-federation-commission; do
+      echo "━━━ $t (settlement ON) ━━━"
+      TMP_DIR=$(mktemp -d)
+      ENABLE_PEER_CONNECTORS=true FEDERATION_SETTLEMENT=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+        pnpm exec tsx "src/$t.ts"
+      if [ $? -ne 0 ]; then FAILED="$FAILED $t(on)"; fi
+      rm -rf "$TMP_DIR"
+    done
     if [ -n "$FAILED" ]; then
       echo ""
       echo "❌ Federation suites failed:$FAILED"

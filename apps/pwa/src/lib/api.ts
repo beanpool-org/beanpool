@@ -572,6 +572,55 @@ export async function getReachablePeers(): Promise<{ peers: ReachablePeer[] }> {
     return request('GET', '/api/federation/reachable-peers');
 }
 
+/** What a keeper may commission across one boundary right now (#143 step 5). */
+export interface CommissionCapacity {
+    peerId: string;
+    treasuryPubkey: string;
+    /** "eastgippy Link". */
+    name: string;
+    /** The peer's public URL — matches `originNode` on a cached listing, which is how the two are joined. */
+    originNode: string | null;
+    /** The tab, signed. Positive = we owe them, negative = they owe us. */
+    energyBalance: number;
+    ceiling: number;
+    /** `ceiling − energyBalance`, floored at 0. Fee included, so it is what an amount must fit inside. */
+    allowance: number;
+    /** How much of the allowance is credit already earned rather than fresh discretion. */
+    redeemable: number;
+    treasuryBalance: number;
+    commonsBalance: number;
+}
+
+/**
+ * The links THIS member keeps, with what each may commission.
+ *
+ * Empty for almost everyone — a member who keeps no link, and every node without federation. The marketplace
+ * uses that to decide whether a remote listing gets a commission action at all, so nobody is shown a button
+ * they cannot press.
+ */
+export async function getCommissionCapacity(): Promise<{ links: CommissionCapacity[] }> {
+    return request('GET', '/api/federation/commission/capacity');
+}
+
+/**
+ * Commission a partner community's listing on behalf of the link, funded from the Commons pot.
+ *
+ * `amount` is optional and defaults to the listing's own price server-side. A 200 means settled, 202 means
+ * in flight and recovery will finish it — `request` surfaces the body either way, so the caller reads
+ * `status` rather than assuming success.
+ */
+export async function commissionListing(postId: string, amount?: number): Promise<{
+    status: 'settled' | 'pending' | 'refused' | 'reversed';
+    amount: number;
+    fee: number;
+    drawnFromCommons: number;
+    commissionedBy: string;
+    peer: string;
+    listing: string;
+}> {
+    return request('POST', '/api/federation/commission', amount === undefined ? { postId } : { postId, amount });
+}
+
 export async function removeMarketplacePost(id: string, authorPublicKey: string): Promise<{ success: boolean }> {
     return request('POST', '/api/marketplace/posts/remove', { id, authorPublicKey });
 }
@@ -903,6 +952,14 @@ export interface Treasury {
         peerId: string;
         energyBalance: number;
         commissionCeiling: number;
+        /**
+         * `ceiling − energyBalance`, floored at 0 (#143 step 5) — what may actually be commissioned now.
+         *
+         * NOT the same as the ceiling, and the card must show this one: a ceiling of 0 still permits calling in
+         * credit the community is owed. Server-computed so it cannot disagree with the route that enforces it.
+         * Optional because a node deployed before step 5 does not send it.
+         */
+        commissionAllowance?: number;
     } | null;
 }
 

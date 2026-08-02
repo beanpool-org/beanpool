@@ -952,6 +952,14 @@ export interface Treasury {
         peerId: string;
         energyBalance: number;
         commissionCeiling: number;
+        /**
+         * `ceiling − energyBalance`, floored at 0 (#143 step 5) — what may actually be commissioned now.
+         *
+         * NOT the same as the ceiling, and the card must show this one: a ceiling of 0 still permits calling in
+         * credit the community is owed. Server-computed so it cannot disagree with the route that enforces it.
+         * Optional because a node deployed before step 5 does not send it.
+         */
+        commissionAllowance?: number;
     } | null;
 }
 

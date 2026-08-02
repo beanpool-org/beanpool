@@ -306,11 +306,20 @@ export function ProjectsPage({ identity }: Props) {
                                         text-xs, not text-[0.65rem] (~10.4px): below the 12px floor, and this app
                                         targets 320dp at 1.3× font scaling, so a hand-tuned size that small is
                                         unreadable exactly where it matters most. */}
+                                    {/* THE ALLOWANCE, not the ceiling (#143 step 5). This read
+                                        "commissioning off" whenever the ceiling was 0, and that is wrong in
+                                        the case §3 is entirely about: a ceiling of 0 still permits calling in
+                                        credit the community has already earned. A link showing "They owe us
+                                        480 beans of work" directly above the words "commissioning off" told
+                                        the keeper the opposite of the truth.
+
+                                        Server-computed, so this cannot disagree with the route that enforces
+                                        it. Falls back to the ceiling on a node that predates the field. */}
                                     {t.link && (
                                         <div className="text-nature-400 text-xs mt-0.5">
-                                            {t.link.commissionCeiling > 0
-                                                ? `up to ${t.link.commissionCeiling} 🫘 spendable`
-                                                : 'commissioning off'}
+                                            {(t.link.commissionAllowance ?? t.link.commissionCeiling) > 0
+                                                ? `up to ${t.link.commissionAllowance ?? t.link.commissionCeiling} 🫘 to commission`
+                                                : 'nothing to commission'}
                                         </div>
                                     )}
                                 </div>

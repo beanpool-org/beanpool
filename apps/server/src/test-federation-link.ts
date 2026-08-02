@@ -215,6 +215,24 @@ async function main() {
     assert(detail.json?.link?.peerId === PEER_ID, '6c. the detail read carries it too, keyed by peer id for the ceiling route');
     assert(getLinkByTreasury(ordinary.publicKey) === null, '6d. and the treasury→link lookup does not invent one');
 
+    // #143 step 5: the CARD MUST SHOW THE ALLOWANCE, not the ceiling, and the two are different numbers.
+    //
+    // The card used to read "commissioning off" whenever the ceiling was 0, which is wrong in exactly the case
+    // §3 is about: a ceiling of 0 still permits calling in credit the community is owed. So the allowance is
+    // computed on the SERVER, by the same `commissionAllowanceFor` the enforcement path uses, and shipped on
+    // both reads. A client recomputing it would be a second definition of the rule that refuses the button.
+    tiltBridge(PEER_ID, -480);
+    const owedList = await get('/api/treasuries');
+    const owedCard = (owedList.json?.treasuries ?? []).find((t: any) => t.publicKey === link!.treasuryPubkey);
+    assert(owedCard?.link?.commissionAllowance === 480,
+        `6e. with a tab of −480 and a ceiling of 0 the card carries an allowance of 480 (got ${owedCard?.link?.commissionAllowance}) — "commissioning off" beside "they owe us 480" told the keeper the opposite of the truth`);
+    assert(owedCard?.link?.commissionCeiling === 0,
+        '6f. while still reporting the ceiling separately — they are different facts and the card shows both');
+    const owedDetail = await get(`/api/treasury/${link!.treasuryPubkey}`);
+    assert(owedDetail.json?.link?.commissionAllowance === 480,
+        `6g. and the detail read agrees with the list (got ${owedDetail.json?.link?.commissionAllowance}) — one shape function, so they cannot drift`);
+    tiltBridge(PEER_ID, 480);   // back to square, so the checks below start where they expect
+
     // ── 7. The ceiling: admin-gated, bounded, and with no "unlimited". ───────────────────────────────────
     assert((await setCeiling({ peerId: PEER_ID, ceiling: 20 })).status === 401, '7a. a missing password is rejected');
     assert((await setCeiling({ password: 'nope', peerId: PEER_ID, ceiling: 20 })).status === 401, '7b. a wrong password is rejected');

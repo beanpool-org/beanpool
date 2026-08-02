@@ -19,6 +19,7 @@ import {
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
+import { commissionAllowanceFor } from '../federation-commission.js';
 import type { RouteDeps } from './types.js';
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
@@ -34,13 +35,28 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
      * `peerId` is included on the detail read because it is what the ceiling route is keyed on, so a
      * keeper's screen can act on the link it is already showing without a second lookup.
      */
+    /**
+     * The wire shape of a link, from the link row. One function so the list and the detail read cannot drift.
+     *
+     * `commissionAllowance` is here rather than left to the client (#143 step 5). The allowance is
+     * `ceiling − tab`, so a client holding both could compute it — and a client that computes it is a second
+     * definition of the rule the commission route enforces with. A card promising a keeper 480 while the route
+     * refuses is worse than a card promising nothing.
+     *
+     * It also fixes a copy bug the cumulative model introduces: the card used to read "commissioning off"
+     * whenever the ceiling was 0, which is now wrong in the case that matters most. A ceiling of 0 still
+     * permits REDEMPTION up to the credit the community is owed — that is the whole argument of §3.
+     */
+    const linkShape = (link: { peerId: string; energyBalance: number; commissionCeiling: number }) => ({
+        peerId: link.peerId,
+        energyBalance: link.energyBalance,
+        commissionCeiling: link.commissionCeiling,
+        commissionAllowance: commissionAllowanceFor(link.commissionCeiling, link.energyBalance),
+    });
+
     const linkDetail = (pk: string) => {
         const link = getLinkByTreasury(pk);
-        return link && {
-            peerId: link.peerId,
-            energyBalance: link.energyBalance,
-            commissionCeiling: link.commissionCeiling,
-        };
+        return link && linkShape(link);
     };
 
     // Gate an operator action: a signed member bound to THIS treasury (#106).
@@ -110,11 +126,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
                     keepers: treasuryKeepers(r.public_key),
-                    link: link && {
-                        peerId: link.peerId,
-                        energyBalance: link.energyBalance,
-                        commissionCeiling: link.commissionCeiling,
-                    },
+                    link: link && linkShape(link),
                 };
             }),
         };

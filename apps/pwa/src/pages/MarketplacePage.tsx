@@ -16,6 +16,7 @@ import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
 import { loadEnabledPeers, togglePeer } from '../lib/peer-prefs';
+import { TRANSACTION_FEE_RATE } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     getMemberProfile, createConversationApi, sendTransfer,
@@ -25,7 +26,9 @@ import {
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     getMembers,
+    getCommissionCapacity, commissionListing,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
+    type CommissionCapacity,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 
@@ -127,6 +130,24 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Federation — multi-toggle (home always on, peers toggled independently)
     const [peerNodes, setPeerNodes] = useState<{ callsign: string; publicUrl: string }[]>([]);
     const [enabledPeers, setEnabledPeers] = useState<Set<string>>(() => loadEnabledPeers());
+
+    // #143 step 5 — the links THIS member keeps, keyed by the peer's URL so a pulled listing's `originNode`
+    // matches directly. Empty for almost everyone: a member who keeps no link, and every node without
+    // federation. That emptiness is what keeps the commission panel off the vast majority of screens.
+    const [myLinks, setMyLinks] = useState<Map<string, CommissionCapacity>>(new Map());
+    const [commissioning, setCommissioning] = useState(false);
+    const [commissionResult, setCommissionResult] = useState<string | null>(null);
+
+    const refreshCommissionCapacity = useCallback(() => {
+        if (!identity) { setMyLinks(new Map()); return; }
+        getCommissionCapacity()
+            .then(r => setMyLinks(new Map((r.links ?? []).filter(l => l.originNode).map(l => [l.originNode as string, l]))))
+            // A 401/404 here is the ordinary case — an unsigned client, or a node without the route. Swallowed
+            // rather than surfaced: nobody should see an error for not being a keeper.
+            .catch(() => setMyLinks(new Map()));
+    }, [identity?.publicKey]);
+
+    useEffect(() => { refreshCommissionCapacity(); }, [refreshCommissionCapacity]);
 
     // Radius filter
     const [radiusSettings, setRadiusSettings] = useState<RadiusSettings | null>(() => loadRadiusSettings());
@@ -467,6 +488,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // stayed enabled and called the ordinary accept on it — which the server now refuses, but a member
         // meeting that as a raw error alert is a worse version of the same bug.
         const isRemotePost = !!((selectedPost as any)._remoteNode ?? (selectedPost as any).originNode);
+
+        // #143 step 5 — the link this member keeps for the community this listing actually came from, or
+        // undefined. Keyed on `originNode` ONLY, never on `_remoteNode`: a client-side peer browse is not a
+        // cached listing, so the server has no post to resolve a commission against and the route would 404.
+        const commissionLink = (selectedPost as any).originNode
+            ? myLinks.get((selectedPost as any).originNode)
+            : undefined;
+        // What the commission costs including the cross-node fee, which is inside the allowance — the server
+        // checks `amount + fee`, so a button quoting the bare price would offer a number the route refuses.
+        // TRANSACTION_FEE_RATE lives in @beanpool/core; hardcoding the arithmetic here would be a second
+        // definition of the fee, so it is imported.
+        const commissionNeeded = Math.round(selectedPost.credits * (1 + TRANSACTION_FEE_RATE) * 100) / 100;
 
         const activeTx = selectedTxId 
             ? myTransactions.find(t => t.id === selectedTxId)
@@ -1007,6 +1040,95 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         This listing belongs to another community. Buying it takes a cross-community
                                         purchase so both communities record it — not this button, yet.
                                     </p>
+                                )}
+
+                                {/* ── HALF B (#143 step 5) ──────────────────────────────────────────────────
+                                    The keeper of a link commissioning a partner community's work, funded from
+                                    the Commons pot. Shown ONLY when this member keeps the link for the exact
+                                    community the listing came from, which for almost everyone is never.
+
+                                    It sits under the disabled Confirm on purpose. The member above it cannot
+                                    buy this listing for themselves; a keeper looking at the same card can buy
+                                    it FOR THE COMMUNITY, and putting the two next to each other is what makes
+                                    the difference legible. Commissioning is not a better personal purchase —
+                                    it spends everyone's beans.
+
+                                    Spec: docs/federation-connector.md §3 — "the management team in Byron
+                                    advertises in Brisbane… Brisbane people get paid in beans to come down and
+                                    do a performance in Byron." This is that, and it is what makes the tab come
+                                    down instead of only growing. */}
+                                {commissionLink && (
+                                    <div className="mt-3 pt-3 border-t border-nature-800">
+                                        <div className="flex items-baseline justify-between gap-2 mb-1">
+                                            <span className="text-xs font-semibold text-sky-300">
+                                                <span aria-hidden="true">🔗 </span>{commissionLink.name}
+                                            </span>
+                                            <span className="text-xs text-nature-400 tabular-nums">
+                                                {commissionLink.allowance} 🫘 available
+                                            </span>
+                                        </div>
+                                        {/* THE SENTENCE, not a signed number. `redeemable` is the part of the
+                                            allowance that is credit already earned, and it is the reason a
+                                            keeper would act at all — "they owe us 480" is a different decision
+                                            from "we have discretion to spend 500 we do not have yet". */}
+                                        <p className="text-[13px] leading-snug text-nature-400 mb-2">
+                                            {commissionLink.redeemable > 0
+                                                ? `${commissionLink.name.replace(/ Link$/, '')} owes this community ${commissionLink.redeemable} beans of work. Commissioning this listing calls some of that in — the beans come from the Commons pot, and the tab comes down.`
+                                                : `Nothing is owed either way right now, so this would open a new tab of ${commissionLink.ceiling > 0 ? `up to ${commissionLink.ceiling} beans` : 'beans'} — within the ceiling set for this link.`}
+                                        </p>
+                                        {commissionNeeded > commissionLink.allowance ? (
+                                            <p className="text-[13px] leading-snug text-amber-500 font-medium">
+                                                ⚠️ This listing needs {commissionNeeded} 🫘 with the fee, which is
+                                                more than the {commissionLink.allowance} available. An operator can
+                                                raise the ceiling in Settings.
+                                            </p>
+                                        ) : commissionNeeded > commissionLink.commonsBalance ? (
+                                            <p className="text-[13px] leading-snug text-amber-500 font-medium">
+                                                ⚠️ The Commons pot holds {commissionLink.commonsBalance} 🫘, less than
+                                                the {commissionNeeded} this needs. The pot fills from fees and demurrage.
+                                            </p>
+                                        ) : (
+                                            <button
+                                                onClick={async () => {
+                                                    if (!selectedPost) return;
+                                                    setCommissioning(true);
+                                                    setCommissionResult(null);
+                                                    try {
+                                                        const r = await commissionListing(selectedPost.id);
+                                                        // 202 is a real outcome, not a failure: the beans are in
+                                                        // flight and boot recovery finishes or refunds them. Saying
+                                                        // "done" would be a lie and saying "failed" a worse one.
+                                                        setCommissionResult(
+                                                            r.status === 'settled'
+                                                                ? `Commissioned. ${r.amount} 🫘 to ${r.peer}, ${r.drawnFromCommons} of it drawn from the Commons.`
+                                                                : r.status === 'pending'
+                                                                    ? 'Sent — still completing. It will finish on its own, or the beans come back.'
+                                                                    : 'That did not go through, and nothing was spent.'
+                                                        );
+                                                        refreshCommissionCapacity();
+                                                        refresh();
+                                                    } catch (e: any) {
+                                                        setCommissionResult(e?.message || 'That commission could not be started.');
+                                                    } finally {
+                                                        setCommissioning(false);
+                                                    }
+                                                }}
+                                                disabled={commissioning}
+                                                className={`w-full py-2.5 rounded-lg font-bold text-white text-sm transition-all shadow-sm min-h-[44px] ${
+                                                    commissioning ? 'bg-sky-500 cursor-not-allowed opacity-60' : 'bg-sky-700 hover:bg-sky-600'
+                                                }`}
+                                            >
+                                                {commissioning
+                                                    ? 'Commissioning…'
+                                                    : `Commission for the community — ${commissionNeeded} 🫘`}
+                                            </button>
+                                        )}
+                                        {commissionResult && (
+                                            <p className="mt-2 text-[13px] leading-snug text-nature-300" role="status">
+                                                {commissionResult}
+                                            </p>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         ) : (

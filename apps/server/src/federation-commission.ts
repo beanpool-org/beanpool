@@ -87,6 +87,22 @@ export interface CommissionCapacity {
     commonsBalance: number;
 }
 
+/**
+ * `ceiling − tab`, floored at 0. THE one definition of the allowance.
+ *
+ * Exported because the Commons list needs the same number on every link card and must not recompute it: the
+ * card is where a keeper decides whether to press the button, and a card disagreeing with the route that
+ * enforces it is worse than a card showing nothing. The list path reads its balances in a single batched
+ * query and passes them here, so sharing the rule costs it no extra round trip.
+ *
+ * Floored rather than allowed negative: a tab already past the ceiling — an operator LOWERED it after
+ * commissioning, which is a legitimate thing to do — must read as "nothing available", not as a negative a
+ * caller might subtract somewhere and turn back into room.
+ */
+export function commissionAllowanceFor(ceiling: number, energyBalance: number): number {
+    return Math.max(0, round4(ceiling - energyBalance));
+}
+
 /** What a keeper of this link may commission right now, or null when the peer has no link. */
 export function commissionCapacity(peerId: string): CommissionCapacity | null {
     const link = getFederationLink(peerId);
@@ -103,10 +119,7 @@ function capacityFor(link: FederationLink): CommissionCapacity {
         originNode: getConnectors().find(c => c.peerId === link.peerId)?.publicUrl ?? null,
         energyBalance: round4(tab),
         ceiling: link.commissionCeiling,
-        // Floored at 0 rather than allowed negative: a tab already past the ceiling (an operator LOWERED it
-        // after commissioning, which is a legitimate thing to do) must read as "nothing available", not as a
-        // negative number a caller might subtract somewhere and turn back into room.
-        allowance: Math.max(0, round4(link.commissionCeiling - tab)),
+        allowance: commissionAllowanceFor(link.commissionCeiling, tab),
         redeemable: Math.max(0, round4(-tab)),
         treasuryBalance: link.treasuryBalance,
         commonsBalance: round2(getCommonsBalanceExact()),

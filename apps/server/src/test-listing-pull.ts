@@ -26,10 +26,11 @@ process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, getMember, getPosts, createPost } from './state-engine.js';
+import { initStateEngine, getMember, getPosts, createPost, reconcileLedgerFromDb } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { ledger } from './engine/ledger.js';
 import {
     cacheRemoteListings, listingsForPeer, REMOTE_ID_PREFIX, LISTING_PULL_INTERVAL_MS,
 } from './federation-listings.js';
@@ -67,8 +68,72 @@ function makeLocalMember(callsign: string): string {
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_url)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`).run(pk, callsign, TINY_PNG);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, 0)`).run(pk);
+    // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
+    // suite to drive a real ledger write:
+    //
+    //   epoch at NOW, not 0. Epoch 0 is 1970, so the first ledger READ charges ~56 years of demurrage (#138).
+    //   reconcileLedgerFromDb(). `initStateEngine` loads the in-memory ledger from `accounts` at boot, so a
+    //   row INSERTed afterwards is invisible to it — `transfer` then debits from an in-memory zero and
+    //   persists the result, discarding the seeded balance. §8h showed the payer going 100 → −4 on a 4-bean
+    //   trade, read as a 100-bean conservation failure, and it was neither a product bug nor demurrage.
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, ?)`)
+        .run(pk, ledger.getCurrentEpoch());
+    reconcileLedgerFromDb();
     return pk;
+}
+
+/**
+ * A local member whose PRIVATE key we keep, so the suite can make genuinely signed requests.
+ *
+ * `makeLocalMember` throws its key away, which is fine for everything that drives the engine directly. It is
+ * not fine for a route check: an unsigned POST is rejected by the signature middleware with a 401, and a
+ * `status >= 400` assertion then passes for entirely the wrong reason. That happened while writing §8 — the
+ * refusal being asserted was "Missing cryptographic signature headers", not the guard under test.
+ */
+function makeSigner(callsign: string): { publicKey: string; privateKey: crypto.KeyObject } {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_url)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`).run(pk, callsign, TINY_PNG);
+    // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
+    // suite to drive a real ledger write:
+    //
+    //   epoch at NOW, not 0. Epoch 0 is 1970, so the first ledger READ charges ~56 years of demurrage (#138).
+    //   reconcileLedgerFromDb(). `initStateEngine` loads the in-memory ledger from `accounts` at boot, so a
+    //   row INSERTed afterwards is invisible to it — `transfer` then debits from an in-memory zero and
+    //   persists the result, discarding the seeded balance. §8h showed the payer going 100 → −4 on a 4-bean
+    //   trade, read as a 100-bean conservation failure, and it was neither a product bug nor demurrage.
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, ?)`)
+        .run(pk, ledger.getCurrentEpoch());
+    reconcileLedgerFromDb();
+    return { publicKey: pk, privateKey };
+}
+
+/** The replay-proof scheme the middleware requires: signature over METHOD\npath\ntimestamp\nnonce\nbody. */
+async function signedPost(
+    signer: { publicKey: string; privateKey: crypto.KeyObject },
+    path: string,
+    body: unknown,
+): Promise<{ status: number; json: any }> {
+    const bodyString = JSON.stringify(body ?? {});
+    const timestamp = String(Date.now());
+    const nonce = crypto.randomUUID();
+    const canonical = `POST\n${path}\n${timestamp}\n${nonce}\n${bodyString}`;
+    const signature = crypto.sign(null, Buffer.from(canonical), signer.privateKey).toString('base64');
+    const res = await fetch(`${BASE}${path}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Public-Key': signer.publicKey,
+            'X-Signature': signature,
+            'X-Timestamp': timestamp,
+            'X-Nonce': nonce,
+        },
+        body: bodyString,
+    });
+    let json: any = null;
+    try { json = await res.json(); } catch { /* no json */ }
+    return { status: res.status, json };
 }
 
 const remoteAuthor = (): string => crypto.randomBytes(32).toString('hex');
@@ -109,7 +174,8 @@ async function main() {
     // EVERY local member seeded BEFORE the baseline. `makeLocalMember` mints — a fixture's privilege, not the
     // code's — so one created later reads as a conservation failure at check 8. The purchase-route suite
     // documents having been caught by this three times; now four.
-    const ours = makeLocalMember('Local Alice');
+    const buyer = makeSigner('Local Alice');
+    const ours = buyer.publicKey;
     const localAuthor = makeLocalMember('Local Bob');
     makeLocalMember('Sam');
     const baseline = nodeTotal();
@@ -227,9 +293,57 @@ async function main() {
     assert(LISTING_PULL_INTERVAL_MS === 5 * 60_000,
         `7. the pull interval is 5 minutes (${LISTING_PULL_INTERVAL_MS}ms) — the accepted staleness, long enough to be nothing on a 1 CPU or solar node`);
 
-    // ── 8. Nothing about any of this minted a bean. ───────────────────────────────────────────────────
+    // ── 8. A CACHED LISTING IS NOT LOCALLY TRADABLE. Found live, after this shipped. ───────────────────
+    //
+    // Caching put remote listings on the local board for the first time, and every existing guard looked the
+    // wrong way. `assertLocalSettlement` checks the PAYER, who on a remote offer is one of ours; it also
+    // returns early when FEDERATION_SETTLEMENT is on, which is the only configuration where cached listings
+    // exist. `acceptPost` refuses your own post, an inactive post, a member on holiday — nothing about origin.
+    //
+    // So the ordinary accept returned 200 and debited the buyer into a LOCAL escrow. Reproduced against two
+    // live nodes before this was written: a gippsland member went −0.08 → −3.07 against an eastgippy listing.
+    // On completion the beans would land in the seller's phantom local account — their real ledger is on the
+    // peer and never hears of it — and no bridge tab is opened, so the peer records no obligation either. The
+    // node still sums to zero, which is exactly why nothing else caught it: no beans are minted, a member is
+    // simply paid into an account they cannot reach.
+    //
+    // Through the ROUTE, not the engine function, because the route is what the button calls and the #144
+    // review already caught a route that refused everything while the handler checks passed.
+    const cachedListing = cachedFor(BYRON_URL)[0];
+    assert(cachedListing !== undefined, '8a. setup: there is a cached listing to aim at');
+    // The buyer needs a live offer of their own — accepting is gated on having contributed.
+    createPost('offer', 'other', 'Alice can garden', 'd', 5, 'fixed', ours);
+    const balBefore = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(ours) as any).balance;
+    const accept = await signedPost(buyer, '/api/marketplace/posts/accept', { postId: cachedListing.id, buyerPublicKey: ours });
+    assert(accept.status >= 400 && !/signature/i.test(accept.json?.error ?? ''),
+        `8b. THE BUG: accepting a cached listing through the ordinary route is refused (got ${accept.status}) — it belongs to the peer, and buying it has to open a bridge tab`);
+    assert(/another community/i.test(accept.json?.error ?? ''),
+        `8c. and says why, in the member's terms: "${accept.json?.error}"`);
+    const balAfter = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(ours) as any).balance;
+    assert(balAfter === balBefore,
+        `8d. with NOT ONE BEAN DEDUCTED (${balBefore} → ${balAfter}) — the live reproduction lost 3 here`);
+    assert((db.prepare("SELECT COUNT(*) AS c FROM accounts WHERE public_key LIKE 'escrow_%' AND balance != 0").get() as any).c === 0,
+        '8e. and no escrow account holding anything');
+    assert((db.prepare('SELECT COUNT(*) AS c FROM marketplace_transactions WHERE post_id = ?').get(cachedListing.id) as any).c === 0,
+        '8f. and no transaction row against the peer\'s listing');
+
+    // The SAME refusal for a request, which is the two-step path and a separate draw point.
+    const reqAttempt = await signedPost(buyer, '/api/marketplace/posts/request', { postId: cachedListing.id, buyerPublicKey: ours });
+    assert(reqAttempt.status >= 400 && /another community/i.test(reqAttempt.json?.error ?? ''),
+        `8g. and requesting one is refused too (got ${reqAttempt.status}) — accept and request are different draw points, so one guard on one of them is half a fix`);
+
+    // A LOCAL listing still trades. The guard has to be about origin, not about anything the pull touched.
+    const localOffer = createPost('offer', 'other', 'Bob fixes bikes', 'd', 4, 'fixed', localAuthor)!;
+    const localAccept = await signedPost(buyer, '/api/marketplace/posts/accept', { postId: localOffer.id, buyerPublicKey: ours });
+    assert(localAccept.status === 200,
+        `8h. AND AN ORDINARY LOCAL TRADE IS UNTOUCHED (got ${localAccept.status}: ${localAccept.json?.error ?? 'ok'}) — a guard that broke the local board would be the worse bug`);
+
+    // ── 9. Nothing about any of this minted a bean. ───────────────────────────────────────────────────
+    //
+    // §8h left 4 beans in a live escrow, which is a legitimate hold rather than drift — count it in.
+    const inEscrow = (db.prepare("SELECT COALESCE(SUM(balance),0) AS t FROM accounts WHERE public_key LIKE 'escrow_%'").get() as any).t;
     assert(nodeTotal() === baseline,
-        `8. FINALLY: across every cache round the ledger is unchanged (${baseline} → ${nodeTotal()}) — a cached listing is a copy of an advert, not value`);
+        `9. FINALLY: across every cache round the ledger is unchanged (${baseline} → ${nodeTotal()}, of which ${inEscrow} is the §8h hold) — a cached listing is a copy of an advert, not value`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

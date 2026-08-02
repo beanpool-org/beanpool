@@ -4,7 +4,7 @@
 
 import { isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { assertLocalSettlement } from '../federation-settlement.js';
+import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -94,6 +94,9 @@ export function requestPost(
     // #102: on a Need the payer is the post's author, NOT the requester — which is exactly why this
     // check belongs at the draw point instead of the route's actor.
     assertLocalSettlement(payerPubkey);
+    // #143 step 4 fallout: a PULLED listing is on this board but belongs to a peer. Raw row here, so the
+    // column name rather than the mapped field. The payee is the other side of the same swap as the payer.
+    assertTradableHere({ originNode: post.origin_node }, isOffer ? post.author_pubkey : requesterPublicKey);
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(payerPubkey);
     if (balance - finalCredits < floor) throw new Error('Insufficient balance to request this post.');
     if (balance - finalCredits < uFloor) throw cb.floorLockedError(payerPubkey, balance - finalCredits);
@@ -162,6 +165,11 @@ export function approvePostRequest(
 
     // #102: the approver is the post author, but the money moves from the BUYER on this row.
     assertLocalSettlement(row.buyer_pubkey);
+    // #143 step 4 fallout. Checked again here and not only in `requestPost`, because a row created before
+    // this guard existed — or on a listing whose author has migrated away since — reaches its draw point
+    // through THIS function. The escrow is funded below either way, so this is a draw point in its own right.
+    const originRow = db.prepare('SELECT origin_node FROM posts WHERE id = ?').get(row.post_id) as any;
+    assertTradableHere({ originNode: originRow?.origin_node }, row.seller_pubkey);
 
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
     if (balance - row.credits < floor) throw new Error('Buyer has insufficient balance to cover escrow');
@@ -298,6 +306,9 @@ export function acceptPost(
     // #102: a visitor's beans live on their home ledger, so this node cannot fund escrow for them.
     // Guarded here rather than only at the route because the PAYER is not always the actor.
     assertLocalSettlement(buyerPublicKey);
+    // #143 step 4 fallout, and the call site the live bug came through: this is the one-step accept, so the
+    // payee is always the post's author — a visitor, on a pulled listing.
+    assertTradableHere(post, post.authorPublicKey);
 
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(buyerPublicKey);
     if (balance - finalCredits < floor) throw new Error('Insufficient balance to accept this offer');

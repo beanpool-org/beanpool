@@ -1,0 +1,623 @@
+=== apps/server/src/federation-settlement-exchange.ts ===
+   1:   @@ -0,0 +1,620 @@
+   2: R:   1 | + /**
+   3: R:   2 | +  * The cross-node settlement exchange — the ledger half of #104 (step 3b).
+   4: R:   3 | +  *
+   5: R:   4 | +  * Spec: docs/federation-economics.md §2.5. Step 3a built the durable state machine; this drives it and
+   6: R:   5 | +  * writes the actual entries. The libp2p wire actions live in `federation-protocol.ts`; everything here is
+   7: R:   6 | +  * local and synchronous-ish, which is what makes both halves testable on one node.
+   8: R:   7 | +  *
+   9: R:   8 | +  * THE FOUR ENTRIES (§2.1). Buyer B on BRISBANE buys a 5-bean service from seller S on BYRON:
+  10: R:   9 | +  *
+  11: R:  10 | +  *     BYRON                                    BRISBANE
+  12: R:  11 | +  *       S                     +5.000            B                     −5.075
+  13: R:  12 | +  *       bridge_brisbane       −5.000            COMMONS_POOL          +0.075
+  14: R:  13 | +  *                                               bridge_byron          +5.000
+  15: R:  14 | +  *       ─────────────────────────────           ─────────────────────────────
+  16: R:  15 | +  *       node total             0.000            node total             0.000
+  17: R:  16 | +  *
+  18: R:  17 | +  * Two invariants the code below exists to preserve, and which the tests assert directly:
+  19: R:  18 | +  *   • the bridge entries are equal and opposite and carry the PRICE ONLY — never price plus fee. The fee
+  20: R:  19 | +  *     is a local matter and must not cross the border.
+  21: R:  20 | +  *   • the seller receives EXACTLY the agreed amount. They quoted 5, they get 5. So every transfer here is
+  22: R:  21 | +  *     explicitly fee-exempt and the fee is moved by hand — the automatic 1.5% deducts from the *recipient*
+  23: R:  22 | +  *     (§8), which is the local convention and the wrong one here (§2.1).
+  24: R:  23 | +  *
+  25: R:  24 | +  * WHO WRITES WHAT (Rule 3a). Each node writes only its own ledger. Brisbane debits its own member on that
+  26: R:  25 | +  * member's own signed instruction; Byron pays its own seller under its own cap. Neither ever asks the
+  27: R:  26 | +  * other to touch a member account, so a compromised peer's maximum reach is exactly the cap its
+  28: R:  27 | +  * counterparty chose.
+  29: R:  28 | +  *
+  30: R:  29 | +  * ORDER (Rule 3c). Byron never credits its seller before it holds a signed receipt. The one reachable
+  31: R:  30 | +  * failure state is Brisbane owing outward for something not yet delivered — recoverable, and never an
+  32: R:  31 | +  * unbacked local mint.
+  33: R:  32 | +  */
+  34: R:  33 | + 
+  35: R:  34 | + import { db } from './db/db.js';
+  36: R:  35 | + import { TRANSACTION_FEE_RATE } from '@beanpool/core';
+  37: R:  36 | + import { transfer, registerVisitor, getMember, moveToCommons, payFromCommons } from './state-engine.js';
+  38: R:  37 | + import { bridgeAccountId, ensureBridgeAccount, settlementCapacityForPeer } from './federation-bridge.js';
+  39: R:  38 | + import {
+  40: R:  39 | +     openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, expiredReservations,
+  41: R:  40 | +     receiptStatus, actionForReceiptStatus, type SettlementRow, type ReceiptStatus,
+  42: R:  41 | + } from './federation-settlement-state.js';
+  43: R:  42 | + import { signReceipt, verifyReceipt, type SettlementReceipt } from './federation-receipt.js';
+  44: R:  43 | + 
+  45: R:  44 | + /**
+  46: R:  45 | +  * Timeouts, and the ordering constraint between them.
+  47: R:  46 | +  *
+  48: R:  47 | +  * §2.5: "Byron's reservation must outlive Brisbane's step-3 timeout, by a clear margin." If it doesn't,
+  49: R:  48 | +  * `CAPACITY_LAPSED` fires in *normal* operation instead of only on a genuine fault, and the rare
+  50: R:  49 | +  * compensating path becomes the routine one. The assertion below encodes that so a future edit to one
+  51: R:  50 | +  * number can't silently invert the relationship.
+  52: R:  51 | +  *
+  53: R:  52 | +  * These are starting values tuned for a healthy link. They are NOT trustworthy until measured on the real
+  54: R:  53 | +  * 1cpu/1GB test pair — that added latency is the entire reason to test there rather than on localhost.
+  55: R:  54 | +  */
+  56: R:  55 | + export const PURCHASE_ASK_TIMEOUT_MS = 10_000;
+  57: R:  56 | + export const RECEIPT_DELIVERY_TIMEOUT_MS = 15_000;
+  58: R:  57 | + export const RESERVATION_TTL_MS = 120_000;
+  59: R:  58 | + 
+  60: R:  59 | + if (RESERVATION_TTL_MS <= PURCHASE_ASK_TIMEOUT_MS + RECEIPT_DELIVERY_TIMEOUT_MS) {
+  61: R:  60 | +     throw new Error(
+  62: R:  61 | +         '[Federation] RESERVATION_TTL_MS must outlive the ask + delivery timeouts by a clear margin — '
+  63: R:  62 | +         + 'otherwise CAPACITY_LAPSED fires in normal operation (docs/federation-economics.md §2.5)',
+  64: R:  63 | +     );
+  65: R:  64 | + }
+  66: R:  65 | + 
+  67: R:  66 | + /** Beans are carried to 4dp internally; round every derived figure so escrow closes to exactly zero. */
+  68: R:  67 | + const round4 = (n: number): number => Math.round(n * 10000) / 10000;
+  69: R:  68 | + 
+  70: R:  69 | + /** The fee the buyer pays ON TOP of the price (§2.1). */
+  71: R:  70 | + export const crossNodeFee = (amount: number): number => round4(amount * TRANSACTION_FEE_RATE);
+  72: R:  71 | + 
+  73: R:  72 | + /** The local escrow account holding a pending cross-node purchase. Derived from the key, so no column. */
+  74: R:  73 | + const escrowAccountFor = (key: string): string => `escrow_${key}`;
+  75: R:  74 | + 
+  76: R:  75 | + export class SettlementError extends Error {
+  77: R:  76 | +     constructor(message: string, readonly reason: string) { super(message); }
+  78: R:  77 | + }
+  79: R:  78 | + 
+  80: R:  79 | + function requireAmount(amount: number): void {
+  81: R:  80 | +     if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+  82: R:  81 | +         throw new SettlementError('A settlement amount must be a positive number', 'invalid_amount');
+  83: R:  82 | +     }
+  84: R:  83 | + }
+  85: R:  84 | + 
+  86: R:  85 | + /** `transfer()` answers failure with null. Turn that into a throw so an enclosing db.transaction rolls back. */
+  87: R:  86 | + function mustTransfer(from: string, to: string, amount: number, memo: string): void {
+  88: R:  87 | +     if (amount === 0) return;
+  89: R:  88 | +     const txn = transfer(from, to, amount, memo, 'direct', /* isFeeExempt */ true);
+  90: R:  89 | +     if (!txn) throw new SettlementError(`Ledger move refused: ${from} → ${to} (${amount})`, 'ledger_refused');
+  91: R:  90 | + }
+  92: R:  91 | + 
+  93: R:  92 | + // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+  94: R:  93 | + // BUYER'S NODE (outbound) — steps 1, 3, and the compensating reversal
+  95: R:  94 | + // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+  96: R:  95 | + 
+  97: R:  96 | + /**
+  98: R:  97 | +  * Step 1: hold the buyer's beans in ordinary local escrow. Nothing has crossed the border yet.
+  99: R:  98 | +  *
+ 100: R:  99 | +  * Escrow deliberately happens BEFORE asking the peer (§2.5). Step 2 is the sole gate on the peer's cap and
+ 101: R: 100 | +  * the peer is the only authority on it, so asking first would be advisory and stale by the time it
+ 102: R: 101 | +  * mattered. Escrow is cheap and fully reversible; discovering the buyer can't afford it after a round trip
+ 103: R: 102 | +  * is not.
+ 104: R: 103 | +  *
+ 105: R: 104 | +  * This is also what retires the old `usableFloor` reservation arithmetic (§3.1): the beans have already
+ 106: R: 105 | +  * left the spendable balance, so the local/foreign double-spend window closes by itself. The floor check
+ 107: R: 106 | +  * inside `transfer(..., 'escrow')` is what enforces Rule 4's aggregate cap — there is no second limit.
+ 108: R: 107 | +  */
+ 109: R: 108 | + export function beginOutboundSettlement(input: {
+ 110: R: 109 | +     key: string;
+ 111: R: 110 | +     peerId: string;
+ 112: R: 111 | +     buyerPublicKey: string;
+ 113: R: 112 | +     sellerPublicKey: string;
+ 114: R: 113 | +     postId?: string | null;
+ 115: R: 114 | +     amount: number;
+ 116: R: 115 | + }): SettlementRow {
+ 117: R: 116 | +     requireAmount(input.amount);
+ 118: R: 117 | + 
+ 119: R: 118 | +     const existing = getSettlement(input.key);
+ 120: R: 119 | +     if (existing) return existing;          // idempotent: a retried purchase reuses the same hold
+ 121: R: 120 | + 
+ 122: R: 121 | +     const amount = round4(input.amount);
+ 123: R: 122 | +     const fee = crossNodeFee(amount);
+ 124: R: 123 | +     const escrowAccount = escrowAccountFor(input.key);
+ 125: R: 124 | + 
+ 126: R: 125 | +     return db.transaction(() => {
+ 127: R: 126 | +         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`)
+ 128: R: 127 | +             .run(escrowAccount);
+ 129: R: 128 | + 
+ 130: R: 129 | +         // 'escrow' method, not 'direct': that is what bounds the debit by the member's offer-banded
+ 131: R: 130 | +         // usableFloor rather than by a positive balance, which is the whole point of a credit line.
+ 132: R: 131 | +         const held = transfer(
+ 133: R: 132 | +             input.buyerPublicKey, escrowAccount, round4(amount + fee),
+ 134: R: 133 | +             `Cross-community purchase hold (${input.key})`, 'escrow', /* isFeeExempt */ true,
+ 135: R: 134 | +         );
+ 136: R: 135 | +         if (!held) {
+ 137: R: 136 | +             throw new SettlementError(
+ 138: R: 137 | +                 'Not enough credit to cover this purchase and its fee', 'insufficient_credit',
+ 139: R: 138 | +             );
+ 140: R: 139 | +         }
+ 141: R: 140 | + 
+ 142: R: 141 | +         return openSettlement({
+ 143: R: 142 | +             key: input.key,
+ 144: R: 143 | +             direction: 'outbound',
+ 145: R: 144 | +             peerId: input.peerId,
+ 146: R: 145 | +             buyerPubkey: input.buyerPublicKey,
+ 147: R: 146 | +             sellerPubkey: input.sellerPublicKey,
+ 148: R: 147 | +             postId: input.postId ?? null,
+ 149: R: 148 | +             amount,
+ 150: R: 149 | +             fee,
+ 151: R: 150 | +             state: 'escrowed',
+ 152: R: 151 | +         });
+ 153: R: 152 | +     })();
+ 154: R: 153 | + }
+ 155: R: 154 | + 
+ 156: R: 155 | + /**
+ 157: R: 156 | +  * Step 3: the peer accepted, so convert escrow into the real entries and issue the signed receipt.
+ 158: R: 157 | +  *
+ 159: R: 158 | +  * The state row moves to `committed` inside the same transaction as the entries, and the receipt is
+ 160: R: 159 | +  * returned only after that commits. That ordering is what makes a bridge disagreement DETECTABLE later
+ 161: R: 160 | +  * (§2.5): without a persisted `committed`, a receipt that was never acted on is invisible and the mismatch
+ 162: R: 161 | +  * surfaces much later as unexplained drift between the two nodes' bridge rows.
+ 163: R: 162 | +  *
+ 164: R: 163 | +  * Idempotent: a retry after the entries were written returns the SAME stored receipt rather than signing a
+ 165: R: 164 | +  * second one, so a redelivery can never produce two different valid receipts for one key.
+ 166: R: 165 | +  */
+ 167: R: 166 | + export async function commitOutboundSettlement(
+ 168: R: 167 | +     key: string,
+ 169: R: 168 | +     ourPeerId: string,
+ 170: R: 169 | +     privateKey: any,
+ 171: R: 170 | +     buyerHomeNode?: string | null,
+ 172: R: 171 | + ): Promise<{ receipt: SettlementReceipt; signature: string }> {
+ 173: R: 172 | +     const row = getSettlement(key);
+ 174: R: 173 | +     if (!row) throw new SettlementError(`Unknown settlement ${key}`, 'unknown_settlement');
+ 175: R: 174 | +     if (row.direction !== 'outbound') {
+ 176: R: 175 | +         throw new SettlementError(`${key} is not ours to commit`, 'wrong_direction');
+ 177: R: 176 | +     }
+ 178: R: 177 | + 
+ 179: R: 178 | +     const receipt: SettlementReceipt = {
+ 180: R: 179 | +         key: row.key,
+ 181: R: 180 | +         issuerPeerId: ourPeerId,
+ 182: R: 181 | +         buyerPublicKey: row.buyerPubkey,
+ 183: R: 182 | +         buyerHomeNode: buyerHomeNode ?? row.buyerHomeNode ?? null,
+ 184: R: 183 | +         sellerPublicKey: row.sellerPubkey ?? '',
+ 185: R: 184 | +         postId: row.postId,
+ 186: R: 185 | +         amount: row.amount,
+ 187: R: 186 | +         committedAt: row.state === 'committed' ? row.updatedAt : new Date().toISOString(),
+ 188: R: 187 | +     };
+ 189: R: 188 | + 
+ 190: R: 189 | +     // Already committed: re-issue exactly what we stored. Re-signing would be harmless for a
+ 191: R: 190 | +     // deterministic payload, but `committedAt` is not deterministic, so a second signature would be over
+ 192: R: 191 | +     // different bytes — two valid receipts for one settlement, which is precisely what idempotency is for.
+ 193: R: 192 | +     if (row.state === 'committed' || row.state === 'settled') {
+ 194: R: 193 | +         if (!row.receipt) {
+ 195: R: 194 | +             throw new SettlementError(`${key} is ${row.state} with no stored receipt`, 'receipt_missing');
+ 196: R: 195 | +         }
+ 197: R: 196 | +         return { receipt, signature: row.receipt };
+ 198: R: 197 | +     }
+ 199: R: 198 | +     if (row.state !== 'escrowed') {
+ 200: R: 199 | +         throw new SettlementError(`${key} is ${row.state}, not awaiting commit`, 'wrong_state');
+ 201: R: 200 | +     }
+ 202: R: 201 | + 
+ 203: R: 202 | +     // Signing is async and better-sqlite3 transactions are synchronous, so sign first, then write. Safe in
+ 204: R: 203 | +     // this order: a crash between the two leaves the row `escrowed`, which boot recovery refunds.
+ 205: R: 204 | +     const signature = await signReceipt(receipt, privateKey);
+ 206: R: 205 | +     const escrowAccount = escrowAccountFor(key);
+ 207: R: 206 | +     const bridge = bridgeAccountId(row.peerId);
+ 208: R: 207 | +     ensureBridgeAccount(row.peerId);
+ 209: R: 208 | + 
+ 210: R: 209 | +     return db.transaction(() => {
+ 211: R: 210 | +         // Price to the bridge; fee to our OWN Commons. The bridge entry carries the price alone, so the
+ 212: R: 211 | +         // two nodes' bridge rows can be equal and opposite.
+ 213: R: 212 | +         mustTransfer(escrowAccount, bridge, row.amount, `Cross-community purchase (${key})`);
+ 214: R: 213 | +         // moveToCommons, NOT transfer(..., 'COMMONS_POOL', ...) — see its docstring. A transfer into the
+ 215: R: 214 | +         // COMMONS_POOL *account* is overwritten by the next persistCommonsBalance() flush, so the fee
+ 216: R: 215 | +         // would vanish from the books and the node would stop summing to zero.
+ 217: R: 216 | +         if (row.fee > 0 && !moveToCommons(escrowAccount, row.fee, `Cross-community purchase fee (${key})`)) {
+ 218: R: 217 | +             throw new SettlementError(`Could not move the fee for ${key} to the Commons`, 'fee_failed');
+ 219: R: 218 | +         }
+ 220: R: 219 | +         advanceSettlement(key, 'committed', { receipt: signature });
+ 221: R: 220 | +         return { receipt, signature };
+ 222: R: 221 | +     })();
+ 223: R: 222 | + }
+ 224: R: 223 | + 
+ 225: R: 224 | + /**
+ 226: R: 225 | +  * Undo a committed settlement with COMPENSATING ENTRIES against the same key — never by deleting rows.
+ 227: R: 226 | +  *
+ 228: R: 227 | +  * Called when the peer answers `CAPACITY_LAPSED`, or when `GET_RECEIPT_STATUS` answers `NOT_FOUND`.
+ 229: R: 228 | +  *
+ 230: R: 229 | +  * Why compensate rather than delete (§2.5): removing the rows would make a settled trade
+ 231: R: 230 | +  * indistinguishable from one that never happened, defeat `runLedgerAudit`, and hand a spoofed or replayed
+ 232: R: 231 | +  * `CAPACITY_LAPSED` the power to quietly rewrite history. Both the original and the reversal stay in the
+ 233: R: 232 | +  * ledger, which is self-documenting and idempotent on the key.
+ 234: R: 233 | +  *
+ 235: R: 234 | +  * The fee is refunded too. The trade did not happen, so the buyer is made whole — the fee is a charge on a
+ 236: R: 235 | +  * completed crossing, not a fee for asking.
+ 237: R: 236 | +  */
+ 238: R: 237 | + export function reverseOutboundSettlement(key: string, reason: string): SettlementRow {
+ 239: R: 238 | +     const row = getSettlement(key);
+ 240: R: 239 | +     if (!row) throw new SettlementError(`Unknown settlement ${key}`, 'unknown_settlement');
+ 241: R: 240 | +     if (row.state === 'reversed') return row;                       // idempotent
+ 242: R: 241 | +     if (row.direction !== 'outbound') {
+ 243: R: 242 | +         throw new SettlementError(`${key} is not ours to reverse`, 'wrong_direction');
+ 244: R: 243 | +     }
+ 245: R: 244 | +     if (row.state !== 'committed') {
+ 246: R: 245 | +         throw new SettlementError(`${key} is ${row.state}, not reversible`, 'wrong_state');
+ 247: R: 246 | +     }
+ 248: R: 247 | + 
+ 249: R: 248 | +     const bridge = bridgeAccountId(row.peerId);
+ 250: R: 249 | + 
+ 251: R: 250 | +     return db.transaction(() => {
+ 252: R: 251 | +         mustTransfer(bridge, row.buyerPubkey, row.amount, `Reversed cross-community purchase (${key})`);
+ 253: R: 252 | +         // Drawn from the Commons pot, not from the shadow account — otherwise the refund is funded from
+ 254: R: 253 | +         // nowhere and the node's books stop balancing. Refusing here (rather than skipping the fee) keeps
+ 255: R: 254 | +         // the reversal all-or-nothing: a partial refund is worse than a retry.
+ 256: R: 255 | +         if (row.fee > 0 && !payFromCommons(row.buyerPubkey, row.fee, `Refunded cross-community fee (${key})`)) {
+ 257: R: 256 | +             throw new SettlementError(`Commons cannot cover the fee refund for ${key}`, 'fee_refund_failed');
+ 258: R: 257 | +         }
+ 259: R: 258 | +         return advanceSettlement(key, 'reversed', { failureReason: reason });
+ 260: R: 259 | +     })();
+ 261: R: 260 | + }
+ 262: R: 261 | + 
+ 263: R: 262 | + /**
+ 264: R: 263 | +  * Release an escrow hold for a purchase the peer never accepted. Nothing crossed the border, so this is a
+ 265: R: 264 | +  * plain refund rather than a compensating entry — there is nothing to compensate.
+ 266: R: 265 | +  */
+ 267: R: 266 | + export function abandonOutboundSettlement(key: string, reason: string): SettlementRow {
+ 268: R: 267 | +     const row = getSettlement(key);
+ 269: R: 268 | +     if (!row) throw new SettlementError(`Unknown settlement ${key}`, 'unknown_settlement');
+ 270: R: 269 | +     if (row.state === 'abandoned') return row;                      // idempotent
+ 271: R: 270 | +     if (row.direction !== 'outbound' || row.state !== 'escrowed') {
+ 272: R: 271 | +         throw new SettlementError(`${key} is ${row.state}, not an unasked hold`, 'wrong_state');
+ 273: R: 272 | +     }
+ 274: R: 273 | + 
+ 275: R: 274 | +     return db.transaction(() => {
+ 276: R: 275 | +         mustTransfer(
+ 277: R: 276 | +             escrowAccountFor(key), row.buyerPubkey, round4(row.amount + row.fee),
+ 278: R: 277 | +             `Released cross-community hold (${key})`,
+ 279: R: 278 | +         );
+ 280: R: 279 | +         return advanceSettlement(key, 'abandoned', { failureReason: reason });
+ 281: R: 280 | +     })();
+ 282: R: 281 | + }
+ 283: R: 282 | + 
+ 284: R: 283 | + /** The peer confirmed it paid its seller. Both bridges agree; nothing left to do but record it. */
+ 285: R: 284 | + export function finaliseOutboundSettlement(key: string): SettlementRow {
+ 286: R: 285 | +     const row = getSettlement(key);
+ 287: R: 286 | +     if (!row) throw new SettlementError(`Unknown settlement ${key}`, 'unknown_settlement');
+ 288: R: 287 | +     if (row.state === 'settled') return row;
+ 289: R: 288 | +     return advanceSettlement(key, 'settled');
+ 290: R: 289 | + }
+ 291: R: 290 | + 
+ 292: R: 291 | + // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+ 293: R: 292 | + // SELLER'S NODE (inbound) — steps 2 and 4
+ 294: R: 293 | + // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+ 295: R: 294 | + 
+ 296: R: 295 | + export type PurchaseDecision =
+ 297: R: 296 | +     | { accepted: true; key: string; reservedUntil: string }
+ 298: R: 297 | +     | { accepted: false; reason: string; message: string };
+ 299: R: 298 | + 
+ 300: R: 299 | + /**
+ 301: R: 300 | +  * Step 2: the peer asks whether we will accept a purchase from one of their members.
+ 302: R: 301 | +  *
+ 303: R: 302 | +  * We check our OWN cap on them and reserve against it. We do not pay our seller yet — that needs the
+ 304: R: 303 | +  * receipt (Rule 3c). Nothing about the cap is negotiable over the wire: the number comes from our own
+ 305: R: 304 | +  * connector record and a peer cannot raise the limit that constrains it (§3.2).
+ 306: R: 305 | +  *
+ 307: R: 306 | +  * IDEMPOTENCY. An accepted reservation is persisted, so a retried ask returns the same acceptance. A
+ 308: R: 307 | +  * refusal is deliberately NOT persisted: refusing is not a commitment, and the honest answer to "will you
+ 309: R: 308 | +  * accept now?" may legitimately have changed — headroom returns when the balance moves back.
+ 310: R: 309 | +  *
+ 311: R: 310 | +  * A key already held for a DIFFERENT peer is refused outright. Keys are minted by the buyer's node, so two
+ 312: R: 311 | +  * peers can collide by accident as well as on purpose, and silently answering for the wrong settlement
+ 313: R: 312 | +  * would let one peer's receipt be paid out of another's credit line.
+ 314: R: 313 | +  */
+ 315: R: 314 | + export function handlePurchaseRequest(input: {
+ 316: R: 315 | +     key: string;
+ 317: R: 316 | +     peerId: string;
+ 318: R: 317 | +     buyerPublicKey: string;
+ 319: R: 318 | +     buyerCallsign?: string;
+ 320: R: 319 | +     buyerHomeNode?: string | null;
+ 321: R: 320 | +     sellerPublicKey: string;
+ 322: R: 321 | +     postId?: string | null;
+ 323: R: 322 | +     amount: number;
+ 324: R: 323 | + }): PurchaseDecision {
+ 325: R: 324 | +     if (!input.key || typeof input.key !== 'string') {
+ 326: R: 325 | +         return { accepted: false, reason: 'invalid_key', message: 'A settlement key is required.' };
+ 327: R: 326 | +     }
+ 328: R: 327 | +     if (typeof input.amount !== 'number' || !Number.isFinite(input.amount) || input.amount <= 0) {
+ 329: R: 328 | +         return { accepted: false, reason: 'invalid_amount', message: 'A settlement amount must be a positive number.' };
+ 330: R: 329 | +     }
+ 331: R: 330 | +     if (!input.sellerPublicKey || !input.buyerPublicKey) {
+ 332: R: 331 | +         return { accepted: false, reason: 'invalid_parties', message: 'Both parties must be identified.' };
+ 333: R: 332 | +     }
+ 334: R: 333 | + 
+ 335: R: 334 | +     const existing = getSettlement(input.key);
+ 336: R: 335 | +     if (existing) {
+ 337: R: 336 | +         if (existing.peerId !== input.peerId || existing.direction !== 'inbound') {
+ 338: R: 337 | +             return {
+ 339: R: 338 | +                 accepted: false, reason: 'key_conflict',
+ 340: R: 339 | +                 message: 'That settlement reference is already in use.',
+ 341: R: 340 | +             };
+ 342: R: 341 | +         }
+ 343: R: 342 | +         if (existing.state === 'reserved' || existing.state === 'held' || existing.state === 'settled') {
+ 344: R: 343 | +             return {
+ 345: R: 344 | +                 accepted: true, key: existing.key,
+ 346: R: 345 | +                 reservedUntil: existing.reservedUntil ?? new Date(Date.now() + RESERVATION_TTL_MS).toISOString(),
+ 347: R: 346 | +             };
+ 348: R: 347 | +         }
+ 349: R: 348 | +         return {
+ 350: R: 349 | +             accepted: false, reason: existing.failureReason ?? 'settlement_closed',
+ 351: R: 350 | +             message: 'That purchase was already closed and cannot be reopened.',
+ 352: R: 351 | +         };
+ 353: R: 352 | +     }
+ 354: R: 353 | + 
+ 355: R: 354 | +     // The seller must actually be one of ours. Paying a stranger out of a bridge account would mint local
+ 356: R: 355 | +     // beans for someone with no local standing — the #102 defect wearing a different hat.
+ 357: R: 356 | +     const seller = getMember(input.sellerPublicKey);
+ 358: R: 357 | +     if (!seller || seller.homeNodeUrl) {
+ 359: R: 358 | +         return {
+ 360: R: 359 | +             accepted: false, reason: 'seller_not_local',
+ 361: R: 360 | +             message: 'That seller is not a member of this community.',
+ 362: R: 361 | +         };
+ 363: R: 362 | +     }
+ 364: R: 363 | + 
+ 365: R: 364 | +     // ...and the buyer must NOT be. Same shape as the `relay_message` impersonation guard (A2-28): the
+ 366: R: 365 | +     // connection is trusted, but that authorises the CONNECTION, not the asserted identity.
+ 367: R: 366 | +     //
+ 368: R: 367 | +     // This one has teeth beyond a bogus trade. Accepting it reaches `registerVisitor`, which stamps a
+ 369: R: 368 | +     // `home_node_url` onto an existing member row that has none — quietly converting one of OUR members
+ 370: R: 369 | +     // into a visitor. `assertLocalSettlement` then refuses that member's own local spending (#102). So any
+ 371: R: 370 | +     // peer that knows a local member's public key could freeze their account by naming them as a buyer.
+ 372: R: 371 | +     const claimedBuyer = getMember(input.buyerPublicKey);
+ 373: R: 372 | +     if (claimedBuyer && !claimedBuyer.homeNodeUrl) {
+ 374: R: 373 | +         console.warn(`[Federation] Peer ${input.peerId.slice(-8)} claimed local member ${input.buyerPublicKey.slice(0, 8)} as a cross-node buyer`);
+ 375: R: 374 | +         return {
+ 376: R: 375 | +             accepted: false, reason: 'buyer_is_local',
+ 377: R: 376 | +             message: 'That buyer is a member of this community, so their purchase is settled here, not across nodes.',
+ 378: R: 377 | +         };
+ 379: R: 378 | +     }
+ 380: R: 379 | + 
+ 381: R: 380 | +     const capacity = settlementCapacityForPeer(input.peerId, input.amount);
+ 382: R: 381 | +     if (!capacity.ok) return { accepted: false, reason: capacity.reason, message: capacity.message };
+ 383: R: 382 | + 
+ 384: R: 383 | +     const reservedUntil = new Date(Date.now() + RESERVATION_TTL_MS).toISOString();
+ 385: R: 384 | + 
+ 386: R: 385 | +     // The seller needs to know who they are serving, and a visitor record is how a cross-community
+ 387: R: 386 | +     // counterparty already renders in the clients. Tagged with their home node so it is never confused
+ 388: R: 387 | +     // with a local member.
+ 389: R: 388 | +     try {
+ 390: R: 389 | +         registerVisitor(input.buyerPublicKey, input.buyerCallsign, input.buyerHomeNode ?? undefined);
+ 391: R: 390 | +     } catch (e: any) {
+ 392: R: 391 | +         console.warn('[Federation] Visitor record for cross-node buyer failed:', e?.message || e);
+ 393: R: 392 | +     }
+ 394: R: 393 | + 
+ 395: R: 394 | +     openSettlement({
+ 396: R: 395 | +         key: input.key,
+ 397: R: 396 | +         direction: 'inbound',
+ 398: R: 397 | +         peerId: input.peerId,
+ 399: R: 398 | +         buyerPubkey: input.buyerPublicKey,
+ 400: R: 399 | +         buyerHomeNode: input.buyerHomeNode ?? null,
+ 401: R: 400 | +         sellerPubkey: input.sellerPublicKey,
+ 402: R: 401 | +         postId: input.postId ?? null,
+ 403: R: 402 | +         amount: round4(input.amount),
+ 404: R: 403 | +         reservedUntil,
+ 405: R: 404 | +         state: 'reserved',
+ 406: R: 405 | +     });
+ 407: R: 406 | + 
+ 408: R: 407 | +     return { accepted: true, key: input.key, reservedUntil };
+ 409: R: 408 | + }
+ 410: R: 409 | + 
+ 411: R: 410 | + export type ReceiptOutcome =
+ 412: R: 411 | +     | { settled: true; key: string }
+ 413: R: 412 | +     | { settled: false; reason: string; message: string };
+ 414: R: 413 | + 
+ 415: R: 414 | + /**
+ 416: R: 415 | +  * Step 4a: persist an arriving receipt, then attempt payment.
+ 417: R: 416 | +  *
+ 418: R: 417 | +  * Persist-then-pay is the order that makes payment REPLAYABLE (§2.5): a crash mid-payment resumes from the
+ 419: R: 418 | +  * stored receipt instead of losing the fact that we owe our seller. So `held` is committed on its own,
+ 420: R: 419 | +  * before any ledger write.
+ 421: R: 420 | +  *
+ 422: R: 421 | +  * Everything the receipt claims is re-checked against what we reserved. A receipt is a bearer instrument
+ 423: R: 422 | +  * for a local mint, so it must not be able to name a different amount, a different seller, or a different
+ 424: R: 423 | +  * peer than the reservation it settles — each of those would route real beans somewhere the cap check
+ 425: R: 424 | +  * never authorised.
+ 426: R: 425 | +  */
+ 427: R: 426 | + export async function handleReceiptDelivery(input: {
+ 428: R: 427 | +     key: string;
+ 429: R: 428 | +     receipt: SettlementReceipt;
+ 430: R: 429 | +     signature: string;
+ 431: R: 430 | +     peerId: string;
+ 432: R: 431 | + }): Promise<ReceiptOutcome> {
+ 433: R: 432 | +     const row = getSettlement(input.key);
+ 434: R: 433 | +     if (!row) {
+ 435: R: 434 | +         return { settled: false, reason: 'NOT_FOUND', message: 'No reservation exists for that settlement.' };
+ 436: R: 435 | +     }
+ 437: R: 436 | +     if (row.direction !== 'inbound' || row.peerId !== input.peerId) {
+ 438: R: 437 | +         return { settled: false, reason: 'NOT_FOUND', message: 'That settlement does not belong to this peer.' };
+ 439: R: 438 | +     }
+ 440: R: 439 | +     if (row.state === 'settled') return { settled: true, key: row.key };          // idempotent redelivery
+ 441: R: 440 | +     if (row.state === 'reversed' || row.state === 'abandoned') {
+ 442: R: 441 | +         return {
+ 443: R: 442 | +             settled: false,
+ 444: R: 443 | +             reason: row.failureReason ?? 'CAPACITY_LAPSED',
+ 445: R: 444 | +             message: 'That reservation is no longer open, so this purchase was not completed.',
+ 446: R: 445 | +         };
+ 447: R: 446 | +     }
+ 448: R: 447 | + 
+ 449: R: 448 | +     // Bind the receipt to the peer that presented it, and to the reservation it claims to settle.
+ 450: R: 449 | +     const ok = await verifyReceipt(input.receipt, input.signature, input.peerId);
+ 451: R: 450 | +     if (!ok) {
+ 452: R: 451 | +         return { settled: false, reason: 'BAD_SIGNATURE', message: 'That settlement receipt could not be verified.' };
+ 453: R: 452 | +     }
+ 454: R: 453 | +     const r = input.receipt;
+ 455: R: 454 | +     const matches = r.key === row.key
+ 456: R: 455 | +         && round4(r.amount) === round4(row.amount)
+ 457: R: 456 | +         && r.buyerPublicKey === row.buyerPubkey
+ 458: R: 457 | +         && r.sellerPublicKey === (row.sellerPubkey ?? '')
+ 459: R: 458 | +         && (r.postId ?? null) === (row.postId ?? null);
+ 460: R: 459 | +     if (!matches) {
+ 461: R: 460 | +         return { settled: false, reason: 'RECEIPT_MISMATCH', message: 'That receipt does not match the reserved purchase.' };
+ 462: R: 461 | +     }
+ 463: R: 462 | + 
+ 464: R: 463 | +     if (row.state === 'reserved') advanceSettlement(row.key, 'held', { receipt: input.signature });
+ 465: R: 464 | +     return settleHeldReceipt(row.key);
+ 466: R: 465 | + }
+ 467: R: 466 | + 
+ 468: R: 467 | + /**
+ 469: R: 468 | +  * Step 4b: pay our seller from the peer's bridge account, or refuse with `CAPACITY_LAPSED`.
+ 470: R: 469 | +  *
+ 471: R: 470 | +  * Split out from delivery because boot recovery calls it directly, with no network and no receipt to
+ 472: R: 471 | +  * re-verify — the `held` row already is the verified receipt.
+ 473: R: 472 | +  *
+ 474: R: 473 | +  * The cap is re-evaluated HERE, atomically, and not trusted from the reservation. A slow network or a
+ 475: R: 474 | +  * sleeping VM can land a receipt late, and paying blindly could push us past the number our operator
+ 476: R: 475 | +  * chose. That makes a reservation *a hint that reduces headroom*, not a promise — the right shape, since a
+ 477: R: 476 | +  * node's own cap is the only authority on what it may extend and should never be bound by a decision it
+ 478: R: 477 | +  * made in the past.
+ 479: R: 478 | +  */
+ 480: R: 479 | + export function settleHeldReceipt(key: string): ReceiptOutcome {
+ 481: R: 480 | +     const row = getSettlement(key);
+ 482: R: 481 | +     if (!row) return { settled: false, reason: 'NOT_FOUND', message: 'No such settlement.' };
+ 483: R: 482 | +     if (row.state === 'settled') return { settled: true, key };
+ 484: R: 483 | +     if (row.state !== 'held') {
+ 485: R: 484 | +         return { settled: false, reason: 'wrong_state', message: `Settlement is ${row.state}, not awaiting payment.` };
+ 486: R: 485 | +     }
+ 487: R: 486 | +     if (!row.sellerPubkey) {
+ 488: R: 487 | +         return { settled: false, reason: 'seller_unknown', message: 'No seller recorded for that settlement.' };
+ 489: R: 488 | +     }
+ 490: R: 489 | + 
+ 491: R: 490 | +     const capacity = settlementCapacityForPeer(row.peerId, row.amount);
+ 492: R: 491 | +     if (!capacity.ok) {
+ 493: R: 492 | +         // Do NOT pay. Mark it reversed so the buyer's node can compensate its own entries; on this side
+ 494: R: 493 | +         // there is nothing to compensate, because nothing was ever paid out.
+ 495: R: 494 | +         advanceSettlement(key, 'reversed', { failureReason: 'CAPACITY_LAPSED' });
+ 496: R: 495 | +         return { settled: false, reason: 'CAPACITY_LAPSED', message: capacity.message };
+ 497: R: 496 | +     }
+ 498: R: 497 | + 
+ 499: R: 498 | +     ensureBridgeAccount(row.peerId);
+ 500: R: 499 | + 
+ 501: R: 500 | +     return db.transaction((): ReceiptOutcome => {
+ 502: R: 501 | +         // The seller receives exactly the agreed amount — fee-exempt, because the buyer already paid the
+ 503: R: 502 | +         // fee on their own node and it never crossed the border.
+ 504: R: 503 | +         mustTransfer(
+ 505: R: 504 | +             bridgeAccountId(row.peerId), row.sellerPubkey!, row.amount,
+ 506: R: 505 | +             `Cross-community sale (${key})`,
+ 507: R: 506 | +         );
+ 508: R: 507 | +         advanceSettlement(key, 'settled');
+ 509: R: 508 | +         return { settled: true, key };
+ 510: R: 509 | +     })();
+ 511: R: 510 | + }
+ 512: R: 511 | + 
+ 513: R: 512 | + /** The `GET_RECEIPT_STATUS(key)` answer. Scoped to the asking peer so no peer can probe another's keys. */
+ 514: R: 513 | + export function answerReceiptStatus(key: string, askingPeerId: string): ReceiptStatus {
+ 515: R: 514 | +     const row = getSettlement(key);
+ 516: R: 515 | +     // An unrecognised key — including one belonging to a different peer — is UNKNOWN, never NOT_FOUND.
+ 517: R: 516 | +     // NOT_FOUND instructs the asker to REVERSE, so defaulting to it would let a fabricated or truncated
+ 518: R: 517 | +     // key talk a node into undoing a trade that actually settled.
+ 519: R: 518 | +     if (!row || row.peerId !== askingPeerId) return 'UNKNOWN';
+ 520: R: 519 | +     return receiptStatus(key);
+ 521: R: 520 | + }
+ 522: R: 521 | + 
+ 523: R: 522 | + /**
+ 524: R: 523 | +  * Release inbound reservations that lapsed with no receipt, returning the headroom they were holding.
+ 525: R: 524 | +  *
+ 526: R: 525 | +  * Free to do: a reservation moves no beans on either side. A receipt arriving after this is not lost — it
+ 527: R: 526 | +  * is answered with `CAPACITY_LAPSED` and the buyer's node compensates.
+ 528: R: 527 | +  */
+ 529: R: 528 | + export function expireStaleReservations(): number {
+ 530: R: 529 | +     const stale = expiredReservations();
+ 531: R: 530 | +     for (const row of stale) {
+ 532: R: 531 | +         try {
+ 533: R: 532 | +             advanceSettlement(row.key, 'abandoned', { failureReason: 'RESERVATION_EXPIRED' });
+ 534: R: 533 | +         } catch (e: any) {
+ 535: R: 534 | +             console.warn(`[Federation] Could not expire reservation ${row.key}:`, e?.message || e);
+ 536: R: 535 | +         }
+ 537: R: 536 | +     }
+ 538: R: 537 | +     if (stale.length) console.log(`[Federation] Released ${stale.length} lapsed cap reservation(s)`);
+ 539: R: 538 | +     return stale.length;
+ 540: R: 539 | + }
+ 541: R: 540 | + 
+ 542: R: 541 | + // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+ 543: R: 542 | + // BOOT RECOVERY
+ 544: R: 543 | + // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+ 545: R: 544 | + 
+ 546: R: 545 | + export interface RecoveryResult {
+ 547: R: 546 | +     expired: number;
+ 548: R: 547 | +     paid: number;
+ 549: R: 548 | +     refunded: number;
+ 550: R: 549 | +     reversed: number;
+ 551: R: 550 | +     finalised: number;
+ 552: R: 551 | +     stillOpen: number;
+ 553: R: 552 | + }
+ 554: R: 553 | + 
+ 555: R: 554 | + /**
+ 556: R: 555 | +  * Resolve every unfinalised settlement at boot. This is what makes "recoverable by replay" true rather
+ 557: R: 556 | +  * than aspirational (§2.5).
+ 558: R: 557 | +  *
+ 559: R: 558 | +  * DELIBERATELY NOT GATED on `FEDERATION_SETTLEMENT_ENABLED`. Turning settlement off is a decision about
+ 560: R: 559 | +  * accepting NEW cross-node trades; it must not strand beans already sitting in escrow or a seller already
+ 561: R: 560 | +  * owed money. An operator flipping the flag off is the most likely moment for in-flight rows to exist.
+ 562: R: 561 | +  *
+ 563: R: 562 | +  * @param askPeer resolves `GET_RECEIPT_STATUS` for an outbound row. Omitted (or throwing) leaves those
+ 564: R: 563 | +  *                rows alone for the next boot — waiting is always safe, reversing on a guess is not.
+ 565: R: 564 | +  */
+ 566: R: 565 | + export async function recoverSettlements(
+ 567: R: 566 | +     askPeer?: (peerId: string, key: string) => Promise<ReceiptStatus>,
+ 568: R: 567 | + ): Promise<RecoveryResult> {
+ 569: R: 568 | +     const result: RecoveryResult = { expired: 0, paid: 0, refunded: 0, reversed: 0, finalised: 0, stillOpen: 0 };
+ 570: R: 569 | + 
+ 571: R: 570 | +     result.expired = expireStaleReservations();
+ 572: R: 571 | + 
+ 573: R: 572 | +     for (const row of unfinalisedSettlements()) {
+ 574: R: 573 | +         try {
+ 575: R: 574 | +             if (row.direction === 'inbound') {
+ 576: R: 575 | +                 // We hold a verified receipt and owe our seller. No network needed — replay the payment.
+ 577: R: 576 | +                 if (row.state === 'held') {
+ 578: R: 577 | +                     if (settleHeldReceipt(row.key).settled) result.paid++;
+ 579: R: 578 | +                     else result.reversed++;
+ 580: R: 579 | +                 } else {
+ 581: R: 580 | +                     result.stillOpen++;      // 'reserved' — still within its hold, wait for the receipt
+ 582: R: 581 | +                 }
+ 583: R: 582 | +                 continue;
+ 584: R: 583 | +             }
+ 585: R: 584 | + 
+ 586: R: 585 | +             // Outbound. An `escrowed` row means we crashed after taking the buyer's beans and before
+ 587: R: 586 | +             // asking the peer. Nothing crossed the border, and the buyer has long since seen an error and
+ 588: R: 587 | +             // moved on, so refund rather than hold their beans hostage to a purchase nobody is waiting on.
+ 589: R: 588 | +             if (row.state === 'escrowed') {
+ 590: R: 589 | +                 abandonOutboundSettlement(row.key, 'INTERRUPTED_BEFORE_ASK');
+ 591: R: 590 | +                 result.refunded++;
+ 592: R: 591 | +                 continue;
+ 593: R: 592 | +             }
+ 594: R: 593 | + 
+ 595: R: 594 | +             // `committed` — we wrote real entries and issued a receipt but never learned what became of
+ 596: R: 595 | +             // it. Only the peer knows.
+ 597: R: 596 | +             if (!askPeer) { result.stillOpen++; continue; }
+ 598: R: 597 | + 
+ 599: R: 598 | +             const status = await askPeer(row.peerId, row.key);
+ 600: R: 599 | +             switch (actionForReceiptStatus(status)) {
+ 601: R: 600 | +                 case 'finalise': finaliseOutboundSettlement(row.key); result.finalised++; break;
+ 602: R: 601 | +                 case 'reverse':  reverseOutboundSettlement(row.key, 'RECEIPT_NOT_FOUND'); result.reversed++; break;
+ 603: R: 602 | +                 case 'wait':     result.stillOpen++; break;
+ 604: R: 603 | +             }
+ 605: R: 604 | +         } catch (e: any) {
+ 606: R: 605 | +             // One unrecoverable row must not stop the rest. Left unfinalised, so the next boot retries.
+ 607: R: 606 | +             console.warn(`[Federation] Settlement recovery failed for ${row.key}:`, e?.message || e);
+ 608: R: 607 | +             result.stillOpen++;
+ 609: R: 608 | +         }
+ 610: R: 609 | +     }
+ 611: R: 610 | + 
+ 612: R: 611 | +     const touched = result.expired + result.paid + result.refunded + result.reversed + result.finalised;
+ 613: R: 612 | +     if (touched || result.stillOpen) {
+ 614: R: 613 | +         console.log(
+ 615: R: 614 | +             `[Federation] Settlement recovery: ${result.paid} paid, ${result.refunded} refunded, `
+ 616: R: 615 | +             + `${result.reversed} reversed, ${result.finalised} finalised, ${result.expired} reservations released, `
+ 617: R: 616 | +             + `${result.stillOpen} still open`,
+ 618: R: 617 | +         );
+ 619: R: 618 | +     }
+ 620: R: 619 | +     return result;
+ 621: R: 620 | + }
+ 622: 

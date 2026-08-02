@@ -100,16 +100,24 @@ async function main() {
     const PEER = peerIdFromPrivateKey(peerKey).toString();
     const mirrorKey = await generateKeyPair('Ed25519');
     const MIRROR = peerIdFromPrivateKey(mirrorKey).toString();
-    const offKey = await generateKeyPair('Ed25519');
-    const OFF = peerIdFromPrivateKey(offKey).toString();
+    const passiveKey = await generateKeyPair('Ed25519');
+    const PASSIVE = peerIdFromPrivateKey(passiveKey).toString();
+    const blockedKey = await generateKeyPair('Ed25519');
+    const BLOCKED = peerIdFromPrivateKey(blockedKey).toString();
 
     const PEER_URL = 'https://byron.beanpool.org';
     const PEER_ADDR = `/dns4/byron.beanpool.org/tcp/4001/p2p/${PEER}`;
     addConnector(PEER_ADDR, 'peer', 'Byron', PEER_URL);
     setConnectorCreditCap(PEER_ADDR, 5_000);
     addConnector(`/dns4/backup.beanpool.org/tcp/4001/p2p/${MIRROR}`, 'mirror', 'Backup', 'https://backup.beanpool.org');
-    const OFF_URL = 'https://sleepy.beanpool.org';
-    addConnector(`/dns4/sleepy.beanpool.org/tcp/4001/p2p/${OFF}`, 'peer', 'Sleepy', OFF_URL, /* enabled */ false);
+    // A PASSIVE peer — a trading partner we do not dial. Exactly one side of a healthy pair is Passive, so
+    // this is the ordinary case, not an edge case, and it must be able to BUY as well as sell.
+    const PASSIVE_URL = 'https://sleepy.beanpool.org';
+    addConnector(`/dns4/sleepy.beanpool.org/tcp/4001/p2p/${PASSIVE}`, 'peer', 'Sleepy', PASSIVE_URL, /* enabled */ false);
+    setConnectorCreditCap(`/dns4/sleepy.beanpool.org/tcp/4001/p2p/${PASSIVE}`, 5_000);
+    // BLOCKED is the control for "stop trading with them" — the one Passive was being misused as.
+    const BLOCKED_URL = 'https://shunned.beanpool.org';
+    addConnector(`/dns4/shunned.beanpool.org/tcp/4001/p2p/${BLOCKED}`, 'blocked', 'Shunned', BLOCKED_URL);
     // A peer whose address carries no /p2p/ component — reachable config, unusable for settlement.
     const NOPEER_URL = 'https://nameless.beanpool.org';
     addConnector('/dns4/nameless.beanpool.org/tcp/4001', 'peer', 'Nameless', NOPEER_URL);
@@ -205,8 +213,19 @@ async function main() {
         `a MIRROR is refused, and says why (${toMirror.status}) — a replica mirrors a ledger, it does not `
         + 'author one, and the outer trust check admits both levels');
 
-    const toDisabled = await buy(buyer, { ...good, nodeUrl: OFF_URL });
-    assert(toDisabled.status === 403, `a disabled connector is refused (${toDisabled.status})`);
+    // A PASSIVE peer is a full trading partner. This assertion is the inverse of the one it replaces, which
+    // asserted the bug: `enabled` is a dialling setting, and gating trade on it made federation permanently
+    // one-directional — the Passive side could sell but never buy, so a `bridge_<peer>` tab could only ever
+    // grow. Reaching the transport refusal means every gate passed.
+    const toPassive = await buy(buyer, { ...good, nodeUrl: PASSIVE_URL });
+    assert(toPassive.status === 503 && /peer-to-peer transport/i.test(toPassive.body?.error ?? ''),
+        `a PASSIVE peer can be bought from (${toPassive.status}: ${toPassive.body?.error}) — Passive means we `
+        + 'do not dial them, not that we do not trade with them, and the inbound side never checked it either');
+
+    const toBlocked = await buy(buyer, { ...good, nodeUrl: BLOCKED_URL });
+    assert(toBlocked.status === 403 && toBlocked.body?.code === SETTLEMENT_REFUSED_CODE,
+        `a BLOCKED peer is refused (${toBlocked.status}) — dropping the \`enabled\` gate costs no capability, `
+        + 'because this is the control that actually means "stop trading", and it is in the Settings dropdown');
 
     const noPeerId = await buy(buyer, { ...good, nodeUrl: NOPEER_URL });
     assert(noPeerId.status === 400,

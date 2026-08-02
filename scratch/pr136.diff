@@ -1,0 +1,352 @@
+diff --git a/apps/server/src/db/db.ts b/apps/server/src/db/db.ts
+index 5cf43cb..0a8985d 100644
+--- a/apps/server/src/db/db.ts
++++ b/apps/server/src/db/db.ts
+@@ -140,6 +140,41 @@ export function initSchema() {
+     try { db.prepare(`ALTER TABLE settlements ADD COLUMN reserved_until DATETIME`).run(); } catch { }
+     try { db.prepare(`ALTER TABLE settlements ADD COLUMN receipt_payload TEXT`).run(); } catch { }
+ 
++    // #127: columns that schema.sql OBJECTS reference, so they have to exist before the exec.
++    //
++    // Same failure as the settlements block above, found by auditing for the class rather than waiting for
++    // the next report. `db.exec()` runs the whole file as one unit, and one failing statement aborts all of
++    // it — so the node will not start. `CREATE TABLE IF NOT EXISTS` no-ops against an existing table, so only
++    // nodes that ALREADY HAVE DATA are affected: every deployed node, and no test suite, because they all
++    // start from an empty data dir.
++    //
++    // ONE of these was the actual boot failure. Measured, not assumed — each reference kind was probed
++    // against a legacy `posts` table:
++    //
++    //   posts.updated_at        → INDEX idx_posts_updated_at        FATAL: "no such column: updated_at"
++    //   posts.search_keywords   → TRIGGERS posts_ai / ad / au       boots fine (FTS5 mirror, body reference)
++    //   members.earned_credit   → TRIGGER members_touch_updated_at  boots fine, and later FIRES correctly
++    //   members.profile_updated_at → same trigger                   boots fine
++    //
++    // Indexes resolve their columns at CREATE time; triggers resolve theirs when they fire. Only the index
++    // breaks. The other three are hoisted anyway: trigger tolerance is an implementation detail of the SQLite
++    // build we ship rather than a documented guarantee, and "if schema.sql names it, add it before the exec"
++    // is a cheaper rule to keep than an exception list.
++    //
++    // test-schema-upgrade.ts enforces this statically for EVERY late-added column — separating the fatal
++    // index case from the defensive trigger one — so a column added below the exec fails in CI rather than on
++    // somebody's node.
++    try {
++        db.prepare(`ALTER TABLE posts ADD COLUMN updated_at DATETIME`).run();
++        db.prepare(`UPDATE posts SET updated_at = created_at WHERE updated_at IS NULL`).run();
++    } catch { }
++    // FTS5 search: the posts_ai/ad/au triggers mirror this into posts_fts.
++    try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
++    // Protocol v1: pre-seeded earned credit for the dynamic floor formula.
++    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
++    // Profile sync: profile mutation timestamp for cache-busting.
++    try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
++
+     // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
+     // column-whitelist form that excludes last_active_at heartbeats from cursor sync.
+     // CREATE TRIGGER IF NOT EXISTS is a no-op against an existing trigger.
+@@ -168,18 +203,11 @@ export function initSchema() {
+     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signer TEXT`).run(); } catch { }
+     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signature TEXT`).run(); } catch { }
+     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
+-    try {
+-        db.prepare(`ALTER TABLE posts ADD COLUMN updated_at DATETIME`).run();
+-        db.prepare(`UPDATE posts SET updated_at = created_at WHERE updated_at IS NULL`).run();
+-    } catch { }
++    // posts.updated_at, posts.search_keywords, members.earned_credit and members.profile_updated_at used to
++    // be added HERE. They moved above the exec (#127) because schema.sql objects depend on them.
++    //
+     // Protocol v1: Admin Genesis Invites — store invite tier type
+     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN genesis_type TEXT DEFAULT 'standard'`).run(); } catch { }
+-    // Protocol v1: Track pre-seeded earned credit for dynamic floor formula
+-    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
+-    // Profile sync: Track profile mutation timestamp for cache-busting
+-    try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
+-    // FTS5 Search: Add search_keywords column to posts
+-    try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
+     // #108: a listing may carry a real cash outlay (fuel/consumables). Flag only, no amount —
+     // the app never touches the money, so it must not imply a figure it holds or settles.
+     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
+diff --git a/apps/server/src/db/schema.sql b/apps/server/src/db/schema.sql
+index 9684c45..8822407 100644
+--- a/apps/server/src/db/schema.sql
++++ b/apps/server/src/db/schema.sql
+@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS members (
+     -- drive a treasury (post its offers/needs, approve/release its escrow) from the Commons tab.
+     -- Named 'operate' to dodge the 'Steward' tier and 'node role' (topology) name collisions.
+     can_operate INTEGER DEFAULT 0,
++    -- #127: declared HERE as well as by the guarded ALTER in db.ts, because the ALTER now runs BEFORE
++    -- db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
++    -- this line is the only thing that creates the column. Both are needed: this one for a fresh install, the
++    -- ALTER for a node that already has data. A hoisted ALTER without a declaration here silently gives fresh
++    -- installs a table missing the column, which is caught by test-schema-upgrade.ts.
++    -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
++    earned_credit REAL DEFAULT 0,
++    -- Profile mutation timestamp, for cache-busting.
++    profile_updated_at DATETIME,
+     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+ );
+ CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
+diff --git a/apps/server/src/test-schema-upgrade.ts b/apps/server/src/test-schema-upgrade.ts
+index 9649ab3..54ae5dc 100644
+--- a/apps/server/src/test-schema-upgrade.ts
++++ b/apps/server/src/test-schema-upgrade.ts
+@@ -31,6 +31,7 @@ import { execFileSync } from 'node:child_process';
+ 
+ const __dirname = path.dirname(fileURLToPath(import.meta.url));
+ const SCHEMA_PATH = path.join(__dirname, 'db', 'schema.sql');
++const DB_TS_PATH = path.join(__dirname, 'db', 'db.ts');
+ 
+ let run = 0, passed = 0;
+ function assert(cond: boolean, msg: string): void {
+@@ -70,25 +71,78 @@ const tmp = (name: string): string =>
+     fs.mkdtempSync(path.join(os.tmpdir(), `beanpool-upgrade-${name}-`));
+ 
+ /**
+- * Recreate a historical `settlements` table by taking the CURRENT definition and dropping the columns that
+- * did not exist then. Derived from schema.sql rather than pasted, so it keeps working as the table evolves.
++ * Every `(table, column)` a guarded ALTER adds AFTER `db.exec(schemaSql)`, minus any also added before it.
++ *
++ * A duplicate ALTER below the exec is harmless when the column was already added above — several exist for
++ * historical reasons — so only columns whose FIRST appearance is late are at risk.
++ */
++function lateAddedColumns(): string[] {
++    const src = fs.readFileSync(DB_TS_PATH, 'utf-8');
++    const marker = src.indexOf('db.exec(schemaSql)');
++    if (marker < 0) throw new Error('Could not find db.exec(schemaSql) in db.ts — this check needs rewriting');
++    const cols = (text: string) =>
++        [...text.matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)].map(m => `${m[1]}.${m[2]}`);
++    const early = new Set(cols(src.slice(0, marker)));
++    return [...new Set(cols(src.slice(marker)))].filter(c => !early.has(c));
++}
++
++/**
++ * Every index/trigger/view `db.exec(schemaSql)` creates, with the table it is defined ON.
++ *
++ * Triggers are read through to their `END;` — stopping at the first `;` would truncate the body and miss the
++ * column references inside it, which is where the FTS5 mirror names `search_keywords`.
+  */
+-function legacySettlementsDdl(withoutColumns: string[]): string {
++function schemaObjects(): { kind: string; name: string; table?: string; body: string }[] {
+     const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
+-    const match = schema.match(/CREATE TABLE IF NOT EXISTS settlements \(([\s\S]*?)\n\);/);
+-    if (!match) throw new Error('Could not find the settlements table in schema.sql');
++    const out: { kind: string; name: string; table?: string; body: string }[] = [];
++    for (const m of schema.matchAll(/CREATE\s+(?:UNIQUE\s+)?(INDEX|TRIGGER|VIEW)\s+(?:IF NOT EXISTS\s+)?(\w+)([\s\S]*?);\s*(?=\n|$)/gi)) {
++        const [, kind, name, rest] = m;
++        let body = rest;
++        if (kind.toUpperCase() === 'TRIGGER') {
++            // Tolerant of `END ;` and of case, and LOUD when it finds nothing (review finding). The previous
++            // `indexOf('END;')` returned -1 on any variation, and `slice(index, -1 + 4)` then produced an
++            // EMPTY body — so the dependency check below found no column references and silently passed.
++            // A false negative in a safety check is worse than no check, so this throws instead.
++            const tail = /END\s*;/gi;
++            tail.lastIndex = m.index!;
++            const found = tail.exec(schema);
++            if (!found) {
++                throw new Error(`Could not find the closing END; of TRIGGER ${name} in schema.sql — `
++                    + 'this parser needs updating before it can be trusted');
++            }
++            body = schema.slice(m.index!, found.index + found[0].length);
++        }
++        out.push({ kind: kind.toUpperCase(), name, table: (body.match(/\bON\s+(\w+)/i) || [])[1], body });
++    }
++    return out;
++}
++
++/**
++ * Recreate a historical table by taking the CURRENT definition from schema.sql and dropping the columns that
++ * did not exist then. Derived rather than pasted, so it keeps working as the table evolves.
++ */
++function legacyDdl(table: string, withoutColumns: string[]): string {
++    const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
++    const match = schema.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\(([\\s\\S]*?)\\n\\);`));
++    if (!match) throw new Error(`Could not find the ${table} table in schema.sql`);
+     const body = match[1]
+         .split('\n')
++        // Comments and blank lines are dropped first. They carry no schema meaning, and leaving them in
++        // defeats the trailing-comma fix below: `members` ends its column list with commentary, so the last
++        // real column kept its comma and SQLite rejected the whole statement with "near ): syntax error".
+         .filter(line => {
+-            const col = line.trim().split(/\s+/)[0];
+-            return !withoutColumns.includes(col);
++            const t = line.trim();
++            return t !== '' && !t.startsWith('--');
+         })
++        .filter(line => !withoutColumns.includes(line.trim().split(/\s+/)[0]))
+         .join('\n')
+-        // A trailing comma before `)` is a syntax error once a column is removed.
++        // A trailing comma before `)` is a syntax error once the last column is removed.
+         .replace(/,(\s*)$/, '$1');
+-    return `CREATE TABLE settlements (${body}\n);`;
++    return `CREATE TABLE ${table} (${body}\n);`;
+ }
+ 
++const legacySettlementsDdl = (withoutColumns: string[]) => legacyDdl('settlements', withoutColumns);
++
+ function main() {
+     console.log('Running schema upgrade tests...\n');
+ 
+@@ -113,7 +167,7 @@ function main() {
+ 
+     const upgraded = bootInto(step3aDir);
+     assert(upgraded.ok, 'and a node holding one still BOOTS on the current schema');
+-    if (!upgraded.ok) console.error(upgraded.output.split('\n').slice(-6).join('\n'));
++    if (!upgraded.ok) console.error(upgraded.output.split('\n').slice(-20).join('\n'));
+ 
+     const upgradedDb = new Database(path.join(step3aDir, 'state.db'), { readonly: true });
+     assert(JSON.stringify(columns(upgradedDb, 'settlements')) === JSON.stringify(freshColumns),
+@@ -133,7 +187,7 @@ function main() {
+ 
+         const result = bootInto(dir);
+         assert(result.ok, `a database missing only ${missing} boots`);
+-        if (!result.ok) console.error(result.output.split('\n').slice(-6).join('\n'));
++        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+ 
+         const check = new Database(path.join(dir, 'state.db'), { readonly: true });
+         assert(columns(check, 'settlements').includes(missing), `and gains ${missing}`);
+@@ -146,6 +200,145 @@ function main() {
+     // already-migrated database fails only on the SECOND restart, which is a miserable way to find out.
+     assert(bootInto(step3aDir).ok, 'and re-booting an already-upgraded database is a no-op');
+ 
++    // ── 5. NO late-added column may be referenced by schema.sql (#127) ─────────────────────────────
++    // The general form of the bug, checked exhaustively and statically rather than one fixture at a time.
++    //
++    // `db.exec(schemaSql)` runs the whole file as a single unit, and a `CREATE INDEX` naming a column the
++    // table does not have yet aborts the ENTIRE exec with "no such column" — the node will not start. Because
++    // `CREATE TABLE IF NOT EXISTS` no-ops against an existing table, ONLY nodes that already hold data are
++    // affected: every suite starting from an empty data dir passes while every deployed node fails. That is
++    // how this shipped twice.
++    //
++    // WHAT IS ACTUALLY FATAL, measured rather than assumed. I probed each reference kind against a legacy
++    // `posts` table on this SQLite build:
++    //
++    //   CREATE INDEX over a missing column        → FAILS: "no such column: updated_at"   (the real bug)
++    //   trigger BODY referencing a missing column → boots fine (posts_ai/ad/au, search_keywords)
++    //   trigger AFTER UPDATE OF whitelist         → boots fine, and the trigger later FIRES correctly
++    //
++    // So triggers resolve their columns when they fire, not when they are created. Indexes do not.
++    //
++    // The check still refuses BOTH kinds. Triggers being tolerant is an implementation detail of the SQLite
++    // build we happen to ship, not a documented guarantee, and the cost of the stricter rule is one line in
++    // a different place in db.ts. One rule — "if schema.sql names it, add it before the exec" — is also
++    // easier to keep than "indexes need it, triggers do not, and here is why".
++    const late = lateAddedColumns();
++    const objects = schemaObjects();
++    assert(late.length > 0 && objects.length > 0,
++        `the static check found real input to work with (${late.length} late columns, ${objects.length} schema objects)`);
++
++    const fatal: string[] = [];
++    const defensive: string[] = [];
++    for (const col of late) {
++        const [table, column] = col.split('.');
++        for (const o of objects) {
++            if (o.table !== table) continue;
++            if (!new RegExp(`\\b${column}\\b`).test(o.body)) continue;
++            (o.kind === 'INDEX' ? fatal : defensive).push(`${col} ← ${o.kind} ${o.name}`);
++        }
++    }
++
++    assert(fatal.length === 0,
++        fatal.length
++            ? `BOOT FAILURE — a schema.sql INDEX depends on a column added after the exec (${fatal.length}):\n     `
++              + fatal.join('\n     ')
++              + '\n     Move those ALTERs ABOVE db.exec(schemaSql) in db.ts. An upgrading node will NOT boot.'
++            : 'no schema.sql INDEX depends on a column added after the exec — upgrading nodes boot');
++    // The COST of hoisting, which is the other half of the rule and bit me while fixing #127.
++    //
++    // Before the exec, the table may not exist at all — on a fresh install nothing has created it yet, so the
++    // guarded ALTER is a silent no-op and `schema.sql`'s CREATE TABLE is the ONLY thing that adds the column.
++    // Hoisting an ALTER whose column schema.sql does not declare therefore fixes upgrading nodes by breaking
++    // fresh ones. That is what happened here: moving `members.earned_credit` up gave every new node a members
++    // table without it, and the failure surfaced three suites away as
++    // "table members has no column named earned_credit".
++    //
++    // So both halves are required for an early-added column: the declaration for a fresh install, the ALTER
++    // for a node that already has data.
++    const undeclared: string[] = [];
++    const schemaText = fs.readFileSync(SCHEMA_PATH, 'utf-8');
++    const dbText = fs.readFileSync(DB_TS_PATH, 'utf-8');
++    const early = [...new Set(
++        [...dbText.slice(0, dbText.indexOf('db.exec(schemaSql)')).matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)]
++            .map(m => `${m[1]}.${m[2]}`),
++    )];
++    for (const col of early) {
++        const [table, column] = col.split('.');
++        const ddl = schemaText.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\(([\\s\\S]*?)\\n\\);`));
++        // A table schema.sql does not create at all is not this check's business.
++        if (!ddl) continue;
++        const declared = ddl[1].split('\n').some(l => l.trim().split(/\s+/)[0] === column);
++        if (!declared) undeclared.push(col);
++    }
++    assert(undeclared.length === 0,
++        undeclared.length
++            ? `FRESH-INSTALL REGRESSION — hoisted above the exec but not declared in schema.sql (${undeclared.length}):\n     `
++              + undeclared.join('\n     ')
++              + '\n     On a fresh install the table does not exist yet, so the ALTER no-ops and the column is'
++              + '\n     never created. Add it to the CREATE TABLE in schema.sql as well.'
++            : `every one of the ${early.length} columns added before the exec is also declared in schema.sql, so fresh installs get them`);
++
++    assert(defensive.length === 0,
++        defensive.length
++            ? `ORDERING RULE — a schema.sql TRIGGER depends on a column added after the exec (${defensive.length}):\n     `
++              + defensive.join('\n     ')
++              + '\n     Not fatal on this SQLite build — triggers resolve columns when they fire — but do not'
++              + '\n     rely on that. Move the ALTERs above the exec so the rule stays one rule.'
++            : 'and no schema.sql TRIGGER does either, so the rule holds without relying on SQLite tolerance');
++
++    // ── 6. The tables that actually broke, booted for real (#127) ─────────────────────────────────
++    // Section 5 is static, so it can only be as right as its parsing. These two prove the same thing
++    // dynamically, on the tables whose columns schema.sql objects really did depend on:
++    //   posts    — idx_posts_updated_at, posts_touch_updated_at, and the posts_ai/ad/au FTS triggers
++    //   members  — members_touch_updated_at's AFTER UPDATE OF whitelist
++    const LEGACY_SHAPES: Record<string, string[]> = {
++        posts: ['updated_at', 'search_keywords', 'price_type', 'cash_also_needed'],
++        members: ['earned_credit', 'profile_updated_at', 'updated_at', 'is_treasury', 'can_operate',
++                  'can_vouch', 'vouch_credit', 'credit_frozen', 'elder_vouched_by'],
++    };
++    for (const [table, missing] of Object.entries(LEGACY_SHAPES)) {
++        const dir = tmp(`legacy-${table}`);
++        const d = new Database(path.join(dir, 'state.db'));
++        d.exec(legacyDdl(table, missing));
++        assert(!columns(d, table).includes(missing[0]),
++            `a database whose ${table} table predates these columns genuinely lacks ${missing[0]}`);
++        d.close();
++
++        const result = bootInto(dir);
++        assert(result.ok, `and a node holding one still BOOTS (${table})`);
++        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
++
++        const check = new Database(path.join(dir, 'state.db'), { readonly: true });
++        const after = columns(check, table);
++        assert(missing.every(c => after.includes(c)), `gaining every missing column on ${table}`);
++
++        // EVERY object schema.sql defines on this table, BY NAME (review finding).
++        //
++        // This was `objectCount > 0`, which proved almost nothing: `posts` also carries idx_active_posts and
++        // idx_posts_category, and `members` carries idx_members_updated_at — all defined over columns that
++        // were never missing. So a boot that created those and skipped `idx_posts_updated_at` still counted
++        // above zero and passed. Since the entire point of the fixture is the objects over the LATE columns,
++        // the assertion has to name them.
++        //
++        // The expected set is derived from schema.sql rather than listed here, so an object added later is
++        // covered without anyone remembering to add it.
++        const expected = schemaObjects()
++            .filter(o => o.table === table && o.kind !== 'VIEW')
++            .map(o => o.name)
++            .sort();
++        const present = new Set((check.prepare(
++            `SELECT name FROM sqlite_master WHERE type IN ('index','trigger') AND tbl_name=? AND name NOT LIKE 'sqlite_%'`,
++        ).all(table) as any[]).map(r => r.name));
++        const absent = expected.filter(n => !present.has(n));
++        assert(expected.length > 0 && absent.length === 0,
++            absent.length
++                ? `${absent.length} of ${expected.length} schema.sql objects on ${table} were SKIPPED: ${absent.join(', ')}`
++                  + ' — the boot survived but delta sync would be quietly broken'
++                : `with all ${expected.length} of its schema.sql indexes and triggers created, not skipped (${table})`);
++        check.close();
++        fs.rmSync(dir, { recursive: true, force: true });
++    }
++
+     freshDb.close();
+     fs.rmSync(freshDir, { recursive: true, force: true });
+     fs.rmSync(step3aDir, { recursive: true, force: true });

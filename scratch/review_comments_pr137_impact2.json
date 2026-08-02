@@ -1,0 +1,14 @@
+[
+  {
+    "path": "packages/beanpool-core/src/ledger.ts",
+    "position": 287,
+    "side": "RIGHT",
+    "body": "### Consequences & Impact\n**Risk:** Critical blast-radius bug: carrying over deferred time windows across principal balance mutations. Demurrage follows $principal \\times time \\times rate$. A time window cannot carry over across a change in principal. If an account has a deferred decay (e.g. balance 200.01 with a 60-day old epoch) and receives a 10,000 bean transfer, leaving `lastDemurrageEpoch` untouched causes the next read to calculate 60 days of demurrage on **10,200.01 beans**, instantly overcharging the user and destroying newly received funds.\n\nConversely, if a user sends funds, they dodge historical demurrage on the transferred portion for the deferred window. Unrecorded sub-threshold decay must be forfeited when principal balance changes.\n\n**Suggested Fix:**\nRestore the epoch timestamp updates in `transfer()` so the time window is closed out on balance modification:\n```typescript\n        // Update timestamps — CRITICAL: if applyDecay deferred (due to cap or threshold),\n        // we MUST close out the interval anyway. Time periods cannot carry over across \n        // principal changes, or the new balance gets retroactively decayed for the old window.\n        const currentEpoch = this.getCurrentEpoch();\n        fromAccount.lastDemurrageEpoch = currentEpoch;\n        toAccount.lastDemurrageEpoch = currentEpoch;\n\n        return true;\n```"
+  },
+  {
+    "path": "packages/beanpool-core/src/ledger.ts",
+    "position": 314,
+    "side": "RIGHT",
+    "body": "### Consequences & Impact\n**Risk:** Same issue in `moveToCommons()`. Leaving `lastDemurrageEpoch` untouched on a balance deduction applies historical deferred time windows to the new, lower balance, causing the sender to under-pay demurrage for the past interval.\n\n**Suggested Fix:**\nRestore the epoch reset in `moveToCommons()`:\n```typescript\n        fromAccount.balance -= amount;\n        COMMONS_BALANCE += amount;\n        fromAccount.lastDemurrageEpoch = this.getCurrentEpoch();\n        return true;\n```"
+  }
+]

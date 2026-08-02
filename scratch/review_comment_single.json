@@ -1,0 +1,8 @@
+[
+  {
+    "path": "apps/server/src/db/schema.sql",
+    "position": 589,
+    "side": "RIGHT",
+    "body": "### Database Architecture: Partial Index Mismatch & Sort Inefficiency\n**Risk:** The partial index `idx_settlements_unfinalised` is indexed on `(state, updated_at)`. However, `unfinalisedSettlements()` queries `WHERE state NOT IN ('settled', 'reversed', 'abandoned') ORDER BY created_at`. Because:\n1. SQLite does not match `WHERE state NOT IN (...)` queries to `WHERE state IN (...)` partial indexes.\n2. The query orders by `created_at` instead of `updated_at`, forcing a temporary B-tree filesort.\n3. Filtering by `direction` is unindexed.\n\nThis will cause `unfinalisedSettlements()` boot recovery scans to execute a full table scan and sort overhead as the table grows.\n\n**Suggested Fix:**\nDefine the partial index on `(direction, created_at)` matching the exact state filtering:\n\n```sql\nCREATE INDEX IF NOT EXISTS idx_settlements_unfinalised \n    ON settlements(direction, created_at)\n    WHERE state IN ('escrowed', 'reserved', 'committed', 'held');\n```"
+  }
+]

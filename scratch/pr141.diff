@@ -1,0 +1,631 @@
+diff --git a/apps/server/src/federation-protocol.ts b/apps/server/src/federation-protocol.ts
+index f0bef5c..190c284 100644
+--- a/apps/server/src/federation-protocol.ts
++++ b/apps/server/src/federation-protocol.ts
+@@ -12,8 +12,8 @@ import { getMember, getBalance, createConversation, sendMessage, registerVisitor
+ import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
+ import { getNodeRole } from './state-engine.js';
+ import {
+-    handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus,
+-    PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS,
++    handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus, runOutboundSettlement,
++    PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS, type OutboundOutcome,
+ } from './federation-settlement-exchange.js';
+ import type { SettlementReceipt } from './federation-receipt.js';
+ import type { ReceiptStatus } from './federation-settlement-state.js';
+@@ -409,6 +409,41 @@ export async function federatedReceiptStatus(
+     return status === 'NOT_FOUND' || status === 'HELD' || status === 'SETTLED' ? status : 'UNKNOWN';
+ }
+ 
++/**
++ * The whole buyer-side purchase, over a real connection. Steps 1–4 of §2.5 in one call.
++ *
++ * `runOutboundSettlement` holds the sequencing and every compensation decision; this supplies the transport
++ * and nothing else. The split is what lets the money logic be driven without libp2p, and it is also the only
++ * way round the module cycle — the exchange module cannot import this one, because this one imports it for
++ * the responder half.
++ */
++export async function settleCrossNodePurchase(
++    node: Libp2p,
++    targetPeerId: any,
++    ourPeerId: string,
++    privateKey: any,
++    input: {
++        key: string;
++        peerId: string;
++        buyerPublicKey: string;
++        buyerCallsign?: string;
++        buyerHomeNode?: string | null;
++        sellerPublicKey: string;
++        postId?: string | null;
++        amount: number;
++    },
++): Promise<OutboundOutcome> {
++    return runOutboundSettlement(
++        input,
++        {
++            ask: payload => federatedPurchase(node, targetPeerId, payload),
++            deliver: payload => federatedDeliverReceipt(node, targetPeerId, payload),
++        },
++        ourPeerId,
++        privateKey,
++    );
++}
++
+ /**
+  * Initiator (Sender) side: Relay a message over Libp2p
+  */
+diff --git a/apps/server/src/federation-settlement-exchange.ts b/apps/server/src/federation-settlement-exchange.ts
+index 90c04db..2d311d9 100644
+--- a/apps/server/src/federation-settlement-exchange.ts
++++ b/apps/server/src/federation-settlement-exchange.ts
+@@ -395,6 +395,180 @@ export function finaliseOutboundSettlement(key: string): SettlementRow {
+     return advanceSettlement(key, 'settled');
+ }
+ 
++/**
++ * What the buyer is told, and it is deliberately about THEIR BEANS rather than about our state machine.
++ *
++ *   settled  — done, the seller has been paid.
++ *   refused  — the other community said no before anything crossed. Beans already back.
++ *   reversed — it crossed and could not be completed. Beans back, by compensating entries.
++ *   pending  — still in flight. Beans held, and recovery will resolve it either way.
++ *
++ * `pending` covers two different internal states on purpose: `escrowed` (the commit never landed, so boot
++ * recovery refunds) and `committed` (we owe outward and only the peer knows whether it paid). Both mean the
++ * same thing to the person waiting — held, not lost, no action from you.
++ */
++export type OutboundOutcome =
++    | { status: 'settled'; key: string }
++    | { status: 'refused' | 'reversed' | 'pending'; key: string; reason: string; message: string };
++
++/**
++ * The wire, injected rather than imported.
++ *
++ * `federation-protocol.ts` already imports this module for the responder half, so importing its dialling
++ * functions back would be a cycle. Injecting also means the orchestration below — which is where the
++ * money-losing mistakes live — can be driven without libp2p at all.
++ */
++export interface SettlementWire {
++    ask(payload: {
++        key: string;
++        buyerPublicKey: string;
++        buyerCallsign?: string;
++        buyerHomeNode?: string | null;
++        sellerPublicKey: string;
++        postId?: string | null;
++        amount: number;
++    }): Promise<any>;
++    deliver(payload: { key: string; receipt: SettlementReceipt; signature: string }): Promise<any>;
++}
++
++/**
++ * A refusal we may act on by REVERSING. Anything else means "not yet", and must be left to recovery.
++ *
++ * This asymmetry is the most important line in the file. Waiting on an ambiguous answer costs a delay;
++ * reversing on one risks compensating a trade the peer actually completed — paying its seller from the
++ * bridge while we hand the buyer their beans back, so the pair no longer sums to zero and the difference is
++ * real beans. So only answers that mean "we will never pay this" are allowed to trigger a reversal:
++ *
++ *   CAPACITY_LAPSED   — they latched it `reversed`; terminal on their side.
++ *   NOT_FOUND         — no reservation exists for the key, so no payment can ever be made against it.
++ *   BAD_SIGNATURE     — they cannot verify our receipt, so they will never honour it.
++ *   RECEIPT_MISMATCH  — the receipt describes a different trade from the one they reserved.
++ *
++ * Notably ABSENT: `settlement_error`. That is `handleReceiptDelivery` failing to pay a receipt it has
++ * already persisted as `held` — it will retry on its next boot, so reversing would be the double-spend
++ * above. It maps to `pending`.
++ */
++const TERMINAL_REFUSALS = new Set(['CAPACITY_LAPSED', 'NOT_FOUND', 'BAD_SIGNATURE', 'RECEIPT_MISMATCH']);
++
++/**
++ * Drive one cross-node purchase end to end, from the BUYER's node. Steps 1–4 of §2.5.
++ *
++ * This is the piece that was missing: both halves of the wire existed and the whole local state machine
++ * existed, but nothing composed them, so no cross-node purchase was reachable in production and the
++ * acceptance criteria in #104 could not be met by any code path a member could trigger.
++ *
++ * Throws only if step 1 fails — the local escrow. Nothing has happened at that point, and the reason (they
++ * cannot afford it, the amount is invalid) is the buyer's to see. Everything after step 1 returns an
++ * outcome, because once beans are held, "what happened to them" is the only useful answer.
++ */
++export async function runOutboundSettlement(
++    input: {
++        key: string;
++        peerId: string;
++        buyerPublicKey: string;
++        buyerCallsign?: string;
++        buyerHomeNode?: string | null;
++        sellerPublicKey: string;
++        postId?: string | null;
++        amount: number;
++    },
++    wire: SettlementWire,
++    ourPeerId: string,
++    privateKey: any,
++): Promise<OutboundOutcome> {
++    const { key } = input;
++
++    // Step 1 — hold the buyer's beans locally. Throws if they cannot cover it; nothing to undo.
++    beginOutboundSettlement(input);
++
++    // Step 2 — ask the seller's node. Their cap is the only authority, and this is where it is applied.
++    let decision: any;
++    try {
++        decision = await wire.ask({
++            key,
++            buyerPublicKey: input.buyerPublicKey,
++            buyerCallsign: input.buyerCallsign,
++            buyerHomeNode: input.buyerHomeNode ?? null,
++            sellerPublicKey: input.sellerPublicKey,
++            postId: input.postId ?? null,
++            amount: input.amount,
++        });
++    } catch (e: any) {
++        // A LOST ASK IS SAFE TO ABANDON, and this is the one transport failure that is. Step 2 moves no beans
++        // on either side — the seller's node reserves headroom and nothing more — so releasing our hold cannot
++        // leave the two ledgers disagreeing. The buyer gets their beans back immediately and can retry, which
++        // beats holding them for the two minutes a reservation takes to lapse.
++        //
++        // If the ask did in fact arrive and only the reply was lost, their reservation expires on its own via
++        // `expireStaleReservations`, and a retry on the SAME key is idempotent there anyway.
++        abandonOutboundSettlement(key, 'ASK_UNREACHABLE');
++        return {
++            status: 'refused', key, reason: 'ASK_UNREACHABLE',
++            message: 'That community could not be reached just now, so nothing was charged. Please try again.',
++        };
++    }
++
++    if (!decision || decision.accepted !== true) {
++        const reason = decision?.reason ?? decision?.code ?? 'REFUSED';
++        abandonOutboundSettlement(key, reason);
++        return {
++            status: 'refused', key, reason,
++            message: decision?.message ?? decision?.error ?? 'That community did not accept this purchase.',
++        };
++    }
++
++    // Step 3 — commit: sign the receipt and move the hold into the bridge. The border is crossed here.
++    let committed: { receipt: SettlementReceipt; signature: string };
++    try {
++        committed = await commitOutboundSettlement(key, ourPeerId, privateKey, input.buyerHomeNode ?? null);
++    } catch (e: any) {
++        // The row is still `escrowed`, which boot recovery refunds. Reported as pending rather than refused
++        // because the refund has not happened yet, and telling someone their beans are back before they are
++        // is worse than telling them to wait.
++        console.error(`[Federation] Committing ${key} failed:`, e?.message || e);
++        return {
++            status: 'pending', key, reason: e?.reason ?? 'commit_failed',
++            message: 'This purchase could not be completed. Your beans are held and will be returned.',
++        };
++    }
++
++    // Step 4 — deliver the receipt, which is what authorises their local payment.
++    let outcome: any;
++    try {
++        outcome = await wire.deliver({ key, receipt: committed.receipt, signature: committed.signature });
++    } catch (e: any) {
++        // AMBIGUOUS, AND THE ONE PLACE NOT TO ACT. We are committed and they may already have paid their
++        // seller — the failure could be the reply, not the request. Reversing here is the double-spend
++        // described on TERMINAL_REFUSALS. `recoverSettlements(askPeer)` resolves it with GET_RECEIPT_STATUS,
++        // whose UNKNOWN answer means wait.
++        console.warn(`[Federation] Receipt delivery for ${key} unresolved: ${e?.message || e}`);
++        return {
++            status: 'pending', key, reason: 'DELIVERY_UNRESOLVED',
++            message: 'This purchase is still completing. It will finish on its own, or your beans will be returned.',
++        };
++    }
++
++    if (outcome?.settled === true) {
++        finaliseOutboundSettlement(key);
++        return { status: 'settled', key };
++    }
++
++    const reason = outcome?.reason ?? outcome?.code ?? 'DELIVERY_REFUSED';
++    if (TERMINAL_REFUSALS.has(reason)) {
++        reverseOutboundSettlement(key, reason);
++        return {
++            status: 'reversed', key, reason,
++            message: outcome?.message ?? reversalMemo(reason),
++        };
++    }
++    // Not a terminal refusal: they hold the receipt and will retry. Leave it committed for recovery.
++    console.warn(`[Federation] ${key} not settled yet (${reason}) — left committed for recovery.`);
++    return {
++        status: 'pending', key, reason,
++        message: outcome?.message ?? 'This purchase is still completing.',
++    };
++}
++
+ // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+ // SELLER'S NODE (inbound) — steps 2 and 4
+ // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+diff --git a/apps/server/src/federation-settlement.ts b/apps/server/src/federation-settlement.ts
+index 38f92b8..4cf0b58 100644
+--- a/apps/server/src/federation-settlement.ts
++++ b/apps/server/src/federation-settlement.ts
+@@ -33,8 +33,24 @@
+ import { getMember } from '@beanpool/engine';
+ import { db } from './db/db.js';
+ 
+-/** Off until charge-home settlement exists (#104). Typed as boolean so the guards stay reachable. */
+-export const FEDERATION_SETTLEMENT_ENABLED: boolean = false;
++/**
++ * Off until charge-home settlement exists (#104). Typed as boolean so the guards stay reachable.
++ *
++ * NOW OPT-IN PER NODE rather than a hardcoded constant, and still **off by default** — an operator has to
++ * set `FEDERATION_SETTLEMENT=true` deliberately, so no existing node's behaviour changes. Two reasons it had
++ * to become reachable:
++ *
++ *   • The responder half refuses `settle_purchase` while this is false, so with a literal `false` there was
++ *     no way to exercise a cross-node purchase against a real second node at all — the acceptance criteria
++ *     in #104 were unreachable by construction, not just unimplemented.
++ *   • It is the cutover mechanism this needs anyway. Flipping a committed constant to enable a community is
++ *     a release; an env var is a decision an operator can make and reverse on their own node.
++ *
++ * Turning it ON only accepts NEW cross-node trades — `settlementGateRefusal` deliberately leaves receipt
++ * delivery and status queries ungated either way, so turning it back OFF never strands value already
++ * committed.
++ */
++export const FEDERATION_SETTLEMENT_ENABLED: boolean = process.env.FEDERATION_SETTLEMENT === 'true';
+ 
+ /** The user-facing refusal. Says what is true, and that nothing was taken. */
+ export const SETTLEMENT_REFUSED_MESSAGE =
+diff --git a/apps/server/src/test-federation-settlement.ts b/apps/server/src/test-federation-settlement.ts
+index 04fc8d3..d1abf6a 100644
+--- a/apps/server/src/test-federation-settlement.ts
++++ b/apps/server/src/test-federation-settlement.ts
+@@ -85,7 +85,12 @@ async function main() {
+     const local = makeIdentity('LocalLou', 100);
+     const payee = makeIdentity('PayeePat', 0);
+ 
+-    assert(FEDERATION_SETTLEMENT_ENABLED === false, 'settlement flag is OFF until #104 lands');
++    // Opt-in per node now, not a hardcoded constant, so this pins the DEFAULT rather than the value: with
++    // FEDERATION_SETTLEMENT unset, a node still refuses to move a visitor's beans.
++    assert(FEDERATION_SETTLEMENT_ENABLED === (process.env.FEDERATION_SETTLEMENT === 'true'),
++        'the settlement flag reflects FEDERATION_SETTLEMENT, and is OFF unless a node opts in');
++    assert(process.env.FEDERATION_SETTLEMENT === 'true' || FEDERATION_SETTLEMENT_ENABLED === false,
++        'and with the env unset — every node today — it is OFF');
+     assert(isVisitor(visitor.pubKeyHex) === true, 'a member with a home_node_url is a visitor');
+     assert(isVisitor(local.pubKeyHex) === false, 'a local member is not a visitor');
+ 
+diff --git a/apps/server/src/test-settlement-exchange.ts b/apps/server/src/test-settlement-exchange.ts
+index d04fe3f..9b7e51c 100644
+--- a/apps/server/src/test-settlement-exchange.ts
++++ b/apps/server/src/test-settlement-exchange.ts
+@@ -707,9 +707,11 @@ async function main() {
+     assert(reversedExposure === 0, 'a member who has bought nothing abroad has no exposure');
+ 
+     // ── 13. The protocol boundary refuses while the flag is off ──────────────────────────────────
+-    assert(FEDERATION_SETTLEMENT_ENABLED === false,
+-        'settlement ships OFF — the mechanism lands before the switch, not with it');
+-    const gated = settlementGateRefusal('peer', BRIS, SETTLE_PURCHASE);
++    // Asserted through the gate's explicit `enabled` parameter rather than the module const, so this holds
++    // whether or not the harness running it has opted the node in (the flag is now env-driven).
++    assert(FEDERATION_SETTLEMENT_ENABLED === (process.env.FEDERATION_SETTLEMENT === 'true'),
++        'settlement is opt-in per node — the mechanism lands before the switch, not with it');
++    const gated = settlementGateRefusal('peer', BRIS, SETTLE_PURCHASE, 'primary', false);
+     assert(gated !== null && gated.code === 'federation_settlement_disabled',
+         'a NEW purchase is refused at the wire, even from a fully trusted peer');
+     assert(SETTLEMENT_ACTIONS.has(SETTLE_PURCHASE) && SETTLEMENT_ACTIONS.has(SETTLE_RECEIPT)
+diff --git a/apps/server/src/test-settlement-orchestration.ts b/apps/server/src/test-settlement-orchestration.ts
+new file mode 100644
+index 0000000..008cf14
+--- /dev/null
++++ b/apps/server/src/test-settlement-orchestration.ts
+@@ -0,0 +1,302 @@
++/**
++ * #104 step 4 — the BUYER's side of a cross-node purchase, driven end to end.
++ *
++ * WHAT WAS MISSING. Steps 1–3b built the whole outbound state machine (`beginOutboundSettlement`,
++ * `commitOutboundSettlement`, `reverseOutboundSettlement`, `abandonOutboundSettlement`,
++ * `finaliseOutboundSettlement`) and `federation-protocol.ts` built all three wire calls — but nothing
++ * composed them. `beginOutboundSettlement` had no caller outside tests, so **no cross-node purchase was
++ * reachable in production**: #104's acceptance criteria were unreachable by construction, not merely
++ * unimplemented. `runOutboundSettlement` is that composition, and this suite is what holds it honest.
++ *
++ * THE DECISION THAT MATTERS. Once step 3 commits, the buyer's beans have left escrow for the bridge and the
++ * seller's node may or may not have paid its seller. From there every answer sorts into exactly two piles:
++ *
++ *   • "we will NEVER pay this"  → reverse, with compensating entries. The buyer is made whole.
++ *   • anything else             → WAIT. Leave the row `committed` for recovery.
++ *
++ * Reversing on an answer from the second pile is a double-spend: their seller is paid from the bridge while
++ * we hand the buyer their beans back, so the pair stops summing to zero and the difference is real beans. A
++ * transport failure after commit is the most likely instance — the request may have arrived and only the
++ * reply been lost — which is why it maps to `pending` and not to a refund.
++ *
++ * The wire is STUBBED here, deliberately. Every branch below is a decision about money, and a stub is the
++ * only way to reach all of them — a real peer cannot be made to answer `BAD_SIGNATURE` on demand. The real
++ * transport is exercised separately, against a second live node.
++ *
++ * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-settlement-orchestration.ts
++ */
++import crypto from 'node:crypto';
++import { generateKeyPair } from '@libp2p/crypto/keys';
++import { peerIdFromPrivateKey } from '@libp2p/peer-id';
++import { initStateEngine, reconcileLedgerFromDb, getCommonsBalanceExact } from './state-engine.js';
++import { ledger } from './engine/ledger.js';
++import { db } from './db/db.js';
++import { addConnector, setConnectorCreditCap } from './connector-manager.js';
++import { bridgeAccountId } from './federation-bridge.js';
++import { getSettlement } from './federation-settlement-state.js';
++import {
++    runOutboundSettlement, crossNodeFee, type SettlementWire,
++    PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS, RESERVATION_TTL_MS,
++} from './federation-settlement-exchange.js';
++
++let run = 0, passed = 0;
++function assert(cond: boolean, msg: string): void {
++    run++;
++    if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
++}
++
++const r4 = (n: number): number => Math.round(n * 10000) / 10000;
++const balanceOf = (pk: string): number =>
++    r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
++const stateOf = (key: string): string | undefined => getSettlement(key)?.state;
++/** Ledger rows naming this settlement — how we prove a reversal ADDS entries rather than removing them. */
++const txnsFor = (key: string): number =>
++    (db.prepare(`SELECT COUNT(*) AS n FROM transactions WHERE memo LIKE ?`).get(`%(${key})%`) as any).n;
++
++/**
++ * The whole ledger as one number: every account row except the COMMONS_POOL shadow, plus the live global.
++ * A settlement only ever MOVES value between rows of one node, so this must not budge — not on the happy
++ * path, and least of all on a compensating one.
++ */
++const nodeTotal = (): number => {
++    const s = (db.prepare(`SELECT COALESCE(SUM(balance),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
++        .get() as { s: number }).s;
++    return r4(s + getCommonsBalanceExact());
++};
++
++function makeMember(callsign: string, balance: number, homeNodeUrl?: string): string {
++    const { publicKey } = crypto.generateKeyPairSync('ed25519');
++    const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
++    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url)
++                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`)
++        .run(pk, callsign, homeNodeUrl ?? null);
++    // Epoch at NOW, not 0. Epoch 0 is 1970, so the first read would apply ~56 years of compound demurrage
++    // and every balance assertion below would be measuring decay instead of settlement (#138).
++    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
++        .run(pk, balance, ledger.getCurrentEpoch());
++    reconcileLedgerFromDb();
++    return pk;
++}
++
++/** A wire whose two answers are fixed up front. `null` for either means "the transport failed". */
++const stubWire = (askReply: any, deliverReply: any): SettlementWire & { asked: number; delivered: number } => {
++    const w = {
++        asked: 0,
++        delivered: 0,
++        async ask() {
++            w.asked++;
++            if (askReply === null) throw new Error('Read timeout');
++            return askReply;
++        },
++        async deliver() {
++            w.delivered++;
++            if (deliverReply === null) throw new Error('Read timeout');
++            return deliverReply;
++        },
++    };
++    return w;
++};
++
++const ACCEPTED = { accepted: true, key: '', reservedUntil: new Date(Date.now() + RESERVATION_TTL_MS).toISOString() };
++const PRICE = 40;
++const FEE = crossNodeFee(PRICE);
++
++async function main() {
++    console.log('Running #104 buyer-side settlement orchestration tests...\n');
++    if (process.env.ENABLE_PEER_CONNECTORS !== 'true') {
++        throw new Error('Run with ENABLE_PEER_CONNECTORS=true — connector reads short-circuit otherwise');
++    }
++    initStateEngine();
++
++    // A genuine peer id: `commitOutboundSettlement` signs a receipt whose verification recovers the public
++    // key FROM the peer id, so a made-up string would fail for the wrong reason.
++    const ourKey = await generateKeyPair('Ed25519');
++    const OURS = peerIdFromPrivateKey(ourKey).toString();
++    const peerKey = await generateKeyPair('Ed25519');
++    const PEER = peerIdFromPrivateKey(peerKey).toString();
++    const PEER_ADDR = `/dns4/byron.beanpool.org/tcp/4001/p2p/${PEER}`;
++    addConnector(PEER_ADDR, 'peer', 'Byron', 'https://byron.beanpool.org');
++    setConnectorCreditCap(PEER_ADDR, 10_000);
++
++    const bridge = bridgeAccountId(PEER);
++    const seller = 'seller-on-their-node';
++
++    // Both members seeded BEFORE the baseline. Seeding mints beans out of nothing — that is a fixture's
++    // privilege, not the code's — so a baseline taken first would read every later check as a 500-bean
++    // conservation failure. (It did, on the first run of this file.)
++    const buyer = makeMember('Buyer', 500);
++    const pauper = makeMember('Pauper', 0);
++    const baseline = nodeTotal();
++
++    // ── 0. The timeout ordering constraint the whole protocol rests on ──────────────────────────────
++    // §2.5: the seller's reservation must outlive the buyer's ask AND delivery timeouts. If it does not,
++    // CAPACITY_LAPSED fires in normal operation and the rare compensating path becomes the routine one.
++    assert(RESERVATION_TTL_MS > PURCHASE_ASK_TIMEOUT_MS + RECEIPT_DELIVERY_TIMEOUT_MS,
++        `a reservation (${RESERVATION_TTL_MS}ms) outlives ask + delivery (${PURCHASE_ASK_TIMEOUT_MS}`
++        + ` + ${RECEIPT_DELIVERY_TIMEOUT_MS}ms) — so a slow link never looks like a lapsed cap`);
++
++    // ── 1. The happy path, and the buyer's three entries ───────────────────────────────────────────
++    const KEY_OK = 'orch-ok';
++    const wire1 = stubWire({ ...ACCEPTED, key: KEY_OK }, { settled: true, key: KEY_OK });
++    const commonsBefore = getCommonsBalanceExact();
++    const out1 = await runOutboundSettlement(
++        { key: KEY_OK, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, postId: 'post-1', amount: PRICE },
++        wire1, OURS, ourKey,
++    );
++
++    assert(out1.status === 'settled', `a purchase the peer accepts and pays settles (${out1.status})`);
++    assert(stateOf(KEY_OK) === 'settled', 'and the row is terminal at `settled`');
++    assert(wire1.asked === 1 && wire1.delivered === 1, 'one ask, one delivery — no retries on the happy path');
++    // The buyer pays price + fee; the bridge carries the PRICE ONLY, and the fee stays home.
++    assert(balanceOf(buyer) === r4(500 - PRICE - FEE),
++        `the buyer is debited ${PRICE} + ${FEE} fee = ${r4(PRICE + FEE)}`);
++    assert(balanceOf(bridge) === PRICE,
++        `the bridge carries the price alone (${balanceOf(bridge)}) — a fee must never cross the border`);
++    assert(r4(getCommonsBalanceExact() - commonsBefore) === FEE,
++        'and the fee landed in our own Commons pot');
++    assert(nodeTotal() === baseline, 'conservation: a settled purchase moved value between our own rows only');
++
++    // ── 2. The peer says no at step 2 — nothing crossed, so it is a plain release ───────────────────
++    const KEY_NO = 'orch-refused';
++    const wire2 = stubWire({ accepted: false, reason: 'PEER_CAP_EXCEEDED', message: 'Not right now.' }, undefined);
++    const beforeNo = balanceOf(buyer);
++    const out2 = await runOutboundSettlement(
++        { key: KEY_NO, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
++        wire2, OURS, ourKey,
++    );
++
++    assert(out2.status === 'refused' && (out2 as any).reason === 'PEER_CAP_EXCEEDED',
++        `a refusal at step 2 is reported as refused, with the peer's reason (${out2.status})`);
++    assert(stateOf(KEY_NO) === 'abandoned', 'the hold is `abandoned`, not `reversed` — there is nothing to compensate');
++    assert(wire2.delivered === 0, 'and no receipt was ever delivered');
++    assert(balanceOf(buyer) === beforeNo, 'the buyer is whole again, fee included');
++    assert(nodeTotal() === baseline, 'conservation holds through a refusal');
++
++    // ── 3. The ask never arrives — the ONE transport failure that is safe to release ────────────────
++    // Step 2 moves no beans on either side, so releasing our hold cannot leave the ledgers disagreeing.
++    const KEY_UNREACHABLE = 'orch-unreachable';
++    const wire3 = stubWire(null, undefined);
++    const out3 = await runOutboundSettlement(
++        { key: KEY_UNREACHABLE, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
++        wire3, OURS, ourKey,
++    );
++
++    assert(out3.status === 'refused' && (out3 as any).reason === 'ASK_UNREACHABLE',
++        `an unreachable peer at step 2 releases the hold rather than stranding it (${out3.status})`);
++    assert(stateOf(KEY_UNREACHABLE) === 'abandoned', 'the row is abandoned');
++    assert(balanceOf(buyer) === beforeNo, 'and the buyer keeps every bean, immediately');
++    assert(nodeTotal() === baseline, 'conservation holds when the peer is unreachable');
++
++    // ── 4. CAPACITY_LAPSED after commit — terminal on their side, so we compensate ──────────────────
++    const KEY_LAPSED = 'orch-lapsed';
++    const wire4 = stubWire({ ...ACCEPTED, key: KEY_LAPSED },
++        { settled: false, reason: 'CAPACITY_LAPSED', message: 'Cap reached.' });
++    const beforeLapsed = balanceOf(buyer);
++    const out4 = await runOutboundSettlement(
++        { key: KEY_LAPSED, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
++        wire4, OURS, ourKey,
++    );
++
++    assert(out4.status === 'reversed' && (out4 as any).reason === 'CAPACITY_LAPSED',
++        `a lapsed cap after commit reverses (${out4.status})`);
++    assert(stateOf(KEY_LAPSED) === 'reversed', 'the row is `reversed`');
++    assert(balanceOf(buyer) === beforeLapsed, 'the buyer is made whole — principal AND fee, since no trade happened');
++    assert(balanceOf(bridge) === PRICE,
++        `the bridge is back to the one settled purchase (${balanceOf(bridge)}) — compensated, not unwound`);
++    assert(txnsFor(KEY_LAPSED) >= 4,
++        `and the reversal ADDED entries rather than deleting any (${txnsFor(KEY_LAPSED)} rows name it)`);
++    assert(nodeTotal() === baseline, 'conservation holds through a compensating reversal');
++
++    // ── 5. THE ASYMMETRY: a non-terminal refusal must NOT reverse ──────────────────────────────────
++    // `settlement_error` is their node failing to pay a receipt it has already persisted as `held`. It will
++    // retry on its next boot. Reversing here would refund the buyer while their seller gets paid — the
++    // double-spend this whole decision table exists to prevent.
++    const KEY_RETRY = 'orch-retrying';
++    const wire5 = stubWire({ ...ACCEPTED, key: KEY_RETRY },
++        { settled: false, reason: 'settlement_error', message: 'It is recorded and will be retried.' });
++    const beforeRetry = balanceOf(buyer);
++    const out5 = await runOutboundSettlement(
++        { key: KEY_RETRY, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
++        wire5, OURS, ourKey,
++    );
++
++    assert(out5.status === 'pending', `a retryable failure is PENDING, never reversed (${out5.status})`);
++    assert(stateOf(KEY_RETRY) === 'committed',
++        `the row stays \`committed\` for recovery (${stateOf(KEY_RETRY)}) — reversing it while they still hold `
++        + 'the receipt would pay their seller and refund our buyer for the same trade');
++    assert(balanceOf(buyer) === r4(beforeRetry - PRICE - FEE),
++        'the buyer stays debited, because the trade may yet complete');
++    assert(balanceOf(bridge) === r4(PRICE * 2), 'and we still owe outward on the bridge');
++    assert(nodeTotal() === baseline, 'conservation holds while a settlement is in flight');
++
++    // ── 6. Delivery times out after commit — ambiguous, so also PENDING ────────────────────────────
++    // The request may have arrived and only the reply been lost, so their seller may already be paid.
++    const KEY_LOST = 'orch-lost-reply';
++    const wire6 = stubWire({ ...ACCEPTED, key: KEY_LOST }, null);
++    const out6 = await runOutboundSettlement(
++        { key: KEY_LOST, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
++        wire6, OURS, ourKey,
++    );
++
++    assert(out6.status === 'pending' && (out6 as any).reason === 'DELIVERY_UNRESOLVED',
++        `a lost reply after commit waits for recovery rather than guessing (${out6.status})`);
++    assert(stateOf(KEY_LOST) === 'committed', 'left `committed` — GET_RECEIPT_STATUS decides, and UNKNOWN means wait');
++    assert(nodeTotal() === baseline, 'conservation holds on an unresolved delivery');
++
++    // ── 7. The other two terminal refusals ────────────────────────────────────────────────────────
++    for (const reason of ['BAD_SIGNATURE', 'RECEIPT_MISMATCH', 'NOT_FOUND']) {
++        const key = `orch-${reason.toLowerCase()}`;
++        const before = balanceOf(buyer);
++        const out = await runOutboundSettlement(
++            { key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
++            stubWire({ ...ACCEPTED, key }, { settled: false, reason, message: reason }), OURS, ourKey,
++        );
++        assert(out.status === 'reversed' && stateOf(key) === 'reversed',
++            `${reason} is terminal — they will never honour the receipt, so it reverses (${out.status})`);
++        assert(balanceOf(buyer) === before, `and the buyer is made whole after ${reason}`);
++    }
++    assert(nodeTotal() === baseline, 'conservation holds across every terminal refusal');
++
++    // ── 8. An unrecognised refusal defaults to WAITING, not to refunding ──────────────────────────
++    // The fail-safe direction. A future reason code we have never seen, or a garbled reply, must not be
++    // able to talk this node into undoing a trade the peer completed.
++    const KEY_ALIEN = 'orch-unknown-reason';
++    const out8 = await runOutboundSettlement(
++        { key: KEY_ALIEN, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
++        stubWire({ ...ACCEPTED, key: KEY_ALIEN }, { settled: false, reason: 'SOME_FUTURE_CODE' }), OURS, ourKey,
++    );
++    assert(out8.status === 'pending' && stateOf(KEY_ALIEN) === 'committed',
++        `an unrecognised reason waits (${out8.status}) — only a KNOWN terminal refusal may trigger a refund`);
++
++    // ── 9. Step 1 refuses on its own terms, and records nothing ───────────────────────────────────
++    // Below the credit floor: the throw is the buyer's answer, and there is nothing to compensate because
++    // nothing was ever held.
++    const KEY_BROKE = 'orch-cannot-afford';
++    let threw = '';
++    try {
++        await runOutboundSettlement(
++            { key: KEY_BROKE, peerId: PEER, buyerPublicKey: pauper, sellerPublicKey: seller, amount: 100_000 },
++            stubWire({ ...ACCEPTED, key: KEY_BROKE }, { settled: true, key: KEY_BROKE }), OURS, ourKey,
++        );
++    } catch (e: any) { threw = e?.message || String(e); }
++    assert(!!threw, `a purchase the buyer cannot fund throws rather than returning an outcome (${threw})`);
++    assert(stateOf(KEY_BROKE) === undefined || stateOf(KEY_BROKE) === 'abandoned',
++        'and it never becomes a live settlement');
++    assert(balanceOf(pauper) === 0, 'the buyer is untouched');
++
++    // ── 10. Every outcome, in one ledger ──────────────────────────────────────────────────────────
++    assert(nodeTotal() === baseline,
++        `conservation across all ${run} checks: ${nodeTotal()} vs ${baseline} — one settled purchase, five `
++        + 'refusals, three in flight, and the node still sums to where it started');
++    // The bridge is the tab, so it must equal exactly the purchases that are settled or still owed: the one
++    // settled, plus the three left committed. Reversed and abandoned ones must have left no trace on it.
++    assert(balanceOf(bridge) === r4(PRICE * 4),
++        `the bridge owes exactly the settled + in-flight purchases (${balanceOf(bridge)} = 4 × ${PRICE}) — `
++        + 'nothing reversed or abandoned is still sitting on the tab');
++
++    console.log(`\n${passed}/${run} checks passed.`);
++    if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
++    console.log('⭐️ #104 buyer-side orchestration PASSED — no ambiguous answer can trigger a refund.');
++}
++
++main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });
+diff --git a/scripts/test-all.sh b/scripts/test-all.sh
+index 40b3bec..548285c 100755
+--- a/scripts/test-all.sh
++++ b/scripts/test-all.sh
+@@ -116,7 +116,7 @@ run_federation_suites() {
+     # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
+     # cycle only revealed the next problem. Statuses are collected and all failures reported together.
+     FAILED=""
+-    for t in test-schema-upgrade test-commons-conservation test-demurrage-window test-federation-bridge test-settlement-state test-settlement-exchange test-federation-settlement; do
++    for t in test-schema-upgrade test-commons-conservation test-demurrage-window test-federation-bridge test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-settlement; do
+       echo "━━━ $t ━━━"
+       TMP_DIR=$(mktemp -d)
+       ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" pnpm exec tsx "src/$t.ts"

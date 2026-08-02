@@ -62,6 +62,23 @@ function explainTradeError(err: unknown): string {
     return raw.replace(/^[A-Z_]+:\s*/, '');
 }
 
+/**
+ * " (from byron)" for a listing pulled from another community, or "" for a local one (#143 step 4).
+ *
+ * Needed because the tile's `aria-label` REPLACES its children for a screen reader, so the 🌐 badge inside
+ * `MarketplaceCard` is announced to nobody (review finding). Which community a listing comes from is not
+ * decoration here — it decides who the buyer's beans are owed to.
+ *
+ * Same trimming as the visible badge, and one definition would be better than two; the badge's copy lives
+ * inside `MarketplaceCard` and hoisting it is a wider change than this PR should make.
+ */
+function remoteOriginLabel(post: any): string {
+    const remote = post?._remoteNode ?? post?.originNode;
+    if (!remote || typeof remote !== 'string') return '';
+    const name = remote.replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/:\d+$/, '');
+    return name ? ` (from ${name})` : '';
+}
+
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile }: Props) {
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>('all');
@@ -1813,7 +1830,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
                                                 role="button"
                                                 tabIndex={0}
-                                                aria-label={`Open listing: ${post.title}`}
+                                                aria-label={`Open listing: ${post.title}${remoteOriginLabel(post)}`}
                                                 className="h-full cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                             >
                                                 <MarketplaceCard
@@ -1821,7 +1838,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     authorRating={authorRatingsCache[post.authorPublicKey]}
                                                     authorEnergy={(post as any).authorEnergyCycled || 0}
                                                     authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
-                                                    remoteNode={(post as any)._remoteNode}
+                                                    // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
+                                                    // the SERVER pulled and cached (#143 step 4). Same badge either way:
+                                                    // a member wants the community it came from, not the mechanism.
+                                                    remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                 />
@@ -1870,7 +1890,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
                                                     role="button"
                                                     tabIndex={0}
-                                                    aria-label={`Open listing: ${post.title}`}
+                                                    aria-label={`Open listing: ${post.title}${remoteOriginLabel(post)}`}
                                                     className="cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                                 >
                                                     <MarketplaceCard
@@ -1878,7 +1898,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         authorRating={authorRatingsCache[post.authorPublicKey]}
                                                         authorEnergy={(post as any).authorEnergyCycled || 0}
                                                         authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
-                                                        remoteNode={(post as any)._remoteNode}
+                                                        // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
+                                                    // the SERVER pulled and cached (#143 step 4). Same badge either way:
+                                                    // a member wants the community it came from, not the mechanism.
+                                                    remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                         viewMode={viewMode}
                                                         isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                     />

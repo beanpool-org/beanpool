@@ -8,6 +8,8 @@
 
 import type { Libp2p } from 'libp2p';
 import { isPeerTrusted } from './connector-manager.js';
+import { listingsForPeer } from './federation-listings.js';
+import { logger } from './logger.js';
 import { getMember, getBalance, createConversation, sendMessage, registerVisitor } from './state-engine.js';
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 import { getNodeRole } from './state-engine.js';
@@ -93,6 +95,9 @@ export const SETTLE_PURCHASE = 'settle_purchase';
 export const SETTLE_RECEIPT = 'settle_receipt';
 export const SETTLE_RECEIPT_STATUS = 'settle_receipt_status';
 export const SETTLEMENT_ACTIONS = new Set<string>([SETTLE_PURCHASE, SETTLE_RECEIPT, SETTLE_RECEIPT_STATUS]);
+
+/** #143 step 4: "show me the listings your members agreed to share with us." */
+export const LIST_LISTINGS = 'list_listings';
 
 /**
  * The three preconditions for touching the ledger on a peer's behalf. Returns a refusal, or null to
@@ -294,6 +299,32 @@ export function registerFederationHandler(node: Libp2p): void {
                     }
                 }
             }
+            // ── The listing pull (#143 step 4) ───────────────────────────────────────────────────
+            // What THIS peer's members may discover here, decided by our own posters' reach settings. Read
+            // only; it moves nothing and writes nothing on this side.
+            //
+            // Trust level `peer` SPECIFICALLY, for the reason `settlementGateRefusal` gives: a `mirror` is a
+            // backup replica, not a discovery partner, and the outer trust check admits both. Not gated on
+            // FEDERATION_SETTLEMENT, deliberately — that flag means "accept no new cross-node trades", and a
+            // community that has switched trading off can still reasonably let a partner see its board. A
+            // purchase attempted against what they see is refused by the flag at the moment it is tried.
+            //
+            // The reply is keyed on `remotePeerId` from the AUTHENTICATED connection, never on anything in
+            // the request body. A peer that could name its own id would read another community's listings.
+            else if (request.action === LIST_LISTINGS) {
+                if (trustLevel !== 'peer') {
+                    response = { error: 'This connection is not a trading peer' };
+                } else {
+                    const listings = listingsForPeer(remotePeerId);
+                    response = { listings };
+                    // `logger`, not console (review finding) — this is the line an operator greps for when a
+                    // board looks wrong, so it belongs in the structured stream with the P2P tag the rest of
+                    // federation uses. The console calls elsewhere in this handler predate that and are left
+                    // alone: converting them is right, but not inside a PR that also changes settlement's
+                    // most central file.
+                    logger.info('P2P', `[Federation] → ${remotePeerId.slice(-8)}: served ${listings.length} listing(s)`);
+                }
+            }
             // ── Cross-node settlement (#104 §2.5) ────────────────────────────────────────────────
             else if (SETTLEMENT_ACTIONS.has(request.action)) {
                 response = settlementGateRefusal(trustLevel, remotePeerId, request.action)
@@ -362,6 +393,23 @@ async function settlementRoundTrip(
             try { await stream.close(); } catch {}
         }
     }
+}
+
+/**
+ * Ask a peer for the listings its members agreed to share with us (#143 step 4).
+ *
+ * A plain read, so a failure is nothing more than "no fresh answer this round": the caller keeps whatever it
+ * cached last time, which is the entire reason §7 chose pull-and-cache over push. Off-grid and solar nodes
+ * sleep, and a board that empties whenever a peer naps is not a board.
+ *
+ * Its own timeout, shorter than settlement's, because nothing is in flight and a slow peer must not hold a
+ * pull round open — the settlement timeouts exist to protect beans mid-trade and are not the right scale for
+ * a discovery read.
+ */
+export const LISTING_PULL_TIMEOUT_MS = 8_000;
+
+export async function federatedListListings(node: Libp2p, targetPeerId: any): Promise<any> {
+    return settlementRoundTrip(node, targetPeerId, { action: LIST_LISTINGS }, LISTING_PULL_TIMEOUT_MS);
 }
 
 /**

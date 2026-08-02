@@ -40,6 +40,7 @@ import { startP2P } from './p2p.js';
 import { initConnectorManager, connectAll } from './connector-manager.js';
 import { registerHandshakeHandler } from './handshake.js';
 import { registerFederationHandler, federatedReceiptStatus } from './federation-protocol.js';
+import { startListingPull } from './federation-listings.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, promotionSanityCheck } from './state-engine.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
@@ -146,6 +147,15 @@ async function main() {
     }, delay).unref();
 
     scheduleRecovery(RECOVERY_PEER_DELAY_MS);
+
+    // Step 8.2: The listing pull (#143 step 4). Ask each capped peer for the listings its members agreed to
+    // share, and cache them with `origin_node` set. Pull rather than push because off-grid and solar nodes
+    // sleep and a board that empties when a peer naps is not a board (§7).
+    //
+    // Started after the recovery wiring on purpose: recovering beans already in flight matters more than a
+    // fresh board, and the pull's own first tick is delayed well past the connector auto-connect window.
+    // A no-op when ENABLE_PEER_CONNECTORS is off, which is every node that has not opted in.
+    startListingPull(p2pNode);
 
     // Step 8.5: Backup puller (one-directional live backup). On a node with
     // NODE_ROLE=backup, periodically pull the primary's signed snapshot over

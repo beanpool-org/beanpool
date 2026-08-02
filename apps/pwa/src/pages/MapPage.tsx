@@ -872,11 +872,18 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
 
                 {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
                     trading partners: a reach chooser on a node with no peers is a decision about nothing.
-                    Default stays "Just here", because a member who has never heard of federation has not
-                    agreed to their listing appearing somewhere else. */}
+                    Default stays "Stays here", because a member who has never heard of federation has not
+                    agreed to their listing appearing somewhere else.
+
+                    THE COPY IS ABOUT TRAVEL, NOT VISIBILITY, and that distinction is the whole point. This
+                    read "Who can see this?" over a "Just here" button, which promises more than the code
+                    keeps: reach decides what this node hands a PEER that asks over libp2p, and every board
+                    has always been a public HTTPS read, so anyone with the node's URL can list every active
+                    listing regardless. That is by design (Rule 9 — reach is a discovery filter, not an
+                    access control), so the honest fix is the words, not a guarantee we cannot make. */}
                 {reachablePeerList.length > 0 && (
                     <div className="py-2 px-1">
-                        <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">Who can see this?</label>
+                        <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">Where does this travel?</label>
                         {/* role="group" with aria-pressed toggles, NOT role="radiogroup" with role="radio"
                             (review suggestion, departed from deliberately): a radiogroup promises arrow-key
                             navigation between options, and implementing the role without the keys leaves a
@@ -884,7 +891,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                             A labelled group of pressed-state buttons is complete exactly as written. */}
                         <div className="flex gap-2" role="group" aria-labelledby="reach-chooser-label">
                             {([
-                                { value: 'local' as const, label: '🏠 Just here' },
+                                { value: 'local' as const, label: '🏠 Stays here' },
                                 { value: 'peers' as const, label: '🤝 Chosen' },
                                 { value: 'everywhere' as const, label: '🌏 Everywhere' },
                             ]).map(opt => (
@@ -936,11 +943,11 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                                 : 'text-nature-500 dark:text-nature-400'
                         }`}>
                             {newPostReach === 'local'
-                                ? 'Only people in this community will see it.'
+                                ? 'Stays on this community\'s board.'
                                 : newPostReach === 'everywhere'
-                                    ? 'Members of every community you trade with can see it and buy it.'
+                                    ? 'Appears on the board of every community you trade with, and they can buy it.'
                                     : newPostReachPeers.length > 0
-                                        ? 'Only the communities you ticked can see it.'
+                                        ? 'Appears on the board of the communities you ticked.'
                                         : '⚠️ Tick at least one community, or it stays here.'}
                         </p>
                     </div>

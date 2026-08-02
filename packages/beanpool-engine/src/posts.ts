@@ -294,7 +294,22 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         photosByPost.get(p.post_id)!.push(p);
     }
 
-    return rows.map(r => rowToPost(db, r, photosByPost));
+    // #143 step 4. `reachPeers` names WHICH NEIGHBOURING COMMUNITIES a member singled out, and that is the
+    // poster's business, not the board's — in a community small enough to know everyone, "she offers this to
+    // Gippsland but not to Castlemaine" is socially loaded in a way the listing itself is not. This board is
+    // a public HTTPS read by design, so it went to anyone who asked, including the peers not named.
+    //
+    // Dropped rather than emptied: `reachPeers: []` would read as "named nobody", which is a different and
+    // false statement, and an edit form loading that would silently clear the poster's real choice.
+    //
+    // `reach` itself stays. It is a property of the listing rather than a fact about third parties, and the
+    // cached copy a peer stores needs to be 'local' for loop prevention to hold.
+    const viewer = filter?.viewerPubkey;
+    return rows.map(r => {
+        const post = rowToPost(db, r, photosByPost);
+        if (post.authorPublicKey !== viewer) delete post.reachPeers;
+        return post;
+    });
 }
 
 export function getActivePostCount(db: Db): number {

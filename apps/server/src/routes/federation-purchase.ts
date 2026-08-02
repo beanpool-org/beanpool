@@ -192,9 +192,20 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
         if (connector.trustLevel !== 'peer') {
             ctx.status = 403;
             ctx.body = {
+                // NAME THE PEER when we know it. "does not trade with that one" is vague to the one person who
+                // reads it — a member who named a community and got a refusal (review finding, accepted). The
+                // callsign is the operator's own label for that connector and is what the Settings card shows,
+                // so it is the name the member has a chance of recognising. `callsign` is optional on a
+                // connector, hence the fallback.
+                //
+                // Deliberately NOT "Trust Level is not set to peer" (the suggested wording, declined): trust
+                // level is operator vocabulary for an operator's screen. A member cannot act on it, and
+                // `blocked` is a decision their community made on purpose, not a misconfiguration to report.
                 error: connector.trustLevel === 'mirror'
                     ? 'That connection is a backup replica, not a trading partner'
-                    : 'This community does not trade with that one',
+                    : connector.callsign
+                        ? `This community does not trade with ${connector.callsign}`
+                        : 'This community does not trade with that one',
                 code: SETTLEMENT_REFUSED_CODE,
             };
             return;

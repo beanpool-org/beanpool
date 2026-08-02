@@ -899,10 +899,15 @@
                     <strong style="color: #60a5fa; display: block; margin-bottom: 0.2rem; font-size: 0.72rem;">💡 Connection Mode Guide</strong>
                     For optimal stability and resource usage:
                     <ul style="margin: 0.2rem 0 0 1rem; padding: 0; list-style-type: disc;">
-                        <li>Configure one node as <strong style="color: #fbbf24;">⚡ Active</strong> (e.g. your private home NAS or backup mirror).</li>
-                        <li>Configure the other node as <strong style="color: #cbd5e1;">💤 Passive</strong> (e.g. your public load-balanced server).</li>
+                        <!-- Decorative emoji carry no meaning the adjacent word does not already state, so they
+                             are aria-hidden — a screen reader announcing "high voltage sign Active" is noise.
+                             Applied to the whole box, not just the line this PR added, so the guide is
+                             internally consistent. The <option> labels below cannot take a span and keep
+                             theirs. -->
+                        <li>Configure one node as <strong style="color: #fbbf24;"><span aria-hidden="true">⚡</span> Active</strong> (e.g. your private home NAS or backup mirror).</li>
+                        <li>Configure the other node as <strong style="color: #cbd5e1;"><span aria-hidden="true">💤</span> Passive</strong> (e.g. your public load-balanced server).</li>
                         <li>Avoid setting both nodes to Active, as simultaneous outbound dialing can cause connection collisions.</li>
-                        <li>Connection Mode only decides <em>who dials</em>. A 💤 Passive peer trades exactly like an Active one — to stop trading with a community, set its Trust Level to <strong style="color: #cbd5e1;">Blocked</strong>.</li>
+                        <li>Connection Mode only decides <em>who dials</em>. A <span aria-hidden="true">💤</span> Passive peer trades exactly like an Active one — to stop trading with a community, set its Trust Level to <strong style="color: #cbd5e1;">Blocked</strong>.</li>
                     </ul>
                 </div>
 

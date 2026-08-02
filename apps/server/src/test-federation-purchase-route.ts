@@ -226,6 +226,9 @@ async function main() {
     assert(toBlocked.status === 403 && toBlocked.body?.code === SETTLEMENT_REFUSED_CODE,
         `a BLOCKED peer is refused (${toBlocked.status}) — dropping the \`enabled\` gate costs no capability, `
         + 'because this is the control that actually means "stop trading", and it is in the Settings dropdown');
+    assert(/Shunned/.test(toBlocked.body?.error ?? ''),
+        `and the refusal NAMES the community (${toBlocked.body?.error}) — a member who named a peer and got a `
+        + 'refusal is the only reader of this string, so "that one" told them nothing');
 
     const noPeerId = await buy(buyer, { ...good, nodeUrl: NOPEER_URL });
     assert(noPeerId.status === 400,

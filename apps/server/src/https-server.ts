@@ -779,11 +779,19 @@ export async function startHttpsServer(port: number): Promise<void> {
             // Generic spoof check: any body field representing the request initiator
             // (ending in 'pubkey', 'publickey', or is 'from' or 'createdby') must match the verified public key.
             // We exclude other non-sender fields like targetPubkey, oldPubkey, to_pubkey, invited_by to prevent false positives.
+            //
+            // `seller` joins that list for the cross-node purchase route (#143), where the seller is a member of
+            // ANOTHER community by definition and can never be the signer. Without it, this check rejected every
+            // valid cross-node purchase with an identity mismatch — the route was unusable over HTTP while its
+            // own suite passed, because that suite drives the router handler directly and never crosses this
+            // middleware. The allowlist is for fields that name someone else on purpose, and a seller is the
+            // clearest possible case of one.
             const body = (ctx as any).requestBody || {};
             for (const [key, value] of Object.entries(body)) {
                 const k = key.toLowerCase();
                 const isIdentityField = k.endsWith('pubkey') || k.endsWith('publickey') || k === 'from' || k === 'createdby';
-                const isOtherEntity = k.startsWith('target') || k.startsWith('old') || k.startsWith('to') || k.startsWith('invited') || k.startsWith('friend');
+                const isOtherEntity = k.startsWith('target') || k.startsWith('old') || k.startsWith('to')
+                    || k.startsWith('invited') || k.startsWith('friend') || k.startsWith('seller');
                 
                 if (isIdentityField && !isOtherEntity && typeof value === 'string' && value !== pubKeyHex) {
                     // A2-13: don't name the field in the client-facing error — leaking

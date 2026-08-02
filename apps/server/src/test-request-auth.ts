@@ -107,6 +107,29 @@ async function main() {
     const r7 = await signedFetch(ENDPOINT, body, { legacy: true });
     assert(r7.status === 401 && /missing/i.test(r7.error ?? ''), `legacy body-only signature rejected (got ${r7.status} ${r7.error ?? ''})`);
 
+    // 7. THE SPOOF CHECK MUST NOT EAT A LEGITIMATE COUNTERPARTY FIELD (#143, review finding).
+    //
+    // Any body key ending in `publickey` is compared against the signer unless it is on the other-entity
+    // allowlist. `sellerPublicKey` was not, so every valid cross-node purchase was rejected with an identity
+    // mismatch — the route was unusable over HTTP while its own suite passed, because that suite drives the
+    // router handler directly and never crosses this middleware. This is the check that closes that gap:
+    // a real signed request, over the wire, with the route's actual body shape.
+    const someoneElse = crypto.randomBytes(32).toString('hex');
+    const purchase = await signedFetch('/api/federation/purchase', {
+        nodeUrl: 'https://byron.beanpool.org', sellerPublicKey: someoneElse, amount: 5,
+    });
+    assert(!/identity mismatch/i.test(purchase.error ?? '') && purchase.status !== 403,
+        `a seller on another node is not mistaken for a spoofed signer (got ${purchase.status} `
+        + `${purchase.error ?? ''}) — 503 here is the route's own kill switch, which means the request reached it`);
+
+    // And the spoof check itself still bites, so the allowlist was widened for `seller` alone.
+    const spoofed = await signedFetch('/api/federation/purchase', {
+        nodeUrl: 'https://byron.beanpool.org', sellerPublicKey: someoneElse, buyerPublicKey: someoneElse, amount: 5,
+    });
+    assert(spoofed.status === 403,
+        `naming someone else as the BUYER is still rejected (got ${spoofed.status} ${spoofed.error ?? ''}) — `
+        + 'the buyer is the payer, so that field must match the signing key');
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ ALL X-1 REQUEST-AUTH CHECKS PASSED.');

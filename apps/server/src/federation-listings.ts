@@ -106,11 +106,18 @@ export function listingsForPeer(peerId: string, limit = LISTINGS_PER_PULL): Remo
  */
 export function reachablePeers(): Array<{ peerId: string; callsign: string | null }> {
     const out: Array<{ peerId: string; callsign: string | null }> = [];
+    // DEDUPED BY PEER ID (review finding). Two connectors can carry the same peer id — an operator who
+    // added a peer by hostname and again by container IP, or kept an old address while migrating a host.
+    // The list is rendered with `key={peerId}`, so a duplicate is a React key collision AND the same
+    // community offered twice in the compose form. First entry wins, which keeps whichever callsign the
+    // connector list shows first.
+    const seen = new Set<string>();
     for (const connector of getConnectors()) {
         if (connector.trustLevel !== 'peer') continue;
         if (getConnectorCreditCap(connector.address) === null) continue;
         const peerId = peerIdFromAddress(connector.address);
-        if (!peerId) continue;
+        if (!peerId || seen.has(peerId)) continue;
+        seen.add(peerId);
         out.push({ peerId, callsign: connector.callsign ?? null });
     }
     return out;

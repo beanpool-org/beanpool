@@ -139,7 +139,18 @@ CREATE TABLE IF NOT EXISTS posts (
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
 -- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would
 -- otherwise dominate a full index for no benefit.
-CREATE INDEX IF NOT EXISTS idx_posts_reach ON posts(reach, created_at DESC)
+--
+-- Keyed on created_at ALONE, with `reach` living only in the partial condition. Review finding, and
+-- MEASURED rather than accepted on argument — the same EXPLAIN QUERY PLAN check the settlements indexes
+-- above document. Leading with `reach` fragments the index by reach value, so the scan cannot deliver
+-- `ORDER BY created_at DESC` globally ordered:
+--
+--   ON posts(reach, created_at DESC)  →  SCAN … + USE TEMP B-TREE FOR ORDER BY
+--   ON posts(created_at DESC)         →  SCAN … , no sort
+--
+-- And `reach` in the leading position buys nothing anyway, because the partial predicate has already
+-- excluded the only value the query filters on.
+CREATE INDEX IF NOT EXISTS idx_posts_reach ON posts(created_at DESC)
     WHERE status = 'active' AND reach != 'local' AND origin_node IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';

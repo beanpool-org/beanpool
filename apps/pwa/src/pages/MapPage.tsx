@@ -876,8 +876,13 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                     agreed to their listing appearing somewhere else. */}
                 {reachablePeerList.length > 0 && (
                     <div className="py-2 px-1">
-                        <label className="block text-sm font-medium text-nature-700 mb-1.5">Who can see this?</label>
-                        <div className="flex gap-2">
+                        <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">Who can see this?</label>
+                        {/* role="group" with aria-pressed toggles, NOT role="radiogroup" with role="radio"
+                            (review suggestion, departed from deliberately): a radiogroup promises arrow-key
+                            navigation between options, and implementing the role without the keys leaves a
+                            screen-reader user told "1 of 3" by a control that does not respond to arrows.
+                            A labelled group of pressed-state buttons is complete exactly as written. */}
+                        <div className="flex gap-2" role="group" aria-labelledby="reach-chooser-label">
                             {([
                                 { value: 'local' as const, label: '🏠 Just here' },
                                 { value: 'peers' as const, label: '🤝 Chosen' },
@@ -888,10 +893,10 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                                     type="button"
                                     onClick={() => setNewPostReach(opt.value)}
                                     aria-pressed={newPostReach === opt.value}
-                                    className={`flex-1 text-xs font-medium rounded-xl px-2 py-2 border transition-all ${
+                                    className={`flex-1 text-xs font-medium rounded-xl px-2 py-2.5 border transition-all min-h-[44px] ${
                                         newPostReach === opt.value
-                                            ? 'bg-nature-700 text-white border-nature-700'
-                                            : 'bg-white text-nature-700 border-nature-300'
+                                            ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500 shadow-sm'
+                                            : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
                                     }`}
                                 >
                                     {opt.label}
@@ -899,7 +904,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                             ))}
                         </div>
                         {newPostReach === 'peers' && (
-                            <div className="mt-2 flex flex-wrap gap-2">
+                            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Communities this listing is aimed at">
                                 {reachablePeerList.map(p => {
                                     const on = newPostReachPeers.includes(p.peerId);
                                     return (
@@ -909,8 +914,10 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                                             onClick={() => setNewPostReachPeers(prev =>
                                                 on ? prev.filter(x => x !== p.peerId) : [...prev, p.peerId])}
                                             aria-pressed={on}
-                                            className={`text-xs rounded-full px-3 py-1.5 border transition-all ${
-                                                on ? 'bg-nature-700 text-white border-nature-700' : 'bg-white text-nature-700 border-nature-300'
+                                            className={`text-xs rounded-full px-3 py-2 border transition-all min-h-[36px] ${
+                                                on
+                                                    ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500'
+                                                    : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
                                             }`}
                                         >
                                             {on ? '✓ ' : ''}{p.callsign || `Peer ${p.peerId.slice(-8)}`}
@@ -919,14 +926,22 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                                 })}
                             </div>
                         )}
-                        <p className="text-[13px] leading-snug text-nature-500 mt-1.5">
+                        {/* "Chosen" with nothing ticked is a real dead end — the listing silently stays home —
+                            so it reads as a warning rather than as neutral help text. Not a blocking error:
+                            staying home is a valid outcome, and refusing the post would be worse than
+                            honouring the safe default. */}
+                        <p className={`text-[13px] leading-snug mt-1.5 ${
+                            newPostReach === 'peers' && newPostReachPeers.length === 0
+                                ? 'text-amber-600 dark:text-amber-400 font-medium'
+                                : 'text-nature-500 dark:text-nature-400'
+                        }`}>
                             {newPostReach === 'local'
                                 ? 'Only people in this community will see it.'
                                 : newPostReach === 'everywhere'
                                     ? 'Members of every community you trade with can see it and buy it.'
                                     : newPostReachPeers.length > 0
                                         ? 'Only the communities you ticked can see it.'
-                                        : 'Tick at least one community, or it stays here.'}
+                                        : '⚠️ Tick at least one community, or it stays here.'}
                         </p>
                     </div>
                 )}

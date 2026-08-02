@@ -183,6 +183,18 @@ async function main() {
     assert((viaHttp.json?.peers ?? []).every((p: any) => !('address' in p) && !('creditCap' in p)),
         '9d. carrying no address and no cap — a member needs the name, not the operator configuration');
 
+    // Two connectors, ONE peer — an operator who added a peer by hostname and again by container IP, or who
+    // kept an old address while migrating a host. Rendered with key={peerId}, so a duplicate is both a React
+    // key collision and the same community offered twice (review finding).
+    await post('/api/local/connectors', {
+        password: PW, address: `/dns4/byron.example/tcp/4001/p2p/${BYRON}`, trustLevel: 'peer', callsign: 'byron-again', enabled: false,
+    });
+    await post('/api/local/connectors/credit-cap', { password: PW, address: `/dns4/byron.example/tcp/4001/p2p/${BYRON}`, cap: 500 });
+    const ids = reachablePeers().map(p => p.peerId);
+    assert(ids.filter(id => id === BYRON).length === 1,
+        `9e. two connectors for the SAME peer id yield ONE entry (got ${ids.filter(id => id === BYRON).length}) — the compose form keys on peer id`);
+    assert(new Set(ids).size === ids.length, '9f. and the list has no duplicates at all');
+
     // ── 10. What crosses the wire is narrower than a post. ─────────────────────────────────────────────
     const wire = listingsForPeer(BYRON)[0];
     assert(wire !== undefined && typeof wire.authorPublicKey === 'string' && typeof wire.authorCallsign === 'string',

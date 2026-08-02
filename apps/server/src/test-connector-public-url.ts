@@ -208,6 +208,40 @@ async function main() {
     assert(cm.getConnectorByAddress('/ip4/10.9.9.9/tcp/4001/p2p/12D3KooWJunkUrl')?.publicUrl === 'https://10.9.9.9',
         '7b. and it is replaced with a derived value');
 
+    // ── 8. A LOAD MUST CONVERGE (review finding). ────────────────────────────────────────────────────────
+    //    An address carrying no hostname cannot yield a publicUrl, and this PR is what made
+    //    `derivePublicUrl` able to return undefined at all. With a bare `!c.publicUrl` migration test, such a
+    //    connector rewrites connectors.json on every boot forever.
+    //
+    //    Detected by CONTENT, not mtime: the file is seeded compact, and saveConnectors writes 2-space
+    //    pretty-printed JSON — so a needless re-save is visible as a change in formatting.
+    const undrivable = '/p2p/12D3KooWNoHostnameInThisAddress';
+    fs.writeFileSync(CONNECTORS_PATH, JSON.stringify([
+        { address: undrivable, trustLevel: 'peer', enabled: true, callsign: 'nohost', addedAt: 3 },
+    ]));   // compact on purpose
+    cm.initConnectorManager({ addEventListener() { /* no-op */ } } as any);
+    const afterFirst = fs.readFileSync(CONNECTORS_PATH, 'utf-8');
+    assert(cm.getConnectorByAddress(undrivable)?.publicUrl === undefined,
+        `8a. an address with no hostname yields no publicUrl rather than a fabricated one `
+        + `(got ${cm.getConnectorByAddress(undrivable)?.publicUrl})`);
+    assert(!afterFirst.includes('\n'),
+        '8b. and the first load did NOT rewrite the file, because the repair would change nothing');
+
+    cm.initConnectorManager({ addEventListener() { /* no-op */ } } as any);
+    assert(fs.readFileSync(CONNECTORS_PATH, 'utf-8') === afterFirst,
+        '8c. nor does a second load — the migration converges instead of re-saving on every boot');
+
+    // The converse: a connector that CAN be repaired is still written back exactly once.
+    fs.writeFileSync(CONNECTORS_PATH, JSON.stringify([
+        { address: '/ip4/10.5.5.5/tcp/4001/p2p/12D3KooWRepairMe', trustLevel: 'peer', enabled: true, publicUrl: 'https:///ip4/10.5.5.5/tcp/4001', addedAt: 4 },
+    ]));   // compact on purpose
+    cm.initConnectorManager({ addEventListener() { /* no-op */ } } as any);
+    const repairedOnce = fs.readFileSync(CONNECTORS_PATH, 'utf-8');
+    assert(repairedOnce.includes('\n'), '8d. a repairable connector IS written back (file reformatted)');
+    cm.initConnectorManager({ addEventListener() { /* no-op */ } } as any);
+    assert(fs.readFileSync(CONNECTORS_PATH, 'utf-8') === repairedOnce,
+        '8e. and only once — the second load leaves it alone');
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ ALL CONNECTOR PUBLIC-URL CHECKS PASSED.');

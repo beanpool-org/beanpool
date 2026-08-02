@@ -189,16 +189,26 @@ function loadConnectors(): void {
     try {
         if (fs.existsSync(CONNECTORS_PATH)) {
             const raw = JSON.parse(fs.readFileSync(CONNECTORS_PATH, 'utf-8'));
-            const needsMigration = raw.some((c: any) =>
-                ['full_sync', 'credit_verification', 'read_only'].includes(c.trustLevel) ||
-                !c.publicUrl ||
-                // Not a usable string, or a `https:///…` value from the old split(':') derivation. Both are
-                // repaired by migrateConnector, and both are listed here so the repair is WRITTEN BACK rather
-                // than recomputed on every boot.
-                typeof c.publicUrl !== 'string' ||
-                c.publicUrl.startsWith('https:///') ||
-                (c.address && c.address.includes(','))
-            );
+            // TRUE ONLY WHEN migrateConnector WOULD ACTUALLY CHANGE SOMETHING, so a load converges.
+            //
+            // The old test included a bare `!c.publicUrl`. That was harmless while derivation always returned
+            // a string (even a malformed one), but this PR lets `derivePublicUrl` return undefined for an
+            // address carrying no hostname — and for such a connector `!c.publicUrl` stays true forever,
+            // rewriting connectors.json on every single boot without ever converging (review finding).
+            //
+            // Comparing against what the repair would produce covers every case in one test: a missing or
+            // malformed value that CAN be derived saves once and is then settled; one that cannot derive saves
+            // never. Note this deliberately does not simply drop the missing-publicUrl case, which would stop
+            // persisting the repair this PR exists for.
+            const needsMigration = raw.some((c: any) => {
+                if (['full_sync', 'credit_verification', 'read_only'].includes(c.trustLevel)) return true;
+                if (c.address && c.address.includes(',')) return true;
+                const current = typeof c.publicUrl === 'string' ? c.publicUrl : undefined;
+                if (!current || current.startsWith('https:///')) {
+                    return derivePublicUrl(c.address) !== current;
+                }
+                return false;
+            });
             connectors = raw.map(migrateConnector);
             logger.info('P2P', `[Connectors] Loaded ${connectors.length} connector(s) from disk.`);
             if (needsMigration) {

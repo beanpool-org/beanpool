@@ -95,6 +95,19 @@ function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
  * handling is needed for payloads this size.
  */
 async function writeToStream(stream: any, data: string): Promise<void> {
+    // `send()` IS SYNCHRONOUS AND RETURNS A BOOLEAN — deliberately not awaited (review finding, rejected with
+    // evidence). It appends to the stream's internal writeBuffer and returns `processSendQueue()`, which is a
+    // plain non-async function returning true/false; the bytes are buffered before it returns. So `await`ing it
+    // would add a microtask and no ordering guarantee, while reading like a synchronisation point that isn't
+    // one. What actually guarantees the bytes reach the transport is `close()` below.
+    //
+    // The boolean is BACKPRESSURE: false means the send buffer is full. Ignored on purpose here — one small
+    // JSON write per stream cannot overflow it, and `close()` flushes whatever is buffered regardless. If this
+    // ever writes repeatedly or carries a large payload, the correct API is `await stream.onDrain()`, NOT
+    // awaiting `send()`.
+    //
+    // `send()` throws synchronously if the write side is already closed. Inside this async function that
+    // surfaces as a rejected promise, which every caller already handles in its try/catch.
     stream.send(encoder.encode(data));
     await stream.close();
 }

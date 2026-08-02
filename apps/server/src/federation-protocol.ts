@@ -77,6 +77,8 @@ function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
  * `close()` is the real half-close: it flushes pending data and leaves the stream readable.
  */
 async function writeToStream(stream: any, data: string): Promise<void> {
+    // `send()` is synchronous and returns a boolean (backpressure), so it is deliberately not awaited — see the
+    // full note in handshake.ts. `close()` is what flushes and half-closes.
     stream.send(encoder.encode(data));
     await stream.close();
 }

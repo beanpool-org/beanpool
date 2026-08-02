@@ -16,7 +16,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts, getNodeConfig, getBalance, type MarketplacePost } from '../lib/api';
+import { getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts, getNodeConfig, getBalance, getReachablePeers, type MarketplacePost, type PostReach, type ReachablePeer } from '../lib/api';
 import { haversineDistance } from '../lib/geo';
 import { MARKETPLACE_CATEGORIES, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
@@ -64,6 +64,10 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
     const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
+    // #143 step 4 — per-listing reach. 'local' is the default and stays the default.
+    const [newPostReach, setNewPostReach] = useState<PostReach>('local');
+    const [newPostReachPeers, setNewPostReachPeers] = useState<string[]>([]);
+    const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);
     const [posting, setPosting] = useState(false);
     const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
@@ -94,6 +98,17 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
     }, [identity.publicKey]);
 
     const needBlocked = blockedFromTrading && newPostType === 'need';
+
+    // #143 step 4 — which communities a listing could be aimed at. Fetched once; failure is silent and
+    // leaves the list empty, which hides the reach chooser. That is the right failure: a member should not be
+    // shown a partner they might not have, and 'local' is what they get, which is the safe answer anyway.
+    useEffect(() => {
+        let cancelled = false;
+        getReachablePeers()
+            .then(r => { if (!cancelled) setReachablePeerList(r.peers ?? []); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
 
     useEffect(() => {
         const handleStorage = () => {
@@ -321,6 +336,8 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                 authorPublicKey: identity.publicKey || '',
                 repeatable: newPostRepeatable,
                 cashAlsoNeeded: newPostCashAlsoNeeded,
+                reach: newPostReach,
+                ...(newPostReach === 'peers' ? { reachPeers: newPostReachPeers } : {}),
                 ...(postLat != null && postLng != null ? { lat: postLat, lng: postLng } : {}),
                 ...(newPostPhotos.length > 0 ? { photos: newPostPhotos } : {}),
             });
@@ -330,6 +347,8 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
             setNewPostPriceType('fixed');
             setNewPostRepeatable(false);
             setNewPostCashAlsoNeeded(false);
+            setNewPostReach('local');
+            setNewPostReachPeers([]);
             setNewPostPhotos([]);
             setPostLat(null);
             setPostLng(null);
@@ -849,6 +868,82 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                         Cash is for fuel and consumables you paid for — <strong>not your time, not your tools</strong>.
                         At cost, no markup. Agree the details in chat; the app never handles the money.
                     </p>
+                )}
+
+                {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
+                    trading partners: a reach chooser on a node with no peers is a decision about nothing.
+                    Default stays "Just here", because a member who has never heard of federation has not
+                    agreed to their listing appearing somewhere else. */}
+                {reachablePeerList.length > 0 && (
+                    <div className="py-2 px-1">
+                        <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">Who can see this?</label>
+                        {/* role="group" with aria-pressed toggles, NOT role="radiogroup" with role="radio"
+                            (review suggestion, departed from deliberately): a radiogroup promises arrow-key
+                            navigation between options, and implementing the role without the keys leaves a
+                            screen-reader user told "1 of 3" by a control that does not respond to arrows.
+                            A labelled group of pressed-state buttons is complete exactly as written. */}
+                        <div className="flex gap-2" role="group" aria-labelledby="reach-chooser-label">
+                            {([
+                                { value: 'local' as const, label: '🏠 Just here' },
+                                { value: 'peers' as const, label: '🤝 Chosen' },
+                                { value: 'everywhere' as const, label: '🌏 Everywhere' },
+                            ]).map(opt => (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => setNewPostReach(opt.value)}
+                                    aria-pressed={newPostReach === opt.value}
+                                    className={`flex-1 text-xs font-medium rounded-xl px-2 py-2.5 border transition-all min-h-[44px] ${
+                                        newPostReach === opt.value
+                                            ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500 shadow-sm'
+                                            : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
+                                    }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                        {newPostReach === 'peers' && (
+                            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Communities this listing is aimed at">
+                                {reachablePeerList.map(p => {
+                                    const on = newPostReachPeers.includes(p.peerId);
+                                    return (
+                                        <button
+                                            key={p.peerId}
+                                            type="button"
+                                            onClick={() => setNewPostReachPeers(prev =>
+                                                on ? prev.filter(x => x !== p.peerId) : [...prev, p.peerId])}
+                                            aria-pressed={on}
+                                            className={`text-xs rounded-full px-3 py-2 border transition-all min-h-[36px] ${
+                                                on
+                                                    ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500'
+                                                    : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
+                                            }`}
+                                        >
+                                            {on ? '✓ ' : ''}{p.callsign || `Peer ${p.peerId.slice(-8)}`}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {/* "Chosen" with nothing ticked is a real dead end — the listing silently stays home —
+                            so it reads as a warning rather than as neutral help text. Not a blocking error:
+                            staying home is a valid outcome, and refusing the post would be worse than
+                            honouring the safe default. */}
+                        <p className={`text-[13px] leading-snug mt-1.5 ${
+                            newPostReach === 'peers' && newPostReachPeers.length === 0
+                                ? 'text-amber-600 dark:text-amber-400 font-medium'
+                                : 'text-nature-500 dark:text-nature-400'
+                        }`}>
+                            {newPostReach === 'local'
+                                ? 'Only people in this community will see it.'
+                                : newPostReach === 'everywhere'
+                                    ? 'Members of every community you trade with can see it and buy it.'
+                                    : newPostReachPeers.length > 0
+                                        ? 'Only the communities you ticked can see it.'
+                                        : '⚠️ Tick at least one community, or it stays here.'}
+                        </p>
+                    </div>
                 )}
 
                 {/* Description */}

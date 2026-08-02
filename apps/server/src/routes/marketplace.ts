@@ -92,7 +92,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -108,7 +108,11 @@ router.post('/api/marketplace/posts', async (ctx) => {
             photos,
             repeatable === true || repeatable === 'true',
             id,
-            cashAlsoNeeded === true || cashAlsoNeeded === 'true'
+            cashAlsoNeeded === true || cashAlsoNeeded === 'true',
+            // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
+            // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
+            // well would put two answers in the codebase for "what if this is nonsense".
+            { reach, reachPeers }
         );
         if (!post) {
             ctx.status = 400;

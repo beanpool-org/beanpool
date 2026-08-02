@@ -120,8 +120,38 @@ CREATE TABLE IF NOT EXISTS posts (
     -- and a structured figure would imply it holds or settles money it never touches. Terms live
     -- in the chat. Local-only by nature — cash can't cross a node boundary.
     cash_also_needed INTEGER DEFAULT 0,
+    -- #143 step 4: how far this listing travels. 'local' (stays here) | 'peers' (named communities in
+    -- reach_peers) | 'everywhere' (any community we settle with).
+    --
+    -- DEFAULTS TO 'local', which is the only defensible default: a member who has never heard of
+    -- federation has not agreed to their listing appearing in another community. Rows written before this
+    -- column existed take the default for the same reason.
+    --
+    -- Rule 9: this is a DISCOVERY FILTER, not an access control. It decides what we choose to send a peer,
+    -- not what that peer may do with a copy it already holds.
+    reach TEXT NOT NULL DEFAULT 'local' CHECK (reach IN ('local', 'peers', 'everywhere')),
+    -- JSON array of peer ids, meaningful only when reach='peers'. Peer IDs rather than callsigns or
+    -- addresses: a callsign is a peer's own mutable label and an address is operator config that changes
+    -- when a host moves, while the peer id is the thing the trust relationship and the bridge are keyed on.
+    reach_peers TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
+-- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
+-- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would
+-- otherwise dominate a full index for no benefit.
+--
+-- Keyed on created_at ALONE, with `reach` living only in the partial condition. Review finding, and
+-- MEASURED rather than accepted on argument — the same EXPLAIN QUERY PLAN check the settlements indexes
+-- above document. Leading with `reach` fragments the index by reach value, so the scan cannot deliver
+-- `ORDER BY created_at DESC` globally ordered:
+--
+--   ON posts(reach, created_at DESC)  →  SCAN … + USE TEMP B-TREE FOR ORDER BY
+--   ON posts(created_at DESC)         →  SCAN … , no sort
+--
+-- And `reach` in the leading position buys nothing anyway, because the partial predicate has already
+-- excluded the only value the query filters on.
+CREATE INDEX IF NOT EXISTS idx_posts_reach ON posts(created_at DESC)
+    WHERE status = 'active' AND reach != 'local' AND origin_node IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);

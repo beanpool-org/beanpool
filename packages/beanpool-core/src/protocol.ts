@@ -260,3 +260,63 @@ export function bridgeAccountId(peerId: string): string {
 export function peerFromBridgeAccountId(accountId: string): string | null {
     return accountId.startsWith('bridge_') ? accountId.slice('bridge_'.length) || null : null;
 }
+
+/**
+ * How far a listing travels (#143 step 4, docs/federation-connector.md §7).
+ *
+ *   local       stays on this node. THE DEFAULT, and the only correct default — a member who has never
+ *               heard of federation has not agreed to their listing appearing in another community.
+ *   peers       named communities only.
+ *   everywhere  any community this node settles with.
+ */
+export type PostReach = 'local' | 'peers' | 'everywhere';
+
+export const POST_REACH_VALUES: readonly PostReach[] = ['local', 'peers', 'everywhere'];
+
+export function isPostReach(value: unknown): value is PostReach {
+    return typeof value === 'string' && (POST_REACH_VALUES as readonly string[]).includes(value);
+}
+
+/**
+ * May a listing with this reach be shown to `peerId`?
+ *
+ * **RULE 9 — THIS IS A DISCOVERY FILTER, NOT AN ACCESS CONTROL.** Reach exists so members don't wade
+ * through offers they cannot use, and so a poster can say "this one travels" about remote tutoring. It is
+ * deliberately NOT a permission system: once a listing has been served to a peer, that peer holds a copy
+ * and nothing here can retract it. Do not build a guarantee on top of this function — the protocol cannot
+ * make one and does not need to.
+ *
+ * What it IS good for: honouring what the poster asked for at the moment we choose what to send.
+ *
+ * Fail-closed on anything unrecognised. A null/absent reach is treated as `local`, which matters for rows
+ * written before the column existed: a migration that defaulted them to anything else would silently
+ * export listings whose authors never opted in.
+ */
+export function reachAdmitsPeer(
+    reach: string | null | undefined,
+    reachPeers: readonly string[] | null | undefined,
+    peerId: string,
+): boolean {
+    if (!peerId) return false;
+    if (reach === 'everywhere') return true;
+    if (reach === 'peers') return Array.isArray(reachPeers) && reachPeers.includes(peerId);
+    return false;   // 'local', null, and anything unrecognised
+}
+
+/**
+ * Parse the stored `reach_peers` column — a JSON array of peer ids — into a clean list.
+ *
+ * Tolerant by design: this value is written by a client, and a listing whose peer list is malformed
+ * should behave as though no peer were named (i.e. stay home) rather than throw somewhere down the line
+ * and take a marketplace read with it.
+ */
+export function parseReachPeers(raw: string | null | undefined): string[] {
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((p): p is string => typeof p === 'string' && p.length > 0);
+    } catch {
+        return [];
+    }
+}

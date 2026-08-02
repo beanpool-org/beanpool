@@ -7,7 +7,6 @@ export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
-import { reconcileFederationLinks } from './federation-link.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -368,15 +367,10 @@ export function initStateEngine(): void {
         if (n > 0) console.log(`🌉 Registered ${n} bridge account(s) as demurrage-exempt`);
     } catch (e) { console.warn('[Federation] Failed to register bridge demurrage exemptions:', e); }
 
-    // #143 step 3 — every peer with a credit cap has a link enterprise. Convergent rather than
-    // incremental (see federation-link.ts): a cap set by hand-editing connectors.json, or set by a build
-    // that predates links, still produces one, and running this on every boot is a no-op once they exist.
-    // Wrapped because a link is a convenience over machinery that works without it — settlement must not
-    // fail to start because an enterprise could not be named.
-    try {
-        const n = reconcileFederationLinks(createTreasury);
-        if (n > 0) console.log(`🔗 Created ${n} federation link enterprise(s) for capped peers`);
-    } catch (e) { console.warn('[Federation] Failed to reconcile federation links:', e); }
+    // #143 step 3's link reconcile USED TO BE HERE, and could not work: this function runs before
+    // `initConnectorManager` has loaded connectors.json, so `getConnectors()` was empty and it created
+    // nothing, silently. Moved to index.ts step 8.05, immediately after the connector manager. See the note
+    // there — it is the sixth instance of this feature shipping code that nothing ever executed.
 
     // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes)
     setInterval(() => {

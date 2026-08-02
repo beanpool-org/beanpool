@@ -185,7 +185,15 @@ function migrateConnector(c: any): ConnectorConfig {
     return c as ConnectorConfig;
 }
 
-function loadConnectors(): void {
+/**
+ * Read connectors.json into memory.
+ *
+ * EXPORTED for tests only. `initConnectorManager` is the production caller and needs a libp2p node, which a
+ * script-style suite has none of — and the ordering between this and the link reconcile is precisely what
+ * shipped broken (#143 step 3: the reconcile ran before this had ever been called, so it saw no connectors and
+ * created nothing). A test that cannot load from disk cannot catch that.
+ */
+export function loadConnectors(): void {
     try {
         if (fs.existsSync(CONNECTORS_PATH)) {
             const raw = JSON.parse(fs.readFileSync(CONNECTORS_PATH, 'utf-8'));

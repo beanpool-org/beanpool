@@ -41,8 +41,9 @@ import { initConnectorManager, connectAll } from './connector-manager.js';
 import { registerHandshakeHandler } from './handshake.js';
 import { registerFederationHandler, federatedReceiptStatus } from './federation-protocol.js';
 import { startListingPull } from './federation-listings.js';
+import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
-import { initStateEngine, migrateAdminConversations, getNodeRole, promotionSanityCheck } from './state-engine.js';
+import { initStateEngine, migrateAdminConversations, getNodeRole, promotionSanityCheck, createTreasury } from './state-engine.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
@@ -102,6 +103,25 @@ async function main() {
     registerHandshakeHandler(p2pNode);
     registerFederationHandler(p2pNode);
     connectAll().catch((e) => console.warn('[Connectors] Initial connect failed:', e));
+
+    // Step 8.05: link enterprises for capped peers (#143 step 3) — HERE, not in initStateEngine.
+    //
+    // It was in initStateEngine, which runs LONG BEFORE this line: the boot log showed bridge exemptions
+    // registered at line 9 and `[Connectors] Loaded 1 connector(s) from disk` at line 20. So the reconcile
+    // iterated an EMPTY connector list, created nothing, and logged nothing — and on an already-configured
+    // node, where no cap is being set, that was the only path that would ever have created a link. Deployed
+    // to two live nodes with correct caps and zero links appeared.
+    //
+    // The step-3 suite passed because it adds connectors over HTTP *after* initStateEngine and the cap route
+    // reconciles them; the ordering that matters in production was the one nothing exercised. Sixth time this
+    // shape has bitten this feature, and the first where my own test setup was what hid it — so
+    // test-federation-link now boots from a connectors.json on disk, which is what a real node does.
+    try {
+        const n = reconcileFederationLinks(createTreasury);
+        if (n > 0) console.log(`🔗 Created ${n} federation link enterprise(s) for capped peers`);
+    } catch (e: any) {
+        console.warn('[Federation] Failed to reconcile federation links:', e?.message || e);
+    }
 
     // Step 8.1: Resolve settlements that were in flight when this node last stopped (#104 §2.5).
     //

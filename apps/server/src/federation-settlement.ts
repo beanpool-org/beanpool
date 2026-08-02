@@ -91,6 +91,50 @@ export function assertLocalSettlement(payerPubkey?: string | null): void {
 }
 
 /**
+ * A listing this node PULLED from a peer must not be traded through the LOCAL escrow.
+ *
+ * WHY THIS EXISTS, and it is a live bug rather than a hypothetical. Before #143 step 4 no remote listing was
+ * ever on the local board, so this case could not arise. The pull put them there — with `origin_node` set and
+ * a visitor author — and every existing guard looked the wrong way:
+ *
+ *   `assertLocalSettlement` checks the PAYER. On a remote offer the payer is one of ours, so it passes.
+ *   It also returns early when FEDERATION_SETTLEMENT_ENABLED, which is exactly the configuration where
+ *   remote listings exist at all.
+ *   `acceptPost` refuses your own post, an inactive post, a member on holiday — nothing about origin.
+ *
+ * So `POST /api/marketplace/posts/accept` on a pulled listing returned 200 and debited the buyer into a local
+ * escrow. Confirmed against two live nodes: a gippsland member went from −0.08 to −3.07 against a listing
+ * belonging to eastgippy. On completion those beans would land in the seller's PHANTOM local account here —
+ * their real ledger is on the peer and never hears about it — and no bridge tab is opened, so the peer has no
+ * record of any obligation. The node still sums to zero, which is why nothing else caught it: no beans are
+ * minted, a member is simply paid into an account they cannot reach.
+ *
+ * TWO CONDITIONS, and they are not the same statement:
+ *
+ *   origin_node set    this listing is another community's, and trading it belongs to the cross-node path.
+ *   payee is a visitor their beans live on another ledger, so crediting them here credits nobody. Catches a
+ *                      member who posted and then migrated away, which leaves a local post with a remote
+ *                      author and no origin_node at all.
+ *
+ * At the draw point rather than in a route, for the same reason `assertLocalSettlement` is: only the engine
+ * knows who ends up being paid.
+ */
+export function assertTradableHere(post: { originNode?: string | null }, payeePubkey?: string | null): void {
+    if (post?.originNode) {
+        throw new Error(
+            'This listing belongs to another community, so it can\'t be accepted here — buying it has to go '
+            + 'through a cross-community purchase so both communities record it. Nothing has been deducted.',
+        );
+    }
+    if (isVisitor(payeePubkey)) {
+        throw new Error(
+            'That member\'s beans live on their home community\'s ledger, so paying them from here would '
+            + 'credit an account they cannot reach. Nothing has been deducted.',
+        );
+    }
+}
+
+/**
  * Route-level guard for a public route that moves a member's value.
  *
  * Returns true — having already written the response — when this node must not move the value.

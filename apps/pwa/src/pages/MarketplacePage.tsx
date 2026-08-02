@@ -460,7 +460,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const isOwnPost = identity?.publicKey === selectedPost.authorPublicKey;
         // #109: a cross-browsed post lives on another node, and cross-community messaging
         // has no working path yet — don't offer a button that can't deliver.
-        const isRemotePost = !!(selectedPost as any)._remoteNode;
+        //
+        // BOTH ORIGINS, not just `_remoteNode` (#143 step 4). `_remoteNode` is set by the client's own peer
+        // fetch; `originNode` is set by the server-side pull, which put remote listings onto the LOCAL board
+        // for the first time. Keying on `_remoteNode` alone left a pulled listing looking local, so Confirm
+        // stayed enabled and called the ordinary accept on it — which the server now refuses, but a member
+        // meeting that as a raw error alert is a worse version of the same bug.
+        const isRemotePost = !!((selectedPost as any)._remoteNode ?? (selectedPost as any).originNode);
 
         const activeTx = selectedTxId 
             ? myTransactions.find(t => t.id === selectedTxId)
@@ -998,7 +1004,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 </div>
                                 {isRemotePost && (
                                     <p className="mt-2 text-xs text-nature-600 text-center">
-                                        This post is from another community — trading across communities isn't available yet.
+                                        This listing belongs to another community. Buying it takes a cross-community
+                                        purchase so both communities record it — not this button, yet.
                                     </p>
                                 )}
                             </div>

@@ -24,7 +24,7 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { getConnectorCreditCap, getConnectorByAddress } from './connector-manager.js';
-import { settlementCapacity } from './federation-bridge.js';
+import { settlementCapacity, type SettlementCapacity } from './federation-bridge.js';
 
 const PORT = 8551;
 const BASE = `https://localhost:${PORT}`;
@@ -52,6 +52,15 @@ async function post(path: string, body: unknown): Promise<{ status: number; json
 
 const setCap = (body: Record<string, unknown>) => post('/api/local/connectors/credit-cap', body);
 
+/**
+ * The refusal reason, or null when capacity was granted.
+ *
+ * `SettlementCapacity` is a discriminated union whose success arm carries no `reason`, so reading `.reason` off
+ * an un-narrowed value is a compile error rather than `undefined`. Worth having as a helper because the
+ * assertion messages below print the reason on both outcomes, and that is exactly where the narrowing is lost.
+ */
+const reasonOf = (c: SettlementCapacity): string | null => (c.ok ? null : c.reason);
+
 async function main() {
     console.log('Running credit-cap operator route tests (#143)...\n');
     initAdminPassword();
@@ -68,8 +77,8 @@ async function main() {
 
     // ── 1. THE GAP THIS CLOSES. Before a cap is chosen, settlement refuses — and that refusal is correct. ──
     const before = settlementCapacity(PEER_ID, ADDRESS, 5);
-    assert(before.ok === false && before.reason === 'no_cap_configured',
-        `1. with no cap chosen, settlement refuses with no_cap_configured (got ok=${before.ok} reason=${before.reason})`);
+    assert(before.ok === false && reasonOf(before) === 'no_cap_configured',
+        `1. with no cap chosen, settlement refuses with no_cap_configured (got ok=${before.ok} reason=${reasonOf(before)})`);
 
     // ── 2. Auth. The cap decides how much credit this community hands out, so it is admin-gated. ──────────
     const noPw = await setCap({ address: ADDRESS, cap: 100 });
@@ -114,7 +123,7 @@ async function main() {
 
     const after = settlementCapacity(PEER_ID, ADDRESS, 5);
     assert(after.ok === true,
-        `4c. THE POINT: with a cap chosen, a 5-bean settlement is now permitted (got ok=${after.ok} reason=${after.reason})`);
+        `4c. THE POINT: with a cap chosen, a 5-bean settlement is now permitted (got ok=${after.ok} reason=${reasonOf(after)})`);
 
     const over = settlementCapacity(PEER_ID, ADDRESS, 101);
     assert(over.ok === false,
@@ -127,9 +136,9 @@ async function main() {
     assert(zero.status === 200 && zero.json?.creditCap === 0, `5a. a cap of 0 is accepted (got ${zero.status} cap=${zero.json?.creditCap})`);
     assert(getConnectorCreditCap(ADDRESS) === 0, '5b. 0 survives the accessor and is not flattened to null');
     const atZero = settlementCapacity(PEER_ID, ADDRESS, 5);
-    assert(atZero.ok === false && atZero.reason !== 'no_cap_configured',
+    assert(atZero.ok === false && reasonOf(atZero) !== 'no_cap_configured',
         `5c. at a cap of 0 a purchase is refused for want of HEADROOM, not for want of a cap `
-        + `(got reason=${atZero.reason})`);
+        + `(got reason=${reasonOf(atZero)})`);
 
     // ── 6. Clearing is deliberate and returns the pair to fail-closed. ───────────────────────────────────
     const cleared = await setCap({ password: PW, address: ADDRESS, cap: null });
@@ -137,8 +146,8 @@ async function main() {
         `6a. an explicit null clears the cap (got ${cleared.status} cap=${cleared.json?.creditCap})`);
     assert(getConnectorCreditCap(ADDRESS) === null, '6b. the cap is gone');
     const reclosed = settlementCapacity(PEER_ID, ADDRESS, 5);
-    assert(reclosed.ok === false && reclosed.reason === 'no_cap_configured',
-        `6c. and settlement is fail-closed again — clearing is a working off-switch (got reason=${reclosed.reason})`);
+    assert(reclosed.ok === false && reasonOf(reclosed) === 'no_cap_configured',
+        `6c. and settlement is fail-closed again — clearing is a working off-switch (got reason=${reasonOf(reclosed)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

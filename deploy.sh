@@ -197,7 +197,21 @@ for NODE in "${TARGETS[@]}"; do
     if [ "$NAME" = "test" ] || [ "$NAME" = "yarravalley" ]; then
       COMPOSE_FLAGS=(--profile tunnel)
     fi
-    if [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ] || [ "$NAME" = "yarravalley" ]; then
+    # Build on the target host by default, which is why every name below is listed: the running image is then
+    # guaranteed to be the code in the tarball we just uploaded, uncommitted work included.
+    #
+    # DEPLOY_PULL=1 takes the published GHCR image instead. That drops the guarantee — you get whatever CI last
+    # pushed to :latest, NOT your working tree — so it is only correct when the commit you want is already built
+    # and pushed. What it buys is not building a monorepo on a small host: the VIC box is 1.3 GB and runs six
+    # nodes, so a build there leans on swap and competes with communities that have live members.
+    #
+    # It is opt-in per run, not per node, because the choice depends on the state of your tree at that moment
+    # rather than on which node you are deploying to.
+    if [ "${DEPLOY_PULL:-}" = "1" ]; then
+      echo "📦 DEPLOY_PULL=1 — taking the published image for: $NAME (NOT your working tree)"
+      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull
+      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d
+    elif [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ] || [ "$NAME" = "yarravalley" ]; then
       echo "🔨 Local build enabled for target: $NAME"
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build
     else

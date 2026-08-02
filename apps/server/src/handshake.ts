@@ -59,7 +59,7 @@ function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
                 }
 
                 // A2-12: decode + (the caller) parse ONCE after the write side closes
-                // (writeToStream always closeWrite()s) instead of re-decoding +
+                // (writeToStream always close()s its write side) instead of re-decoding +
                 // JSON.parse-ing the whole accumulated buffer on EVERY chunk — which
                 // was O(n²) CPU. For the handshake handler this is reached BEFORE any
                 // trust gate (we must reply to untrusted peers too), so the old
@@ -76,13 +76,40 @@ function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
 }
 
 /**
- * Write data to a stream using AbstractStream's send() and close write side.
+ * Write data to a stream and HALF-CLOSE THE WRITE SIDE, which is what tells the remote reader the message is
+ * complete.
+ *
+ * `closeWrite()` DOES NOT EXIST on a real libp2p 3.x stream — it is only implemented on `mock-stream.js` and
+ * `mock-muxer.js`. So the old `if (typeof stream.closeWrite === 'function')` guard never fired in production and
+ * the write side was never closed. The reader on the other end ends its iteration on `remoteCloseWrite` (or
+ * `close`), so it sat waiting for an event that was never sent → `Read timeout` on both sides of every
+ * handshake and every federation stream.
+ *
+ * Note WHY this survived: because the guard is a `typeof` check it degraded silently rather than throwing, and
+ * because the mocks DO implement `closeWrite`, any test written against a mock stream passes either way. The
+ * bug is only observable between two real nodes.
+ *
+ * `close()` is the correct call: "Close stream for writing and return a promise that resolves once any pending
+ * data has been passed to the underlying transport… the stream itself will remain readable until the remote end
+ * also closes its writable end." That is exactly half-close semantics, and it flushes first, so no `drain`
+ * handling is needed for payloads this size.
  */
 async function writeToStream(stream: any, data: string): Promise<void> {
-    await stream.send(encoder.encode(data));
-    if (typeof stream.closeWrite === 'function') {
-        await stream.closeWrite();
-    }
+    // `send()` IS SYNCHRONOUS AND RETURNS A BOOLEAN — deliberately not awaited (review finding, rejected with
+    // evidence). It appends to the stream's internal writeBuffer and returns `processSendQueue()`, which is a
+    // plain non-async function returning true/false; the bytes are buffered before it returns. So `await`ing it
+    // would add a microtask and no ordering guarantee, while reading like a synchronisation point that isn't
+    // one. What actually guarantees the bytes reach the transport is `close()` below.
+    //
+    // The boolean is BACKPRESSURE: false means the send buffer is full. Ignored on purpose here — one small
+    // JSON write per stream cannot overflow it, and `close()` flushes whatever is buffered regardless. If this
+    // ever writes repeatedly or carries a large payload, the correct API is `await stream.onDrain()`, NOT
+    // awaiting `send()`.
+    //
+    // `send()` throws synchronously if the write side is already closed. Inside this async function that
+    // surfaces as a rejected promise, which every caller already handles in its try/catch.
+    stream.send(encoder.encode(data));
+    await stream.close();
 }
 
 /**

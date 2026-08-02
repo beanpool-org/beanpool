@@ -70,13 +70,17 @@ function readFromStream(stream: any, timeoutMs = 10000): Promise<string> {
 }
 
 /**
- * Write data to a stream using AbstractStream's send().
+ * Write data to a stream and half-close the write side — see the full note in handshake.ts.
+ *
+ * In short: `closeWrite()` exists only on libp2p's MOCK stream, so the old `typeof` guard silently never fired,
+ * the write side stayed open, and the remote reader waited forever for a `remoteCloseWrite` that never came.
+ * `close()` is the real half-close: it flushes pending data and leaves the stream readable.
  */
 async function writeToStream(stream: any, data: string): Promise<void> {
-    await stream.send(encoder.encode(data));
-    if (typeof stream.closeWrite === 'function') {
-        await stream.closeWrite();
-    }
+    // `send()` is synchronous and returns a boolean (backpressure), so it is deliberately not awaited — see the
+    // full note in handshake.ts. `close()` is what flushes and half-closes.
+    stream.send(encoder.encode(data));
+    await stream.close();
 }
 
 /**

@@ -617,7 +617,6 @@ export function migrateLegacyState() {
     try {
         db.pragma('foreign_keys = OFF');
         migrate();
-        db.pragma('foreign_keys = ON');
         console.log('✅ Successfully migrated state.json to SQLite database.');
         fs.renameSync(STATE_JSON_PATH, STATE_BACKUP_PATH);
         console.log(`📦 Legacy JSON renamed to ${STATE_BACKUP_PATH}`);

@@ -686,7 +686,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             }
         })();
     } finally {
-        db.pragma('foreign_keys = ON');
         currentImportOrigin = null;
     }
 

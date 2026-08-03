@@ -304,13 +304,9 @@ export function initStateEngine(): void {
     initSchema();
     migrateLegacyState();
     
-    // Seed SYSTEM user securely bypassing foreign key constraints
+    // Seed SYSTEM user securely
     db.pragma('foreign_keys = OFF');
-    try {
-        db.prepare("INSERT OR IGNORE INTO members (public_key, callsign, invited_by, invite_code) VALUES ('SYSTEM', 'System', 'genesis', 'genesis')").run();
-    } finally {
-        db.pragma('foreign_keys = ON');
-    }
+    db.prepare("INSERT OR IGNORE INTO members (public_key, callsign, invited_by, invite_code) VALUES ('SYSTEM', 'System', 'genesis', 'genesis')").run();
 
     // Load ledger accounts into LedgerManager
     const accounts = db.prepare("SELECT public_key as id, balance, last_demurrage_epoch as lastDemurrageEpoch FROM accounts").all() as any[];

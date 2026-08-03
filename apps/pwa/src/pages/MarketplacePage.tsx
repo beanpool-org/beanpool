@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { MARKETPLACE_CATEGORIES, POST_TYPE_COLORS, type PostType } from '../lib/marketplace';
+import { MARKETPLACE_CATEGORIES, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
@@ -77,9 +77,9 @@ function explainTradeError(err: unknown): string {
  */
 function remoteOriginLabel(post: any): string {
     const remote = post?._remoteNode ?? post?.originNode;
-    if (!remote || typeof remote !== 'string') return '';
-    const name = remote.replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/:\d+$/, '');
-    return name ? ` (from ${name})` : '';
+    const name = formatNodeName(remote, post?._remoteCallsign);
+    if (!name) return '';
+    return name.startsWith('peer (') ? ` from ${name}` : ` (from ${name})`;
 }
 
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile }: Props) {

@@ -9,7 +9,7 @@
  *  - Elder treatment (gold border/shadow) for high-energy users
  */
 
-import { MARKETPLACE_CATEGORIES, POST_TYPE_COLORS, type MarketplacePost } from '../lib/marketplace';
+import { MARKETPLACE_CATEGORIES, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
 
 interface Props {
@@ -29,9 +29,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const typeColor = POST_TYPE_COLORS[post.type];
     const emoji = categoryConfig?.emoji ?? '📦';
 
-    const nodeBadge = remoteNode
-        ? remoteNode.replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/:\d+$/, '')
-        : null;
+    const nodeBadge = formatNodeName(
+        remoteNode || (post as any)?._remoteNode || (post as any)?.originNode,
+        (post as any)?._remoteCallsign
+    ) || null;
 
     const hasPhoto = post.photos && post.photos.length > 0;
 

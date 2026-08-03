@@ -3,6 +3,38 @@
 **As at 2026-08-03.** Written at a context/quota boundary, so it states what is *verified*, what is *built but
 unproven*, and the one job left. Nothing here is aspirational.
 
+---
+
+## ► START HERE — resuming cold
+
+Everything is merged. `main` is at `a5b9ed7`, the tree is clean, no branches or PRs are open. **Nothing is
+half-landed, so there is nothing to untangle first.** The remaining work is ~20 minutes and it is one thing:
+prove the tab comes down.
+
+```bash
+# 1. Deploy. 5d9041c is published; give the publish a moment, then:
+DEPLOY_PULL=1 bash deploy.sh 12 13
+
+# 2. VERIFY IT ACTUALLY LANDED — a deploy this session pulled a stale :latest, recreated
+#    nothing, and reported success. Expect a NEW image sha and a fresh StartedAt.
+ssh root@ssh-vic.beanpool.org 'docker inspect --format "{{.Name}} {{.Image}} {{.State.StartedAt}}" \
+  beanpool-gippsland-beanpool-node-1 beanpool-eastgippy-beanpool-node-1'
+
+# 3. Tunnel, then fix phase 1 and run the redemption (see "Then the redemption" below).
+ssh -N -L 18448:localhost:8448 -L 18450:localhost:8450 root@ssh-vic.beanpool.org
+cd <scratchpad> && ADMIN_PASSWORD=<from repo .env> node redeem.mjs report
+```
+
+**The first thing that will bite:** `redeem.mjs` phase 1 self-deals, because `seedElder()` returns the stored
+identity instead of minting a new one. Fix that before running phase 1 — details under "Two harness bugs" below.
+
+**What "done" looks like:** gippsland's bridge moves **−20 → −19**, its Commons drops by 1.015, the eastgippy
+seller is credited 1, and `SUM(balance)` is still `0.000000` on both nodes — with the ceiling at **0** the whole
+time.
+
+Until that has happened, **#143 stays open**. The tab has been proven to go up, and to net out by reciprocal
+accident. It has never been driven down on purpose, and that is the claim the whole design rests on.
+
 Spec: [`docs/federation-connector.md`](federation-connector.md) §3 (the two halves), §7 (resolutions), §8 (the
 five-step slice). Economics: [`docs/federation-economics.md`](federation-economics.md).
 

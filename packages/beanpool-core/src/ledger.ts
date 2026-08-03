@@ -293,11 +293,13 @@ export class LedgerManager {
             COMMONS_BALANCE += fee;
         }
 
-        // #160: Zero out microscopic floating point dust (< 1e-6) on synthetic accounts (escrow, etc.)
+        // #160: Absorb synthetic account floating-point dust (< 1e-6) into COMMONS_BALANCE to preserve total supply conservation
         if (isSyntheticAccount(fromId) && Math.abs(fromAccount.balance) < 1e-6) {
+            COMMONS_BALANCE += fromAccount.balance;
             fromAccount.balance = 0;
         }
         if (isSyntheticAccount(toId) && Math.abs(toAccount.balance) < 1e-6) {
+            COMMONS_BALANCE += toAccount.balance;
             toAccount.balance = 0;
         }
 

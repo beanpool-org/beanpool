@@ -294,11 +294,12 @@ export class LedgerManager {
         }
 
         // #160: Absorb synthetic account floating-point dust (< 1e-6) into COMMONS_BALANCE to preserve total supply conservation
-        if (isSyntheticAccount(fromId) && Math.abs(fromAccount.balance) < 1e-6) {
+        const DUST_THRESHOLD = 1e-6;
+        if (isSyntheticAccount(fromId) && Math.abs(fromAccount.balance) > 0 && Math.abs(fromAccount.balance) < DUST_THRESHOLD) {
             COMMONS_BALANCE += fromAccount.balance;
             fromAccount.balance = 0;
         }
-        if (isSyntheticAccount(toId) && Math.abs(toAccount.balance) < 1e-6) {
+        if (isSyntheticAccount(toId) && fromId !== toId && Math.abs(toAccount.balance) > 0 && Math.abs(toAccount.balance) < DUST_THRESHOLD) {
             COMMONS_BALANCE += toAccount.balance;
             toAccount.balance = 0;
         }

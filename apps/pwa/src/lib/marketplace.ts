@@ -63,7 +63,14 @@ export function formatNodeName(origin?: string | null, knownName?: string | null
         if (cleaned) return cleaned;
     }
     if (!origin || typeof origin !== 'string') return '';
-    let name = origin.replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/:\d+$/, '');
+
+    const multiAddrMatch = origin.match(/^\/(?:ip4|ip6|dns4|dns6)\/([^/]+)/);
+    if (multiAddrMatch) {
+        const host = multiAddrMatch[1];
+        return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ? `peer (${host})` : host;
+    }
+
+    let name = origin.replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/:\d+.*$/, '');
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name)) {
         return `peer (${name})`;
     }

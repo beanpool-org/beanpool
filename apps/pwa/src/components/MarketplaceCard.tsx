@@ -29,9 +29,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const typeColor = POST_TYPE_COLORS[post.type];
     const emoji = categoryConfig?.emoji ?? '📦';
 
-    const nodeBadge = remoteNode
-        ? formatNodeName(remoteNode, (post as any)._remoteCallsign)
-        : null;
+    const nodeBadge = formatNodeName(
+        remoteNode || (post as any)?._remoteNode || (post as any)?.originNode,
+        (post as any)?._remoteCallsign
+    ) || null;
 
     const hasPhoto = post.photos && post.photos.length > 0;
 

@@ -305,6 +305,7 @@ export function initStateEngine(): void {
     migrateLegacyState();
     
     // Seed SYSTEM user securely
+    db.pragma('foreign_keys = OFF');
     db.prepare("INSERT OR IGNORE INTO members (public_key, callsign, invited_by, invite_code) VALUES ('SYSTEM', 'System', 'genesis', 'genesis')").run();
 
     // Load ledger accounts into LedgerManager

@@ -23,6 +23,7 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
         return getMember(db, adminPublicKey)!;
     }
 
+    db.pragma('foreign_keys = OFF');
     db.transaction(() => {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) 
                     VALUES (?, ?, ?, ?, ?)`).run(adminPublicKey, callsign, new Date().toISOString(), 'genesis', 'genesis');

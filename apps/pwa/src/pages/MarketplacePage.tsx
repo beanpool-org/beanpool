@@ -78,7 +78,8 @@ function explainTradeError(err: unknown): string {
 function remoteOriginLabel(post: any): string {
     const remote = post?._remoteNode ?? post?.originNode;
     const name = formatNodeName(remote, post?._remoteCallsign);
-    return name ? ` (from ${name})` : '';
+    if (!name) return '';
+    return name.startsWith('peer (') ? ` from ${name}` : ` (from ${name})`;
 }
 
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile }: Props) {

@@ -436,9 +436,12 @@ export function completePostTransaction(
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_completed', transaction: tx });
 
+    const netPayout = releaseCredits - (releaseResult?.taxFee ?? 0);
     try {
         cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_RELEASED, {
-            amount: releaseCredits,
+            amount: netPayout,
+            grossAmount: releaseCredits,
+            fee: releaseResult?.taxFee ?? 0,
             postId: row.post_id,
             actorPubkey: confirmerPublicKey,
             buyerPubkey: row.buyer_pubkey,
@@ -453,7 +456,7 @@ export function completePostTransaction(
         [row.seller_pubkey],
         confirmerPublicKey,
         '🎉 Deal Completed!',
-        `Payment of ${releaseCredits} Beans was released for "${post?.title || 'your post'}"`,
+        `Payment of ${netPayout} Beans was released for "${post?.title || 'your post'}"`,
         { screen: 'post', postId: row.post_id },
         'escrow'
     );

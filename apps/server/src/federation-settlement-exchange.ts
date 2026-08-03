@@ -185,7 +185,7 @@ export function beginOutboundSettlement(input: {
 
         // Not ours to fund: either an earlier call already escrowed for this key, or it has moved on.
         if (row.state !== 'escrowed' || row.createdAt !== row.updatedAt) return row;
-        if (balanceOfAccount(escrowAccount) > 0) return row;   // already funded by an earlier attempt
+        if (balanceOfAccount(escrowAccount) > 0.0001) return row;   // already funded by an earlier attempt
 
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`)
             .run(escrowAccount);

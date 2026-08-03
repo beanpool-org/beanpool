@@ -607,6 +607,14 @@ export function runMarketplaceHygiene(): void {
 }
 
 function sweepSettledEscrowAccounts(): void {
+    // #160: Zero out any floating-point dust (< 0.0001) on settled escrow accounts before sweeping
+    db.prepare(`
+        UPDATE accounts 
+        SET balance = 0 
+        WHERE public_key LIKE 'escrow_%' 
+          AND ABS(balance) < 0.0001
+    `).run();
+
     const result = db.prepare(`
         DELETE FROM accounts 
         WHERE public_key LIKE 'escrow_%' 
@@ -1172,6 +1180,14 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Sync ledger account balances to DB
     const fromAcc = ledger.getAccount(from);
     const toAcc = ledger.getAccount(to);
+
+    // #160: Ensure synthetic account balances (escrow_*, etc.) are zeroed when near 0 (< 0.0001)
+    if (isSyntheticAccount(from) && Math.abs(fromAcc.balance) < 0.0001) {
+        fromAcc.balance = 0;
+    }
+    if (isSyntheticAccount(to) && Math.abs(toAcc.balance) < 0.0001) {
+        toAcc.balance = 0;
+    }
     // UPSERT, not UPDATE. ledger.getAccount() auto-creates an account in memory on first touch, but a
     // bare `UPDATE ... WHERE public_key=?` matches 0 rows when SQLite has never seen it — silently, so
     // the in-memory balance and the DB diverge permanently and every later read returns 0. Synthetic

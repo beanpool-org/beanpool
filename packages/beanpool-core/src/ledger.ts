@@ -293,6 +293,14 @@ export class LedgerManager {
             COMMONS_BALANCE += fee;
         }
 
+        // #160: Zero out microscopic floating point dust (< 1e-6) on synthetic accounts (escrow, etc.)
+        if (isSyntheticAccount(fromId) && Math.abs(fromAccount.balance) < 1e-6) {
+            fromAccount.balance = 0;
+        }
+        if (isSyntheticAccount(toId) && Math.abs(toAccount.balance) < 1e-6) {
+            toAccount.balance = 0;
+        }
+
         // The epoch is not touched here, and does not need to be: `getAccount()` above ran `applyDecay`, which
         // stamps it on EVERY path — decayed, nothing to decay, or forfeited. Both accounts therefore arrive
         // here with their interval already closed, so the balance change below cannot carry a stale window

@@ -417,7 +417,11 @@ export function completePostTransaction(
             db.prepare(`UPDATE marketplace_transactions SET credits=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
         }
 
-        releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', true);
+        // The 1.5% community fee is charged HERE — the seller receives (amount − fee), the fee goes to
+        // the Commons. Holds, adjustments and refunds stay exempt; this is the one transfer where value
+        // settles to a real member's account. Cross-node settlement handles its own fee separately
+        // (federation-settlement-exchange.ts § commitOutboundSettlement → moveToCommons).
+        releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false);
         if (!releaseResult) throw new Error('Failed to release escrow funds');
 
         db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?`).run(completedAt, transactionId);
@@ -432,9 +436,12 @@ export function completePostTransaction(
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_completed', transaction: tx });
 
+    const netPayout = releaseCredits - (releaseResult?.taxFee ?? 0);
     try {
         cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_RELEASED, {
-            amount: releaseCredits,
+            amount: netPayout,
+            grossAmount: releaseCredits,
+            fee: releaseResult?.taxFee ?? 0,
             postId: row.post_id,
             actorPubkey: confirmerPublicKey,
             buyerPubkey: row.buyer_pubkey,
@@ -449,7 +456,7 @@ export function completePostTransaction(
         [row.seller_pubkey],
         confirmerPublicKey,
         '🎉 Deal Completed!',
-        `Payment of ${releaseCredits} Beans was released for "${post?.title || 'your post'}"`,
+        `Payment of ${netPayout} Beans was released for "${post?.title || 'your post'}"`,
         { screen: 'post', postId: row.post_id },
         'escrow'
     );

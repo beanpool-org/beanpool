@@ -48,7 +48,24 @@ export interface MarketplacePost {
     cashAlsoNeeded?: boolean;
     acceptedBy?: string;
     authorEnergyCycled?: number;
-    authorFoundingNeeded?: boolean; // author has no completed trades yet — first trade unlocks their floor
+    authorFoundingNeeded?: boolean;
     lat?: number;
     lng?: number;
+}
+
+/**
+ * Format a node origin or peer name into a clean, human-readable label.
+ * Handles domain names, multi-addrs, raw IP addresses, and custom callsigns/link names.
+ */
+export function formatNodeName(origin?: string | null, knownName?: string | null): string {
+    if (knownName && typeof knownName === 'string') {
+        const cleaned = knownName.replace(/\s+Link$/i, '').trim();
+        if (cleaned) return cleaned;
+    }
+    if (!origin || typeof origin !== 'string') return '';
+    let name = origin.replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/:\d+$/, '');
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name)) {
+        return `peer (${name})`;
+    }
+    return name;
 }

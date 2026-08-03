@@ -23,16 +23,11 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
         return getMember(db, adminPublicKey)!;
     }
 
-    db.pragma('foreign_keys = OFF');
-    try {
-        db.transaction(() => {
-            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) 
-                        VALUES (?, ?, ?, ?, ?)`).run(adminPublicKey, callsign, new Date().toISOString(), 'genesis', 'genesis');
-            db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(adminPublicKey);
-        })();
-    } finally {
-        db.pragma('foreign_keys = ON');
-    }
+    db.transaction(() => {
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) 
+                    VALUES (?, ?, ?, ?, ?)`).run(adminPublicKey, callsign, new Date().toISOString(), 'genesis', 'genesis');
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(adminPublicKey);
+    })();
 
     ledger.initializeGenesisAccount(adminPublicKey);
     console.log(`⛰️ Genesis member seeded: ${callsign}`);

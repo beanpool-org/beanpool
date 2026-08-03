@@ -70,7 +70,7 @@ export function formatNodeName(origin?: string | null, knownName?: string | null
         return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ? `peer (${host})` : host;
     }
 
-    let name = origin.replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/:\d+.*$/, '');
+    const name = origin.replace(/^https?:\/\//, '').replace(/\.beanpool\.org.*$/, '').replace(/:\d+.*$/, '');
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name)) {
         return `peer (${name})`;
     }

@@ -10,7 +10,7 @@ import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map'
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
-import { getPosts, createPost, getBalance, getMemberProfile } from '../../utils/db';
+import { getPosts, createPost, getBalance, getMemberProfile, getReachablePeers } from '../../utils/db';
 import { getCanonicalAvatar } from '../../utils/canonical-profile';
 import { useIdentity } from '../IdentityContext';
 import { CurrencyDisplay, useCurrencyString } from '../../components/CurrencyDisplay';
@@ -388,6 +388,34 @@ export default function MapScreen() {
         checkboxCash: { backgroundColor: colors.feedback.warning.solid, borderColor: colors.feedback.warning.solid },
         cashNudge: { color: colors.feedback.warning.fg, backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12, lineHeight: 17, marginBottom: 6 },
 
+        // #143 step 4 — Reach chooser
+        reachSection: { marginTop: 8, marginBottom: 6 },
+        reachLabel: { color: colors.text.secondary, fontSize: 13, fontWeight: '600', marginBottom: 6 },
+        reachButtonRow: { flexDirection: 'row', gap: 8 },
+        reachButton: {
+            flex: 1, paddingVertical: 10, paddingHorizontal: 6, borderRadius: 12, borderWidth: 1,
+            borderColor: colors.border.default, backgroundColor: colors.surface.app,
+            alignItems: 'center', justifyContent: 'center', minHeight: 44,
+        },
+        reachButtonActive: {
+            backgroundColor: colors.brand.dark,
+            borderColor: colors.brand.primary,
+        },
+        reachButtonText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
+        reachButtonTextActive: { color: '#fff', fontWeight: '700' },
+        reachPeerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+        reachPeerChip: {
+            paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1,
+            borderColor: colors.border.default, backgroundColor: colors.surface.app, minHeight: 36,
+        },
+        reachPeerChipActive: {
+            backgroundColor: colors.brand.dark,
+            borderColor: colors.brand.primary,
+        },
+        reachPeerChipText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
+        reachPeerChipTextActive: { color: '#fff', fontWeight: '700' },
+        reachPeerHint: { color: colors.text.muted, fontSize: 11, fontWeight: '500', fontStyle: 'italic', paddingVertical: 4 },
+
         // Description
         descriptionInput: { backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 10, paddingVertical: 6, color: colors.text.heading, fontSize: 14, minHeight: 60, marginBottom: 8 },
 
@@ -442,6 +470,10 @@ export default function MapScreen() {
     const [postPriceType, setPostPriceType] = useState<string>('fixed');
     const [postRepeatable, setPostRepeatable] = useState(false);
     const [postCashAlsoNeeded, setPostCashAlsoNeeded] = useState(false);  // #108
+    // #143 step 4 — per-listing reach. 'local' is the default and stays the default.
+    const [postReach, setPostReach] = useState<'local' | 'peers' | 'everywhere'>('local');
+    const [postReachPeers, setPostReachPeers] = useState<string[]>([]);
+    const [reachablePeerList, setReachablePeerList] = useState<{ peerId: string; callsign: string | null }[]>([]);
     const [postPhotos, setPostPhotos] = useState<string[]>([]);
     const [postLat, setPostLat] = useState<number | null>(null);
     const [postLng, setPostLng] = useState<number | null>(null);
@@ -455,6 +487,17 @@ export default function MapScreen() {
     const [pricingModalTab, setPricingModalTab] = useState<'guide' | 'tax'>('guide');
     const scrollViewRef = useRef<ScrollView>(null);
     const pickerRef = useRef<any>(null);
+
+    // #143 step 4 — which communities a listing could be aimed at. Fetched once; failure is silent and
+    // leaves the list empty, which hides the reach chooser. That is the right failure: a member should not be
+    // shown a partner they might not have, and 'local' is what they get, which is the safe answer anyway.
+    useEffect(() => {
+        let cancelled = false;
+        getReachablePeers()
+            .then(peers => { if (!cancelled) setReachablePeerList(peers); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
 
     // Map UI State
     const [selectedPostPreview, setSelectedPostPreview] = useState<any>(null);
@@ -593,7 +636,7 @@ export default function MapScreen() {
         setPostType('offer'); setPostCategory(''); setPostTitle(''); setPostDescription('');
         setPostCredits(''); setPostPriceType('fixed'); setPostRepeatable(false); setPostPhotos([]);
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
-        setValidationToast('');
+        setValidationToast(''); setPostReach('local'); setPostReachPeers([]);
     };
 
     // ── Draft persistence + up-front profile-photo check ──
@@ -611,11 +654,12 @@ export default function MapScreen() {
             const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const draft = {
                 anchorUrl, postType, postCategory, postTitle, postDescription, postCredits,
-                postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, savedAt: Date.now(),
+                postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
+                postReach, postReachPeers, savedAt: Date.now(),
             };
             await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
         } catch { /* draft is best-effort */ }
-    }, [postType, postCategory, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng]);
+    }, [postType, postCategory, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
 
     const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
 
@@ -631,6 +675,8 @@ export default function MapScreen() {
         setPostPhotos(Array.isArray(d.postPhotos) ? d.postPhotos : []);
         setPostLat(typeof d.postLat === 'number' ? d.postLat : null);
         setPostLng(typeof d.postLng === 'number' ? d.postLng : null);
+        setPostReach(d.postReach === 'peers' || d.postReach === 'everywhere' ? d.postReach : 'local');
+        setPostReachPeers(Array.isArray(d.postReachPeers) ? d.postReachPeers : []);
     };
 
     // Posting requires a profile photo. Resolve it from this node's row first,
@@ -820,6 +866,9 @@ export default function MapScreen() {
                 lng: postLng,
                 photos: postPhotos.length > 0 ? JSON.stringify(postPhotos) : null,
                 created_at: new Date().toISOString(),
+                // #143 step 4 — per-listing reach
+                reach: postReach,
+                ...(postReach === 'peers' ? { reachPeers: postReachPeers } : {}),
             });
             clearDraft();
             setTimeout(() => {
@@ -1358,6 +1407,67 @@ export default function MapScreen() {
                                 <Text style={styles.cashNudge}>
                                     Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.
                                 </Text>
+                            )}
+
+                            {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
+                                trading partners: a reach chooser on a node with no peers is a decision about nothing.
+                                Default stays "Stays here", because a member who has never heard of federation has not
+                                agreed to their listing appearing somewhere else. */}
+                            {reachablePeerList.length > 0 && (
+                                <View style={styles.reachSection}>
+                                    <Text style={styles.reachLabel}>Where does this travel?</Text>
+                                    <View style={styles.reachButtonRow}>
+                                        {([
+                                            { value: 'local' as const, label: '🏠 Stays here' },
+                                            { value: 'peers' as const, label: '🤝 Chosen' },
+                                            { value: 'everywhere' as const, label: '🌏 Everywhere' },
+                                        ]).map(opt => (
+                                            <Pressable
+                                                key={opt.value}
+                                                accessibilityRole="button"
+                                                accessibilityState={{ selected: postReach === opt.value }}
+                                                style={[
+                                                    styles.reachButton,
+                                                    postReach === opt.value && styles.reachButtonActive,
+                                                ]}
+                                                onPress={() => setPostReach(opt.value)}
+                                            >
+                                                <Text style={[
+                                                    styles.reachButtonText,
+                                                    postReach === opt.value && styles.reachButtonTextActive,
+                                                ]}>{opt.label}</Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                    {postReach === 'peers' && (
+                                        <View style={styles.reachPeerRow}>
+                                            {reachablePeerList.map(p => {
+                                                const on = postReachPeers.includes(p.peerId);
+                                                return (
+                                                    <Pressable
+                                                        key={p.peerId}
+                                                        accessibilityRole="button"
+                                                        accessibilityState={{ selected: on }}
+                                                        style={[
+                                                            styles.reachPeerChip,
+                                                            on && styles.reachPeerChipActive,
+                                                        ]}
+                                                        onPress={() => setPostReachPeers(prev =>
+                                                            on ? prev.filter(x => x !== p.peerId) : [...prev, p.peerId])}
+                                                    >
+                                                        <Text style={[
+                                                            styles.reachPeerChipText,
+                                                            on && styles.reachPeerChipTextActive,
+                                                        ]}>{on ? '✓ ' : ''}{p.callsign || `Peer ${p.peerId.slice(-8)}`}</Text>
+                                                    </Pressable>
+                                                );
+                                            })}
+                                            {postReachPeers.length === 0 && (
+                                                <Text style={styles.reachPeerHint}>Tap a community to include it</Text>
+                                            )}
+                                        </View>
+                                    )}
+                                </View>
                             )}
                         </ScrollView>
 

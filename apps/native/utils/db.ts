@@ -1402,6 +1402,21 @@ export async function getProjectById(id: string) {
     };
 }
 
+/** #143 step 4 — which communities a listing can be aimed at (peers this node settles with).
+ *  Returns empty on non-federated nodes, which hides the reach chooser in the composer. */
+export async function getReachablePeers(): Promise<{ peerId: string; callsign: string | null }[]> {
+    try {
+        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        if (!anchorUrl) return [];
+        const res = await fetch(`${anchorUrl}/api/federation/reachable-peers`);
+        if (!res.ok) return [];
+        const json = await res.json();
+        return json.peers ?? [];
+    } catch {
+        return [];
+    }
+}
+
 export async function createPost(post: any) {
     const database = await getDb();
 
@@ -1430,6 +1445,9 @@ export async function createPost(post: any) {
         photos: post.photos ? JSON.parse(post.photos) : undefined,
         repeatable: post.repeatable === 1,
         cashAlsoNeeded: post.cash_also_needed === 1,
+        // #143 step 4 — per-listing reach. Omitted fields default to 'local' on the server.
+        ...(post.reach ? { reach: post.reach } : {}),
+        ...(post.reach === 'peers' && post.reachPeers ? { reachPeers: post.reachPeers } : {}),
     };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);

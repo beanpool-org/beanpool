@@ -20,13 +20,28 @@ DEPLOY_PULL=1 bash deploy.sh 12 13
 ssh root@ssh-vic.beanpool.org 'docker inspect --format "{{.Name}} {{.Image}} {{.State.StartedAt}}" \
   beanpool-gippsland-beanpool-node-1 beanpool-eastgippy-beanpool-node-1'
 
-# 3. Tunnel, then fix phase 1 and run the redemption (see "Then the redemption" below).
+# 3. Tunnel, then run the redemption. The harness is IN THE REPO at scripts/federation/.
 ssh -N -L 18448:localhost:8448 -L 18450:localhost:8450 root@ssh-vic.beanpool.org
-cd <scratchpad> && ADMIN_PASSWORD=<from repo .env> node redeem.mjs report
+cd scripts/federation
+export ADMIN_PASSWORD="$(grep -E '^ADMIN_PASSWORD=' ../../.env | cut -d= -f2-)"
+node redeem.mjs report
+node redeem.mjs 1     # then 2, then 3, WAIT ≤5 min for a pull tick, then 4
 ```
 
-**The first thing that will bite:** `redeem.mjs` phase 1 self-deals, because `seedElder()` returns the stored
-identity instead of minting a new one. Fix that before running phase 1 — details under "Two harness bugs" below.
+`export`, not a per-command prefix: the harness throws immediately without `ADMIN_PASSWORD`, and a prefix on
+only the first line means every later phase fails on a missing variable rather than on anything real.
+
+**`scripts/federation/` is a durable home, deliberately.** The first version of this doc pointed at a session
+scratchpad, and the next session could not see it — the files were fine, they were simply outside the
+workspace. Anything a future session needs has to live in the repo.
+
+`fed-state.json` sits beside them and is **gitignored**: it holds the test identities' private keys. If it is
+missing, the harness re-seeds from scratch, which is fine — it just means new identities and a fresh 100-bean
+local trade.
+
+**Phase 1's self-deal is FIXED** (`makeFreshMember`, which mints unconditionally instead of calling
+`seedElder`). The bug is still described below because the *shape* of it — a helper that quietly reuses stored
+state — is worth recognising elsewhere.
 
 **What "done" looks like:** gippsland's bridge moves **−20 → −19**, its Commons drops by 1.015, the eastgippy
 seller is credited 1, and `SUM(balance)` is still `0.000000` on both nodes — with the ceiling at **0** the whole
@@ -122,11 +137,11 @@ which is the entire point of Half B.
 - `signed()` in `fed.mjs` used to attach a body to a GET and sign over `'{}'`. A GET must sign over an **empty**
   body (`rawBody ?? ''`) and carry none — fetch throws otherwise. The 403 it produced looks exactly like a
   wrong key.
-- **`seedElder()` short-circuits on the stored identity**, so `seedElder('gippsland', 'FedLocal')` hands back
-  **FedBuyer** and writes to `state.gippsland`, not `state.gippslandLocal`. Phase 1 needs a genuinely
-  *distinct* member or `acceptPost` refuses with "Cannot accept your own post". **This is unresolved in
-  `redeem.mjs` — phase 1 will self-deal as written.** Write a local `makeMember` that always mints a fresh
-  identity (copy the invite→redeem flow out of `seedElder`, skipping the reuse branch).
+- **`seedElder()` short-circuits on the stored identity**, so `seedElder('gippsland', 'FedLocal')` handed back
+  **FedBuyer** and phase 1 tried to buy FedBuyer's own offer — which `acceptPost` refuses outright ("Cannot
+  accept your own post"), so phase 1 could never have worked as first written. **Fixed:** `makeFreshMember()`
+  in `redeem.mjs` mints unconditionally and stores under its own key. Recorded because the shape is worth
+  recognising — a helper that quietly reuses stored state, called somewhere that needs a distinct one.
 
 ---
 

@@ -1,15 +1,37 @@
 /**
- * #143 step 2 driver — seeds members, wires connectors, and runs one real cross-node purchase
- * between gippsland and eastgippy over the SSH port-forwards.
+ * #143 driver — seeds members, wires connectors, and runs real cross-node trades between gippsland and
+ * eastgippy over the SSH port-forwards.
  *
- * Not part of the repo: this is the operator harness for a live test, not a unit suite.
+ * An OPERATOR HARNESS for a live test, not a unit suite. In the repo (rather than a scratchpad) only because a
+ * handover needs to be able to point at it — see docs/federation-half-b-handover.md.
+ */
+
+/*
+ * TLS VERIFICATION IS OFF, and this was raised in review as exposing ADMIN_PASSWORD to interception. Declined,
+ * with the reasoning recorded here so it does not have to be re-litigated:
+ *
+ *   • Every request goes to `https://localhost:<port>` — an SSH port-forward to the node. The only way to sit
+ *     between this process and that socket is to already be root on this machine, at which point the password
+ *     in `.env` is readable directly.
+ *   • The nodes present SELF-SIGNED certificates by design (`initTls` falls back to them without
+ *     CF_RECORD_NAME). There is no CA to validate against, so verification cannot succeed — it can only be
+ *     bypassed, and the question is whether the bypass is scoped or global.
+ *   • The suggested scoping (a custom undici dispatcher per call) is the better shape in a long-lived service.
+ *     Here it would thread an agent through every fetch in a throwaway operator script to remove a risk that
+ *     is already nil, and the added surface is its own hazard.
+ *
+ * If this file ever grows a request to a host that is NOT a localhost forward, revisit it — that is the change
+ * that would make the global flag genuinely wrong.
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-const STATE_PATH = new URL('./fed-state.json', import.meta.url).pathname;
+// fileURLToPath, not `.pathname` (review finding): `.pathname` yields "/C:/..." on Windows and leaves %20 in
+// any path containing a space, so it silently reads and writes the wrong file rather than failing.
+const STATE_PATH = fileURLToPath(new URL('./fed-state.json', import.meta.url));
 
 export const NODES = {
     gippsland: { port: 18448, callsign: 'Gippsland Beanpool', containerIp: '172.18.0.3', publicUrl: 'https://gippsland.beanpool.org:8448' },
@@ -22,7 +44,10 @@ if (!ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD must be set in the environm
 export function loadState() {
     try { return JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8')); } catch { return {}; }
 }
-export function saveState(s) { fs.writeFileSync(STATE_PATH, JSON.stringify(s, null, 2)); }
+// 0600 (review finding, accepted). This file holds the TEST identities' Ed25519 private keys; the default
+// umask leaves it world-readable, and "they are only test keys" is the sentence that precedes every leak of a
+// key that turned out to matter. They also sign real ledger writes on the live pair.
+export function saveState(s) { fs.writeFileSync(STATE_PATH, JSON.stringify(s, null, 2), { mode: 0o600 }); }
 
 const base = (node) => `https://localhost:${NODES[node].port}`;
 

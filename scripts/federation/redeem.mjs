@@ -22,7 +22,7 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 import crypto from 'node:crypto';
-import { NODES, plain, signed, admin, newIdentity, postOffer, setAvatar, loadState, saveState } from './fed.mjs';
+import { NODES, plain, signed, admin, newIdentity, postOffer, seedElder, setAvatar, loadState, saveState } from './fed.mjs';
 
 /**
  * A member who is definitely NOT one we already have.
@@ -57,7 +57,32 @@ async function makeFreshMember(node, callsign, stateKey) {
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const phase = process.argv[2] ?? 'report';
-const state = loadState();
+
+/*
+ * NO MODULE-LEVEL `const state = loadState()`. There used to be one, and it was a data-loss bug (review
+ * finding): `makeFreshMember` writes through its own fresh load, then a later `saveState(state)` wrote the
+ * STALE module snapshot back over the file and erased `gippslandLocal`. Every phase now loads immediately
+ * before it reads and saves immediately after it writes.
+ */
+
+/**
+ * The two base identities every phase assumes. Seeded here rather than presumed, because `fed-state.json` is
+ * gitignored — so a clean checkout has none, and the handover's claim that a missing state file just re-seeds
+ * was false: `state.gippsland.identity` threw a TypeError instead (review finding).
+ *
+ * `seedElder` is the RIGHT helper for these two, unlike in phase 1: reuse-or-create is exactly what a base
+ * identity wants.
+ */
+async function ensureBase() {
+    const s = loadState();
+    if (!s.gippsland?.identity) await seedElder('gippsland', 'FedBuyer');
+    if (!s.eastgippy?.identity) await seedElder('eastgippy', 'FedSeller');
+    const after = loadState();
+    if (!after.gippsland?.identity || !after.eastgippy?.identity) {
+        throw new Error('could not establish base identities on both nodes');
+    }
+    return after;
+}
 
 const money = (n) => (n === undefined || n === null ? '—' : Number(n).toFixed(4));
 
@@ -88,7 +113,7 @@ async function phase1() {
         s.gippslandLocal = local;
         saveState(s);
     }
-    const buyer = state.gippsland.identity;
+    const buyer = (await ensureBase()).gippsland.identity;
     // The ordinary local accept — 1.5% of 100 lands in gippsland's Commons.
     const acc = await signed('gippsland', buyer, 'POST', '/api/marketplace/posts/accept', {
         postId: local.offerId, buyerPublicKey: buyer.publicKey,
@@ -109,8 +134,9 @@ async function phase1() {
 // ── Phase 2: eastgippy buys from gippsland, so gippsland is OWED. ───────────────────────────────────────
 async function phase2() {
     console.log('── Phase 2: eastgippy buys gippsland work → gippsland bridge goes NEGATIVE (they owe us) ──');
-    const theirBuyer = state.eastgippy.identity;      // an eastgippy member, spending eastgippy beans
-    const ourSeller = state.gippsland.identity;       // a gippsland member, doing the work
+    const st = await ensureBase();
+    const theirBuyer = st.eastgippy.identity;      // an eastgippy member, spending eastgippy beans
+    const ourSeller = st.gippsland.identity;       // a gippsland member, doing the work
     // The peer resolved from eastgippy's OWN connector list rather than constructed here — the route looks the
     // connector up by address or public URL, so a hand-built multiaddr that differs by a character 404s.
     const conns = await plain('eastgippy', 'GET', '/api/local/connectors');
@@ -123,7 +149,7 @@ async function phase2() {
         peerAddress: gipps.address,
         sellerPublicKey: ourSeller.publicKey,
         amount: 20,
-        key: `xn-redeem-setup-${state.attempt ?? 1}`,
+        key: `xn-redeem-setup-${st.attempt ?? 1}`,
     });
     console.log(`  cross-node purchase (20 beans) → ${r.status} ${JSON.stringify(r.json).slice(0, 240)}`);
 }
@@ -131,20 +157,25 @@ async function phase2() {
 // ── Phase 3: something cheap for the keeper to commission. ───────────────────────────────────────────────
 async function phase3() {
     console.log('── Phase 3: a cheap travelling offer on eastgippy, priced inside gippsland\'s Commons ──');
-    const seller = state.eastgippy.identity;
-    if (!state.commissionOfferId) {
-        const p = await postOffer('eastgippy', seller, 'A song at the Gippsland harvest supper', 1,
+    const st = await ensureBase();
+    if (!st.commissionOfferId) {
+        const p = await postOffer('eastgippy', st.eastgippy.identity, 'A song at the Gippsland harvest supper', 1,
             { reach: 'everywhere' });
-        state.commissionOfferId = p.id;
-        saveState(state);
+        // Re-loaded before writing: postOffer does not touch state, but phase 1 may have added
+        // `gippslandLocal` since `st` was read, and writing `st` back would erase it.
+        const fresh = loadState();
+        fresh.commissionOfferId = p.id;
+        saveState(fresh);
+        st.commissionOfferId = p.id;
     }
-    console.log(`  offer ${state.commissionOfferId} — wait one pull cycle (≤5 min) before phase 4`);
+    console.log(`  offer ${st.commissionOfferId} — wait one pull cycle (≤5 min) before phase 4`);
 }
 
 // ── Phase 4: THE REDEMPTION. ────────────────────────────────────────────────────────────────────────────
 async function phase4() {
     console.log('── Phase 4: gippsland\'s keeper commissions it, from the Commons, at ceiling 0 ──');
-    const keeper = state.gippsland.identity;
+    const st = await ensureBase();
+    const keeper = st.gippsland.identity;
 
     // The link's treasury, and the keeper binding (#106) that authorises acting for it.
     const t = await plain('gippsland', 'GET', '/api/treasuries');
@@ -161,7 +192,14 @@ async function phase4() {
     // The cached copy of the eastgippy listing, on gippsland's own board.
     const posts = await plain('gippsland', 'GET', '/api/marketplace/posts');
     const arr = Array.isArray(posts.json) ? posts.json : (posts.json?.posts ?? []);
-    const target = arr.find(p => String(p.id).includes(state.commissionOfferId ?? ' '));
+    // NOT a `?? '<fallback>'` (review finding): any id containing the fallback character matches, so a
+    // missing commissionOfferId silently bound `target` to an ARBITRARY remote listing — and phase 4
+    // spends the community's beans. Refuse instead.
+    if (!st.commissionOfferId) {
+        console.log('  no commissionOfferId in state — run phase 3 first');
+        return;
+    }
+    const target = arr.find(p => String(p.id).includes(st.commissionOfferId));
     if (!target) {
         console.log('  the travelling offer has NOT been pulled yet — wait for the next tick');
         console.log('  cached remote listings currently on the board:',

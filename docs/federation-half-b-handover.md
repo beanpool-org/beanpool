@@ -23,9 +23,13 @@ ssh root@ssh-vic.beanpool.org 'docker inspect --format "{{.Name}} {{.Image}} {{.
 # 3. Tunnel, then run the redemption. The harness is IN THE REPO at scripts/federation/.
 ssh -N -L 18448:localhost:8448 -L 18450:localhost:8450 root@ssh-vic.beanpool.org
 cd scripts/federation
-ADMIN_PASSWORD="$(grep -E '^ADMIN_PASSWORD=' ../../.env | cut -d= -f2-)" node redeem.mjs report
-ADMIN_PASSWORD=...  node redeem.mjs 1     # then 2, then 3, wait ≤5 min, then 4
+export ADMIN_PASSWORD="$(grep -E '^ADMIN_PASSWORD=' ../../.env | cut -d= -f2-)"
+node redeem.mjs report
+node redeem.mjs 1     # then 2, then 3, WAIT ≤5 min for a pull tick, then 4
 ```
+
+`export`, not a per-command prefix: the harness throws immediately without `ADMIN_PASSWORD`, and a prefix on
+only the first line means every later phase fails on a missing variable rather than on anything real.
 
 **`scripts/federation/` is a durable home, deliberately.** The first version of this doc pointed at a session
 scratchpad, and the next session could not see it — the files were fine, they were simply outside the

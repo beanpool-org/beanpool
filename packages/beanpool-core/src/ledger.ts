@@ -293,6 +293,17 @@ export class LedgerManager {
             COMMONS_BALANCE += fee;
         }
 
+        // #160: Absorb synthetic account floating-point dust (< 1e-6) into COMMONS_BALANCE to preserve total supply conservation
+        const DUST_THRESHOLD = 1e-6;
+        if (isSyntheticAccount(fromId) && Math.abs(fromAccount.balance) > 0 && Math.abs(fromAccount.balance) < DUST_THRESHOLD) {
+            COMMONS_BALANCE += fromAccount.balance;
+            fromAccount.balance = 0;
+        }
+        if (isSyntheticAccount(toId) && fromId !== toId && Math.abs(toAccount.balance) > 0 && Math.abs(toAccount.balance) < DUST_THRESHOLD) {
+            COMMONS_BALANCE += toAccount.balance;
+            toAccount.balance = 0;
+        }
+
         // The epoch is not touched here, and does not need to be: `getAccount()` above ran `applyDecay`, which
         // stamps it on EVERY path — decayed, nothing to decay, or forfeited. Both accounts therefore arrive
         // here with their interval already closed, so the balance change below cannot carry a stale window

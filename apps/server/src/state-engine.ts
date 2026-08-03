@@ -607,12 +607,54 @@ export function runMarketplaceHygiene(): void {
 }
 
 function sweepSettledEscrowAccounts(): void {
+    const DUST_THRESHOLD = 1e-6;
+    // #160: Absorb floating-point dust (< 1e-6) on settled escrow accounts into COMMONS_POOL in SQLite & memory before sweeping.
+    // Uses indexed NOT EXISTS query to avoid unindexed table scans.
+    const dustSumRow = db.prepare(`
+        SELECT COALESCE(SUM(balance), 0) AS dustSum
+        FROM accounts 
+        WHERE public_key LIKE 'escrow_%' 
+          AND ABS(balance) < ? 
+          AND ABS(balance) > 0
+          AND NOT EXISTS (
+              SELECT 1 FROM marketplace_transactions mt 
+              WHERE mt.id = SUBSTR(accounts.public_key, 8) 
+                AND mt.status IN ('pending', 'requested')
+          )
+    `).get(DUST_THRESHOLD) as { dustSum: number };
+
+    if (dustSumRow && dustSumRow.dustSum !== 0) {
+        setCommonsBalance(COMMONS_BALANCE + dustSumRow.dustSum);
+        db.prepare(`
+            UPDATE accounts 
+            SET balance = balance + ?,
+                last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE public_key = 'COMMONS_POOL'
+        `).run(dustSumRow.dustSum);
+    }
+
+    db.prepare(`
+        UPDATE accounts 
+        SET balance = 0,
+            last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE public_key LIKE 'escrow_%' 
+          AND ABS(balance) < ? 
+          AND ABS(balance) > 0
+          AND NOT EXISTS (
+              SELECT 1 FROM marketplace_transactions mt 
+              WHERE mt.id = SUBSTR(accounts.public_key, 8) 
+                AND mt.status IN ('pending', 'requested')
+          )
+    `).run(DUST_THRESHOLD);
+
     const result = db.prepare(`
         DELETE FROM accounts 
         WHERE public_key LIKE 'escrow_%' 
           AND balance = 0
-          AND SUBSTR(public_key, 8) NOT IN (
-              SELECT id FROM marketplace_transactions WHERE status IN ('pending', 'requested')
+          AND NOT EXISTS (
+              SELECT 1 FROM marketplace_transactions mt 
+              WHERE mt.id = SUBSTR(accounts.public_key, 8) 
+                AND mt.status IN ('pending', 'requested')
           )
     `).run();
     if (result.changes > 0) {

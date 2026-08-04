@@ -204,18 +204,27 @@ export default function ChatsScreen() {
             const keepIfSame = <T,>(prev: T, next: T): T =>
                 JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
 
+            const getPeerKey = (obj: any): string | undefined =>
+                obj?.peer_pubkey ?? obj?.peerPublicKey ?? obj?.peer_public_key ?? undefined;
+
             const loadData = async () => {
                 if (identity?.publicKey && active) {
                     const blocked = await getBlockedUsers();
                     getConversations(identity.publicKey)
                         .then(res => {
-                            const filtered = (res || []).filter((c: any) => !blocked.includes(c.peer_pubkey || c.peerPublicKey || c.peer_public_key));
+                            const filtered = (res || []).filter((c: any) => {
+                                const pk = getPeerKey(c);
+                                return !pk || !blocked.includes(pk);
+                            });
                             if (active) setConversations(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);
                     getActionableDeals(identity.publicKey)
                         .then(res => {
-                            const filtered = (res || []).filter((d: any) => !blocked.includes(d.peer_pubkey || d.peerPublicKey || d.peer_public_key));
+                            const filtered = (res || []).filter((d: any) => {
+                                const pk = getPeerKey(d);
+                                return !pk || !blocked.includes(pk);
+                            });
                             if (active) setDeals(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);

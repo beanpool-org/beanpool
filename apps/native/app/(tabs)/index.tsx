@@ -581,7 +581,7 @@ export default function MarketScreen() {
     const pendingCount = usePendingDealsCount(identity, posts, myTransactions);
 
     useEffect(() => {
-        loadBlockedUsers();
+        getBlockedUsers().then(setBlockedUsers);
         const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (newList) => {
             setBlockedUsers(newList);
         });
@@ -766,8 +766,12 @@ export default function MarketScreen() {
                     text: "Hide Post & Block User", 
                     style: "destructive",
                     onPress: async () => {
-                        await blockUser(targetPubkey, identity?.publicKey, 'Objectionable Content via Marketplace', postId);
-                        Alert.alert('Blocked', `${authorName} has been filtered from your Feed.`);
+                        try {
+                            await blockUser(targetPubkey, identity?.publicKey, 'Objectionable Content via Marketplace', postId);
+                            Alert.alert('Blocked', `${authorName} has been blocked and removed from your feed.`);
+                        } catch (e) {
+                            Alert.alert('Error', 'Failed to block user. Please try again.');
+                        }
                     }
                 },
                 {

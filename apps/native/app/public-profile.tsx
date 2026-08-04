@@ -432,12 +432,17 @@ export default function PublicProfileScreen() {
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Block user ${callsignStr || ''}`}
+                        accessibilityState={{ busy: isBlocking }}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         disabled={isBlocking}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, opacity: isBlocking ? 0.6 : 1 }}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, opacity: isBlocking ? 0.6 : 1 }}
                         onPress={handleBlockUser}
                     >
-                        <MaterialCommunityIcons name="shield-alert-outline" size={15} color={colors.feedback.danger.solid} />
+                        {isBlocking ? (
+                            <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                        ) : (
+                            <MaterialCommunityIcons name="shield-alert-outline" size={15} color={colors.feedback.danger.solid} />
+                        )}
                         <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.solid }}>{isBlocking ? 'Blocking…' : 'Block'}</Text>
                     </Pressable>
                 )}
@@ -904,6 +909,7 @@ export default function PublicProfileScreen() {
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel={`Block user ${callsignStr || ''}`}
+                                    accessibilityState={{ busy: isBlocking }}
                                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                     disabled={isBlocking}
                                     style={{
@@ -920,7 +926,11 @@ export default function PublicProfileScreen() {
                                     }}
                                     onPress={handleBlockUser}
                                 >
-                                    <MaterialCommunityIcons name="shield-alert" size={18} color={colors.feedback.danger.solid} />
+                                    {isBlocking ? (
+                                        <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                                    ) : (
+                                        <MaterialCommunityIcons name="shield-alert" size={18} color={colors.feedback.danger.solid} />
+                                    )}
                                     <Text style={{ color: colors.feedback.danger.solid, fontWeight: '800', fontSize: 14 }}>
                                         {isBlocking ? 'Blocking…' : `Block ${callsignStr || 'User'}`}
                                     </Text>

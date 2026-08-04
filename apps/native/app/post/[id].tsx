@@ -1419,8 +1419,10 @@ export default function PostDetailModal() {
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel={`Block user ${post?.author_callsign || ''}`}
-                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                accessibilityState={{ busy: isBlocking }}
+                                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
                                 disabled={isBlocking}
+                                style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingVertical: 4 }}
                                 onPress={() => {
                                     if (!post?.author_pubkey || isBlocking) return;
                                     const authorName = post.author_callsign || 'this user';
@@ -1450,6 +1452,9 @@ export default function PostDetailModal() {
                                     );
                                 }}
                             >
+                                {isBlocking ? (
+                                    <ActivityIndicator size="small" color={colors.feedback.danger.solid} style={{ marginRight: 4 }} />
+                                ) : null}
                                 <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700', opacity: isBlocking ? 0.6 : 1 }}>
                                     {isBlocking ? 'Blocking…' : '🚫 Block User'}
                                 </Text>

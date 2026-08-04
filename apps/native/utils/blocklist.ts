@@ -22,6 +22,7 @@ interface PendingReport {
  * Uses AsyncStorage for unbounded capacity (avoiding SecureStore 2KB limits).
  */
 export async function getBlockedUsers(): Promise<string[]> {
+    if (cachedBlocklist !== null) return cachedBlocklist;
     try {
         let data = await AsyncStorage.getItem(BLOCKLIST_STORAGE_KEY);
         // Fallback / migration check from legacy SecureStore key
@@ -34,8 +35,9 @@ export async function getBlockedUsers(): Promise<string[]> {
             }
         }
         if (data) {
-            cachedBlocklist = JSON.parse(data);
-            return cachedBlocklist || [];
+            const parsed = JSON.parse(data);
+            cachedBlocklist = Array.isArray(parsed) ? parsed : [];
+            return cachedBlocklist;
         }
     } catch (e) {
         console.error('[blocklist] Failed to read blocked users from AsyncStorage', e);
@@ -44,13 +46,7 @@ export async function getBlockedUsers(): Promise<string[]> {
     return [];
 }
 
-/**
- * Returns whether a given user public key is in the local blocklist synchronously (from cache).
- */
-export function isUserBlockedSync(pubkey: string): boolean {
-    if (!cachedBlocklist) return false;
-    return cachedBlocklist.includes(pubkey);
-}
+
 
 /**
  * Asynchronously checks if a given user is blocked.
@@ -142,13 +138,25 @@ export async function clearBlocklist(): Promise<boolean> {
     }
 }
 
+const REPORT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const MAX_PENDING_REPORTS = 50;
+
 /**
  * Queues a moderation report locally to retry when network is restored.
+ * Deduplicates by targetPubkey, enforces a 7-day TTL, and caps at 50 entries.
  */
 async function queueReportForRetry(report: PendingReport) {
     try {
         const raw = await AsyncStorage.getItem(PENDING_REPORTS_KEY);
-        const pending: PendingReport[] = raw ? JSON.parse(raw) : [];
+        let pending: PendingReport[] = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(pending)) pending = [];
+        // TTL: drop reports older than 7 days
+        const now = Date.now();
+        pending = pending.filter(p => now - p.timestamp < REPORT_TTL_MS);
+        // Deduplicate: keep only the latest report per target
+        pending = pending.filter(p => p.targetPubkey !== report.targetPubkey);
+        // Cap queue size
+        if (pending.length >= MAX_PENDING_REPORTS) pending.shift();
         pending.push(report);
         await AsyncStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(pending));
     } catch (e) {
@@ -163,8 +171,20 @@ export async function retryPendingReports(): Promise<void> {
     try {
         const raw = await AsyncStorage.getItem(PENDING_REPORTS_KEY);
         if (!raw) return;
-        const pending: PendingReport[] = JSON.parse(raw);
-        if (!pending.length) return;
+        const parsed = JSON.parse(raw);
+        let pending: PendingReport[] = Array.isArray(parsed) ? parsed : [];
+        if (!pending.length) {
+            await AsyncStorage.removeItem(PENDING_REPORTS_KEY);
+            return;
+        }
+
+        // Prune stale reports before retrying
+        const now = Date.now();
+        pending = pending.filter(p => now - p.timestamp < REPORT_TTL_MS);
+        if (!pending.length) {
+            await AsyncStorage.removeItem(PENDING_REPORTS_KEY);
+            return;
+        }
 
         const remaining: PendingReport[] = [];
         for (const item of pending) {
@@ -175,7 +195,9 @@ export async function retryPendingReports(): Promise<void> {
             }
         }
 
-        if (remaining.length !== pending.length) {
+        if (remaining.length === 0) {
+            await AsyncStorage.removeItem(PENDING_REPORTS_KEY);
+        } else if (remaining.length !== pending.length) {
             await AsyncStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(remaining));
         }
     } catch (e) {

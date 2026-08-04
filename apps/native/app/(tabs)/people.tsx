@@ -3,6 +3,7 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { View, Text, StyleSheet, FlatList, Pressable, SafeAreaView, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi, setGuardianApi } from '../../utils/db';
+import { getBlockedUsers } from '../../utils/blocklist';
 import { useIdentity } from '../IdentityContext';
 import { hexToBytes, encodeUtf8, encodeBase64, signData, buildSignedHeaders } from '../../utils/crypto';
 import QRCode from 'react-native-qrcode-svg';
@@ -611,7 +612,9 @@ export default function PeopleScreen() {
                 });
             }
 
-            setMembers(rows);
+            const blocked = await getBlockedUsers();
+            const filteredRows = rows.filter(m => !blocked.includes(m.public_key));
+            setMembers(filteredRows);
         } catch (e) {
             console.error('Error loading members:', e);
         }

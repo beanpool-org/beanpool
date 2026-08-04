@@ -5,6 +5,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, getTrustProfile, vouchMember } from '../utils/db';
+import { blockUser } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { colors, palette } from '../constants/colors';
@@ -372,6 +373,28 @@ export default function PublicProfileScreen() {
         );
     };
 
+    const handleBlockUser = () => {
+        if (!pubKeyStr) return;
+        const targetName = callsignStr || 'this user';
+        Alert.alert(
+            `Block ${targetName}?`,
+            `This will instantly hide all posts, offers, and messages from ${targetName}, and notify moderation.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Block User',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await blockUser(pubKeyStr, identity?.publicKey, 'Abusive user reported via Trust Profile', undefined);
+                        Alert.alert('User Blocked', `${targetName} has been blocked and removed from your feed.`, [
+                            { text: 'OK', onPress: () => router.back() }
+                        ]);
+                    }
+                }
+            ]
+        );
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
@@ -397,7 +420,14 @@ export default function PublicProfileScreen() {
                         <Text style={styles.editBtnText}>Edit</Text>
                     </Pressable>
                 ) : (
-                    <View style={{ width: 60 }} />
+                    <Pressable
+                        accessibilityRole="button"
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border }}
+                        onPress={handleBlockUser}
+                    >
+                        <MaterialCommunityIcons name="shield-alert-outline" size={15} color={colors.feedback.danger.solid} />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.solid }}>Block</Text>
+                    </Pressable>
                 )}
             </View>
 
@@ -855,6 +885,33 @@ export default function PublicProfileScreen() {
                                         </View>
                                     ))
                                 )}
+                            </View>
+                        )}
+                        {!isSelf && (
+                            <View style={{ marginHorizontal: 16, marginTop: 24, marginBottom: 32 }}>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                        paddingVertical: 14,
+                                        borderRadius: 12,
+                                        backgroundColor: colors.feedback.danger.bg,
+                                        borderWidth: 1,
+                                        borderColor: colors.feedback.danger.border
+                                    }}
+                                    onPress={handleBlockUser}
+                                >
+                                    <MaterialCommunityIcons name="shield-alert" size={18} color={colors.feedback.danger.solid} />
+                                    <Text style={{ color: colors.feedback.danger.solid, fontWeight: '800', fontSize: 14 }}>
+                                        Block {callsignStr || 'User'}
+                                    </Text>
+                                </Pressable>
+                                <Text style={{ textAlign: 'center', color: colors.text.muted, fontSize: 11, marginTop: 6 }}>
+                                    Blocking will instantly hide their content from your feed and notify moderation.
+                                </Text>
                             </View>
                         )}
                     </>

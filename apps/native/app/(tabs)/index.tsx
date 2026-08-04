@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { getPosts, getMarketplaceTransactions, reportAbuse, getBalance } from '../../utils/db';
+import { getBlockedUsers, blockUser, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { requestSync } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
@@ -581,6 +582,10 @@ export default function MarketScreen() {
 
     useEffect(() => {
         loadBlockedUsers();
+        const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (newList) => {
+            setBlockedUsers(newList);
+        });
+        return () => sub.remove();
     }, []);
 
     useFocusEffect(
@@ -747,12 +752,8 @@ export default function MarketScreen() {
     };
 
     const loadBlockedUsers = async () => {
-        try {
-            const data = await SecureStore.getItemAsync('beanpool_blocked_users');
-            if (data) setBlockedUsers(JSON.parse(data));
-        } catch (e) {
-            console.error('Failed to load local blocklist', e);
-        }
+        const list = await getBlockedUsers();
+        setBlockedUsers(list);
     };
 
     const handleContentAction = (targetPubkey: string, authorName: string, postId: string) => {
@@ -765,14 +766,8 @@ export default function MarketScreen() {
                     text: "Hide Post & Block User", 
                     style: "destructive",
                     onPress: async () => {
-                        try {
-                            const newBlocklist = [...blockedUsers, targetPubkey];
-                            await SecureStore.setItemAsync('beanpool_blocked_users', JSON.stringify(newBlocklist));
-                            setBlockedUsers(newBlocklist);
-                            Alert.alert('Blocked', `${authorName} has been filtered from your Feed.`);
-                        } catch (e) {
-                            Alert.alert('Hardware Error', 'Could not write to Secure Enclave.');
-                        }
+                        await blockUser(targetPubkey, identity?.publicKey, 'Objectionable Content via Marketplace', postId);
+                        Alert.alert('Blocked', `${authorName} has been filtered from your Feed.`);
                     }
                 },
                 {

@@ -11,6 +11,7 @@ import { resolveBundledAvatar } from '../../utils/bundled-avatars';
 import { updateCallsign, wipeIdentity } from '../../utils/identity';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, getPendingRecoveryRequests, approveRecoveryRequest, rejectRecoveryRequest, signedRequest } from '../../utils/db';
+import { getBlockedUsers, unblockUser } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
@@ -1206,6 +1207,34 @@ export default function SettingsScreen() {
                 {/* ─── Legal & Privacy ─── */}
                 <Text style={styles.sectionHeader}>LEGAL & PRIVACY</Text>
                 <View style={styles.menuGroup}>
+                    <Pressable style={styles.menuBtn} onPress={async () => {
+                        const list = await getBlockedUsers();
+                        if (!list || list.length === 0) {
+                            Alert.alert('Blocked Users', 'You currently have no blocked users.');
+                            return;
+                        }
+                        Alert.alert(
+                            'Blocked Users',
+                            `You have ${list.length} blocked user${list.length === 1 ? '' : 's'}. Clear your blocklist?`,
+                            [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                    text: `Unblock All (${list.length})`,
+                                    style: 'destructive',
+                                    onPress: async () => {
+                                        for (const pk of list) {
+                                            await unblockUser(pk);
+                                        }
+                                        Alert.alert('Unblocked', 'All blocked users have been unblocked.');
+                                    }
+                                }
+                            ]
+                        );
+                    }} accessibilityRole="button">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚫</Text></View>
+                        <Text style={[styles.menuText, { flex: 1 }]}>Manage Blocked Users</Text>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
                     <Pressable style={styles.menuBtn} onPress={() => Linking.openURL('https://beanpool.org/privacy.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                         <Text style={[styles.menuText, { flex: 1 }]}>Privacy Policy</Text>

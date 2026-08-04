@@ -22,6 +22,7 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
+import { blockUser } from '../../utils/blocklist';
 import { colors, palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 
@@ -1404,9 +1405,35 @@ export default function PostDetailModal() {
                             </View>
                         )}
 
-                        <Pressable accessibilityRole="button" style={[styles.messageBtn, { marginTop: 12, borderColor: 'transparent', backgroundColor: 'transparent' }]} onPress={() => setShowReportForm(!showReportForm)}>
-                            <Text style={[styles.messageBtnText, { color: colors.feedback.danger.solid, fontSize: 13 }]}>🚩 Report Post</Text>
-                        </Pressable>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 12 }}>
+                            <Pressable accessibilityRole="button" onPress={() => setShowReportForm(!showReportForm)}>
+                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' }}>🚩 Report Post</Text>
+                            </Pressable>
+                            <Text style={{ color: colors.text.muted }}>•</Text>
+                            <Pressable accessibilityRole="button" onPress={() => {
+                                if (!post?.author_pubkey) return;
+                                const authorName = post.author_callsign || 'this user';
+                                Alert.alert(
+                                    `Block ${authorName}?`,
+                                    `This will instantly hide all posts from ${authorName} and notify moderation.`,
+                                    [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        {
+                                            text: 'Block User',
+                                            style: 'destructive',
+                                            onPress: async () => {
+                                                await blockUser(post.author_pubkey, identity?.publicKey, 'Abusive content reported via Post', post.id);
+                                                Alert.alert('User Blocked', `${authorName} has been blocked and removed from your feed.`, [
+                                                    { text: 'OK', onPress: () => router.back() }
+                                                ]);
+                                            }
+                                        }
+                                    ]
+                                );
+                            }}>
+                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' }}>🚫 Block User</Text>
+                            </Pressable>
+                        </View>
                         {showReportForm && (
                             <View style={[styles.confirmBox, { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border }]}>
                                 <Text style={styles.confirmBoxLabel}>REPORT REASON</Text>

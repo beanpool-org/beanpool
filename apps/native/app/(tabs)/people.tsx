@@ -3,7 +3,7 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { View, Text, StyleSheet, FlatList, Pressable, SafeAreaView, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi, setGuardianApi } from '../../utils/db';
-import { getBlockedUsers } from '../../utils/blocklist';
+import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { useIdentity } from '../IdentityContext';
 import { hexToBytes, encodeUtf8, encodeBase64, signData, buildSignedHeaders } from '../../utils/crypto';
 import QRCode from 'react-native-qrcode-svg';
@@ -561,6 +561,14 @@ export default function PeopleScreen() {
         );
     };
 
+
+    // Listen for blocklist changes to auto-refresh member list
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => {
+            loadMembers(searchQuery, sortOption);
+        });
+        return () => sub.remove();
+    }, [searchQuery, sortOption]);
 
     // Debounced Search Effect
     useEffect(() => {

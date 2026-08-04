@@ -11,7 +11,7 @@ import { resolveBundledAvatar } from '../../utils/bundled-avatars';
 import { updateCallsign, wipeIdentity } from '../../utils/identity';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, getPendingRecoveryRequests, approveRecoveryRequest, rejectRecoveryRequest, signedRequest } from '../../utils/db';
-import { getBlockedUsers, unblockUser } from '../../utils/blocklist';
+import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
@@ -1222,9 +1222,7 @@ export default function SettingsScreen() {
                                     text: `Unblock All (${list.length})`,
                                     style: 'destructive',
                                     onPress: async () => {
-                                        for (const pk of list) {
-                                            await unblockUser(pk);
-                                        }
+                                        await clearBlocklist();
                                         Alert.alert('Unblocked', 'All blocked users have been unblocked.');
                                     }
                                 }

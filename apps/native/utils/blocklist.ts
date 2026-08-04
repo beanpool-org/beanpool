@@ -1,24 +1,44 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { DeviceEventEmitter } from 'react-native';
 import { reportAbuse } from './db';
 
 const BLOCKLIST_STORAGE_KEY = 'beanpool_blocked_users';
+const PENDING_REPORTS_KEY = 'beanpool_pending_abuse_reports';
 export const BLOCKLIST_UPDATED_EVENT = 'beanpool_blocklist_updated';
 
 let cachedBlocklist: string[] | null = null;
 
+interface PendingReport {
+    reporterPubkey: string;
+    targetPubkey: string;
+    reason: string;
+    postId?: string;
+    timestamp: number;
+}
+
 /**
  * Retrieves the current array of blocked user public keys.
+ * Uses AsyncStorage for unbounded capacity (avoiding SecureStore 2KB limits).
  */
 export async function getBlockedUsers(): Promise<string[]> {
     try {
-        const data = await SecureStore.getItemAsync(BLOCKLIST_STORAGE_KEY);
+        let data = await AsyncStorage.getItem(BLOCKLIST_STORAGE_KEY);
+        // Fallback / migration check from legacy SecureStore key
+        if (!data) {
+            const legacyData = await SecureStore.getItemAsync(BLOCKLIST_STORAGE_KEY).catch(() => null);
+            if (legacyData) {
+                data = legacyData;
+                await AsyncStorage.setItem(BLOCKLIST_STORAGE_KEY, legacyData);
+                await SecureStore.deleteItemAsync(BLOCKLIST_STORAGE_KEY).catch(() => {});
+            }
+        }
         if (data) {
             cachedBlocklist = JSON.parse(data);
             return cachedBlocklist || [];
         }
     } catch (e) {
-        console.error('[blocklist] Failed to read blocked users from SecureStore', e);
+        console.error('[blocklist] Failed to read blocked users from AsyncStorage', e);
     }
     cachedBlocklist = [];
     return [];
@@ -41,8 +61,8 @@ export async function isUserBlocked(pubkey: string): Promise<boolean> {
 }
 
 /**
- * Blocks a user, saves to SecureStore, notifies server moderation (per Apple Guideline 1.2),
- * and dispatches a global event for immediate UI updates.
+ * Blocks a user, saves to AsyncStorage, notifies server moderation (per Apple Guideline 1.2),
+ * queues failed network reports for retry, and dispatches a global event for immediate UI updates.
  */
 export async function blockUser(
     targetPubkey: string,
@@ -56,7 +76,7 @@ export async function blockUser(
         const list = await getBlockedUsers();
         if (!list.includes(targetPubkey)) {
             const newList = [...list, targetPubkey];
-            await SecureStore.setItemAsync(BLOCKLIST_STORAGE_KEY, JSON.stringify(newList));
+            await AsyncStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify(newList));
             cachedBlocklist = newList;
             
             // Apple Guideline 1.2: Blocking must notify developer of inappropriate content
@@ -64,7 +84,14 @@ export async function blockUser(
                 try {
                     await reportAbuse(reporterPubkey, targetPubkey, reason, postId);
                 } catch (err) {
-                    console.warn('[blocklist] Failed to send reportAbuse to server on block:', err);
+                    console.warn('[blocklist] Failed to send reportAbuse to server on block, queuing for retry:', err);
+                    await queueReportForRetry({
+                        reporterPubkey,
+                        targetPubkey,
+                        reason,
+                        postId,
+                        timestamp: Date.now()
+                    });
                 }
             }
 
@@ -78,7 +105,7 @@ export async function blockUser(
 }
 
 /**
- * Unblocks a user, updates SecureStore, and dispatches a global event.
+ * Unblocks a single user, updates AsyncStorage, and dispatches a global event.
  */
 export async function unblockUser(targetPubkey: string): Promise<boolean> {
     if (!targetPubkey) return false;
@@ -87,7 +114,7 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
         const list = await getBlockedUsers();
         if (list.includes(targetPubkey)) {
             const newList = list.filter(pk => pk !== targetPubkey);
-            await SecureStore.setItemAsync(BLOCKLIST_STORAGE_KEY, JSON.stringify(newList));
+            await AsyncStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify(newList));
             cachedBlocklist = newList;
             DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, newList);
             return true;
@@ -96,4 +123,62 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
         console.error('[blocklist] Failed to unblock user', e);
     }
     return false;
+}
+
+/**
+ * Clears the entire blocklist atomically in a single operation.
+ * Prevents thread blocking and O(N) storage writes when unblocking all users.
+ */
+export async function clearBlocklist(): Promise<boolean> {
+    try {
+        await AsyncStorage.removeItem(BLOCKLIST_STORAGE_KEY);
+        await SecureStore.deleteItemAsync(BLOCKLIST_STORAGE_KEY).catch(() => {});
+        cachedBlocklist = [];
+        DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, []);
+        return true;
+    } catch (e) {
+        console.error('[blocklist] Failed to clear blocklist', e);
+        return false;
+    }
+}
+
+/**
+ * Queues a moderation report locally to retry when network is restored.
+ */
+async function queueReportForRetry(report: PendingReport) {
+    try {
+        const raw = await AsyncStorage.getItem(PENDING_REPORTS_KEY);
+        const pending: PendingReport[] = raw ? JSON.parse(raw) : [];
+        pending.push(report);
+        await AsyncStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(pending));
+    } catch (e) {
+        console.error('[blocklist] Failed to queue report for retry', e);
+    }
+}
+
+/**
+ * Retries sending any queued offline reports to the server.
+ */
+export async function retryPendingReports(): Promise<void> {
+    try {
+        const raw = await AsyncStorage.getItem(PENDING_REPORTS_KEY);
+        if (!raw) return;
+        const pending: PendingReport[] = JSON.parse(raw);
+        if (!pending.length) return;
+
+        const remaining: PendingReport[] = [];
+        for (const item of pending) {
+            try {
+                await reportAbuse(item.reporterPubkey, item.targetPubkey, item.reason, item.postId);
+            } catch (e) {
+                remaining.push(item);
+            }
+        }
+
+        if (remaining.length !== pending.length) {
+            await AsyncStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(remaining));
+        }
+    } catch (e) {
+        console.error('[blocklist] Error retrying pending reports', e);
+    }
 }

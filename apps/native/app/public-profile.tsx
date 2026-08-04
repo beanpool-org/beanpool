@@ -373,8 +373,10 @@ export default function PublicProfileScreen() {
         );
     };
 
+    const [isBlocking, setIsBlocking] = useState(false);
+
     const handleBlockUser = () => {
-        if (!pubKeyStr) return;
+        if (!pubKeyStr || isBlocking) return;
         const targetName = callsignStr || 'this user';
         Alert.alert(
             `Block ${targetName}?`,
@@ -385,10 +387,17 @@ export default function PublicProfileScreen() {
                     text: 'Block User',
                     style: 'destructive',
                     onPress: async () => {
-                        await blockUser(pubKeyStr, identity?.publicKey, 'Abusive user reported via Trust Profile', undefined);
-                        Alert.alert('User Blocked', `${targetName} has been blocked and removed from your feed.`, [
-                            { text: 'OK', onPress: () => router.back() }
-                        ]);
+                        try {
+                            setIsBlocking(true);
+                            await blockUser(pubKeyStr, identity?.publicKey, 'Abusive user reported via Trust Profile', undefined);
+                            Alert.alert('User Blocked', `${targetName} has been blocked and removed from your feed.`, [
+                                { text: 'OK', onPress: () => router.back() }
+                            ]);
+                        } catch (e) {
+                            Alert.alert('Error', 'Failed to block user. Please try again.');
+                        } finally {
+                            setIsBlocking(false);
+                        }
                     }
                 }
             ]
@@ -422,11 +431,14 @@ export default function PublicProfileScreen() {
                 ) : (
                     <Pressable
                         accessibilityRole="button"
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border }}
+                        accessibilityLabel={`Block user ${callsignStr || ''}`}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        disabled={isBlocking}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, opacity: isBlocking ? 0.6 : 1 }}
                         onPress={handleBlockUser}
                     >
                         <MaterialCommunityIcons name="shield-alert-outline" size={15} color={colors.feedback.danger.solid} />
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.solid }}>Block</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.solid }}>{isBlocking ? 'Blocking…' : 'Block'}</Text>
                     </Pressable>
                 )}
             </View>
@@ -891,6 +903,9 @@ export default function PublicProfileScreen() {
                             <View style={{ marginHorizontal: 16, marginTop: 24, marginBottom: 32 }}>
                                 <Pressable
                                     accessibilityRole="button"
+                                    accessibilityLabel={`Block user ${callsignStr || ''}`}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    disabled={isBlocking}
                                     style={{
                                         flexDirection: 'row',
                                         alignItems: 'center',
@@ -900,13 +915,14 @@ export default function PublicProfileScreen() {
                                         borderRadius: 12,
                                         backgroundColor: colors.feedback.danger.bg,
                                         borderWidth: 1,
-                                        borderColor: colors.feedback.danger.border
+                                        borderColor: colors.feedback.danger.border,
+                                        opacity: isBlocking ? 0.6 : 1
                                     }}
                                     onPress={handleBlockUser}
                                 >
                                     <MaterialCommunityIcons name="shield-alert" size={18} color={colors.feedback.danger.solid} />
                                     <Text style={{ color: colors.feedback.danger.solid, fontWeight: '800', fontSize: 14 }}>
-                                        Block {callsignStr || 'User'}
+                                        {isBlocking ? 'Blocking…' : `Block ${callsignStr || 'User'}`}
                                     </Text>
                                 </Pressable>
                                 <Text style={{ textAlign: 'center', color: colors.text.muted, fontSize: 11, marginTop: 6 }}>

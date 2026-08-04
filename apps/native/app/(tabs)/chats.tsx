@@ -4,6 +4,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal } from '../../utils/db';
+import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -203,16 +204,19 @@ export default function ChatsScreen() {
             const keepIfSame = <T,>(prev: T, next: T): T =>
                 JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
 
-            const loadData = () => {
+            const loadData = async () => {
                 if (identity?.publicKey && active) {
+                    const blocked = await getBlockedUsers();
                     getConversations(identity.publicKey)
                         .then(res => {
-                            if (active) setConversations(prev => keepIfSame(prev, res));
+                            const filtered = (res || []).filter((c: any) => !blocked.includes(c.peer_pubkey || c.peerPublicKey || c.peer_public_key));
+                            if (active) setConversations(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);
                     getActionableDeals(identity.publicKey)
                         .then(res => {
-                            if (active) setDeals(prev => keepIfSame(prev, res));
+                            const filtered = (res || []).filter((d: any) => !blocked.includes(d.peer_pubkey || d.peerPublicKey || d.peer_public_key));
+                            if (active) setDeals(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);
                     getFriendsLocal(identity.publicKey)
@@ -237,6 +241,7 @@ export default function ChatsScreen() {
             }
 
             const sub = DeviceEventEmitter.addListener('sync_data_updated', loadData);
+            const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, loadData);
 
             const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
                 if (identity?.publicKey && active) {
@@ -249,6 +254,7 @@ export default function ChatsScreen() {
             return () => {
                 active = false;
                 sub.remove();
+                blockSub.remove();
                 wsSub.remove();
             };
         }, [identity])

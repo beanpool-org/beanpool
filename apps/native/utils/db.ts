@@ -3393,6 +3393,25 @@ export async function signedRequest(endpoint: string, payload: any) {
     return _signedRequest(endpoint, payload);
 }
 
+/**
+ * Report one onboarding step that only the device can see — a screen drawn, a choice made,
+ * a guide finished. The server counts the rest for itself.
+ *
+ * Swallows everything, including the throw from being off-grid. A person joining a
+ * community must never see an error, a delay, or a blocked button because a counter could
+ * not be incremented; a funnel that costs somebody their signup has done more damage than
+ * the missing number could ever be worth. Not awaited by its callers either — the screen
+ * moves on regardless of whether this lands.
+ */
+export async function recordOnboardingEvent(event: string, variant = ''): Promise<void> {
+    try {
+        await _signedRequest('/api/funnel-event', { event, variant });
+    } catch {
+        // Deliberately silent. Not even a console.warn: this runs on the join path, and a
+        // red box in a fresh user's face over telemetry would be its own bug.
+    }
+}
+
 // Vouch for a member at a level (1=-25, 2=-50, 3=-100). Signed POST — the server verifies the
 // actor holds the vouch capability and rejects self-vouch. Optimistically mirrors the vouch
 // locally so the badge/floor reflect immediately; applyDelta later reconciles from the server.

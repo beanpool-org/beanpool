@@ -176,6 +176,22 @@ export interface Member {
     elderVouchedBy?: string | null;
 }
 
+/**
+ * Report one onboarding step that only the browser can see — a screen drawn, a choice made,
+ * a guide finished. The server counts everything else for itself.
+ *
+ * Swallows every failure. Somebody joining a community must never meet an error or a stall
+ * because a counter could not be incremented; a funnel that costs a signup has done more
+ * damage than the missing number was ever worth. Callers do not await it either.
+ */
+export async function recordOnboardingEvent(event: string, variant = ''): Promise<void> {
+    try {
+        await request('POST', '/api/funnel-event', { event, variant });
+    } catch {
+        // Deliberately silent — this runs on the join path.
+    }
+}
+
 export async function getCommunityInfo(): Promise<CommunityInfo> {
     return request('GET', '/api/community/info');
 }

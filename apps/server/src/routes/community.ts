@@ -196,6 +196,48 @@ router.get('/api/local/community-info', async (ctx) => {
     };
 });
 
+/**
+ * Record one onboarding step the server cannot see for itself.
+ *
+ * Steps 3 and 4 happen entirely on the device — a screen drawn, a choice made, a guide
+ * finished — and leave no row behind. If they are not counted as they happen they are gone,
+ * which is why they are the only client-reported events in the funnel.
+ *
+ * NOT under `/api/local/`, and that placement is the authentication. Everything below
+ * `/api/local/` is bypassed by the global requireSignature middleware; a POST to
+ * `/api/funnel-event` is not, so it arrives with an Ed25519 signature over
+ * method+path+timestamp+nonce+body, checked for freshness and single-use nonce. Only
+ * somebody holding a real member's private key can move these numbers, and they cannot
+ * replay a request to move them twice. An open endpoint here would let anyone on the
+ * internet invent a node's onboarding history, which is worse than having no numbers.
+ *
+ * The caller's public key is checked by that middleware and then deliberately dropped: the
+ * counter table has no column for it (M2). Knowing four people abandoned the protection
+ * screen is the point; knowing which four is not.
+ */
+const CLIENT_FUNNEL_EVENTS = ['protection_shown', 'protection_choice', 'guide_complete'] as const;
+
+router.post('/api/funnel-event', async (ctx) => {
+    if (!rateLimit(ctx)) return;
+    const { event, variant } = (ctx as any).requestBody || {};
+
+    // Allowlisted rather than passed through. The counted events include the invite
+    // outcomes, which the server records itself from what actually happened — accepting
+    // those from a client would let a member post their own "invite_failed" and quietly
+    // rewrite this node's rejection rate.
+    if (!CLIENT_FUNNEL_EVENTS.includes(event)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Unknown onboarding event' };
+        return;
+    }
+
+    // Bounded because it becomes part of a primary key, and an unbounded string there is an
+    // unbounded number of rows.
+    const safeVariant = typeof variant === 'string' ? variant.slice(0, 16) : '';
+    recordFunnelEvent(event, safeVariant);
+    ctx.body = { success: true };
+});
+
 router.post('/api/local/change-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();

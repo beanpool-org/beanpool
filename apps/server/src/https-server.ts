@@ -570,17 +570,21 @@ export async function startHttpsServer(port: number): Promise<void> {
             }
         }
 
-        // 4. Rate Limiting Middleware (Exempts authenticated admin control plane)
-        if (gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/')) {
+        // 4. Rate Limiting Middleware (Exempts admin control plane and federation/community paths
+        //    to avoid NAT IP aggregation issues and inter-node synchronisation bursts)
+        const isFederationPath = ctx.path.startsWith('/api/federation/') || ctx.path.startsWith('/api/community/');
+        if (gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !isFederationPath) {
             const now = Date.now();
             const windowMs = 60 * 1000;
-            const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute || 600;
+            // #132: Use nullish coalescing so a falsy (0) value doesn't silently fall back to 600
+            const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute ?? 120;
 
             let timestamps = gatewayRateLimits.get(clientIp) || [];
             timestamps = timestamps.filter(t => now - t < windowMs);
 
             if (timestamps.length >= maxReqs) {
                 ctx.status = 429;
+                ctx.set('Retry-After', '60'); // RFC 6585 — tell clients how long to wait
                 ctx.body = { error: 'Gateway rate limit exceeded. Please try again in 1 minute.' };
                 return;
             }

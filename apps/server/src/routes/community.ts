@@ -47,6 +47,7 @@ import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { db } from '../db/db.js';
+import { recordFirstAvatar } from '../engine/funnel.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -738,6 +739,10 @@ router.post('/api/profile/update', async (ctx) => {
         ctx.body = { error: 'publicKey is required' };
         return;
     }
+    // Funnel: step 2. Checked before the write, since afterwards there is no way to tell
+    // a first avatar from a fifth edit.
+    recordFirstAvatar(activeKey, avatar);
+
     let profile;
     try {
         profile = updateProfile(activeKey, { avatar, bio, contact, callsign });

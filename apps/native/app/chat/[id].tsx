@@ -1688,7 +1688,7 @@ export default function ChatScreen() {
                 local cache so it's instant/offline after first view). */}
             {viewerUri && (
                 <Modal visible transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
-                    <Pressable style={styles.imageViewerOverlay} onPress={() => setViewerUri(null)}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Dismiss full-size photo" style={styles.imageViewerOverlay} onPress={() => setViewerUri(null)}>
                         <Image source={{ uri: viewerUri }} style={styles.imageViewerImage} resizeMode="contain" accessibilityLabel="Full-size photo" />
                         <Pressable accessibilityRole="button" accessibilityLabel="Close photo" style={styles.imageViewerClose} onPress={() => setViewerUri(null)}>
                             <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />

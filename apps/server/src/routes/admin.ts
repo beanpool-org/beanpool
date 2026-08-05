@@ -23,6 +23,7 @@ import {
     createVotingRound, closeVotingRound, adminRejectProject,
     getActiveRound, getGovernanceCredits,
     getVotingRounds, getCommonsBalance,
+    runLedgerAudit,
 } from '../state-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
@@ -49,6 +50,42 @@ router.post('/api/local/admin/csrf-token', async (ctx) => {
     const token = issueCsrfToken();
     ctx.set('X-CSRF-Token', token);
     ctx.body = { csrfToken: token };
+});
+
+// ===================== LEDGER AUDIT ENDPOINTS =====================
+// #129: On-demand audit + drift acknowledgment endpoints.
+// Operators can call ledger-audit to inspect the current conservation state,
+// and ledger-rebaseline to acknowledge known pre-existing drift with a written note.
+
+router.post('/api/local/admin/ledger-audit', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const result = runLedgerAudit();
+    ctx.body = {
+        sumBalances: result.sumBalances,
+        baseline: result.baseline,
+        drift: result.drift,
+        strandedEscrows: result.strandedEscrows,
+        ok: result.ok,
+    };
+});
+
+router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    // #129: Rebaseline MUST include a written explanation so drift is documented,
+    // not silently accepted. "I rebaselined" with no context is not acceptable.
+    const { reason } = (ctx as any).requestBody || {};
+    if (!reason || String(reason).trim().length < 10) {
+        ctx.status = 400;
+        ctx.body = { error: 'reason is required (minimum 10 characters) — document why the drift is acceptable' };
+        return;
+    }
+    const result = runLedgerAudit();
+    const note = `[${new Date().toISOString()}] rebaselined at ${result.sumBalances.toFixed(4)} (drift was ${result.drift.toFixed(4)}): ${String(reason).trim()}`;
+    // Persist: new baseline is the current sum (drift acknowledged), and the note goes into node_config.
+    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?)`).run(String(result.sumBalances));
+    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('ledger_audit_rebaseline_note', ?)`).run(note);
+    console.log(`📐 [LedgerAudit] Rebaselined by admin: ${note}`);
+    ctx.body = { ok: true, newBaseline: result.sumBalances, note };
 });
 
 // ===================== ADMIN ACTIONS (Requires Password) =====================

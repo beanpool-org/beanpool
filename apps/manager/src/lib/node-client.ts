@@ -62,6 +62,55 @@ export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string):
     return res.json();
 }
 
+export interface FunnelRow {
+    day: string;
+    event: string;
+    variant: string;
+    count: number;
+}
+
+export interface OnboardingFunnelResponse {
+    days: number;
+    rows: FunnelRow[];
+}
+
+/**
+ * Onboarding funnel for one node. Its own endpoint rather than part of diagnostics,
+ * which is polled on a timer — two of these numbers group over the whole of `posts` and
+ * `members`, so they should run when somebody opens the panel, not every few seconds.
+ */
+export async function fetchOnboardingFunnel(
+    nodeUrl: string,
+    adminPassword?: string,
+    days = 30,
+): Promise<OnboardingFunnelResponse> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const url = new URL(`${cleanUrl}/api/local/admin/onboarding-funnel`);
+    url.searchParams.set('days', String(days));
+    // Password goes in the header only, never the query string. checkAdminAuth accepts
+    // the header on its own, and a credential in a URL ends up in proxy access logs,
+    // browser history and Referer headers. The node's own logger does redact
+    // `password=...`, but only at 12+ characters and only for its own logs — none of
+    // which helps once the URL has left the browser.
+    //
+    // NB fetchDiagnostics and fetchGatewayConfig above still pass it as a query param.
+    // Same fix applies, but it wants its own PR: if any deployment sits behind something
+    // that strips custom headers, removing their fallback locks that operator out of
+    // their own dashboard, and that needs testing against a real node first.
+    const res = await fetch(url.toString(), {
+        headers,
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string): Promise<GatewayConfig> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) {

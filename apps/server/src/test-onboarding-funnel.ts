@@ -21,11 +21,13 @@
  *   8. Reading the funnel never deletes anything. Retention is an explicit call made at
  *      startup, not a side effect of a query.
  *   9. The genesis operator's own first post is not an activation.
+ *  10. clampDays refuses to turn a junk or unbounded `days` parameter into a wide scan,
+ *      and never lets NaN through as a predicate that silently matches nothing.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-onboarding-funnel.ts
  */
 import { initStateEngine, getAdminPubkey } from './state-engine.js';
-import { recordFunnelEvent, hasNoAvatarYet, getFunnel, pruneFunnel } from './engine/funnel.js';
+import { recordFunnelEvent, hasNoAvatarYet, getFunnel, pruneFunnel, clampDays } from './engine/funnel.js';
 import { redeemInvite, generateInvite } from './engine/invites.js';
 import { db } from './db/db.js';
 
@@ -184,6 +186,18 @@ async function main(): Promise<void> {
     pruneFunnel();
     const pruned = db.prepare("SELECT count FROM onboarding_funnel WHERE day = ?").get(ancient);
     assert(!pruned, 'pruneFunnel drops rows past the retention window when called on purpose');
+
+    // ---------- 9. the endpoint's window is clamped, not trusted ----------
+    // `days` drives a group-by over posts, so junk must not become an unbounded scan —
+    // and NaN must not become a predicate that matches nothing and reads as "no activity".
+    assert(clampDays(7) === 7, 'a sensible window is passed through');
+    assert(clampDays('90') === 90, 'a numeric string is accepted');
+    assert(clampDays(99999) === 365, 'an enormous window is capped');
+    assert(clampDays(0) === 1, 'zero is floored to one day');
+    assert(clampDays(-5) === 1, 'a negative window is floored to one day');
+    assert(clampDays('nonsense') === 30, 'junk falls back to the default rather than NaN');
+    assert(clampDays(undefined) === 30, 'a missing window falls back to the default');
+    assert(clampDays(7.9) === 7, 'a fractional window is floored to a whole day');
 
     // ---------- shape ----------
     assert(getFunnel(30).every(r => r.day <= today), 'no row is dated in the future');

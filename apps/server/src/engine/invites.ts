@@ -5,6 +5,7 @@
 import { db } from '../db/db.js';
 import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
+import { recordFunnelEvent } from './funnel.js';
 import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
 import {
     getMember,
@@ -69,28 +70,45 @@ export function redeemInvite(
     publicKey: string,
     callsign: string
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+    // Funnel: the top of the join flow. Counted here rather than derived because a
+    // rejected code leaves nothing behind to derive from.
+    recordFunnelEvent('invite_attempt');
+
     const invite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(code) as any;
-    if (!invite) return { success: false, error: 'Invalid invite code' };
+    if (!invite) {
+        recordFunnelEvent('invite_failed', 'invalid');
+        return { success: false, error: 'Invalid invite code' };
+    }
 
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const createdAtTime = new Date(invite.created_at).getTime();
     if (Date.now() - createdAtTime > THIRTY_DAYS_MS) {
+        recordFunnelEvent('invite_failed', 'expired');
         return { success: false, error: 'This invite code has expired (maximum 30 days validation)' };
     }
 
     // Check if identity is ALREADY a member before "already used" check
     const existingMember = getMember(db, publicKey);
     if (existingMember) {
+        // Not a failure and not a new join — someone re-entering. Its own event so it
+        // neither inflates signups nor drags down the rejection rate.
+        recordFunnelEvent('invite_reentry');
         return { success: true, member: existingMember, alreadyMember: true };
     }
 
     // NB: `invite.intended_for` is recorded for the INVITER's records only — it is
     // deliberately not enforced here, so an invitee picks whatever callsign they want.
-    if (invite.used_by) return { success: false, error: 'This invite has already been used' };
+    if (invite.used_by) {
+        recordFunnelEvent('invite_failed', 'already_used');
+        return { success: false, error: 'This invite has already been used' };
+    }
 
     // Register member FIRST — invite_codes.used_by has FK to members(public_key)
     const member = registerMemberInternal(broadcast, publicKey, callsign, invite.created_by, code);
-    if (!member) return { success: false, error: 'Registration failed' };
+    if (!member) {
+        recordFunnelEvent('invite_failed', 'registration_failed');
+        return { success: false, error: 'Registration failed' };
+    }
 
     db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code COLLATE NOCASE = ?").run(publicKey, new Date().toISOString(), code);
 
@@ -117,14 +135,23 @@ export function redeemOfflineTicket(
     joinerPublicKey: string,
     callsign: string
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+    // Funnel: the offline ticket is the other door into the same flow, so it counts as
+    // an attempt too — otherwise a community handing out paper tickets would look like
+    // nobody was trying to join at all.
+    recordFunnelEvent('invite_attempt');
+
     try {
         const verified = verifyOfflineTicket(db, ticketB64);
-        if (!verified.ok) return { success: false, error: verified.error };
+        if (!verified.ok) {
+            recordFunnelEvent('invite_failed', 'invalid');
+            return { success: false, error: verified.error };
+        }
         const { inviterPubkey, timestamp, intendedFor, codeHash } = verified;
 
         // Check if identity is ALREADY a member before "already used" check
         const existingMember = getMember(db, joinerPublicKey);
         if (existingMember) {
+            recordFunnelEvent('invite_reentry');
             return { success: true, member: existingMember, alreadyMember: true };
         }
 
@@ -132,7 +159,10 @@ export function redeemOfflineTicket(
         // records and is stored below, but never constrains the joiner's chosen callsign.
         const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
         if (existingInvite) {
-            if (existingInvite.used_by) return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
+            if (existingInvite.used_by) {
+                recordFunnelEvent('invite_failed', 'already_used');
+                return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
+            }
         } else {
             const createdAt = new Date(timestamp).toISOString();
             db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`).run(codeHash, inviterPubkey, createdAt, intendedFor || null);
@@ -141,12 +171,16 @@ export function redeemOfflineTicket(
         recordActivity(inviterPubkey);
 
         const member = registerMemberInternal(broadcast, joinerPublicKey, callsign, inviterPubkey, codeHash);
-        if (!member) return { success: false, error: 'Registration failed during state sync' };
+        if (!member) {
+            recordFunnelEvent('invite_failed', 'registration_failed');
+            return { success: false, error: 'Registration failed during state sync' };
+        }
 
         db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code COLLATE NOCASE = ?").run(joinerPublicKey, new Date().toISOString(), codeHash);
 
         return { success: true, member };
     } catch (e) {
+        recordFunnelEvent('invite_failed', 'malformed');
         return { success: false, error: 'Malformed or broken offline ticket payload' };
     }
 }

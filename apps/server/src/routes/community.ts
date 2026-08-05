@@ -47,6 +47,7 @@ import { isSyntheticAccount } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { db } from '../db/db.js';
+import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -738,6 +739,12 @@ router.post('/api/profile/update', async (ctx) => {
         ctx.body = { error: 'publicKey is required' };
         return;
     }
+    // Funnel: step 2. Asked before the write — afterwards there is no telling a first
+    // avatar from a fifth edit — but recorded only once the write has actually landed,
+    // below. A taken callsign is a common thing to hit on this very step, and counting
+    // here would book an avatar that was never saved, then book it again on every retry.
+    const isFirstAvatar = Boolean(avatar) && hasNoAvatarYet(activeKey);
+
     let profile;
     try {
         profile = updateProfile(activeKey, { avatar, bio, contact, callsign });
@@ -759,6 +766,7 @@ router.post('/api/profile/update', async (ctx) => {
         ctx.body = { error: 'Member not found' };
         return;
     }
+    if (isFirstAvatar) recordFunnelEvent('avatar_published');
     ctx.body = { success: true, profile };
 });
 

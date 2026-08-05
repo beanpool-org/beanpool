@@ -695,3 +695,32 @@ CREATE TABLE IF NOT EXISTS federation_links (
 -- would otherwise scan this table per row. UNIQUE because one treasury backs exactly one peer: sharing
 -- one across two links would pool two separate obligations into one pot.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_federation_links_treasury ON federation_links(treasury_pubkey);
+
+-- Onboarding funnel: how many people try to join, and where they stop. Counts only the steps the node
+-- cannot reconstruct afterwards — a rejected invite code leaves no row behind, so it has to be counted
+-- as it happens. Steps that ARE already recorded elsewhere (join dates, first posts) are derived on
+-- read instead, which is why they carry full history from day one. See engine/funnel.ts.
+--
+-- There is deliberately no public_key column and no foreign key to members. The grain is
+-- (day, event, variant) and nothing finer, so an operator can see that four people abandoned the
+-- protection screen and cannot see which four. That is the whole difference between a funnel and a
+-- surveillance log, and it is this table definition that decides it — a well-meant "just add the
+-- pubkey so we can help them" would quietly cross the line. Keep it out.
+--
+-- Node-local, and it stays that way: sync.ts carries an explicit typed payload rather than
+-- enumerating tables, so this does not replicate to peers or backup nodes. Do not add it there.
+CREATE TABLE IF NOT EXISTS onboarding_funnel (
+    day     TEXT NOT NULL,              -- YYYY-MM-DD, UTC
+    event   TEXT NOT NULL,              -- invite_attempt | invite_failed | avatar_published | ...
+    variant TEXT NOT NULL DEFAULT '',   -- failure reason, keeper-count state, or choice made
+    -- Only ever incremented, so it cannot go negative today. The CHECK is here so it
+    -- cannot start to: a tally that reads -3 is worse than one that refuses to write.
+    count   INTEGER NOT NULL DEFAULT 0 CHECK (count >= 0),
+    PRIMARY KEY (day, event, variant)
+);
+-- The funnel derives "who joined" and "who got started" from these two tables rather than
+-- counting them, so both queries group over history every time the dashboard is opened.
+-- Partial indexes because both queries only ever look at local rows — a federation
+-- visitor is not a signup, and a federated listing is not somebody getting started here.
+CREATE INDEX IF NOT EXISTS idx_members_joined_at_local ON members(joined_at) WHERE home_node_url IS NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_author_created_local ON posts(author_pubkey, created_at) WHERE origin_node IS NULL;

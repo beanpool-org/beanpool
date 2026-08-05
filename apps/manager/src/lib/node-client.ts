@@ -62,6 +62,48 @@ export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string):
     return res.json();
 }
 
+export interface FunnelRow {
+    day: string;
+    event: string;
+    variant: string;
+    count: number;
+}
+
+export interface OnboardingFunnelResponse {
+    days: number;
+    rows: FunnelRow[];
+}
+
+/**
+ * Onboarding funnel for one node. Its own endpoint rather than part of diagnostics,
+ * which is polled on a timer — two of these numbers group over the whole of `posts` and
+ * `members`, so they should run when somebody opens the panel, not every few seconds.
+ */
+export async function fetchOnboardingFunnel(
+    nodeUrl: string,
+    adminPassword?: string,
+    days = 30,
+): Promise<OnboardingFunnelResponse> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const url = new URL(`${cleanUrl}/api/local/admin/onboarding-funnel`);
+    url.searchParams.set('days', String(days));
+    if (adminPassword) {
+        url.searchParams.set('password', adminPassword);
+    }
+    const res = await fetch(url.toString(), {
+        headers,
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string): Promise<GatewayConfig> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) {

@@ -173,6 +173,23 @@ export function pruneFunnel(): void {
     }
 }
 
+/** Widest window the endpoint will answer. Beyond retention there is nothing to find. */
+const MAX_DAYS = 365;
+
+/**
+ * Coerce a caller-supplied window into a sane one.
+ *
+ * `days` ends up in a date comparison that drives a group-by over `posts`, so an
+ * unbounded or junk value would let an admin-authenticated caller ask for an arbitrarily
+ * wide scan — or, with a NaN, one whose SQL predicate quietly matches nothing and reads
+ * as "no onboarding activity" rather than as an error.
+ */
+export function clampDays(raw: unknown): number {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return 30;
+    return Math.min(MAX_DAYS, Math.max(1, Math.floor(n)));
+}
+
 /**
  * The whole funnel for the last `days` days: stored counters plus the derived steps,
  * sorted by day then event. Read-only. Derived rows arrive with full history already in

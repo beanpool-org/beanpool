@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 
-export type TabId = 'overview' | 'analytics' | 'gateway' | 'members' | 'topology' | 'invites' | 'logs' | 'ai';
+export type TabId = 'overview' | 'analytics' | 'gateway' | 'members' | 'topology' | 'invites' | 'onboarding' | 'logs' | 'ai';
 
 export type NodeHealthStatus = 'online' | 'warning' | 'critical' | 'alert' | 'offline' | 'loading';
 
@@ -51,6 +51,7 @@ export function FleetSidebar({
         { id: 'gateway', label: 'Gateway Security', icon: '🛡️' },
         { id: 'members', label: 'Trust & Members', icon: '👥' },
         { id: 'invites', label: 'Invites & Onboarding', icon: '🎫' },
+        { id: 'onboarding', label: 'Join Funnel', icon: '🚪' },
         { id: 'logs', label: 'System Streamer', icon: '📜' },
         { id: 'ai', label: 'Sovereign AI Copilot', icon: '🤖', badge: 'PRO' },
     ];

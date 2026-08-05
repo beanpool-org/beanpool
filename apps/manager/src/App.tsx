@@ -33,6 +33,7 @@ import { EditNodeModal } from './components/nodes/EditNodeModal';
 
 import { TelemetryModule, type NodeDiagnosticState, type TelemetryHistoryPoint } from './components/modules/TelemetryModule';
 import { AnalyticsModule } from './components/modules/AnalyticsModule';
+import { OnboardingModule } from './components/modules/OnboardingModule';
 import { GatewayModule } from './components/modules/GatewayModule';
 import { MembersModule } from './components/modules/MembersModule';
 import { TopologyModule } from './components/modules/TopologyModule';
@@ -562,6 +563,14 @@ export function App() {
                     )}
 
                     {activeTab === 'invites' && <InvitesModule activeNode={activeNode} />}
+
+                    {activeTab === 'onboarding' && (
+                        <OnboardingModule
+                            profiles={profiles}
+                            activeProfileId={activeProfileId}
+                            onSelectNode={(id: string) => setActiveProfileId(id)}
+                        />
+                    )}
 
                     {activeTab === 'logs' && (
                         <LogsModule logs={nodeLogs} onRefresh={() => loadLogs()} />

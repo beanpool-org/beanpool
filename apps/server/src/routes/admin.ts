@@ -31,6 +31,7 @@ import {
 import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
+import { getFunnel, clampDays } from '../engine/funnel.js';
 import type { RouteDeps } from './types.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
@@ -217,6 +218,33 @@ const getDiagnosticsHandler = async (ctx: any) => {
 
 router.get('/api/local/admin/diagnostics', getDiagnosticsHandler);
 router.post('/api/local/admin/diagnostics', getDiagnosticsHandler);
+
+/**
+ * Onboarding funnel: how many people tried to join, and where they stopped.
+ *
+ * Deliberately NOT folded into /diagnostics. That endpoint is polled on a timer — it is
+ * in the polling-endpoint list in https-server.ts — whereas two of these numbers are
+ * derived by grouping over the whole of `posts` and `members`. Riding along would run
+ * those aggregations every few seconds to answer a question nobody asked; here they run
+ * when an operator actually opens the panel.
+ *
+ * Aggregate rows only: (day, event, variant, count). There is no per-member data to
+ * return because none is stored — see M2 in docs/ONBOARDING.md.
+ */
+const getOnboardingFunnelHandler = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        // Clamped rather than trusted — see clampDays.
+        const days = clampDays(ctx.query?.days ?? 30);
+        ctx.body = { days, rows: getFunnel(days) };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { error: e.message };
+    }
+};
+
+router.get('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
+router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 
 
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {

@@ -833,6 +833,10 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
             db.prepare(`UPDATE accounts SET balance = balance - ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(totalRefunded, escrowPubkey);
         }
 
+        // #139: Unlink transactions from the project before deletion to prevent SQLITE_CONSTRAINT_FOREIGNKEY
+        // failure while retaining complete transaction history (pledges, refunds, sweeps) in the ledger.
+        db.prepare(`UPDATE transactions SET project_id = NULL WHERE project_id = ?`).run(projectId);
+
         // Shred the Project — and tombstone it so mirrors propagate the delete.
         db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
         writeTombstone('projects', projectId);

@@ -726,3 +726,27 @@ CREATE TABLE IF NOT EXISTS onboarding_funnel (
 -- visitor is not a signup, and a federated listing is not somebody getting started here.
 CREATE INDEX IF NOT EXISTS idx_members_joined_at_local ON members(joined_at) WHERE home_node_url IS NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_author_created_local ON posts(author_pubkey, created_at) WHERE origin_node IS NULL;
+
+-- 21. Mirror Sync Audit Log (#134)
+-- Permanent audit trail: every importRemoteState() call writes one row recording
+-- the originating peer's identity and what changed. This makes it possible to
+-- trace a corrupt import back to its source peer and roll back deliberately.
+-- Only backup nodes write to this table (primary nodes never call importRemoteState).
+CREATE TABLE IF NOT EXISTS sync_audit_log (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    synced_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    origin_peer_id   TEXT NOT NULL,   -- libp2p peer ID of the signing mirror connector
+    origin_node_id   TEXT NOT NULL,   -- nodeId string from the SyncPayload
+    new_members      INTEGER NOT NULL DEFAULT 0,
+    updated_members  INTEGER NOT NULL DEFAULT 0,
+    new_posts        INTEGER NOT NULL DEFAULT 0,
+    updated_posts    INTEGER NOT NULL DEFAULT 0,
+    new_transactions INTEGER NOT NULL DEFAULT 0,
+    account_changes  INTEGER NOT NULL DEFAULT 0,
+    marketplace_txns INTEGER NOT NULL DEFAULT 0,
+    new_messages     INTEGER NOT NULL DEFAULT 0,
+    tombstones_applied INTEGER NOT NULL DEFAULT 0,
+    conflicts_skipped  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_sync_audit_log_peer ON sync_audit_log(origin_peer_id, synced_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sync_audit_log_time ON sync_audit_log(synced_at DESC);

@@ -104,6 +104,34 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
     }
 });
 
+// ===================== SYNC AUDIT LOG ENDPOINT =====================
+// #134: Read-only view of the mirror sync audit trail.
+// Returns the most recent sync imports ordered by time, optionally filtered by peer.
+
+router.get('/api/local/admin/sync-audit-log', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        // parseInt + clamp to [1, 500]: prevents negative-limit DoS (LIMIT -1 disables the cap in SQLite).
+        const parsedLimit = parseInt(String(ctx.query.limit), 10);
+        const limit = Math.max(1, Math.min(isNaN(parsedLimit) ? 50 : parsedLimit, 500));
+        const peerFilter = ctx.query.peer ? String(ctx.query.peer) : null;
+
+        // Real COUNT(*) of all matching rows, not just the returned page slice.
+        const countRow = peerFilter
+            ? db.prepare(`SELECT COUNT(*) as c FROM sync_audit_log WHERE origin_peer_id = ?`).get(peerFilter)
+            : db.prepare(`SELECT COUNT(*) as c FROM sync_audit_log`).get();
+        const total = (countRow as { c: number })?.c || 0;
+
+        const rows = peerFilter
+            ? db.prepare(`SELECT * FROM sync_audit_log WHERE origin_peer_id = ? ORDER BY synced_at DESC LIMIT ?`).all(peerFilter, limit)
+            : db.prepare(`SELECT * FROM sync_audit_log ORDER BY synced_at DESC LIMIT ?`).all(limit);
+        ctx.body = { success: true, entries: rows, total };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to query sync audit log' };
+    }
+});
+
 // ===================== ADMIN ACTIONS (Requires Password) =====================
 
 router.post('/api/local/admin/data', async (ctx) => {

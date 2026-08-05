@@ -185,9 +185,6 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                 <div className="p-4 rounded-xl bg-red-600/15 border border-red-500/40 text-xs text-red-300">
                     <strong className="block mb-1">Couldn't read this node</strong>
                     {error}
-                    <span className="block mt-2 text-red-400/80">
-                        If this node hasn't been redeployed since the funnel shipped, the endpoint won't exist yet.
-                    </span>
                 </div>
             )}
 

@@ -13,6 +13,7 @@ import {
     getRegistrarPending,
     approveRegistrarClaim,
     revokeRegistrarClaim,
+    downloadAdminFile,
     type HarvesterNodeState,
     type HistoryFileItem,
     type SnapshotItem,
@@ -163,6 +164,51 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     }, [activeTab, snapshotNodeId]);
 
     // Manual Sync Trigger
+    // Which download is in flight, as `${slug}:db` / `${slug}:identity`. Keyed rather than
+    // a plain boolean so one node's download does not grey out every other row's buttons.
+    const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+
+    /**
+     * These two used to be <a href> links with the admin password on the query string,
+     * which put a live credential in the DOM and in browser history — and one of them
+     * serves the node's identity keys. A link cannot send a header, so they are fetches
+     * now, which also means failures can be reported instead of opening a tab containing
+     * a JSON error.
+     */
+    const handleDownloadBackup = async (
+        kind: 'db' | 'identity',
+        slug: string,
+        node?: NodeProfile,
+    ) => {
+        const key = `${slug}:${kind}`;
+        setDownloadingKey(key);
+        try {
+            await downloadAdminFile(
+                kind === 'db'
+                    ? '/api/manager/backups/download-db'
+                    : '/api/manager/backups/download-identity',
+                { nodeId: slug },
+                node?.adminPassword,
+                kind === 'db'
+                    ? `beanpool-backup-${slug}.db`
+                    : `identity-bundle-${slug}.tar.gz`,
+            );
+        } catch (e: any) {
+            // "Failed to fetch" is what a browser says when the request never got an answer
+            // at all, and on its own it leaves the operator unable to tell that from a
+            // rejected password. These endpoints are same-origin — served by the node this
+            // dashboard is loaded from, or proxied there in dev — so there is no CORS
+            // preflight in the picture and no remote hop to blame: it means the backend
+            // behind this page did not respond.
+            const detail = /failed to fetch|networkerror|load failed/i.test(e?.message || '')
+                ? "no response from the server behind this dashboard — check it's still running"
+                : (e?.message || String(e));
+            alert(`${kind === 'db' ? 'Database' : 'Identity bundle'} download failed: ${detail}`);
+        } finally {
+            setDownloadingKey(null);
+        }
+    };
+
     const handleTriggerSync = async (nodeId: string, node?: NodeProfile) => {
         setHarvestingNodeId(nodeId);
         try {
@@ -509,28 +555,38 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         >
                                                             {isSyncing ? '...' : '🔄 Sync'}
                                                         </button>
-                                                        <a
-                                                            href={`/api/manager/backups/download-db?nodeId=${slug}${node.adminPassword ? `&password=${encodeURIComponent(node.adminPassword)}` : ''}`}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-sky-400 font-bold text-[11px] transition-all inline-block"
+                                                        <button
+                                                            onClick={() => handleDownloadBackup('db', slug, node)}
+                                                            disabled={downloadingKey === `${slug}:db`}
+                                                            aria-busy={downloadingKey === `${slug}:db`}
+                                                            // The visible label collapses to "..." to hold the row's
+                                                            // width, which a screen reader would read out as three dots
+                                                            // with no idea which of the two files is moving. The
+                                                            // accessible name says it in full instead.
+                                                            aria-label={downloadingKey === `${slug}:db`
+                                                                ? `Downloading database backup for ${node.name}`
+                                                                : `Download database backup for ${node.name}`}
+                                                            className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 disabled:opacity-50 text-sky-400 font-bold text-[11px] transition-all"
                                                         >
-                                                            ⬇ DB
-                                                        </a>
+                                                            {downloadingKey === `${slug}:db` ? '...' : '⬇ DB'}
+                                                        </button>
                                                         <button
                                                             onClick={() => handleOpenHistory(slug, node.name)}
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-amber-400 font-bold text-[11px] transition-all"
                                                         >
                                                             📅 History
                                                         </button>
-                                                        <a
-                                                            href={`/api/manager/backups/download-identity?nodeId=${slug}${node.adminPassword ? `&password=${encodeURIComponent(node.adminPassword)}` : ''}`}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-emerald-400 font-bold text-[11px] transition-all inline-block"
+                                                        <button
+                                                            onClick={() => handleDownloadBackup('identity', slug, node)}
+                                                            disabled={downloadingKey === `${slug}:identity`}
+                                                            aria-busy={downloadingKey === `${slug}:identity`}
+                                                            aria-label={downloadingKey === `${slug}:identity`
+                                                                ? `Downloading identity bundle for ${node.name}`
+                                                                : `Download identity bundle for ${node.name}`}
+                                                            className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 disabled:opacity-50 text-emerald-400 font-bold text-[11px] transition-all"
                                                         >
-                                                            🔑 Identity
-                                                        </a>
+                                                            {downloadingKey === `${slug}:identity` ? '...' : '🔑 Identity'}
+                                                        </button>
                                                     </div>
                                                 </td>
                                             </tr>

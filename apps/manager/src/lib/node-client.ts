@@ -42,6 +42,107 @@ export function normalizeNodeUrl(rawUrl: string): string {
     return trimmed.replace(/\/+$/, '');
 }
 
+// Admin credentials travel in the X-Admin-Password header only, never as a query
+// parameter. checkAdminAuth reads the header (https-server.ts) ahead of ?password= in its
+// fallback chain, so the header alone is sufficient — and a credential in a URL ends up in
+// reverse-proxy access logs, browser history and Referer headers. The node's own logger
+// does redact `password=...`, but only at 12+ characters and only for logs it writes
+// itself, neither of which helps once the URL has left the browser.
+//
+// The server still accepts all four transports, so this is a client-side hardening: no
+// node needs redeploying for it, and nothing breaks if one is on an older build.
+
+/**
+ * Download an admin-gated file without putting the credential in a URL.
+ *
+ * The backup endpoints used to be plain `<a href>` links with `?password=` on them, which
+ * is the worst version of this problem: a link's URL persists in the DOM as well as in
+ * browser history, and one of these two serves the node's identity keys. A link cannot
+ * carry a header, so it has to become a fetch — the response is buffered and handed to the
+ * browser through a transient object URL instead.
+ *
+ * Buffering is acceptable here and not elsewhere: the fleet manager is a local desktop
+ * dashboard downloading a community node's SQLite file, and there is no browser-side way
+ * to stream to disk that also lets us set a header. The caller is expected to show a
+ * pending state, since a file of real size otherwise looks like a dead button.
+ */
+/** How long the blob stays alive after the click. Long enough for a slow disk write. */
+const REVOKE_DELAY_MS = 60_000;
+
+/** Above this, ask before buffering. Set far above any real node database. */
+const HUGE_DOWNLOAD_BYTES = 500 * 1024 * 1024;
+
+export async function downloadAdminFile(
+    endpointPath: string,
+    params: Record<string, string>,
+    adminPassword: string | undefined,
+    filename: string,
+): Promise<void> {
+    const headers: Record<string, string> = {};
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const url = new URL(endpointPath, window.location.origin);
+    for (const [k, v] of Object.entries(params)) {
+        url.searchParams.set(k, v);
+    }
+
+    const res = await fetch(url.toString(), { headers, cache: 'no-store' });
+    if (!res.ok) {
+        // The endpoints answer 404 with a JSON reason worth surfacing — "no backup yet for
+        // this node" is a different problem from "wrong password", and a bare HTTP code
+        // would leave the operator guessing which.
+        let detail = `HTTP ${res.status}`;
+        try {
+            const body = await res.json();
+            if (body?.error) detail = body.error;
+        } catch { /* not JSON — the status is all we have */ }
+        throw new Error(detail);
+    }
+
+    // Asked before buffering, because afterwards is too late to warn about.
+    //
+    // The response is read into the tab's heap, which the <a href> this replaced did not
+    // do — the browser streamed that straight to disk. There is no way to stream to disk
+    // AND set a header, so the buffering stays; what it must not do is silently take the
+    // tab out. The largest node database in the fleet today is around 29 MB, so this line
+    // is nowhere near normal operation: it exists so that a pathological file asks first
+    // rather than crashing on arrival. Deliberately a question and not a refusal — a hard
+    // cap would break the only way to get a backup out, and "use direct streaming
+    // instead" is not an option that exists here.
+    const declaredSize = Number(res.headers.get('content-length') || 0);
+    if (declaredSize > HUGE_DOWNLOAD_BYTES) {
+        const gb = (declaredSize / 1024 / 1024 / 1024).toFixed(1);
+        const proceed = window.confirm(
+            `${filename} is about ${gb} GB. It has to be held in memory before it can be saved, `
+            + `which may make this tab run out of memory. Download anyway?`
+        );
+        if (!proceed) return;
+    }
+
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    } finally {
+        // Revoked in a finally, but NOT on the next tick.
+        //
+        // Both ends of this are real. Never revoking pins the whole database in memory for
+        // the life of the page. Revoking immediately races the download: the click only
+        // *starts* the transfer, and pulling the object URL out from under a download
+        // manager that is still reading produces a silent failure or a truncated file —
+        // Firefox especially, and more likely the larger the file, which is exactly the
+        // case that matters here. A delay resolves both: the memory comes back, just not
+        // instantly.
+        setTimeout(() => URL.revokeObjectURL(objectUrl), REVOKE_DELAY_MS);
+    }
+}
+
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string): Promise<DiagnosticsResponse> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) {
@@ -49,9 +150,6 @@ export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string):
     }
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/diagnostics`);
-    if (adminPassword) {
-        url.searchParams.set('password', adminPassword);
-    }
     const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',
@@ -91,21 +189,20 @@ export async function fetchOnboardingFunnel(
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/onboarding-funnel`);
     url.searchParams.set('days', String(days));
-    // Password goes in the header only, never the query string. checkAdminAuth accepts
-    // the header on its own, and a credential in a URL ends up in proxy access logs,
-    // browser history and Referer headers. The node's own logger does redact
-    // `password=...`, but only at 12+ characters and only for its own logs — none of
-    // which helps once the URL has left the browser.
-    //
-    // NB fetchDiagnostics and fetchGatewayConfig above still pass it as a query param.
-    // Same fix applies, but it wants its own PR: if any deployment sits behind something
-    // that strips custom headers, removing their fallback locks that operator out of
-    // their own dashboard, and that needs testing against a real node first.
     const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',
     });
     if (!res.ok) {
+        // 401 and 404 need telling apart, because the fix is in a different place for
+        // each and the status code alone sent someone hunting the wrong one: 401 is this
+        // node's stored admin password, 404 is a node that predates the endpoint.
+        if (res.status === 401) {
+            throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
+        }
+        if (res.status === 404) {
+            throw new Error('This node is running a build without the funnel endpoint. Redeploy it.');
+        }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
@@ -118,9 +215,6 @@ export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string
     }
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/gateway`);
-    if (adminPassword) {
-        url.searchParams.set('password', adminPassword);
-    }
     const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',
@@ -559,9 +653,6 @@ export async function getRegistrarPending(
     const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
     const endpoint = cleanUrl ? `${cleanUrl}/api/local/admin/registrar/pending` : '/api/local/admin/registrar/pending';
     const url = new URL(endpoint, typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost');
-    if (adminPassword) {
-        url.searchParams.set('password', adminPassword);
-    }
     const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',

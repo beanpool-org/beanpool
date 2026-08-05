@@ -451,33 +451,44 @@ export function WelcomePage({ onComplete }: Props) {
         if (!pendingIdentity) return;
         setLoading(true);
         try {
-            // Skipped when the invite was already redeemed at Step 1, which is the normal
-            // path — redemption moved there so a member exists on the node from the moment
-            // they pick a name. Re-sending the same code here doubled the invite attempts in
-            // the onboarding funnel and spent a round trip at the tap where somebody is
-            // waiting to get in. Kept for the case where Step 1 never got that far.
-            if (pendingInviteCode && !inviteRedeemed) {
-                try {
-                    if (pendingInviteCode.length > 20 && pendingInviteCode.startsWith('BP-')) {
-                        // Offline ticket cryptographic redemption
-                        const ticketB64 = pendingInviteCode.slice(3); // Remove 'BP-' prefix
-                        await redeemOfflineTicket(ticketB64, pendingIdentity.publicKey, pendingIdentity.callsign);
-                    } else {
-                        // Legacy short-hash central database redemption
-                        await redeemInvite(pendingInviteCode, pendingIdentity.publicKey, pendingIdentity.callsign);
+            // Wraps the whole thing, rather than being folded into the first condition.
+            //
+            // The two inner branches are "redeem a code" and "register without one", and
+            // they are alternatives to each other — not to being already registered. Adding
+            // `&& !inviteRedeemed` to the outer `if` instead sent the normal path, an
+            // invited member whose code was redeemed at Step 1, down the else and into
+            // registerMember(), which is the no-invite path: a wasted request at best, and
+            // at worst an error that returns early and strands somebody on the last screen
+            // of a join they had already completed.
+            //
+            // Skipped entirely once Step 1 has redeemed, which is the normal path —
+            // redemption moved there so a member exists on the node from the moment they
+            // pick a name. Re-sending the code here doubled the invite attempts in the
+            // funnel and spent a round trip at the tap where somebody is waiting to get in.
+            if (!inviteRedeemed) {
+                if (pendingInviteCode) {
+                    try {
+                        if (pendingInviteCode.length > 20 && pendingInviteCode.startsWith('BP-')) {
+                            // Offline ticket cryptographic redemption
+                            const ticketB64 = pendingInviteCode.slice(3); // Remove 'BP-' prefix
+                            await redeemOfflineTicket(ticketB64, pendingIdentity.publicKey, pendingIdentity.callsign);
+                        } else {
+                            // Legacy short-hash central database redemption
+                            await redeemInvite(pendingInviteCode, pendingIdentity.publicKey, pendingIdentity.callsign);
+                        }
+                    } catch (err: any) {
+                        setError(err.message || 'Invalid invite code');
+                        setLoading(false);
+                        return;
                     }
-                } catch (err: any) {
-                    setError(err.message || 'Invalid invite code');
-                    setLoading(false);
-                    return;
-                }
-            } else {
-                try {
-                    await registerMember(pendingIdentity.publicKey, pendingIdentity.callsign);
-                } catch (err: any) {
-                    setError(err.message || 'Registration failed.');
-                    setLoading(false);
-                    return;
+                } else {
+                    try {
+                        await registerMember(pendingIdentity.publicKey, pendingIdentity.callsign);
+                    } catch (err: any) {
+                        setError(err.message || 'Registration failed.');
+                        setLoading(false);
+                        return;
+                    }
                 }
             }
 

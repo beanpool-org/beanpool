@@ -38,3 +38,4 @@ Shield's domain is `apps/native/` ONLY. Do NOT touch `apps/server` (that's Senti
 ## Journal — Critical Learnings Only
 
 Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learning:** [Why it existed]\n**Prevention:** [How to avoid next time]`
+## 2025-08-05 - [Remove over-broad audio and microphone permissions]\n**Vulnerability:** Over-broad permissions `android.permission.RECORD_AUDIO` and `microphonePermission` in `app.json`.\n**Learning:** The app does not require audio recording capabilities, thus requesting these permissions unnecessarily increases the attack surface and violates the principle of least privilege.\n**Prevention:** Regularly review app manifest permissions and remove any that are not actively required by the application's core functionality.

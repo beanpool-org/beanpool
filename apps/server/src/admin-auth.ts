@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
-import { getLocalConfig, verifyPasswordAsync } from './config/local-config.js';
+import { getLocalConfig, updateLocalConfig, verifyPasswordAsync } from './config/local-config.js';
+import { verifyTotpCode } from './totp.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
 // event loop — concurrent dashboard admin POSTs no longer serialize on a
@@ -28,6 +29,44 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         return false;
     }
     if (adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
+
+    // #135: TOTP 2FA Verification
+    // If 2FA is enabled on the node config, require a valid 6-digit TOTP code or backup code.
+    if (config.totpEnabled && config.totpSecret) {
+        const totpHeader = (typeof ctx.get === 'function' ? ctx.get('x-admin-totp') : null) ||
+            ctx.request?.headers?.['x-admin-totp'] ||
+            ctx.headers?.['x-admin-totp'] ||
+            ctx.requestBody?.totpCode ||
+            ctx.request?.body?.totpCode;
+
+        if (!totpHeader) {
+            ctx.status = 401;
+            ctx.body = { error: '2FA code required', totpRequired: true };
+            return false;
+        }
+
+        const cleanCode = String(totpHeader).trim();
+        let totpValid = verifyTotpCode(cleanCode, config.totpSecret);
+
+        // Check backup codes if 6-digit TOTP code check didn't match
+        if (!totpValid && config.totpBackupCodes && config.totpBackupCodes.length > 0) {
+            const codeIndex = config.totpBackupCodes.findIndex(c => c.toLowerCase() === cleanCode.toLowerCase());
+            if (codeIndex !== -1) {
+                totpValid = true;
+                // Consume used single-use backup code
+                const updatedCodes = [...config.totpBackupCodes];
+                updatedCodes.splice(codeIndex, 1);
+                updateLocalConfig({ totpBackupCodes: updatedCodes });
+                console.log(`[AdminAuth] 🔑 Admin authenticated using 2FA backup code (${updatedCodes.length} remaining)`);
+            }
+        }
+
+        if (!totpValid) {
+            ctx.status = 401;
+            ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+            return false;
+        }
+    }
 
     // #133: If a CSRF token is present, validate it as defence-in-depth.
     // Clients that have fetched a token via POST /api/local/admin/csrf-token must

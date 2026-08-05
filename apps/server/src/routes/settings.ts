@@ -12,10 +12,12 @@ import {
     getNodeRole, getMemberStats,
 } from '../state-engine.js';
 import {
-    getLocalConfig, saveLocalConfig, verifyPassword,
+    getLocalConfig, saveLocalConfig, updateLocalConfig, verifyPassword,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
     getGatewayConfig,
 } from '../config/local-config.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri } from '../totp.js';
+import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import type { RouteDeps } from './types.js';
@@ -394,6 +396,103 @@ router.post('/api/admin/check-update', async (ctx) => {
             error: e.message || 'Failed to check',
         };
     }
+});
+
+// ===================== TOTP 2FA ENDPOINTS (#135) =====================
+
+/**
+ * GET /api/local/admin/2fa/status — Returns current 2FA status (enabled/disabled).
+ */
+router.get('/api/local/admin/2fa/status', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const config = getLocalConfig();
+    ctx.body = {
+        success: true,
+        totpEnabled: !!config.totpEnabled,
+        hasSecret: !!config.totpSecret,
+        backupCodesRemaining: config.totpBackupCodes ? config.totpBackupCodes.length : 0,
+    };
+});
+
+/**
+ * POST /api/local/admin/2fa/setup — Generates a new secret + QR code + backup codes for setup.
+ * Does NOT enable 2FA yet until verified via /2fa/verify.
+ */
+router.post('/api/local/admin/2fa/setup', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const config = getLocalConfig();
+    const secret = generateTotpSecret();
+    const backupCodes = generateBackupCodes(8);
+    const label = config.communityName || config.callsign || 'Admin';
+    const otpauthUri = generateOtpauthUri(secret, label, 'BeanPool');
+
+    try {
+        const qrDataUrl = await qrcode.toDataURL(otpauthUri);
+        // Stash pending secret & backup codes in config (unverified until user confirms with a 6-digit code)
+        updateLocalConfig({
+            totpSecret: secret,
+            totpBackupCodes: backupCodes,
+            totpEnabled: false, // Ensure false until verified
+        });
+
+        ctx.body = {
+            success: true,
+            secret,
+            qrDataUrl,
+            otpauthUri,
+            backupCodes,
+        };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to generate QR code' };
+    }
+});
+
+/**
+ * POST /api/local/admin/2fa/verify — Verifies initial setup code and enables 2FA.
+ */
+router.post('/api/local/admin/2fa/verify', async (ctx) => {
+    // Note: If 2FA is not yet enabled (totpEnabled is false during setup), password check passes here.
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { code } = (ctx as any).requestBody || ctx.request?.body || {};
+    if (!code) {
+        ctx.status = 400;
+        ctx.body = { success: false, error: 'code is required' };
+        return;
+    }
+
+    const config = getLocalConfig();
+    if (!config.totpSecret) {
+        ctx.status = 400;
+        ctx.body = { success: false, error: 'No 2FA setup in progress — call /2fa/setup first' };
+        return;
+    }
+
+    const valid = verifyTotpCode(String(code).trim(), config.totpSecret);
+    if (!valid) {
+        ctx.status = 400;
+        ctx.body = { success: false, error: 'Invalid 6-digit 2FA code — check authenticator app time sync' };
+        return;
+    }
+
+    // Enable 2FA permanently in config
+    updateLocalConfig({ totpEnabled: true });
+    console.log('🔒 [AdminAuth] TOTP 2FA successfully enabled for admin account');
+    ctx.body = { success: true, message: '2FA enabled successfully', totpEnabled: true };
+});
+
+/**
+ * POST /api/local/admin/2fa/disable — Disables 2FA (requires valid password + 2FA code).
+ */
+router.post('/api/local/admin/2fa/disable', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    updateLocalConfig({
+        totpEnabled: false,
+        totpSecret: null,
+        totpBackupCodes: [],
+    });
+    console.log('🔓 [AdminAuth] TOTP 2FA disabled for admin account');
+    ctx.body = { success: true, message: '2FA disabled successfully', totpEnabled: false };
 });
 
 // NOTE: /api/admin/update (signal-file approach) has been removed.

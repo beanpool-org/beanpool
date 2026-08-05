@@ -28,6 +28,10 @@ export interface LocalConfig {
     adminHash: string | null;
     salt: string | null;
     joinedAt: number | null;
+    // --- TOTP 2FA for Admin (#135) ---
+    totpEnabled?: boolean;
+    totpSecret?: string | null;
+    totpBackupCodes?: string[];
     thresholds?: Thresholds;
     gateway?: GatewayConfig;
     communityName: string | null;
@@ -129,6 +133,13 @@ export function saveLocalConfig(config: LocalConfig): void {
     } catch (e) {
         console.error('[Config] Failed to save local config:', e);
     }
+}
+
+export function updateLocalConfig(updates: Partial<LocalConfig>): LocalConfig {
+    const current = getLocalConfig();
+    const updated = { ...current, ...updates };
+    saveLocalConfig(updated);
+    return updated;
 }
 
 export function hashPassword(password: string): { hash: string; salt: string } {

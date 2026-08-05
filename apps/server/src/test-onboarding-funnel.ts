@@ -152,10 +152,12 @@ async function main(): Promise<void> {
 
     assert(hasNoAvatarYet(av), 'a member with no photo yet is reported as such');
 
-    // What the route does: ask first, write, then count. The failure case is the point —
-    // a taken callsign on this very step must not book an avatar that was never saved.
-    const wouldCount = Boolean('data:image/png;base64,AAA') && hasNoAvatarYet(av);
-    assert(wouldCount, 'the route would count this one');
+    // What the route does with its request body: ask first, write, then count. The failure
+    // case is the point — a taken callsign on this very step must not book an avatar that
+    // was never saved.
+    const routeWouldCount = (incomingAvatar: unknown) => Boolean(incomingAvatar) && hasNoAvatarYet(av);
+    assert(routeWouldCount('data:image/png;base64,AAA'), 'the route would count a new photo');
+    assert(!routeWouldCount(undefined), 'a profile edit with no photo is not a first avatar');
     assert(count('avatar_published') === 0,
         'asking the question does not itself count — nothing is booked before the write');
 

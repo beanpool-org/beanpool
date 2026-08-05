@@ -2,12 +2,12 @@ import * as Device from 'expo-device';
 import { Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import Constants from 'expo-constants';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { signedRequest } from '../utils/db';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedHeaders } from '../utils/crypto';
 
-const isExpoGo = Constants.appOwnership === 'expo';
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 let Notifications: any = null;
 
 if (!isExpoGo) {

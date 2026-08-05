@@ -162,6 +162,15 @@ export async function fetchOnboardingFunnel(
         cache: 'no-store',
     });
     if (!res.ok) {
+        // 401 and 404 need telling apart, because the fix is in a different place for
+        // each and the status code alone sent someone hunting the wrong one: 401 is this
+        // node's stored admin password, 404 is a node that predates the endpoint.
+        if (res.status === 401) {
+            throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
+        }
+        if (res.status === 404) {
+            throw new Error('This node is running a build without the funnel endpoint. Redeploy it.');
+        }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();

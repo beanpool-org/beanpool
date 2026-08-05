@@ -194,7 +194,16 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     : `identity-bundle-${slug}.tar.gz`,
             );
         } catch (e: any) {
-            alert(`${kind === 'db' ? 'Database' : 'Identity bundle'} download failed: ${e.message}`);
+            // "Failed to fetch" is what a browser says when the request never got an answer
+            // at all, and on its own it leaves the operator unable to tell that from a
+            // rejected password. These endpoints are same-origin — served by the node this
+            // dashboard is loaded from, or proxied there in dev — so there is no CORS
+            // preflight in the picture and no remote hop to blame: it means the backend
+            // behind this page did not respond.
+            const detail = /failed to fetch|networkerror|load failed/i.test(e?.message || '')
+                ? "no response from the server behind this dashboard — check it's still running"
+                : (e?.message || String(e));
+            alert(`${kind === 'db' ? 'Database' : 'Identity bundle'} download failed: ${detail}`);
         } finally {
             setDownloadingKey(null);
         }
@@ -549,6 +558,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         <button
                                                             onClick={() => handleDownloadBackup('db', slug, node)}
                                                             disabled={downloadingKey === `${slug}:db`}
+                                                            aria-busy={downloadingKey === `${slug}:db`}
+                                                            // The visible label collapses to "..." to hold the row's
+                                                            // width, which a screen reader would read out as three dots
+                                                            // with no idea which of the two files is moving. The
+                                                            // accessible name says it in full instead.
+                                                            aria-label={downloadingKey === `${slug}:db`
+                                                                ? `Downloading database backup for ${node.name}`
+                                                                : `Download database backup for ${node.name}`}
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 disabled:opacity-50 text-sky-400 font-bold text-[11px] transition-all"
                                                         >
                                                             {downloadingKey === `${slug}:db` ? '...' : '⬇ DB'}
@@ -562,6 +579,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         <button
                                                             onClick={() => handleDownloadBackup('identity', slug, node)}
                                                             disabled={downloadingKey === `${slug}:identity`}
+                                                            aria-busy={downloadingKey === `${slug}:identity`}
+                                                            aria-label={downloadingKey === `${slug}:identity`
+                                                                ? `Downloading identity bundle for ${node.name}`
+                                                                : `Download identity bundle for ${node.name}`}
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 disabled:opacity-50 text-emerald-400 font-bold text-[11px] transition-all"
                                                         >
                                                             {downloadingKey === `${slug}:identity` ? '...' : '🔑 Identity'}

@@ -66,6 +66,12 @@ export function normalizeNodeUrl(rawUrl: string): string {
  * to stream to disk that also lets us set a header. The caller is expected to show a
  * pending state, since a file of real size otherwise looks like a dead button.
  */
+/** How long the blob stays alive after the click. Long enough for a slow disk write. */
+const REVOKE_DELAY_MS = 60_000;
+
+/** Above this, ask before buffering. Set far above any real node database. */
+const HUGE_DOWNLOAD_BYTES = 500 * 1024 * 1024;
+
 export async function downloadAdminFile(
     endpointPath: string,
     params: Record<string, string>,
@@ -94,6 +100,26 @@ export async function downloadAdminFile(
         throw new Error(detail);
     }
 
+    // Asked before buffering, because afterwards is too late to warn about.
+    //
+    // The response is read into the tab's heap, which the <a href> this replaced did not
+    // do — the browser streamed that straight to disk. There is no way to stream to disk
+    // AND set a header, so the buffering stays; what it must not do is silently take the
+    // tab out. The largest node database in the fleet today is around 29 MB, so this line
+    // is nowhere near normal operation: it exists so that a pathological file asks first
+    // rather than crashing on arrival. Deliberately a question and not a refusal — a hard
+    // cap would break the only way to get a backup out, and "use direct streaming
+    // instead" is not an option that exists here.
+    const declaredSize = Number(res.headers.get('content-length') || 0);
+    if (declaredSize > HUGE_DOWNLOAD_BYTES) {
+        const gb = (declaredSize / 1024 / 1024 / 1024).toFixed(1);
+        const proceed = window.confirm(
+            `${filename} is about ${gb} GB. It has to be held in memory before it can be saved, `
+            + `which may make this tab run out of memory. Download anyway?`
+        );
+        if (!proceed) return;
+    }
+
     const blob = await res.blob();
     const objectUrl = URL.createObjectURL(blob);
     try {
@@ -104,10 +130,16 @@ export async function downloadAdminFile(
         a.click();
         a.remove();
     } finally {
-        // Revoked in a finally, and after a tick: without the revoke the blob is pinned in
-        // memory for the life of the page, and a database file is not a small thing to
-        // leak on every click.
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+        // Revoked in a finally, but NOT on the next tick.
+        //
+        // Both ends of this are real. Never revoking pins the whole database in memory for
+        // the life of the page. Revoking immediately races the download: the click only
+        // *starts* the transfer, and pulling the object URL out from under a download
+        // manager that is still reading produces a silent failure or a truncated file —
+        // Firefox especially, and more likely the larger the file, which is exactly the
+        // case that matters here. A delay resolves both: the memory comes back, just not
+        // instantly.
+        setTimeout(() => URL.revokeObjectURL(objectUrl), REVOKE_DELAY_MS);
     }
 }
 

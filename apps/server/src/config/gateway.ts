@@ -43,8 +43,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
         invites: true,
         servePwa: true,
     },
+    // #132: Rate limiting enabled by default to protect against brute-force and DoS.
+    // 120 req/min is generous for legitimate clients while throttling scripted attacks.
+    // Admin control-plane routes (/api/local/admin/*) are already exempt from this limit.
     rateLimiting: {
-        enabled: false,
-        maxRequestsPerMinute: 600,
+        enabled: true,
+        maxRequestsPerMinute: 120,
     },
 };

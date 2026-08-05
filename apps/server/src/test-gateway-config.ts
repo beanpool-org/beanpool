@@ -30,8 +30,8 @@ async function runTests() {
     const initialGw = getGatewayConfig();
     assert(initialGw.features.marketplace === true, 'Marketplace feature is enabled by default');
     assert(initialGw.features.servePwa === true, 'PWA serving is enabled by default');
-    assert(initialGw.rateLimiting.enabled === false, 'Rate limiting is disabled by default');
-    assert(initialGw.rateLimiting.maxRequestsPerMinute === 600, 'Default rate limit is 600 req/min');
+    assert(initialGw.rateLimiting.enabled === true, 'Rate limiting is enabled by default (#132)');
+    assert(initialGw.rateLimiting.maxRequestsPerMinute === 120, 'Default rate limit is 120 req/min (#132)');
 
     // 2. Gateway Config Updates
     const updated = updateGatewayConfig({
@@ -66,7 +66,7 @@ async function runTests() {
     updateGatewayConfig(DEFAULT_GATEWAY_CONFIG);
     const reset = getGatewayConfig();
     assert(reset.features.marketplace === true, 'Gateway config reset back to defaults');
-    assert(reset.rateLimiting.enabled === false, 'Rate limiting reset back to disabled');
+    assert(reset.rateLimiting.enabled === true, 'Rate limiting reset back to enabled (#132)');
 
     console.log('\n⭐️ ALL PHASE 3 GATEWAY CONFIGURATION CHECKS PASSED.');
 }

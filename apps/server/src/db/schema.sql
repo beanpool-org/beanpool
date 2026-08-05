@@ -85,12 +85,14 @@ CREATE TABLE IF NOT EXISTS transactions (
     -- transactions (demurrage/escrow/genesis) are node-signed. NULL on legacy rows.
     auth_signer TEXT,
     auth_signature TEXT,
-    auth_payload TEXT
+    auth_payload TEXT,
+    project_id TEXT REFERENCES projects(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_from ON transactions(from_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_to ON transactions(to_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id);
 
 -- 4. Marketplace Posts & Photos
 CREATE TABLE IF NOT EXISTS posts (

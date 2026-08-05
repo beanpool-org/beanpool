@@ -435,7 +435,7 @@ export default function PublicProfileScreen() {
                         accessibilityState={{ busy: isBlocking }}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         disabled={isBlocking}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, opacity: isBlocking ? 0.6 : 1 }}
+                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, minWidth: 44, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, opacity: isBlocking ? 0.6 : 1 }}
                         onPress={handleBlockUser}
                     >
                         {isBlocking ? (

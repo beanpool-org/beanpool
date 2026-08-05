@@ -42,7 +42,6 @@ export async function getBlockedUsers(): Promise<string[]> {
     } catch (e) {
         console.error('[blocklist] Failed to read blocked users from AsyncStorage', e);
     }
-    cachedBlocklist = [];
     return [];
 }
 

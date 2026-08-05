@@ -1625,7 +1625,7 @@ export default function ChatScreen() {
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ padding: 14, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, alignItems: 'center', marginHorizontal: 12, marginBottom: Math.max(insets.bottom, 12), borderRadius: 12 }}>
                         <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' }}>
-                            🚫 You have blocked this user. Messaging is disabled.
+                            <Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>You have blocked this user. Messaging is disabled.
                         </Text>
                     </View>
                 ) : (

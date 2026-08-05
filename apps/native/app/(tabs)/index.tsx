@@ -4,8 +4,8 @@ import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { getPosts, getMarketplaceTransactions, reportAbuse, getBalance } from '../../utils/db';
-import { getBlockedUsers, blockUser, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
+import { getPosts, getMarketplaceTransactions, getBalance } from '../../utils/db';
+import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { requestSync } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
@@ -756,40 +756,7 @@ export default function MarketScreen() {
         setBlockedUsers(list);
     };
 
-    const handleContentAction = (targetPubkey: string, authorName: string, postId: string) => {
-        Alert.alert(
-            "Post Options",
-            `What would you like to do regarding this post by ${authorName}?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Hide Post & Block User", 
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            await blockUser(targetPubkey, identity?.publicKey, 'Objectionable Content via Marketplace', postId);
-                            Alert.alert('Blocked', `${authorName} has been blocked and removed from your feed.`);
-                        } catch (e) {
-                            Alert.alert('Error', 'Failed to block user. Please try again.');
-                        }
-                    }
-                },
-                {
-                    text: "Report Objectionable Content",
-                    style: "default",
-                    onPress: async () => {
-                        if (!identity) return;
-                        try {
-                            await reportAbuse(identity.publicKey, targetPubkey, 'Objectionable Content via Marketplace', postId);
-                            Alert.alert('Report Received', 'Thank you. The community administrators will review this post shortly.');
-                        } catch (e: any) {
-                            Alert.alert('Report Failed', e.message || 'Could not reach server.');
-                        }
-                    }
-                }
-            ]
-        );
-    };
+
 
     // Use server search results when available, otherwise filter locally
     const basePosts = searchResults !== null ? searchResults : posts;

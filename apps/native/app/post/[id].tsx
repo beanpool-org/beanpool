@@ -1456,7 +1456,7 @@ export default function PostDetailModal() {
                                     <ActivityIndicator size="small" color={colors.feedback.danger.solid} style={{ marginRight: 4 }} />
                                 ) : null}
                                 <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700', opacity: isBlocking ? 0.6 : 1 }}>
-                                    {isBlocking ? 'Blocking…' : '🚫 Block User'}
+                                    {isBlocking ? 'Blocking…' : (<><Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>Block User</>)}
                                 </Text>
                             </Pressable>
                         </View>

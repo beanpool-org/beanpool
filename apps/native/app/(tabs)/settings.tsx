@@ -1231,7 +1231,7 @@ export default function SettingsScreen() {
                     }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚫</Text></View>
                         <Text style={[styles.menuText, { flex: 1 }]}>Manage Blocked Users</Text>
-                        <Text style={styles.menuChevron}>›</Text>
+                        <Text style={styles.menuChevron} aria-hidden={true} importantForAccessibility="no">›</Text>
                     </Pressable>
                     <Pressable style={styles.menuBtn} onPress={() => Linking.openURL('https://beanpool.org/privacy.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>

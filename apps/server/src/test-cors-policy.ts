@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
+import { DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
 
 console.log('Running #131 CORS policy & credentials security test...');
 
@@ -7,13 +7,14 @@ console.log('Running #131 CORS policy & credentials security test...');
 function applyCorsHeaders(requestOrigin: string | undefined, corsAllowedOrigins: string[]) {
     const headers: Record<string, string> = {};
     const ctx = {
-        get: (headerName: string) => headerName.toLowerCase() === 'origin' ? requestOrigin : undefined,
         set: (k: string, v: string) => { headers[k] = v; }
     };
 
     const allowedOrigins = corsAllowedOrigins || [];
     if (requestOrigin) {
-        const isExplicitlyAllowed = allowedOrigins.includes(requestOrigin);
+        // Normalize trailing slashes to match browser Origin header format (mirrors federation-api.ts)
+        const normalizedReq = requestOrigin.replace(/\/+$/, '');
+        const isExplicitlyAllowed = allowedOrigins.some(o => o.replace(/\/+$/, '') === normalizedReq);
         const isWildcardAllowed = allowedOrigins.includes('*');
 
         if (isExplicitlyAllowed) {
@@ -42,9 +43,14 @@ const explicitRes = applyCorsHeaders('https://app.beanpool.org', ['https://app.b
 assert.strictEqual(explicitRes['Access-Control-Allow-Origin'], 'https://app.beanpool.org', 'Explicit origin must be reflected');
 assert.strictEqual(explicitRes['Access-Control-Allow-Credentials'], 'true', 'Explicit allowed origin permits credentials');
 
-// Non-matching origin under explicit config gets NO headers
+// 4. Non-matching origin under explicit config gets NO headers
 const explicitNonMatchRes = applyCorsHeaders('https://evil-site.com', ['https://app.beanpool.org']);
 assert.strictEqual(explicitNonMatchRes['Access-Control-Allow-Origin'], undefined, 'Non-matching origin gets no CORS headers');
 assert.strictEqual(explicitNonMatchRes['Access-Control-Allow-Credentials'], undefined, 'Non-matching origin gets no credentials');
+
+// 5. Trailing slash normalization: 'https://app.beanpool.org/' in config matches 'https://app.beanpool.org' from browser
+const trailingSlashRes = applyCorsHeaders('https://app.beanpool.org', ['https://app.beanpool.org/']);
+assert.strictEqual(trailingSlashRes['Access-Control-Allow-Origin'], 'https://app.beanpool.org', 'Trailing slash in config entry matches canonical browser origin');
+assert.strictEqual(trailingSlashRes['Access-Control-Allow-Credentials'], 'true', 'Trailing slash normalized origin permits credentials');
 
 console.log('✅ #131 CORS policy & credentials security test PASSED!');

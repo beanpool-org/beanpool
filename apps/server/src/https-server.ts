@@ -480,8 +480,8 @@ export async function startHttpsServer(port: number): Promise<void> {
         ctx.set('X-Content-Type-Options', 'nosniff');
         ctx.set('X-Frame-Options', 'DENY');
         ctx.set('X-XSS-Protection', '1; mode=block');
-        // #131: Remove connect-src wildcard to prevent unauthorized cross-origin connections
-        ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: ws:; frame-ancestors 'none'");
+        // #131: Removed connect-src wildcard; https: permits PWA→peer-node fetch calls, wss: permits encrypted WebSockets only
+        ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'");
         ctx.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         await next();
     });
@@ -498,7 +498,9 @@ export async function startHttpsServer(port: number): Promise<void> {
         const allowedOrigins = gwConfig.corsAllowedOrigins || [];
 
         if (requestOrigin) {
-            const isExplicitlyAllowed = allowedOrigins.includes(requestOrigin);
+            // Normalize trailing slashes to match browser Origin header format (mirrors federation-api.ts)
+            const normalizedReq = requestOrigin.replace(/\/+$/, '');
+            const isExplicitlyAllowed = allowedOrigins.some(o => o.replace(/\/+$/, '') === normalizedReq);
             const isWildcardAllowed = allowedOrigins.includes('*');
 
             if (isExplicitlyAllowed) {

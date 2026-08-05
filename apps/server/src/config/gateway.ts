@@ -31,6 +31,9 @@ export interface GatewayConfig {
 }
 
 export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
+    // #131: Empty by default (secure-by-default). CORS only applies to cross-origin browser requests.
+    // The built-in Settings UI and Manager Dashboard connect to the same origin (port 8443), so
+    // same-origin requests are never blocked. Only add origins here for detached PWA hosting scenarios.
     corsAllowedOrigins: [],
     adminIpAllowlist: [],
     features: {

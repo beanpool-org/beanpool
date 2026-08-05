@@ -477,9 +477,19 @@ export function WelcomePage({ onComplete }: Props) {
                             await redeemInvite(pendingInviteCode, pendingIdentity.publicKey, pendingIdentity.callsign);
                         }
                     } catch (err: any) {
-                        setError(err.message || 'Invalid invite code');
-                        setLoading(false);
-                        return;
+                        // Already-redeemed is not a failure here. Step 1 treats it as
+                        // success and carries on; this step used to strand the user on an
+                        // error instead, so a code that had in fact been redeemed — by a
+                        // Step 1 that ran before this flag existed, or by the same person
+                        // retrying — blocked the join it had already completed. The two
+                        // steps now agree about what "already a member" means.
+                        const alreadyIn = err?.message?.includes('already a member')
+                            || err?.message?.includes('already been used');
+                        if (!alreadyIn) {
+                            setError(err.message || 'Invalid invite code');
+                            setLoading(false);
+                            return;
+                        }
                     }
                 } else {
                     try {
@@ -813,6 +823,9 @@ export function WelcomePage({ onComplete }: Props) {
                                 onClick={() => {
                                     setPendingIdentity(null);
                                     setPendingAvatar(null);
+                                    // Going back discards the identity, so what was redeemed
+                                    // no longer describes what is about to be submitted.
+                                    setInviteRedeemed(false);
                                     setShowAvatarSetup(false);
                                     setError(null);
                                 }}

@@ -673,7 +673,11 @@ export default function WelcomeScreen() {
                     setPendingAvatar(null);
                     setSeedConfirmed(false);
                     setSeedCopied(false);
-                    updatePendingOnboarding({ step: 'create', avatar: null }).catch(() => {});
+                    // Going back discards the identity, so what was redeemed no longer
+                    // describes what is about to be submitted. Cleared in the persisted
+                    // record too, or a kill-and-resume would restore the stale answer.
+                    setInviteRedeemed(false);
+                    updatePendingOnboarding({ step: 'create', avatar: null, redeemed: false }).catch(() => {});
                     setMode('create');
                     setError(null);
                 }},
@@ -820,8 +824,8 @@ export default function WelcomeScreen() {
                         <Pressable
                             style={styles.backBtn}
                             onPress={() => {
-                                updatePendingOnboarding({ step: 'create', avatar: null }).catch(() => {});
-                                setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setShowAvatarPicker(false); setError(null);
+                                updatePendingOnboarding({ step: 'create', avatar: null, redeemed: false }).catch(() => {});
+                                setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setInviteRedeemed(false); setShowAvatarPicker(false); setError(null);
                             }}
                             disabled={loading}
                             accessibilityRole="button"

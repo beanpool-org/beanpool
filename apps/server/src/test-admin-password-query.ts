@@ -8,16 +8,7 @@ const TEST_PASSWORD = 'SecureAdminPassword123!';
 process.env.ADMIN_PASSWORD = TEST_PASSWORD;
 initAdminPassword();
 
-// Re-implement checkAdminAuth logic exact matching https-server.ts:
-async function checkAdminAuth(ctx: any): Promise<boolean> {
-    const config = getLocalConfig();
-    const headerPass = (typeof ctx.get === 'function' ? ctx.get('x-admin-password') : null) || ctx.request?.headers?.['x-admin-password'] || ctx.headers?.['x-admin-password'];
-    // #130: Password must travel in X-Admin-Password header or request body only, NEVER in URL query params.
-    const password = ctx.requestBody?.password || ctx.request?.body?.password || headerPass;
-    const ok = !!password && !!config.adminHash && !!config.salt
-        && await verifyPasswordAsync(password as string, config.adminHash, config.salt);
-    return ok;
-}
+import { checkAdminAuth } from './admin-auth.js';
 
 async function runTests() {
     // A. Header authentication -> ACCEPTED

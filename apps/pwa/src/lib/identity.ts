@@ -46,6 +46,34 @@ export async function loadIdentity(): Promise<BeanPoolIdentity | null> {
 }
 
 /**
+ * The one way to read a user's recovery words. Mirrors `getMnemonic` in the native app
+ * deliberately — the two clients show the same words in the same places, and a seam that
+ * exists on only one of them is a seam that gets forgotten on the other.
+ *
+ * Today it returns `identity.mnemonic` and nothing else, which is the point: every screen
+ * that shows the words goes through one function BEFORE that function has anything
+ * interesting to do. The PWA's vault (Phase C) is also the fix for these words sitting in
+ * plaintext IndexedDB, and it lands here without touching a single caller.
+ *
+ * Async now, though it need not be, so callers are already awaiting by the time it is.
+ */
+export async function getMnemonic(identity: BeanPoolIdentity | null | undefined): Promise<string[] | null> {
+    if (!identity) return null;
+    const words = identity.mnemonic;
+    return words && words.length > 0 ? words : null;
+}
+
+/**
+ * Does this identity have recovery words at all — without reading them. Stays synchronous
+ * because whether words exist is not itself a secret, and because the callers are render
+ * guards: making them await would hand each one a null first frame, which in the
+ * onboarding flow is enough to show the wrong step for a tick.
+ */
+export function hasMnemonic(identity: BeanPoolIdentity | null | undefined): identity is BeanPoolIdentity {
+    return !!identity?.mnemonic && identity.mnemonic.length > 0;
+}
+
+/**
  * Generate a new Ed25519 identity from a 12-word mnemonic.
  * Returns the identity AND the mnemonic (for one-time display).
  */

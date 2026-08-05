@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { processProfileImage } from '../../utils/image-processing';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
 import { resolveBundledAvatar } from '../../utils/bundled-avatars';
-import { updateCallsign, wipeIdentity } from '../../utils/identity';
+import { updateCallsign, wipeIdentity, getMnemonic, hasMnemonic } from '../../utils/identity';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, getPendingRecoveryRequests, approveRecoveryRequest, rejectRecoveryRequest, signedRequest } from '../../utils/db';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
@@ -511,6 +511,10 @@ export default function SettingsScreen() {
     const [seedConfirm, setSeedConfirm] = useState('');
     const [seedVisible, setSeedVisible] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
+    // Loaded at the moment of reveal, not when the screen mounts — the words should only be
+    // read once the user has typed CONFIRM and passed the biometric check, which is also
+    // exactly where the vault read belongs once there is a vault to read from.
+    const [seedWords, setSeedWords] = useState<string[] | null>(null);
     const [advancedLoading, setAdvancedLoading] = useState(false);
     const [resyncing, setResyncing] = useState(false);
     const [resyncModalVisible, setResyncModalVisible] = useState(false);
@@ -558,8 +562,9 @@ export default function SettingsScreen() {
     };
 
     const handleCopySeed = async () => {
-        if (!identity?.mnemonic) return;
-        await Clipboard.setStringAsync(identity.mnemonic.join(' '));
+        const words = await getMnemonic(identity);
+        if (!words) return;
+        await Clipboard.setStringAsync(words.join(' '));
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
     };
@@ -1776,7 +1781,7 @@ export default function SettingsScreen() {
             {mode === 'seed' && (
                 <View style={styles.card}>
                     <Text style={styles.sectionTitle}>🔑 Recovery Phrase</Text>
-                    {!identity?.mnemonic ? (
+                    {!hasMnemonic(identity) ? (
                         <Text style={styles.infoText}>
                             This identity was created before seed phrase support. Please create a new account to enable recovery phrase backups.
                         </Text>
@@ -1803,6 +1808,9 @@ export default function SettingsScreen() {
                                         onPress={async () => {
                                             const success = await authenticateUser('Confirm your security to view your recovery phrase.');
                                             if (success) {
+                                                const words = await getMnemonic(identity);
+                                                if (!words) return;
+                                                setSeedWords(words);
                                                 setSeedVisible(true);
                                                 await AsyncStorage.setItem('beanpool_identity_backed_up', 'true');
                                             }
@@ -1819,7 +1827,7 @@ export default function SettingsScreen() {
                                         Never share this phrase with anyone. Write it down on paper and keep it secure.
                                     </Text>
                                     <View style={styles.seedGrid}>
-                                        {identity.mnemonic.map((word, i) => (
+                                        {seedWords?.map((word, i) => (
                                             <View key={i} style={styles.seedWord}>
                                                 <Text style={styles.seedWordNum}>{i + 1}.</Text>
                                                 <Text style={styles.seedWordText}>{word}</Text>
@@ -1850,7 +1858,7 @@ export default function SettingsScreen() {
                     <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.feedback.danger.solid, marginBottom: 8 }}>Danger Zone</Text>
                     <Text style={styles.infoText}>This is a total nuke. It permanently destroys your private key from this phone AND removes every saved community, all of their local data, and all sync state.{'\n\n'}Your identity is one key shared across every community — without your 12-word recovery phrase (or an identity export) you will lose access to all communities and all ledger balances, everywhere. This cannot be undone.</Text>
 
-                    {identity.mnemonic ? (
+                    {hasMnemonic(identity) ? (
                         <View style={{ backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 14, marginTop: 4, marginBottom: 16 }}>
                             <Text style={{ color: colors.feedback.warning.fg, fontSize: 14, lineHeight: 20, marginBottom: 12 }}>
                                 Might you want this account back later — say, to switch to a different one and return to this one? Save your 12 recovery words first. They're the only way back.

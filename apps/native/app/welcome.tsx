@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
-import { createIdentity, createIdentityFromMnemonic, loadIdentity, BeanPoolIdentity } from '../utils/identity';
+import { createIdentity, createIdentityFromMnemonic, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
 import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
@@ -80,6 +80,27 @@ export default function WelcomeScreen() {
     const [replaceConfirmText, setReplaceConfirmText] = useState('');
     const [showOutgoingSeed, setShowOutgoingSeed] = useState(false);
     const [outgoingSeedCopied, setOutgoingSeedCopied] = useState(false);
+
+    // The words themselves, for the two screens that draw them.
+    //
+    // Held in state because reading them is asynchronous. It does not have to be today —
+    // the accessor just returns the field — but it will be once the words live in an
+    // encrypted vault behind a biometric prompt, and a render function cannot await. Doing
+    // this now means Phase C changes one function instead of every screen that shows words.
+    const [pendingWords, setPendingWords] = useState<string[] | null>(null);
+    const [outgoingWords, setOutgoingWords] = useState<string[] | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        getMnemonic(pendingIdentity).then(w => { if (!cancelled) setPendingWords(w); });
+        return () => { cancelled = true; };
+    }, [pendingIdentity]);
+
+    useEffect(() => {
+        let cancelled = false;
+        getMnemonic(outgoingIdentity).then(w => { if (!cancelled) setOutgoingWords(w); });
+        return () => { cancelled = true; };
+    }, [outgoingIdentity]);
 
     // The web trampoline copies the invite link to the clipboard before sending
     // people to the app store, but nothing can read it for them automatically —
@@ -539,8 +560,9 @@ export default function WelcomeScreen() {
 
     // --- Copy the OUTGOING account's seed to the clipboard (confirm-replace) ---
     async function handleCopyOutgoingSeed() {
-        if (!outgoingIdentity?.mnemonic) return;
-        await Clipboard.setStringAsync(outgoingIdentity.mnemonic.join(' '));
+        const words = await getMnemonic(outgoingIdentity);
+        if (!words) return;
+        await Clipboard.setStringAsync(words.join(' '));
         hapticTick();
         setOutgoingSeedCopied(true);
         setTimeout(() => setOutgoingSeedCopied(false), 2000);
@@ -591,8 +613,9 @@ export default function WelcomeScreen() {
 
     // --- Copy seed phrase to clipboard ---
     async function handleCopySeed() {
-        if (!pendingIdentity?.mnemonic) return;
-        await Clipboard.setStringAsync(pendingIdentity.mnemonic.join(' '));
+        const words = await getMnemonic(pendingIdentity);
+        if (!words) return;
+        await Clipboard.setStringAsync(words.join(' '));
         hapticTick();
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
@@ -794,7 +817,7 @@ export default function WelcomeScreen() {
                             💡 Take a screenshot or write them down somewhere safe.
                         </Text>
                         <View style={styles.seedGrid}>
-                            {pendingIdentity.mnemonic?.map((word, i) => (
+                            {pendingWords?.map((word, i) => (
                                 <View key={i} style={styles.seedCell}>
                                     <Text style={styles.seedIndex}>{i + 1}.</Text>
                                     <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
@@ -1147,7 +1170,7 @@ export default function WelcomeScreen() {
     // outgoing account's words and a typed WIPE confirmation. ---
     if (mode === 'confirmReplace' && outgoingIdentity) {
         const outCallsign = outgoingIdentity.callsign?.trim() || 'your current account';
-        const hasOutgoingSeed = !!(outgoingIdentity.mnemonic && outgoingIdentity.mnemonic.length > 0);
+        const hasOutgoingSeed = hasMnemonic(outgoingIdentity);
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
@@ -1181,7 +1204,7 @@ export default function WelcomeScreen() {
                                     ) : (
                                         <>
                                             <View style={styles.seedGrid}>
-                                                {outgoingIdentity.mnemonic?.map((word, i) => (
+                                                {outgoingWords?.map((word, i) => (
                                                     <View key={i} style={styles.seedCell}>
                                                         <Text style={styles.seedIndex}>{i + 1}.</Text>
                                                         <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>

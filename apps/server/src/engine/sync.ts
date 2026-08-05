@@ -197,6 +197,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
         throw new Error(`[Sync] Cryptographic validation failed: Missing SyncPayload signature or publicKey`);
     }
 
+    // #134: Hoist signerPeerId so it's available for the audit log write after the import.
+    let signerPeerId = 'unknown';
     try {
         const { signature, publicKey, ...basePayload } = remote;
         const serialized = JSON.stringify(basePayload);
@@ -214,7 +216,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
         }
 
         const { peerIdFromPublicKey } = await import('@libp2p/peer-id');
-        const signerPeerId = peerIdFromPublicKey(pubKey as any).toString();
+        signerPeerId = peerIdFromPublicKey(pubKey as any).toString();
         const { isPeerTrusted } = await import('../connector-manager.js');
         const signerTrust = isPeerTrusted(signerPeerId);
         if (!signerTrust.trusted || signerTrust.trustLevel === 'blocked') {
@@ -692,6 +694,27 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     if (newMembers > 0 || newPosts > 0) {
         cb.broadcast({ type: 'state_synced', newMembers, newPosts, from: remote.nodeId });
     }
+
+    // #134: Permanent audit trail — write one row per import with origin peer identity and change counts.
+    // Failures here must never abort the import itself; we log and continue.
+    try {
+        db.prepare(`
+            INSERT INTO sync_audit_log
+                (origin_peer_id, origin_node_id,
+                 new_members, updated_members, new_posts, updated_posts,
+                 new_transactions, account_changes, marketplace_txns,
+                 new_messages, tombstones_applied, conflicts_skipped)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+            signerPeerId, remote.nodeId,
+            newMembers, updatedMembers, newPosts, updatedPosts,
+            newTransactions, accountChanges, marketplaceTxns,
+            newMessages, tombstonesApplied, conflictsSkipped
+        );
+    } catch (auditErr: any) {
+        console.error(`[Sync] ⚠️ Failed to write sync_audit_log row (import itself succeeded):`, auditErr?.message || auditErr);
+    }
+
     return {
         newMembers,
         updatedMembers,

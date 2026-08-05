@@ -836,7 +836,8 @@ export async function startHttpsServer(port: number): Promise<void> {
     async function checkAdminAuth(ctx: any): Promise<boolean> {
         const config = getLocalConfig();
         const headerPass = (typeof ctx.get === 'function' ? ctx.get('x-admin-password') : null) || ctx.request?.headers?.['x-admin-password'] || ctx.headers?.['x-admin-password'];
-        const password = ctx.requestBody?.password || ctx.request?.body?.password || headerPass || ctx.query?.password || ctx.request?.query?.password;
+        // #130: Password must travel in X-Admin-Password header or request body only, NEVER in URL query params.
+        const password = ctx.requestBody?.password || ctx.request?.body?.password || headerPass;
         const ok = !!password && !!config.adminHash && !!config.salt
             && await verifyPasswordAsync(password as string, config.adminHash, config.salt);
         if (!ok) {

@@ -76,14 +76,22 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
         try {
             // Force strict database isolation and hot-swap reconnect if matrix url changes
             if (db) {
-                const oldDb = db;
-                db = null;
-                dbInitialized = false;
-                dbInitPromise = null;
+                await acquireSyncLock({ urgent: true });
                 try {
-                    await oldDb.closeAsync();
-                } catch (e) {
-                    console.warn('[DB] Reconnect close warning:', e);
+                    if (db) {
+                        const oldDb = db;
+                        db = null;
+                        currentDbName = null;
+                        dbInitialized = false;
+                        dbInitPromise = null;
+                        try {
+                            await oldDb.closeAsync();
+                        } catch (e) {
+                            console.warn('[DB] Reconnect close warning:', e);
+                        }
+                    }
+                } finally {
+                    releaseSyncLock();
                 }
             }
 
@@ -113,16 +121,22 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 }
 
 export async function closeDB() {
-    if (db) {
-        const oldDb = db;
-        db = null;
-        dbInitialized = false;
-        dbInitPromise = null;
-        try {
-            await oldDb.closeAsync();
-        } catch (e) {
-            console.warn('[DB] closeDB warning:', e);
+    await acquireSyncLock({ urgent: true });
+    try {
+        if (db) {
+            const oldDb = db;
+            db = null;
+            currentDbName = null;
+            dbInitialized = false;
+            dbInitPromise = null;
+            try {
+                await oldDb.closeAsync();
+            } catch (e) {
+                console.warn('[DB] closeDB warning:', e);
+            }
         }
+    } finally {
+        releaseSyncLock();
     }
 }
 

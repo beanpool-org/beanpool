@@ -85,6 +85,9 @@ importers:
       '@beanpool/core':
         specifier: workspace:*
         version: link:../../packages/beanpool-core
+      '@expo/config-plugins':
+        specifier: ~55.0.0
+        version: 55.0.10
       '@expo/metro-runtime':
         specifier: ~55.0.11
         version: 55.0.11(@expo/dom-webview@55.0.6)(expo@55.0.27)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.84.1(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)

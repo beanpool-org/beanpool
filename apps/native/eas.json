@@ -1,7 +1,5 @@
-{
   "cli": {
-    "version": ">= 7.0.0",
-    "packageManager": "pnpm"
+    "version": ">= 7.0.0"
   },
   "build": {
     "development": {

@@ -1411,7 +1411,15 @@ export default function PostDetailModal() {
                                 accessibilityRole="button"
                                 accessibilityLabel="Report Post"
                                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                                onPress={() => setShowReportForm(!showReportForm)}
+                                onPress={() => {
+                                    const next = !showReportForm;
+                                    setShowReportForm(next);
+                                    if (next) {
+                                        setTimeout(() => {
+                                            scrollViewRef.current?.scrollToEnd({ animated: true });
+                                        }, 150);
+                                    }
+                                }}
                             >
                                 <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' }}>🚩 Report Post</Text>
                             </Pressable>

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { getLocalConfig, verifyPasswordAsync } from './config/local-config.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
@@ -27,10 +28,70 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         return false;
     }
     if (adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
+
+    // #133: If a CSRF token is present, validate it as defence-in-depth.
+    // Clients that have fetched a token via POST /api/local/admin/csrf-token must
+    // send it back. Clients that haven't yet adopted CSRF tokens are unaffected
+    // (token absent → skip check). This makes enforcement opt-in but strictly
+    // validated once opted in, avoiding a lockout during the migration window.
+    const csrfHeader: string | undefined =
+        (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
+        ctx.request?.headers?.['x-csrf-token'] ||
+        ctx.headers?.['x-csrf-token'];
+    if (csrfHeader && !validateCsrfToken(ctx)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Invalid or expired CSRF token' };
+        return false;
+    }
+
     return true;
 }
 
 export function resetAdminAuthTarpit(): void {
     adminAuthFailures = 0;
     adminFailWindowStart = Date.now();
+}
+
+// ===================== CSRF TOKEN STORE =====================
+// #133: Short-lived CSRF tokens issued after successful password verification.
+// Tokens are 32 random hex bytes, expire after 4 hours, and must be echoed
+// back in the X-CSRF-Token header on all admin state-mutation requests.
+// This provides defence-in-depth against XSS-based CSRF attacks.
+
+const CSRF_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const csrfTokens = new Map<string, number>(); // token → expiry timestamp
+
+/** Issue a new CSRF token (called after successful password authentication). */
+export function issueCsrfToken(): string {
+    const token = crypto.randomBytes(32).toString('hex');
+    csrfTokens.set(token, Date.now() + CSRF_TOKEN_TTL_MS);
+    // Prune expired tokens opportunistically (hoist now to avoid repeated calls)
+    const now = Date.now();
+    for (const [t, exp] of csrfTokens) {
+        if (now > exp) csrfTokens.delete(t);
+    }
+    return token;
+}
+
+/** Validate a CSRF token from the request's X-CSRF-Token header. */
+export function validateCsrfToken(ctx: any): boolean {
+    const token: string | undefined =
+        (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
+        ctx.request?.headers?.['x-csrf-token'] ||
+        ctx.headers?.['x-csrf-token'];
+    if (!token) return false;
+    const expiry = csrfTokens.get(token);
+    if (!expiry) return false;
+    if (Date.now() > expiry) {
+        csrfTokens.delete(token); // eagerly remove expired entries on encounter
+        return false;
+    }
+    // Sliding window: refresh TTL on valid use
+    csrfTokens.set(token, Date.now() + CSRF_TOKEN_TTL_MS);
+    return true;
+}
+
+/** Revoke a specific CSRF token (on logout). */
+export function revokeCsrfToken(token: string): void {
+    csrfTokens.delete(token);
 }

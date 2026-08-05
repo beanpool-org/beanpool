@@ -42,6 +42,22 @@ export function normalizeNodeUrl(rawUrl: string): string {
     return trimmed.replace(/\/+$/, '');
 }
 
+// Admin credentials travel in the X-Admin-Password header only, never as a query
+// parameter. checkAdminAuth reads the header (https-server.ts) ahead of ?password= in its
+// fallback chain, so the header alone is sufficient — and a credential in a URL ends up in
+// reverse-proxy access logs, browser history and Referer headers. The node's own logger
+// does redact `password=...`, but only at 12+ characters and only for logs it writes
+// itself, neither of which helps once the URL has left the browser.
+//
+// The server still accepts all four transports, so this is a client-side hardening: no
+// node needs redeploying for it, and nothing breaks if one is on an older build.
+//
+// STILL OUTSTANDING, and worse than these were: the two backup download links in
+// TopologyModule.tsx put the password in an <a href>, where it persists in the DOM as well
+// as in history. A plain link cannot carry a header, so fixing those needs either a
+// fetch-to-blob download (awkward for a database file of real size) or a short-lived
+// one-time download token issued by the node. That is server work, not a find-and-replace.
+
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string): Promise<DiagnosticsResponse> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) {
@@ -49,9 +65,6 @@ export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string):
     }
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/diagnostics`);
-    if (adminPassword) {
-        url.searchParams.set('password', adminPassword);
-    }
     const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',
@@ -91,16 +104,6 @@ export async function fetchOnboardingFunnel(
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/onboarding-funnel`);
     url.searchParams.set('days', String(days));
-    // Password goes in the header only, never the query string. checkAdminAuth accepts
-    // the header on its own, and a credential in a URL ends up in proxy access logs,
-    // browser history and Referer headers. The node's own logger does redact
-    // `password=...`, but only at 12+ characters and only for its own logs — none of
-    // which helps once the URL has left the browser.
-    //
-    // NB fetchDiagnostics and fetchGatewayConfig above still pass it as a query param.
-    // Same fix applies, but it wants its own PR: if any deployment sits behind something
-    // that strips custom headers, removing their fallback locks that operator out of
-    // their own dashboard, and that needs testing against a real node first.
     const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',
@@ -118,9 +121,6 @@ export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string
     }
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/gateway`);
-    if (adminPassword) {
-        url.searchParams.set('password', adminPassword);
-    }
     const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',
@@ -559,9 +559,6 @@ export async function getRegistrarPending(
     const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
     const endpoint = cleanUrl ? `${cleanUrl}/api/local/admin/registrar/pending` : '/api/local/admin/registrar/pending';
     const url = new URL(endpoint, typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost');
-    if (adminPassword) {
-        url.searchParams.set('password', adminPassword);
-    }
     const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',

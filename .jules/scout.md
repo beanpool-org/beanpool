@@ -35,3 +35,7 @@ Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager
 *(Add entries only for surprising findings, not routine work)*
 
 Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning:** [Why it was interesting]\n**Action:** [How to find similar gaps next time]`
+## 2024-05-30 - [Federation API Info Endpoint Coverage]
+**Gap found:** /api/node/info in apps/server/src/federation-api.ts had no corresponding test file.
+**Learning:** Checking the metadata response based on active connections and posts is key.
+**Action:** Created test-federation-api.ts and verified.

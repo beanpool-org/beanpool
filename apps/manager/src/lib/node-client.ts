@@ -51,12 +51,65 @@ export function normalizeNodeUrl(rawUrl: string): string {
 //
 // The server still accepts all four transports, so this is a client-side hardening: no
 // node needs redeploying for it, and nothing breaks if one is on an older build.
-//
-// STILL OUTSTANDING, and worse than these were: the two backup download links in
-// TopologyModule.tsx put the password in an <a href>, where it persists in the DOM as well
-// as in history. A plain link cannot carry a header, so fixing those needs either a
-// fetch-to-blob download (awkward for a database file of real size) or a short-lived
-// one-time download token issued by the node. That is server work, not a find-and-replace.
+
+/**
+ * Download an admin-gated file without putting the credential in a URL.
+ *
+ * The backup endpoints used to be plain `<a href>` links with `?password=` on them, which
+ * is the worst version of this problem: a link's URL persists in the DOM as well as in
+ * browser history, and one of these two serves the node's identity keys. A link cannot
+ * carry a header, so it has to become a fetch — the response is buffered and handed to the
+ * browser through a transient object URL instead.
+ *
+ * Buffering is acceptable here and not elsewhere: the fleet manager is a local desktop
+ * dashboard downloading a community node's SQLite file, and there is no browser-side way
+ * to stream to disk that also lets us set a header. The caller is expected to show a
+ * pending state, since a file of real size otherwise looks like a dead button.
+ */
+export async function downloadAdminFile(
+    endpointPath: string,
+    params: Record<string, string>,
+    adminPassword: string | undefined,
+    filename: string,
+): Promise<void> {
+    const headers: Record<string, string> = {};
+    if (adminPassword) {
+        headers['X-Admin-Password'] = adminPassword;
+    }
+    const url = new URL(endpointPath, window.location.origin);
+    for (const [k, v] of Object.entries(params)) {
+        url.searchParams.set(k, v);
+    }
+
+    const res = await fetch(url.toString(), { headers, cache: 'no-store' });
+    if (!res.ok) {
+        // The endpoints answer 404 with a JSON reason worth surfacing — "no backup yet for
+        // this node" is a different problem from "wrong password", and a bare HTTP code
+        // would leave the operator guessing which.
+        let detail = `HTTP ${res.status}`;
+        try {
+            const body = await res.json();
+            if (body?.error) detail = body.error;
+        } catch { /* not JSON — the status is all we have */ }
+        throw new Error(detail);
+    }
+
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    } finally {
+        // Revoked in a finally, and after a tick: without the revoke the blob is pinned in
+        // memory for the life of the page, and a database file is not a small thing to
+        // leak on every click.
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    }
+}
 
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string): Promise<DiagnosticsResponse> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

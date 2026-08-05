@@ -514,6 +514,7 @@ export async function startHttpsServer(port: number): Promise<void> {
                 // Wildcard allowed: set '*' origin, DO NOT set Access-Control-Allow-Credentials to true
                 ctx.set('Access-Control-Allow-Origin', '*');
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce');
+                ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
             }
         }

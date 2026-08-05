@@ -28,6 +28,22 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         return false;
     }
     if (adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
+
+    // #133: If a CSRF token is present, validate it as defence-in-depth.
+    // Clients that have fetched a token via POST /api/local/admin/csrf-token must
+    // send it back. Clients that haven't yet adopted CSRF tokens are unaffected
+    // (token absent → skip check). This makes enforcement opt-in but strictly
+    // validated once opted in, avoiding a lockout during the migration window.
+    const csrfHeader: string | undefined =
+        (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
+        ctx.request?.headers?.['x-csrf-token'] ||
+        ctx.headers?.['x-csrf-token'];
+    if (csrfHeader && !validateCsrfToken(ctx)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Invalid or expired CSRF token' };
+        return false;
+    }
+
     return true;
 }
 
@@ -49,9 +65,10 @@ const csrfTokens = new Map<string, number>(); // token → expiry timestamp
 export function issueCsrfToken(): string {
     const token = crypto.randomBytes(32).toString('hex');
     csrfTokens.set(token, Date.now() + CSRF_TOKEN_TTL_MS);
-    // Prune expired tokens opportunistically
+    // Prune expired tokens opportunistically (hoist now to avoid repeated calls)
+    const now = Date.now();
     for (const [t, exp] of csrfTokens) {
-        if (Date.now() > exp) csrfTokens.delete(t);
+        if (now > exp) csrfTokens.delete(t);
     }
     return token;
 }
@@ -64,7 +81,11 @@ export function validateCsrfToken(ctx: any): boolean {
         ctx.headers?.['x-csrf-token'];
     if (!token) return false;
     const expiry = csrfTokens.get(token);
-    if (!expiry || Date.now() > expiry) return false;
+    if (!expiry) return false;
+    if (Date.now() > expiry) {
+        csrfTokens.delete(token); // eagerly remove expired entries on encounter
+        return false;
+    }
     // Sliding window: refresh TTL on valid use
     csrfTokens.set(token, Date.now() + CSRF_TOKEN_TTL_MS);
     return true;
@@ -74,4 +95,3 @@ export function validateCsrfToken(ctx: any): boolean {
 export function revokeCsrfToken(token: string): void {
     csrfTokens.delete(token);
 }
-

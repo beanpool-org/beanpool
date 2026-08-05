@@ -7,6 +7,7 @@
  * C. validateCsrfToken() rejects unknown/empty tokens
  * D. revokeCsrfToken() invalidates a previously valid token
  * E. Expired tokens are rejected (simulated via clock manipulation)
+ * F. Expired tokens are eagerly deleted from the store on encounter
  */
 import assert from 'node:assert';
 import { issueCsrfToken, validateCsrfToken, revokeCsrfToken } from './admin-auth.js';
@@ -44,5 +45,22 @@ revokeCsrfToken(token1);
 assert.strictEqual(validateCsrfToken(makeCtx(token1)), false, 'Revoked token must be rejected');
 // token2 should still be valid
 assert.strictEqual(validateCsrfToken(makeCtx(token2)), true, 'Other tokens unaffected by single revocation');
+
+// E. Expired tokens are rejected (simulate by monkey-patching Date.now)
+const token3 = issueCsrfToken();
+assert.strictEqual(validateCsrfToken(makeCtx(token3)), true, 'Fresh token3 must be valid before expiry');
+
+const realDateNow = Date.now;
+try {
+    // Jump clock 5 hours into the future (past the 4-hour TTL)
+    Date.now = () => realDateNow() + 5 * 60 * 60 * 1000;
+    assert.strictEqual(validateCsrfToken(makeCtx(token3)), false, 'Expired token must be rejected');
+} finally {
+    Date.now = realDateNow;
+}
+
+// F. Expired token eagerly deleted — after expiry check above, token3 should be gone from the store
+//    Restore real clock and verify it can't be re-validated even if clock is reset
+assert.strictEqual(validateCsrfToken(makeCtx(token3)), false, 'Eagerly deleted expired token stays rejected after clock restore');
 
 console.log('✅ #133 CSRF protection test PASSED!');

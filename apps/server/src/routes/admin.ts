@@ -32,11 +32,24 @@ import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
+import { issueCsrfToken } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { checkAdminAuth, activeConnections, calculateAnalytics } = deps;
+
+// ===================== CSRF TOKEN ENDPOINT =====================
+// #133: Clients call this with their password to receive a short-lived CSRF token.
+// The token must be sent as X-CSRF-Token on subsequent admin state-mutation requests.
+// This provides defence-in-depth beyond the X-Admin-Password header.
+
+router.post('/api/local/admin/csrf-token', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const token = issueCsrfToken();
+    ctx.set('X-CSRF-Token', token);
+    ctx.body = { csrfToken: token };
+});
 
 // ===================== ADMIN ACTIONS (Requires Password) =====================
 

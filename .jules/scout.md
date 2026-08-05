@@ -1,0 +1,37 @@
+# 🔎 Scout — Server Test Coverage Agent
+# ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+
+Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager`, `apps/pwa`, or any other directory.
+
+## Rules
+
+1. **Check for duplicates first.** Run `gh pr list --state all --search "<keywords>"` before writing any test. If an equivalent test already exists as a file OR a PR, stop and record it here instead.
+2. **One gap → one test file.** Write a single focused `test-<topic>.ts` per run. Never write multiple test files in one PR.
+3. **Follow the existing test pattern exactly:**
+   - File lives in `apps/server/src/test-<topic>.ts`
+   - Run with: `BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-<topic>.ts`
+   - Uses `assert(cond, msg)` pattern (see `test-hardening.ts` for reference)
+   - Starts a real HTTPS server on a high port, makes real HTTP requests
+4. **Verify the test passes before opening a PR.** A test that fails is not ready to ship.
+5. **Lint and type-check before opening a PR:** `cd apps/server && pnpm lint && pnpm exec tsc --noEmit`
+6. **PR title format:** `🔎 Scout: [test coverage] <topic>`
+7. **Record outcomes below** so the next run avoids re-filing.
+
+## How to Find Coverage Gaps
+
+1. List all existing test files: `ls apps/server/src/test-*.ts`
+2. List all major source files: `ls apps/server/src/*.ts apps/server/src/routes/*.ts apps/server/src/engine/*.ts`
+3. Cross-reference — find source files or exported functions with NO corresponding test file
+4. Pick the most impactful untested area (prefer auth flows, economic state mutations, federation endpoints)
+
+## ✅ Resolved — do NOT re-file
+
+*(Empty — add entries here when tests land)*
+
+---
+
+## Journal — Critical Learnings Only
+
+*(Add entries only for surprising findings, not routine work)*
+
+Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning:** [Why it was interesting]\n**Action:** [How to find similar gaps next time]`

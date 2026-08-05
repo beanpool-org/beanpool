@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
@@ -17,7 +17,7 @@ import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
-import { updateMemberProfile, fetchNodeCallsign } from '../utils/db';
+import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 
@@ -101,6 +101,19 @@ export default function WelcomeScreen() {
         getMnemonic(outgoingIdentity).then(w => { if (!cancelled) setOutgoingWords(w); });
         return () => { cancelled = true; };
     }, [outgoingIdentity]);
+
+    // Count step 3 being drawn — once per join, not once per render.
+    //
+    // The variant is the keeper-count state from the design doc, and in Phase A it is
+    // always 'C': the user's twelve words and nothing else. It is sent anyway rather than
+    // left blank, so the day states A and B become reachable the dashboard already has the
+    // shape to compare them against, instead of a cliff where the old rows have no variant.
+    const protectionShownRef = useRef(false);
+    useEffect(() => {
+        if (mode !== 'seedBackup' || protectionShownRef.current) return;
+        protectionShownRef.current = true;
+        recordOnboardingEvent('protection_shown', 'C');
+    }, [mode]);
 
     // The web trampoline copies the invite link to the clipboard before sending
     // people to the app store, but nothing can read it for them automatically —
@@ -462,6 +475,13 @@ export default function WelcomeScreen() {
             // Refresh node recognition
             await recheckNodeStatus().catch(() => {});
 
+            // Counted here, after the work above has actually landed, rather than on the
+            // tap that started it. Recording on the tap booked a completion for anyone the
+            // catch below then stranded with an error, and booked it again on every retry —
+            // the same mistake `hasNoAvatarYet` exists to prevent for step 2, where asking
+            // must happen before the write and counting after it.
+            recordOnboardingEvent('guide_complete');
+
             // Final step — enter the app
             setIdentity(pendingIdentity);
         } catch (err: any) {
@@ -816,6 +836,16 @@ export default function WelcomeScreen() {
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
                             💡 Take a screenshot or write them down somewhere safe.
                         </Text>
+                        {/*
+                          Says out loud that this screen is not the only chance. Without it,
+                          removing the gate just leaves people guessing whether skipping
+                          costs them something permanent — and the ones most likely to skip
+                          are the ones with no pen to hand, not the ones who do not care.
+                        */}
+                        <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
+                            No pen handy? Carry on — you can come back to these any time under
+                            Settings → Recovery Phrase.
+                        </Text>
                         <View style={styles.seedGrid}>
                             {/*
                               The words arrive a tick after this screen mounts, since reading
@@ -854,23 +884,41 @@ export default function WelcomeScreen() {
                             </Text>
                         </Pressable>
 
+                        {/*
+                          The tick is now a claim the user makes, not a toll they pay.
+                          Nothing is disabled behind it.
+
+                          It used to gate the only way forward, which made the last step of
+                          joining a community a checkbox someone had to tick to get past —
+                          so people ticked it without reading, and the screen taught them
+                          that the words did not matter. Worse, anyone who genuinely could
+                          not write them down right then was stuck at a dead end with an
+                          account already created on the node. Leaving it optional means
+                          ticking it can go back to meaning what it says.
+                        */}
                         <Pressable
                             style={[styles.checkbox, seedConfirmed && styles.checkboxActive]}
                             onPress={() => setSeedConfirmed(!seedConfirmed)}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: seedConfirmed }}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: seedConfirmed }}
+                            // Without this the announcement is "white large square, I've saved
+                            // these words, check box, unchecked" — the tick state read out
+                            // twice, once as a described emoji. The role and state already
+                            // carry it, so the label is just the sentence.
+                            accessibilityLabel="I've saved these words"
                         >
                             <Text style={styles.checkboxText}>
-                                {seedConfirmed ? '✅ ' : '⬜ '} I've saved these words ✓
+                                {seedConfirmed ? '✅ ' : '⬜ '} I've saved these words
                             </Text>
                         </Pressable>
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
                         <Pressable
-                            style={[styles.primaryBtn, !seedConfirmed && styles.disabledBtn]}
-                            disabled={!seedConfirmed || loading}
+                            style={[styles.primaryBtn, loading && styles.disabledBtn]}
+                            disabled={loading}
                             onPress={() => {
+                                recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
                                 updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
                                 setMode('onboardingGuide');
                             }}
@@ -968,7 +1016,38 @@ export default function WelcomeScreen() {
                             </Text>
                         </View>
 
-                        {/* Card 4: Where to Start */}
+                        {/*
+                          Card 4: how you get back in.
+                          
+                          The design doc's wording for this card describes Phase B — an
+                          account split into pieces held by your phone, your hub and the
+                          person who invited you, any three of which bring you back. None of
+                          that machinery exists yet, so printing it here would tell a brand
+                          new member they are protected by keepers they do not have. That is
+                          precisely the false all-clear this redesign is meant to remove, so
+                          the card says what is true today and gets the keeper wording in
+                          Phase B, when the keepers are real.
+                        */}
+                        <View style={guideStyles.card}>
+                            <Text style={guideStyles.cardTitle}>🔑 Getting Back In</Text>
+                            {/* Spaced locally rather than by changing guideStyles.cardText,
+                                which has no marginBottom because the other three cards end on
+                                it. This is the only card where it is followed by bullets. */}
+                            <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
+                                Right now your 12 words are the only way back into your account. No
+                                email, no password reset — nobody, including your hub, can restore it
+                                for you.
+                            </Text>
+                            <Text style={guideStyles.bulletItem}>
+                                📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
+                            </Text>
+                            <Text style={guideStyles.bulletItem}>
+                                🤝 Soon you'll be able to share the job with your hub and the person who
+                                invited you, so losing your phone stops being a problem you carry alone.
+                            </Text>
+                        </View>
+
+                        {/* Card 5: Where to Start */}
                         <View style={guideStyles.card}>
                             <Text style={guideStyles.cardTitle}>🚀 Where to Start?</Text>
                             <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (blue) and needs (orange) near you.</Text>

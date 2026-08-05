@@ -10,7 +10,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
-import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership } from '../lib/api';
+import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership, recordOnboardingEvent} from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 
 
@@ -228,6 +228,18 @@ export function WelcomePage({ onComplete }: Props) {
     const [openFaq, setOpenFaq] = useState<number | null>(null);
 
     const [showAvatarSetup, setShowAvatarSetup] = useState(false);
+
+    // Count the backup step being drawn — once per join, not once per render. The variant is
+    // the keeper-count state from the design doc; in Phase A it is always 'C', the user's
+    // twelve words and nothing else. Sent anyway rather than left blank, so that when states
+    // A and B become reachable the dashboard already has the shape to compare against.
+    const protectionShownRef = useRef(false);
+    useEffect(() => {
+        const onBackupStep = hasMnemonic(pendingIdentity) && !showAvatarSetup && !showOnboardingGuide;
+        if (!onBackupStep || protectionShownRef.current) return;
+        protectionShownRef.current = true;
+        recordOnboardingEvent('protection_shown', 'C');
+    }, [pendingIdentity, showAvatarSetup, showOnboardingGuide]);
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -467,6 +479,12 @@ export function WelcomePage({ onComplete }: Props) {
                 }
             }
             
+            // Counted here, after registration has actually landed, rather than on the tap
+            // that started it. Both branches above bail out early with an error, so counting
+            // on the tap booked a completion for people who never got in — and booked it
+            // again each time they retried.
+            recordOnboardingEvent('guide_complete');
+
             // Onboarding complete — explicitly ask for location once
             if ('geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
@@ -855,7 +873,33 @@ export function WelcomePage({ onComplete }: Props) {
                                     </p>
                                 </div>
 
-                                {/* Card 4: Where to Start */}
+                                {/*
+                                  Card 4: how you get back in.
+
+                                  The design doc's wording describes Phase B — an account
+                                  split into pieces held by your phone, your hub and whoever
+                                  invited you. None of that exists yet, and printing it now
+                                  would tell a brand new member they are protected by keepers
+                                  they do not have: exactly the false all-clear this redesign
+                                  is meant to remove. It says what is true today, and gets
+                                  the keeper wording in Phase B when the keepers are real.
+                                */}
+                                <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-2">
+                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🔑 Getting Back In</h4>
+                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
+                                        Right now your 12 words are the only way back into your account. No email,
+                                        no password reset — nobody, including your hub, can restore it for you.
+                                    </p>
+                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
+                                        📝 Find them any time under <strong>Settings → Recovery Phrase</strong>.
+                                    </p>
+                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
+                                        🤝 Soon you'll be able to share the job with your hub and the person who
+                                        invited you, so losing your phone stops being a problem you carry alone.
+                                    </p>
+                                </div>
+
+                                {/* Card 5: Where to Start */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-2">
                                     <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🚀 Where to Start?</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
@@ -932,6 +976,18 @@ export function WelcomePage({ onComplete }: Props) {
                                 ))}
                             </div>
 
+                            {/*
+                              Says out loud that this is not the only chance. Removing the
+                              gate without this just leaves people guessing whether skipping
+                              costs them something permanent — and the ones most likely to
+                              skip are the ones with no pen to hand, not the ones who do not
+                              care.
+                            */}
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                No pen handy? Carry on — you can come back to these any time under
+                                Settings → Recovery Phrase.
+                            </p>
+
                             <label htmlFor="seedConfirmed" style={{
                                 display: 'flex', alignItems: 'center', gap: '0.5rem',
                                 fontSize: '0.8rem', color: 'var(--text-muted)',
@@ -947,28 +1003,37 @@ export function WelcomePage({ onComplete }: Props) {
                                 I've written these words down somewhere safe
                             </label>
 
+
                             {error && (
                                 <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>
                                     {error}
                                 </p>
                             )}
 
+                            {/*
+                              No longer disabled behind the checkbox. Gating the only way
+                              forward on a tick box taught people that ticking it was the
+                              price of entry rather than a statement about their words, and
+                              stranded anyone who could not write them down right then at a
+                              dead end — with an account already created on the node.
+                            */}
                             <button
                                 onClick={() => {
+                                    recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
                                     setShowOnboardingGuide(true);
                                     setError(null);
                                 }}
-                                disabled={!seedConfirmed || loading}
+                                disabled={loading}
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
                                     border: 'none',
-                                    background: !seedConfirmed ? '#334155' : loading ? '#555' : '#2563eb',
+                                    background: loading ? '#555' : '#2563eb',
                                     color: 'var(--text-primary)', fontSize: '1rem',
-                                    fontWeight: 600, cursor: !seedConfirmed ? 'not-allowed' : 'pointer',
+                                    fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
                             >
-                                Continue →
+                                Next →
                             </button>
 
                             <button

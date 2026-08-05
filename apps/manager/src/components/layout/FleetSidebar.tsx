@@ -3,7 +3,13 @@ import type { NodeProfile } from '../../lib/profiles';
 
 export type TabId = 'overview' | 'analytics' | 'gateway' | 'members' | 'topology' | 'invites' | 'onboarding' | 'logs' | 'ai';
 
-export type NodeHealthStatus = 'online' | 'warning' | 'critical' | 'alert' | 'offline' | 'loading';
+/**
+ * `auth_required` is kept apart from `offline` because the two need different actions from
+ * the operator: one is "the node is down", the other is "this manager has the wrong
+ * password for a node that is up and answering". Collapsing them sent someone looking for
+ * a network fault when the node was healthy.
+ */
+export type NodeHealthStatus = 'online' | 'warning' | 'critical' | 'alert' | 'offline' | 'auth_required' | 'loading';
 
 export interface AlertCounts {
     critical: number;
@@ -239,7 +245,12 @@ export function FleetSidebar({
                                                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                                                 </>
                                             ) : health === 'offline' ? (
-                                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                                                <span title="Unreachable" className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                                            ) : health === 'auth_required' ? (
+                                                // Static amber: not red, because the node is up and answering — it is
+                                                // this manager that has the wrong password. Not the pulsing amber of
+                                                // `warning` either, since nothing is in progress; it waits on a person.
+                                                <span title="Admin password needed" className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                                             ) : (
                                                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500 animate-pulse"></span>
                                             )}

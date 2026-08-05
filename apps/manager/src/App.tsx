@@ -61,6 +61,12 @@ function isAuthFailure(message: string): boolean {
  * changes — however it changed, whether through the edit modal, an imported profile
  * list, or someone editing localStorage by hand — without keeping a second copy of the
  * secret around to do it.
+ *
+ * Being 32-bit it can in principle collide, which would leave the poll switched off for
+ * one node after a password change. The length prefix narrows it further, the odds are
+ * remote, and the cost is one press of Refresh — so a wider hash would buy nothing here.
+ * `charCodeAt` over UTF-16 units is fine for the same reason: it only ever has to be
+ * consistent with itself, within one tab, for as long as that tab is open.
  */
 function credentialDigest(password?: string): string {
     if (!password) return 'none';
@@ -221,6 +227,13 @@ export function App() {
             }));
             try {
                 const data = await fetchDiagnostics(p.url, p.adminPassword);
+                // Lifted on any success, not just on a credential edit. The password can
+                // also start working without this manager touching it — the operator
+                // resets it on the node itself to the value already stored here — and
+                // without this the digest would still match, so the automatic poll would
+                // stay switched off for a node that is answering perfectly well, until
+                // somebody thought to open the edit modal and press save.
+                delete authBlockedRef.current[p.id];
                 setFleetDiags((prev) => ({
                     ...prev,
                     [p.id]: { diag: data, loading: false, error: null },
@@ -269,14 +282,19 @@ export function App() {
             } catch (e: any) {
                 const errMsg = e.message || 'Failed to connect';
                 if (!errMsg.includes('429')) {
-                    if (isAuthFailure(errMsg)) {
+                    const authFailed = isAuthFailure(errMsg);
+                    if (authFailed) {
                         authBlockedRef.current[p.id] = credentialDigest(p.adminPassword);
                     }
                     setFleetDiags((prev) => ({
                         ...prev,
                         [p.id]: { diag: null, loading: false, error: errMsg },
                     }));
-                    setNodeHealthMap((prev) => ({ ...prev, [p.id]: 'offline' }));
+                    // A rejected password is not an outage. Reporting it as `offline` sent
+                    // someone hunting a network fault on a node that was up and answering
+                    // every request it was asked — the sidebar now says which of the two
+                    // it is, and they need different things done about them.
+                    setNodeHealthMap((prev) => ({ ...prev, [p.id]: authFailed ? 'auth_required' : 'offline' }));
                     if (p.id === activeNode?.id) {
                         setDiagError(errMsg);
                     }

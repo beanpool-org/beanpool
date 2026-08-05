@@ -381,6 +381,27 @@ export function initStateEngine(): void {
         persistCommonsBalance();
     }, 5 * 60 * 1000);
 
+    // #129: Run the ledger conservation audit IMMEDIATELY at startup so drift
+    // appears in the boot log and cannot go unnoticed between releases.
+    // The delayed versions below handle periodic re-checks during operation.
+    try {
+        const auditResult = runLedgerAudit();
+        if (!auditResult.ok) {
+            console.error('');
+            console.error('╔════════════════════════════════════════════════════════╗');
+            console.error('║ ⚠️  LEDGER CONSERVATION WARNING — NODE STARTED WITH DRIFT ║');
+            console.error('╠════════════════════════════════════════════════════════╣');
+            console.error(`║  sum(balances) = ${String(auditResult.sumBalances.toFixed(4)).padEnd(10)} baseline = ${String(auditResult.baseline.toFixed(4)).padEnd(10)}    ║`);
+            console.error(`║  drift         = ${String(auditResult.drift.toFixed(4)).padEnd(10)} stranded = ${String(auditResult.strandedEscrows).padEnd(10)}    ║`);
+            console.error('║                                                        ║');
+            console.error('║  Run POST /api/local/admin/ledger-audit to inspect.   ║');
+            console.error('║  Run POST /api/local/admin/ledger-rebaseline to       ║');
+            console.error('║  acknowledge known drift with a written explanation.  ║');
+            console.error('╚════════════════════════════════════════════════════════╝');
+            console.error('');
+        }
+    } catch (e) { console.warn('[LedgerAudit] startup check failed:', e); }
+
     // Daily ledger conservation audit (also once shortly after boot)
     setTimeout(() => {
         try { runLedgerAudit(); } catch (e) { console.warn('[LedgerAudit] failed:', e); }

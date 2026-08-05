@@ -23,6 +23,7 @@ import {
     createVotingRound, closeVotingRound, adminRejectProject,
     getActiveRound, getGovernanceCredits,
     getVotingRounds, getCommonsBalance,
+    runLedgerAudit,
 } from '../state-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
@@ -49,6 +50,58 @@ router.post('/api/local/admin/csrf-token', async (ctx) => {
     const token = issueCsrfToken();
     ctx.set('X-CSRF-Token', token);
     ctx.body = { csrfToken: token };
+});
+
+// ===================== LEDGER AUDIT ENDPOINTS =====================
+// #129: On-demand audit + drift acknowledgment endpoints.
+// Operators can call ledger-audit to inspect the current conservation state,
+// and ledger-rebaseline to acknowledge known pre-existing drift with a written note.
+
+router.post('/api/local/admin/ledger-audit', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        const result = runLedgerAudit();
+        ctx.body = {
+            success: true,
+            sumBalances: result.sumBalances,
+            baseline: result.baseline,
+            drift: result.drift,
+            strandedEscrows: result.strandedEscrows,
+            ok: result.ok,
+        };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Ledger audit failed' };
+    }
+});
+
+router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    // #129: Rebaseline MUST include a written explanation so drift is documented,
+    // not silently accepted. "I rebaselined" with no context is not acceptable.
+    const { reason } = (ctx as any).requestBody || {};
+    if (!reason || String(reason).trim().length < 10) {
+        ctx.status = 400;
+        ctx.body = { success: false, error: 'reason is required (minimum 10 characters) — document why the drift is acceptable' };
+        return;
+    }
+    // Sanitize reason: strip control characters and cap at 500 chars to prevent log injection.
+    const sanitizedReason = String(reason).replace(/[\r\n\t\x00-\x1F\x7F]/g, ' ').trim().slice(0, 500);
+    try {
+        const result = runLedgerAudit();
+        const normalizedBaseline = (Math.round(result.sumBalances * 10000) / 10000).toString();
+        const note = `[${new Date().toISOString()}] rebaselined at ${result.sumBalances.toFixed(4)} (drift was ${result.drift.toFixed(4)}): ${sanitizedReason}`;
+        // Wrap both writes in a transaction so baseline and note are always consistent.
+        db.transaction(() => {
+            db.prepare(`INSERT INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(normalizedBaseline);
+            db.prepare(`INSERT INTO node_config (key, value) VALUES ('ledger_audit_rebaseline_note', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(note);
+        })();
+        console.log(`📐 [LedgerAudit] Rebaselined by admin: ${note}`);
+        ctx.body = { success: true, ok: true, newBaseline: result.sumBalances, note };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Rebaseline failed' };
+    }
 });
 
 // ===================== ADMIN ACTIONS (Requires Password) =====================

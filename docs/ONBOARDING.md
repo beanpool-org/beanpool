@@ -1,7 +1,8 @@
 # Onboarding UX Redesign
 
-> **Status**: Design — not yet implemented  
-> **Goal**: Reduce onboarding friction for non-technical users while preserving full sovereignty for users who want it.
+> **Status**: Design — not yet implemented
+> **Revision**: 3 (2026-08-05) — the keyholder model. See [Revision History](#revision-history).
+> **Goal**: Reduce onboarding friction for non-technical users while preserving full sovereignty, with no central point of failure anywhere in the system.
 
 ---
 
@@ -17,35 +18,100 @@ The current onboarding flow asks every user to:
 
 Steps 1–3 and 5 are reasonable. Step 4 is the problem: it's intimidating, confusing, and most non-technical users tick the checkbox without actually saving their words — then lose their account when their phone breaks.
 
-Meanwhile, technically-minded users who *want* self-custodied keys and full control shouldn't be funnelled into an SSO flow that wraps their identity in someone else's infrastructure.
+Meanwhile, technically-minded users who *want* self-custodied keys shouldn't be funnelled into someone else's infrastructure.
 
-**The redesign serves both audiences with a single coherent system.**
+### What the code does today (verified 2026-08-05)
+
+| Fact | Location |
+|---|---|
+| Native identity — including the 12-word `mnemonic` — is stored as **plaintext JSON** in SecureStore, with **no options passed** | [identity.ts:104-111](../apps/native/utils/identity.ts#L104-L111) |
+| The native app's *web* build path writes the same plaintext object to `localStorage` | [identity.ts:106-107](../apps/native/utils/identity.ts#L106-L107) |
+| The PWA stores the same plaintext object in **unencrypted IndexedDB** | [identity.ts:127-128](../apps/pwa/src/lib/identity.ts#L127-L128) |
+| Keypair derivation is `sha256(sha256(words))` — a deliberate BIP-39 deviation | [crypto.ts:165-166](../apps/native/utils/crypto.ts#L165-L166) |
+| Guardian recovery exists: `recovery_requests` (with `cooldown_until`, `quorum_required`, `expires_at`) + `recovery_approvals` | [schema.sql:341-362](../apps/server/src/db/schema.sql#L341-L362) |
+| `members.invited_by` records who invited each member (FK to `members.public_key`) — **the inviter is already known** | [schema.sql:6](../apps/server/src/db/schema.sql#L6) |
+| `friends.is_guardian` exists | [schema.sql:240](../apps/server/src/db/schema.sql#L240) |
+| The onboarding stepper is a 4-step component (`Your Name / Your Photo / Safety Backup / How it Works`) | [welcome.tsx:568-590](../apps/native/app/welcome.tsx#L568-L590) |
+| `identity.mnemonic` is read directly by four screens | [welcome.tsx:542](../apps/native/app/welcome.tsx#L542), [settings.tsx:537](../apps/native/app/%28tabs%29/settings.tsx#L537), [SettingsPage.tsx:247](../apps/pwa/src/pages/SettingsPage.tsx#L247) |
+| **No SSO / OAuth code exists anywhere in the repo** | — |
+| `app.json` has **no `plugins` array** — native configuration means a new Expo config plugin, because `android/` is generated and git-ignored | `app.json` |
 
 ---
 
 ## Design Principles
 
-1. **Zero-friction by default** — a non-technical user should be able to join BeanPool and be fully protected without ever seeing a seed phrase, understanding cryptography, or trusting a big-tech account.
+1. **Zero-friction by default** — a non-technical user should be able to join and be protected without ever seeing a seed phrase or understanding cryptography.
 2. **Sovereignty always available** — a technically-minded user can opt into full self-custody at any point, no gates.
-3. **Your community is your backup** — recovery should feel social ("my friends can help me") not technical ("I need to find 12 words I wrote down 2 years ago").
-4. **Layered resilience** — no single point of failure. Multiple independent recovery paths stack silently.
-5. **Same Ed25519 protocol underneath** — SSO and seed backup changes are UX layers. The core identity model (Ed25519 keypair, signed request headers, node-held public keys) does not change.
-6. **Relatable, Zero-Jargon Voice** — every screen, prompt, and tip must read like a message from a friend. No crypto/tech jargon ("mnemonic", "Ed25519", "DID", "asymmetric key", "node anchor"). Written so any 21-year-old or everyday community member instantly gets it.
+3. **Your community is your backup** — recovery should feel social, not technical.
+4. **Layered resilience** — no single point of failure, in the design *or* in the infrastructure.
+5. **Same Ed25519 protocol underneath** — this is a UX and key-custody layer. The identity model (Ed25519 keypair, signed request headers, node-held public keys) does not change.
+6. **Relatable, zero-jargon voice** — no "mnemonic", "Ed25519", "DID", "shard", "threshold".
+7. **No custodial surprises** — if anything can open a user's account other than the user, the UI says so, in plain words, at the moment of choosing.
+8. **Decentralised means decentralised** *(new)* — no component may exist whose loss or compromise costs users their accounts. Convenience services are allowed; custodians are not.
 
 ---
 
-## Part 1: Unified Onboarding Flow with Account Protection Chooser
+## Part 0: The Keyholder Model
 
-The core design change: **everyone walks the same path** through invite → name → avatar. The SSO/sovereign choice appears *after* the user is already welcomed into their community, replacing the old seed phrase screen with a multi-option "Protect Your Account" chooser.
+### The idea
 
-This is better than a dual-path welcome screen because:
-- The invite + name + avatar steps are identical regardless of backup method
-- The user makes the SSO/sovereign decision at the moment it matters ("how do you want to protect this account you just created?"), not at the front door
-- Existing deep-link and clipboard-paste invite handling stays unchanged
+Your account is your 12 words. Whoever holds them *is* you. Everything below follows from one decision about where those words live.
 
-### Welcome Screen (Unchanged)
+Earlier revisions of this document tried to give a **whole copy** of the words to a helper — the node, or a central broker — locked behind something. That's what forced all the scaffolding: a whole copy has to be defended perfectly, which meant peppers, PINs, an Argon2 arms race, and ultimately a central service that could open accounts.
 
-The welcome screen stays as it is — one primary button, one recovery link:
+**Revision 3 never creates a whole copy.** The words are split into pieces the moment the account is made. **Any 3 pieces rebuild the account. Any 1 or 2 pieces are mathematically worthless** — not "hard to crack", genuinely no information at all. Pieces are then handed to keyholders who have nothing to do with each other.
+
+This inverts the security problem. We no longer need each keyholder to be trustworthy, because no keyholder can do anything alone. The flaw that made Revision 1 unusable — a node operator being able to derive the key from their own database — becomes harmless here, because what they'd derive is one piece.
+
+### The four keyholders
+
+Every new member gets these, automatically, at signup:
+
+| # | Keyholder | Piece unlocked by | Why it's independent |
+|---|---|---|---|
+| **K1** | **This phone's own backup** (iCloud / Google Auto Backup) | Restoring the phone | Lives in the user's own device ecosystem; no BeanPool involvement |
+| **K2** | **Your community hub** | The hub releasing it (see [release rules](#release-rules)) | Run by your community, not by us |
+| **K3** | **Whoever invited you** | That person tapping Approve | A real human you already trust — guaranteed to exist, since `members.invited_by` is recorded |
+| **K4** | **Your sign-in account** (Facebook / Google / Apple / GitHub) | Logging in with that account | Optional. A different corporation again |
+
+And then, over time:
+
+| **K5+** | **Backup buddies** | Each one tapping Approve | Real people, added as the user meets them |
+
+Any 3 rebuild the account.
+
+### Why the threshold stays at 3
+
+Three is load-bearing and shouldn't be lowered to two, for a reason that isn't obvious: **the keyholders are not perfectly independent.** The hub physically stores several of the encrypted pieces, including K4's, and for the PWA the hub also serves the app code to the browser — so a dishonest operator has more ways to reach a second piece than the diagram suggests.
+
+At a threshold of 3, that's absorbed: hub's own piece + a captured K4 piece = 2, one short, nothing happens. At a threshold of 2, a single hub operator could take any account on their node — which is exactly the Revision 1 flaw, re-entering through the front door.
+
+**Redundancy comes from the number of pieces, not from lowering the bar.** Four keyholders at 3-of-4 survives losing one. Adding buddies makes it 3-of-6, 3-of-8. Lowering to 2-of-3 would survive one loss too — and halve the security to get there.
+
+### Decisions taken
+
+| # | Decision | Rationale |
+|---|---|---|
+| **D1** | **No party ever holds a whole copy of the words.** Split first, distribute second. | Removes the need for any keyholder to be trusted, and removes the central broker with it |
+| **D2** | **Threshold is 3, always.** Matches the quorum the existing guardian flow already uses. | See above |
+| **D3** | **Sign-in is a keyholder, not a vault.** Facebook/Google/Apple/GitHub hold one piece each, same as a person. | Retains the one-tap experience without making a corporation a custodian |
+| **D4** | **No broker, no pepper, no PIN.** All deleted. | Nothing holds a whole copy, so there is nothing that needs that level of defence |
+| **D5** | **Central OAuth apps are acceptable** — BeanPool registers the Facebook/Google/Apple/GitHub applications. | They are now a *login convenience*, not a custodian. If they vanished, every user loses one keyholder out of four or more and recovers through the rest. Loss degrades the system; it does not cost anyone an account (Principle 8) |
+| **D10** | **Facebook is a first-class provider, and the priority one.** Order by reach for this project's actual audience: Facebook, Google, Apple, GitHub. | Facebook is frequently the *only* account a user in a developing market has, often instead of a Google account. Business verification is a one-off cost for us under D5, not a per-hub burden. GitHub is there for the developer crossover and reaches the fewest users |
+| **D6** | **Human pieces release instantly on Approve.** No cooldown, no owner-cancellable window. | Chosen for recovery UX. Residual risk recorded as [R1](#part-9-risk-register) |
+| **D7** | **The hub's piece releases instantly *once at least one human has approved*, otherwise after 24h with notification.** | Prevents an all-automated trio (hub + sign-in + phone backup) from silently taking an account. Costs a real user nothing when any human is available. **This is the one call made without an explicit ruling — see [Open Questions](#part-10-open-questions).** |
+| **D8** | **Recovery starts with the community hub**, not the provider. | The pieces live on one specific node; the recovering device has to know which. Registrar (`<name>.beanpool.org`) assists |
+| **D9** | **SSO confers no membership.** `autoEnrollment` and `/api/sso/enroll` are deleted. | Social accounts are free and bulk-creatable; coupling them to enrolment would gut the vouch gate and worsen the Sybil residual in `docs/security-floor-exploit-handover.md` |
+
+---
+
+## Part 1: Onboarding Flow
+
+Everyone walks the same path: invite → name → avatar. The old seed-phrase screen is replaced by a screen that *opens with the user already protected*.
+
+The 4-step stepper at [welcome.tsx:568](../apps/native/app/welcome.tsx#L568) is preserved; step 3's label changes from `Safety Backup` to `Protection`.
+
+### Welcome Screen (unchanged)
 
 ```
 ┌─────────────────────────────────────┐
@@ -65,126 +131,137 @@ The welcome screen stays as it is — one primary button, one recovery link:
 └─────────────────────────────────────┘
 ```
 
-### Steps 1–2: Invite + Profile (Unchanged)
-
-Identical to today:
+### Steps 1–2 (unchanged)
 
 ```
 Step 1 (Your Name):   Invite code + node URL + callsign
 Step 2 (Your Photo):  Avatar selection (camera, gallery, or bundled)
 ```
 
-Behind the scenes, Step 1 still generates the Ed25519 keypair and redeems the invite on the node — exactly as it does now.
+Step 1 still generates the Ed25519 keypair and redeems the invite. **New**: immediately after redemption the client splits the words and distributes K1–K3. This happens silently, before step 3 is drawn.
 
-### Step 3: Account Protection Chooser (NEW — replaces seed phrase screen)
+### Step 3: Protection (replaces the seed phrase screen)
 
-Instead of showing the 12-word seed phrase, the user is presented with a clear, visual chooser page:
+```
+This is **one screen with three states**, chosen by counting the keepers the user actually ended up with. That count is not assumed — K1 is absent for every PWA user and for anyone whose phone has no cloud backup, and K3 is absent on bulk/admin invites.
+
+**State A — 3 keepers (the common case).** Sign-in is a spare.
 
 ```
 ┌─────────────────────────────────────────┐
-│  🛡️ Protect Your Account               │
+│  🛡️ You're covered                      │
 │                                         │
-│  Choose how to back up your account     │
-│  so you're covered if you ever upgrade  │
-│  or lose this phone.                    │
+│  Your account is split into 3 pieces.   │
+│  It takes 3 to bring you back:          │
 │                                         │
-│  ┌─────────────────────────────────┐    │
-│  │    Continue with Apple         │    │  (shown on iOS)
-│  └─────────────────────────────────┘    │
-│  ┌─────────────────────────────────┐    │
-│  │  G  Continue with Google        │    │
-│  └─────────────────────────────────┘    │
-│  ┌─────────────────────────────────┐    │
-│  │  f  Continue with Facebook      │    │
-│  └─────────────────────────────────┘    │
-│  ┌─────────────────────────────────┐    │
-│  │  🐙 Continue with GitHub        │    │
-│  └─────────────────────────────────┘    │
-│  ┌─────────────────────────────────┐    │
-│  │  ✉️  Protect with Email          │    │
-│  │     One-tap code sent to email  │    │
-│  └─────────────────────────────────┘    │
+│   📱 This phone's backup      ✅        │
+│   🏠 Mullum Community Hub     ✅        │
+│   👋 Kim (who invited you)    ✅        │
 │                                         │
-│  ─────────── or ───────────             │
+│  Right now you need all three. Want a   │
+│  spare, in case one goes missing?       │
 │                                         │
 │  ┌─────────────────────────────────┐    │
-│  │  🔑 Off-Grid / Sovereign        │    │
-│  │     Write down 12 safety words  │    │
-│  │     No social accounts linked   │    │
+│  │  f  Add my Facebook account     │    │
+│  └─────────────────────────────────┘    │
+│  ┌─────────────────────────────────┐    │
+│  │  G  Add my Google account       │    │
+│  └─────────────────────────────────┘    │
+│  ┌─────────────────────────────────┐    │
+│  │    Add my Apple account        │    │
+│  └─────────────────────────────────┘    │
+│  ┌─────────────────────────────────┐    │
+│  │  🐙 Add my GitHub account       │    │
 │  └─────────────────────────────────┘    │
 │                                         │
+│  Rather write down 12 words? →          │
+│  Not now →                              │
 └─────────────────────────────────────────┘
 ```
 
-**Key UX details:**
+**State B — 2 keepers.** Sign-in *is* the third keeper, so it isn't framed as a bonus, and "Not now" leads to the words rather than a false all-clear.
 
-- The SSO buttons are styled with each provider's brand colours and logos (familiar, trustworthy)
-- The email option is positioned as the simplest SSO choice ("one tap") for users who don't want social login
-- The sovereign option is visually separated with an "or" divider — clearly available but not the default path
-- No jargon. "Protect your account" not "back up your seed phrase"
+```
+┌─────────────────────────────────────────┐
+│  🛡️ Almost covered                      │
+│                                         │
+│  It takes 3 pieces to bring you back.   │
+│  You've got 2:                          │
+│                                         │
+│   🏠 Mullum Community Hub     ✅        │
+│   👋 Kim (who invited you)    ✅        │
+│   ➕ One more needed                    │
+│                                         │
+│  Quickest way — sign in with an         │
+│  account you already have:              │
+│                                         │
+│  [ f Facebook ] [ G Google ]            │
+│  [  Apple ]   [ 🐙 GitHub ]            │
+│                                         │
+│  Or write down 12 words instead →       │
+│  I'll sort it later →                   │
+└─────────────────────────────────────────┘
+```
 
-### What Each Button Does
+**State C — 1 keeper** (browser + bulk invite, no sign-in). The words are the path, said plainly.
 
-#### Apple / Google / Facebook / GitHub (SSO Buttons)
+```
+┌─────────────────────────────────────────┐
+│  🔑 Write these down                    │
+│                                         │
+│  Right now these 12 words are the only  │
+│  way back into your account. Keep them  │
+│  somewhere safe.                        │
+│                                         │
+│   [ 12 words in a 3×4 grid ]            │
+│                                         │
+│  ┌─────────────────────────────────┐    │
+│  │  📋 Copy all words              │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+│  Once you sign in or add a mate as a    │
+│  keeper, you won't need them.           │
+│                                         │
+│  [ f ] [ G ] [  ] [ 🐙 ]  Add a keeper │
+└─────────────────────────────────────────┘
+```
 
-1. User taps provider button → OAuth / native Sign-In flow opens (native sheet or browser redirect)
-   - On iOS, **Apple Sign-In** uses the native `expo-apple-authentication` sheet (Face ID / Touch ID confirmation).
-   - **Google / Facebook / GitHub** use `expo-auth-session` OAuth 2.0 flow.
-2. User authenticates with their existing account
-3. Behind the scenes:
-   - Ed25519 keypair was already generated in Step 1 (this doesn't change)
-   - The 12-word mnemonic is encrypted with a key derived from the OAuth `id_token` subject claim + random salt (HKDF-SHA256 → AES-256-GCM)
-   - Encrypted backup is uploaded to the node (`POST /api/sso/backup`)
-   - SSO binding is recorded (which provider + provider user ID maps to which public key)
-4. User sees: "✅ Account protected!" → proceeds to Step 4 (How It Works guide)
-5. **The user never sees the 12 words.**
+**Why this works:**
 
-#### Email (Single-Click Backup)
+- It **opens with good news** wherever it truthfully can. In State A the user is protected before they tap anything.
+- The screen never claims a keeper the user doesn't have. Revision 3's first draft said "Not now → you're still covered by 3" unconditionally, which was false for every PWA user — told to exactly the people who most needed the truth.
+- Per Principle 7, one line sits under the sign-in buttons: *"Facebook just holds one piece — it can't open your account on its own."*
+- Nothing here is a hard gate, in any state. State C shows words because they're genuinely the user's only route, not as a punishment.
+- **Nobody is ever locked out.** A user on fewer than 3 keepers is exactly as protected as every user is today: their words exist and are always available in Settings. The keeper model is an improvement layered on top, and a user who doesn't reach 3 has simply not received that improvement yet.
 
-1. User taps "Protect with Email" → enters their email address
-2. Server sends a magic-link verification email
-3. User taps the link in their email (verifies ownership)
-4. Behind the scenes:
-   - Mnemonic encrypted with a key derived from the verified email + random salt
-   - Encrypted backup stored on the node
-5. User sees: "✅ Account protected!" → proceeds to Step 4
-6. **No password to remember.** Recovery works by re-verifying the same email address.
+Provider buttons are ordered by reach for this audience — Facebook, Google, Apple, GitHub (D10) — not by what a developer would pick.
 
-#### Sovereign (12-Word Seed Phrase)
-
-1. User taps "Off-Grid / Sovereign" → shown the 12 safety words screen:
-   - 12 words displayed in a clean 3x4 grid
-   - "Copy All Words" button
-   - Checkbox: "I've saved my 12 safety words" (required)
-2. Friendly, empowering messaging: *"These 12 words are your key. No central server, no big company, and no middleman owns your account — just you. Keep them in a safe spot!"*
-3. Proceeds to Step 4 (How It Works guide)
-
-### Step 4: How It Works Guide (Updated for Clarity)
-
-Presented as 4 bite-sized, interactive swipe cards:
+### Step 4: How It Works
 
 1. **⚡ Energy & Favours**: *"Share your skills, borrow gear, or help neighbours out. Earn credits for your time and energy."*
 2. **🪙 Mutual Credits**: *"No cash needed. Everyone starts with a clean slate and trades fairly within your local hub."*
 3. **🤝 Trust Escrow**: *"Trades stay safe and fair. Both sides confirm when a job or exchange is done."*
-4. **🛡️ Guardian Recovery**: *"Pick 3 trusted friends as your guardians. If you drop your phone in the ocean, they've got your back!"*
+4. **🔑 Getting Back In**: *"Your account is split into pieces held by your phone, your hub and people you trust. Lose your phone and any 3 of them bring you back."*
 
-→ "Let's Begin! 🚀" → enter main app.
+→ "Let's Begin! 🚀" → main app.
 
 ---
 
-## Part 1.5: Microcopy & Voice Reference Guide (Gen-Z & Everyday Friendly)
+## Part 1.5: Microcopy & Voice Reference
 
-To keep the app feeling modern, friendly, and accessible to anyone (from a 21-year-old student to a local market vendor), all technical terms are mapped to simple, conversational everyday language:
-
-| Technical Concept | What We Call It in the UI | Example Tooltip / Info Copy |
+| Technical Concept | What We Call It in the UI | Example Copy |
 |---|---|---|
-| **BIP-39 Mnemonic** | **12 Safety Words** or **Recovery Phrase** | *"Think of these 12 words like a master key. Keep them secret, keep them safe!"* |
-| **Ed25519 Keypair / DID** | **Your Account ID** | *"Your unique digital stamp on BeanPool. No email or password needed."* |
-| **Anchor Node / Server** | **Community Hub** | *"The local server hosting your community's trades and members."* |
-| **Social Guardian Recovery** | **Guardian Recovery** | *"Pick 3 trusted friends as your guardians. If you lose your phone, your guardians can vouch for you to get your account back."* |
-| **Mutual Credit Ledger** | **Community Balance** | *"Your local trading balance — earn by helping out, spend on goods & services."* |
-| **Shamir's Secret Sharing** | **Split Backup** | *"We split your backup into 5 pieces among your guardians. Nobody can peek at your account alone!"* |
+| **Shamir share** | **A piece** | *"One piece on its own is useless — it takes 3."* |
+| **Threshold / quorum** | **It takes 3** | *"Any 3 of your keepers can bring you back."* |
+| **Keyholder** | **Keeper** | *"Your keepers: this phone, your hub, Kim, and Google."* |
+| **BIP-39 mnemonic** | **12 Safety Words** | *"Think of these 12 words like a master key. Keep them secret, keep them safe!"* |
+| **Ed25519 keypair / DID** | **Your Account ID** | *"Your unique digital stamp on BeanPool. No email or password needed."* |
+| **Anchor node / server** | **Community Hub** | *"The local server hosting your community's trades and members."* |
+| **Guardian** | **Backup Buddy** | *"Pick people you trust. Any 3 keepers can get you back in."* |
+| **Mutual credit ledger** | **Community Balance** | *"Your local trading balance — earn by helping out, spend on goods & services."* |
 | **Secure Store / Keyring** | **Device Vault** | *"Locked securely on your device behind Face ID or Touch ID."* |
+
+Never used in the UI: shard, threshold, Shamir, quorum, escrow, key derivation.
 
 ---
 
@@ -197,726 +274,522 @@ Welcome Screen
     │                                                         │
     │   Step 1: Invite Code + Node URL + Callsign             │
     │   (keypair generated, invite redeemed)                   │
-    │       │                                                  │
+    │        │                                                 │
+    │        └─► words split into pieces, K1–K3 distributed    │
+    │            silently: phone backup / hub / inviter        │
+    │                                                          │
     │   Step 2: Choose Avatar                                  │
-    │       │                                                  │
-    │   Step 3: 🛡️ Protect Your Account  ◄── THE NEW STEP     │
-    │       │                                                  │
-    │       ├── Apple ─────► Native Sign-In → encrypt seed → ✅│
-    │       ├── Google ────► OAuth → encrypt seed → ✅         │
-    │       ├── Facebook ──► OAuth → encrypt seed → ✅         │
-    │       ├── GitHub ────► OAuth → encrypt seed → ✅         │
-    │       ├── Email ─────► magic link → encrypt seed → ✅    │
-    │       └── Sovereign ► show 12 words → confirm → ✅      │
-    │                          │                               │
-    │   Step 4: How It Works Guide                             │
-    │       │                                                  │
+    │        │                                                 │
+    │   Step 3: 🛡️ "You're covered"                           │
+    │        ├── Add Facebook/Google/Apple/GitHub ──► K4, 1 tap│
+    │        ├── "Rather write down 12 words?" ──► sovereign   │
+    │        └── "Not now" ──► still covered by 3              │
+    │                                                          │
+    │   Step 4: How It Works                                   │
+    │        │                                                 │
     │   "Let's Begin! 🚀" → Main App                          │
     │                                                          │
-    └── "Restore my account" ──► Recovery flows (unchanged)    │
-                                                               │
-        ┌──────────────────────────────────────────────────────┘
-        │
-        │  [Day 3-7: nudge to pick guardians → Shamir sharding]
+    │        [As the user makes friends: add buddies as K5+]   │
+    │                                                          │
+    └── "Restore my account" ──► hub first, then collect 3     │
 ```
-
-### SSO Providers
-
-| Provider | Mechanism | Returns | Notes |
-|---|---|---|---|
-| **Facebook** | OAuth 2.0 via `expo-auth-session` | `name`, `email`, `picture` | Largest user base globally |
-| **Google** | OAuth 2.0 / OIDC via `expo-auth-session` | `name`, `email`, `picture` | Most common SSO choice |
-| **GitHub** | OAuth 2.0 via `expo-auth-session` | `login`, `name`, `email`, `avatar_url` | Developer / technical community crossover |
-| **Email** | Custom magic link (no OAuth) | `email` (verified) | No third-party dependency. Sovereign-adjacent. |
-| **Apple** | Native `expo-apple-authentication` | `fullName`, `email` | Required by App Store if any other social login is offered. Added to the list automatically on iOS. |
-
-> **Note on Apple**: Apple Sign-In is required by App Store policy whenever you offer third-party social login. On iOS, the Apple button is shown alongside the others. On Android/PWA, it can be omitted since the policy doesn't apply.
-
-### SSO Key Backup & Recovery Security Model
-
-#### ⚠️ Critical Security Design: Token-Gated Recovery & Key Derivation
-
-A naive implementation that derives the AES key purely from `HKDF(providerUserId, salt)` and exposes `GET /api/sso/backup/:provider/:providerUserId` publicly would be **insecure**: since `providerUserId` (e.g. Google sub, GitHub username, Facebook ID, or email) and `salt` are semi-public, anyone could fetch the encrypted blob and derive the key without ever authenticating!
-
-To make SSO key backup 100% secure:
-
-1. **Authentication Requirement**: The node endpoint `POST /api/sso/recover` requires a freshly signed, valid OAuth `id_token` from the provider.
-2. **Server-Side Verification**: The node verifies the `id_token` signature against the provider's official JWKS endpoints (Google, Apple, Facebook, GitHub) and checks `aud`, `iss`, and `exp`.
-3. **Entropy & Pepper**: The key derivation includes an ephemeral secret or signature proof from the verified OAuth token, ensuring that knowing the public `providerUserId` alone is mathematically useless.
-
-```
-Encrypted Backup Schema (stored on node):
-{
-  provider: 'facebook' | 'google' | 'github' | 'apple' | 'email',
-  providerUserId: string,    // stable OAuth subject ID
-  publicKey: string,         // Ed25519 public key of the account
-  salt: string,              // random 32-byte hex salt
-  iv: string,                // AES-256-GCM IV
-  ciphertext: string,        // AES-256-GCM encrypted 12-word mnemonic
-  tag: string,               // AES-GCM auth tag
-  createdAt: string
-}
-```
-
-### SSO Recovery Flow
-
-When a user who chose an SSO backup method opens BeanPool on a new device:
-
-```
-1. User opens app → no identity found → Welcome screen
-2. "Restore my account" → recovery options shown:
-   ┌──────────────────────────────────┐
-   │  🔑 Recover with 12 Words       │
-   │  🛡️ Recover via Guardians       │
-   │    Recover with Apple         │  (iOS)
-   │  G  Recover with Google         │
-   │  f  Recover with Facebook       │
-   │  🐙 Recover with GitHub         │
-   │  ✉️  Recover with Email          │
-   └──────────────────────────────────┘
-3. User taps provider → authenticates → client obtains fresh OAuth id_token
-4. Client sends id_token to node: POST /api/sso/recover
-5. Server validates id_token with provider JWKS:
-   → If valid & matching providerUserId found in sso_key_backups:
-     return { salt, iv, ciphertext, tag }
-6. Client re-derives key from token entropy + salt → decrypts mnemonic
-7. Ed25519 keypair derived → "Welcome back!" → identity fully restored
-```
-
-### Handling SSO Account Collisions
-
-If a user already has an SSO backup linked to `Provider X` and creates a *new* account on a second device, then attempts to protect it with the *same* `Provider X` account:
-
-- The node detects an existing `UNIQUE(provider, provider_user_id)` constraint match.
-- The node responds with: `409 Conflict: SSO account already linked to another BeanPool identity.`
-- The app prompts the user: *"This Facebook/Google account is already protecting another BeanPool account. Would you like to restore your existing account instead, or choose a different backup method?"*
 
 ---
 
-## Part 2: Three-Layer Seed Backup (Zero-Friction Recovery)
+## Part 2: The Keyholders in Detail
 
-The core innovation: instead of forcing users to back up their seed phrase manually, the system provides three stacking recovery layers. Non-technical users get Layers 1 and 2 without ever knowing what a seed phrase is. Technical users can additionally use Layer 3.
+### K1 — This phone's own backup
 
-### Layer 1: Automatic Platform Backup (Invisible)
+**Piece stored**: as an ordinary file in the app's backed-up directory.
+**Restored by**: iCloud Backup (iOS) or Google Auto Backup (Android) onto a new device on the same account.
 
-**Active from**: the moment the account is created.  
-**User effort**: zero.  
-**Covers**: phone upgrade, reinstall, device swap (same platform).
+> Revisions 1–2 tried to sync a *secret* through platform backup, and both proposed mechanisms were broken. iCloud Keychain sync needs `kSecAttrSynchronizable`, which `expo-secure-store@55.0.15` does not expose (`keychainAccessible` controls *when* an item is readable, not whether it syncs). On Android, SecureStore encrypts with a **non-exportable Keystore key**, so Auto Backup captures a blob whose key never leaves the old device.
+>
+> The keyholder model dissolves this. A single piece is not a secret, so it can be an ordinary file — and ordinary files back up and restore correctly on both platforms. The mechanism that didn't work is no longer needed.
 
-**How it works**: The identity is already stored in `expo-secure-store`. By configuring the SecureStore options correctly:
+Requires an Expo config plugin to place the file in the backup set (`app.json` has no `plugins` array today, and `android/` is generated). Testing requires a standalone rebuild.
 
-- **iOS**: Setting `keychainAccessible` enables iCloud Keychain sync. Apple encrypts the item end-to-end and syncs it across devices signed into the same Apple ID. The item is restored automatically on a new device.
-- **Android**: Configuring `backup_rules.xml` to include the Keystore entry means Google Auto Backup captures it. Restored on new device with same Google account.
+**If the user has no cloud backup** (common on cheap Android with no Google account), K1 silently won't survive. The protection status must say so honestly rather than claiming a keeper that isn't there.
 
-**What changes in code**: A configuration flag on the existing `SecureStore.setItemAsync()` call. No new screens, no new server routes.
+### K2 — Your community hub
 
-**Limitations**: Tied to Apple/Google ecosystem. Doesn't survive a platform switch (iPhone → Android). This is why Layer 2 exists.
+**Piece stored**: on the node, encrypted with a key held in the node's **environment/config, not the database**.
 
-### Layer 2: Guardian Seed Sharding (Sovereign, Community-Based)
+That detail matters: node snapshots are pulled to the fleet manager by design, so DB copies exist off-node. Keeping the wrapping key out of the DB means a stolen backup tarball doesn't yield the hub's piece — the attacker gets ciphertext for a piece that would be worthless even if they opened it.
 
-**Active from**: the moment the user picks guardians.  
-**User effort**: pick 3+ trusted people (feels social, not technical).  
-**Covers**: phone loss, platform switch, total device loss — everything.
+**Released**: per the [release rules](#release-rules) — instantly once a human keyholder has approved, otherwise after 24h with notification (D7).
 
-**How it works**: [Shamir's Secret Sharing](https://en.wikipedia.org/wiki/Shamir%27s_secret_sharing) — a well-established cryptographic technique that splits a secret into N shares such that any K shares can reconstruct the original, but fewer than K shares reveal nothing.
+### K3 — Whoever invited you
 
-#### Setup (when user picks guardians)
+**Piece stored**: on the node, encrypted to the inviter's public key (Ed25519 → X25519 → ECDH → AES-256-GCM). Their app caches its own piece locally on next sync, so the piece survives the node losing data.
 
-```
-1. User picks 5 guardians (existing guardian selection flow)
-2. Client-side: Shamir split
-   → 12-word seed → 5 shares, threshold K=3
-3. Each share encrypted with that guardian's Ed25519 public key
-   → converted to X25519 for Diffie-Hellman key agreement
-   → AES-256-GCM encryption per share
-4. Encrypted shares uploaded to the node
-   → stored in guardian_shares table
-   → node cannot read them (encrypted per-guardian)
-```
+`members.invited_by` already records this relationship, so no new user action is required. Both sides are told:
 
-The user sees: "✅ Guardians set! Your account is protected." No mention of seed phrases, Shamir, or cryptographic shares.
+- To the new member: *"Kim is one of your keepers."*
+- To the inviter: *"You're now one of Sam's keepers. If Sam loses their phone, you can help them back in."*
 
-#### Recovery (user loses phone)
+The inviter can decline, which deletes their piece and drops the user to two keepers (surfaced honestly, with a prompt to add another).
 
-```
-1. User installs BeanPool on new device
-2. "Recover via Guardians" → enters old callsign + node URL
-3. Node shows: "You have 5 guardians, need 3 to recover"
-4. User contacts guardians out-of-band (text, call, in person)
-5. Each guardian opens BeanPool → Settings → Recovery Requests → Approve
-6. Guardian's app:
-   → decrypts their share with their private key
-   → relays decrypted share to the recovering device
-     via E2E encrypted messaging channel (existing infrastructure)
-7. Once 3 shares collected:
-   → Shamir recombination on the new device
-   → original 12-word mnemonic reconstructed
-   → Ed25519 keypair derived (identical to original)
-   → identity fully restored with ORIGINAL key
-```
+### K4 — Your sign-in account (optional)
 
-#### Key difference from current guardian recovery
+**Piece stored**: on the node as `AES-256-GCM(piece, HKDF-SHA256(sub, salt))`, indexed by `SHA-256(sub ‖ lookup_salt)`.
+**Released**: by the node on proof of a fresh provider login, rate-limited.
 
-| Current Guardian Recovery | Guardian Seed Sharding |
-|---|---|
-| Creates a **new** Ed25519 keypair | Reconstructs the **original** keypair |
-| Migrates account from old key → new key | No migration — same key restored |
-| 24h security cooldown after quorum | No cooldown needed (key proves identity) |
-| Old key becomes invalid | Key never changes |
-| Guardians only tap "approve" | Guardians tap "approve" which also releases their share |
+The node **may be able to derive this piece** — GitHub and Facebook account IDs are short numbers that can be guessed against the lookup hash, and for the PWA the node serves the app code and could capture `sub` in transit. This is documented, accepted, and harmless: it gives the node a second piece, and two pieces are nothing. It is also precisely why the threshold cannot drop to 2.
 
-#### What exists today vs. what's new
+**Providers, in priority order (D10):**
 
-| Already Built | Needs Building |
-|---|---|
-| Guardian selection UI | Shamir split/recombine (client-side, ~200 lines) |
-| `friends` table with `is_guardian` flag | `guardian_shares` DB table |
-| `POST /api/recovery/request` | Share encryption with guardian public keys |
-| `POST /api/recovery/approve` | Share relay over E2E encrypted channel |
-| `GET /api/recovery/status/:pubkey` | Guardian nudge system ("pick your guardians!") |
-| 3-of-N quorum checking | |
-| Recovery notification push to guardians | |
-| Guardian knowledge check (anti-spam) | |
+| Provider | Reach for this audience | Notes |
+|---|---|---|
+| **Facebook** | Highest | Often the only account a user in a developing market has. Requires business verification — a one-off cost for us under D5, not a per-hub burden |
+| **Google** | High | Overlaps heavily with the Android cloud-backup keeper (K1), so it adds less independence than it appears to — see [R3](#part-9-risk-register) |
+| **Apple** | Medium, iOS only | Mandatory *only* if we ship an App Store build offering other social logins |
+| **GitHub** | Lowest | Developer crossover. Cheapest to register, reaches the fewest users |
 
-#### Schema: `guardian_shares` table
+Central OAuth applications (D5). If they disappear, users lose one keeper and recover through the others.
 
-```sql
-CREATE TABLE IF NOT EXISTS guardian_shares (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_pubkey TEXT NOT NULL,      -- the member whose seed was sharded
-    guardian_pubkey TEXT NOT NULL,    -- the guardian holding this share
-    share_index INTEGER NOT NULL,    -- Shamir share index (1-based)
-    encrypted_share TEXT NOT NULL,   -- AES-256-GCM ciphertext (hex)
-    share_iv TEXT NOT NULL,          -- AES-GCM IV (hex)
-    share_tag TEXT NOT NULL,         -- AES-GCM auth tag (hex)
-    ephemeral_pubkey TEXT NOT NULL,  -- X25519 ephemeral public key for DH
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(owner_pubkey, guardian_pubkey)
-);
-```
+### K5+ — Backup buddies
 
-#### Guardian Nudge System
+**Piece stored**: on the node, encrypted to each buddy's public key, exactly as K3. Each buddy's app caches its own piece locally.
+**Released**: instantly when the buddy taps Approve (D6).
 
-After onboarding, the app periodically nudges users who haven't picked guardians:
+Uses the existing guardian selection UI, `friends.is_guardian`, the existing approve flow, and the existing anti-spam knowledge check.
+
+#### Nudges — event-based, not day-based
+
+A user three days into an invite-only local app doesn't yet know three people on it, so a day-3 nudge is an instruction they can't follow.
 
 ```
-Day 1:  (nothing — let them explore)
-Day 3:  Gentle banner: "🛡️ Pick 3 trusted people to protect your account"
-Day 7:  Settings badge: "⚠️ Your account has no guardians"
-Day 14: One-time push notification: "Your BeanPool account isn't backed up yet"
+Trigger: user has ≥3 accepted connections and <2 human keepers
+    → Gentle banner: "🛡️ Add someone you trust as a keeper"
+
+Trigger: any keeper is lost (buddy leaves, inviter declines, sign-in revoked)
+    → "You're down to 2 keepers — add one so you've got a spare"
+
+Trigger: first completed trade with only the minimum 3 keepers
+    → One-time push: "You've got beans now — worth adding a spare keeper"
 ```
 
-The nudge disappears once 3+ guardians are set and shares are distributed.
+### Protection status
 
-### Layer 3: Seed Vault (Settings → Security)
-
-**Active from**: always available.  
-**User effort**: navigate to Settings → Security → Recovery Phrase.  
-**Covers**: everything, forever, offline.
-
-For sovereign users who want the raw 12 words on paper, in a password manager, or engraved in steel. This is not part of the onboarding flow — it's a power-user feature accessible from settings, protected by multiple security layers.
-
-#### The Problem with the Current Approach
-
-Today the 12-word mnemonic is stored as **plaintext JSON** inside `expo-secure-store` alongside the signing key. This means:
-
-- On a jailbroken iOS device, the Keychain can be dumped → mnemonic exposed
-- On a rooted Android device, the Keystore can be extracted → mnemonic exposed
-- Malware with accessibility permissions could screenshot the seed if it's displayed without additional protection
-- A stolen unlocked phone gives immediate access to the identity and recovery phrase
-
-**The signing key** (private key hex) must remain accessible for API request signing without user interaction — it can't require a biometric tap for every fetch call. But **the mnemonic** is only ever needed when the user explicitly wants to view or export it. This lets us lock the mnemonic down much harder.
-
-#### Design: Encrypted Seed Vault
-
-The mnemonic is stored **encrypted at rest** in a separate SecureStore entry, protected by one or both of:
-
-1. **Biometric hardware key** (Face ID / Touch ID / fingerprint) — the decryption key lives in the Secure Enclave (iOS) or StrongBox/TEE (Android) and physically cannot be extracted, even with root access
-2. **Admin password** — user-chosen password, used to derive a second encryption key via Argon2id
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  BeanPoolIdentity (in SecureStore, accessible for signing)   │
-│  ├─ publicKey: hex                                           │
-│  ├─ privateKey: hex  ← needed for API signing, always        │
-│  ├─ callsign: string    accessible after device unlock       │
-│  ├─ createdAt: string                                        │
-│  └─ mnemonic: REMOVED ← no longer stored here               │
-│                                                              │
-│  SeedVault (separate SecureStore entry, encrypted at rest)    │
-│  ├─ ciphertext: AES-256-GCM encrypted mnemonic              │
-│  ├─ iv: random initialisation vector                         │
-│  ├─ tag: GCM authentication tag                              │
-│  ├─ salt: Argon2 salt (if password-protected)                │
-│  ├─ protection: 'biometric' | 'password' | 'both'           │
-│  └─ biometricKeyId: reference to hardware-backed key         │
-└──────────────────────────────────────────────────────────────┘
-```
-
-#### Protection Modes
-
-Users choose their protection level when they first access the Seed Vault in Settings, or during onboarding if they pick the Sovereign path:
+Replace any binary "backed up ✅" with a keeper count, because that's the truth:
 
 ```
 ┌─────────────────────────────────────────────┐
-│  🔒 Seed Vault Protection                   │
+│  Your keepers                     4 of 3    │
 │                                              │
-│  How do you want to lock your               │
-│  recovery phrase?                            │
+│   📱 This phone's backup            ✅       │
+│   🏠 Mullum Community Hub           ✅       │
+│   👋 Kim                            ✅       │
+│   G  Google                         ✅       │
 │                                              │
-│  ┌───────────────────────────────────────┐   │
-│  │  👆 Biometric (Recommended)           │   │
-│  │     Face ID / Touch ID / Fingerprint  │   │
-│  │     Hardware-backed, can't be hacked  │   │
-│  └───────────────────────────────────────┘   │
-│  ┌───────────────────────────────────────┐   │
-│  │  🔑 Password                          │   │
-│  │     Set an admin password             │   │
-│  │     Works on any device               │   │
-│  └───────────────────────────────────────┘   │
-│  ┌───────────────────────────────────────┐   │
-│  │  🛡️ Both (Maximum Security)           │   │
-│  │     Biometric + password              │   │
-│  │     Two-factor seed protection        │   │
-│  └───────────────────────────────────────┘   │
-│                                              │
+│  Any 3 can bring you back.                   │
+│  You can afford to lose 1.        [Add →]    │
 └─────────────────────────────────────────────┘
 ```
 
-##### Mode 1: Biometric Only
+"You can afford to lose N" is the number users actually need, and it makes the value of adding a keeper obvious without nagging.
+
+---
+
+## Part 3: Recovery
+
+### Release rules
+
+| Piece | Released when | Instant? |
+|---|---|---|
+| K1 phone backup | Platform restore puts the file back | Yes, automatic |
+| K3 / K5+ humans | That person taps Approve | Yes (D6) |
+| K4 sign-in | Fresh provider login verified, rate-limited | Yes |
+| K2 hub | ≥1 human piece already released → instant. Otherwise 24h + notification to every remaining device and every human keeper | Conditional (D7) |
+
+D7 exists because K1, K2 and K4 are all machine-released. Without it, that trio is a silent, fully-automated path into any account — and if a user signs in with Google on an Android phone backed up to the same Google account, one company effectively controls two of the three. The 24h delay plus notification means the account owner and their keepers find out and can stop it. When any human is in the loop, the delay serves no purpose and doesn't apply.
+
+### Flow
 
 ```
-Encryption:
-  1. Generate AES-256 key inside Secure Enclave / StrongBox (never leaves hardware)
-  2. Encrypt mnemonic with hardware-bound AES key
-  3. Store encrypted blob in SecureStore
-  
-Decryption (to view seed):
-  1. Settings → Security → View Recovery Phrase
-  2. System biometric prompt: "Authenticate to view your recovery phrase"
-  3. Face ID / Touch ID / fingerprint → hardware decrypts the blob
-  4. 12 words displayed for 60 seconds, then auto-cleared from memory
+1. Install BeanPool on the new device → "Restore my account"
+2. Enter community hub (registrar-assisted) + callsign          (D8)
+3. App shows your keepers and collects pieces:
+     📱 phone backup ....... found automatically
+     G  Google ............. tap to sign in
+     👋 Kim ................ tap "ask Kim"  → push → Kim approves
+     🏠 Hub ................ auto once a human approves, else 24h
+4. On the 3rd piece: rebuild the words → original keypair → in
 ```
 
-**Security**: The encryption key physically cannot be extracted from the Secure Enclave / StrongBox — not by jailbreak, not by forensic tools, not by state actors. It requires biometric presence at the device hardware. This is the same technology that protects Apple Pay and Google Pay.
+The original key is restored, not replaced — so there is no migration, no re-vouching, and no history loss.
 
-##### Mode 2: Password Only
+The existing **migrate-to-new-key** guardian recovery stays in place alongside this. It remains the only remedy for a user whose key has actually been compromised, because a rebuilt key is by definition the same key.
+
+### Scenarios
+
+**New phone, same Apple ID.** K1 restores itself. Sarah taps her Google sign-in (K4). That's 2. The hub's piece needs 24h — or she texts Kim, who taps Approve, and she's in immediately. *Effort: one tap, plus one text if she's impatient.*
+
+**Switched iPhone → Android.** No K1. Google (K4) + Kim (K3) = 2, hub joins instantly because a human approved = 3. *Effort: one tap and one text.*
+
+**No sign-in account, phone in the ocean, switched platforms.** Kim (K3) + two buddies (K5, K6) = 3. *Effort: three texts.*
+
+**Wrote the words down.** Type them. Works forever, needs nobody.
+
+---
+
+## Part 4: The Sovereign Path & Seed Vault
+
+For users who want the raw 12 words on paper, in a password manager, or engraved in steel. Available during onboarding ("Rather write down 12 words?") and always in Settings → Security.
+
+### The problem with today's storage
+
+The words sit in **plaintext** — SecureStore JSON on native, `localStorage` on the native web build, unencrypted IndexedDB in the PWA. A rooted phone, a jailbroken phone, or a browser devtools window is enough. A stolen unlocked phone gives immediate access to identity *and* recovery phrase.
+
+**The signing key** must stay usable without user interaction, for request signing. **The words** are only needed when the user explicitly asks for them. That asymmetry is what lets us lock the words down hard.
+
+### Design
 
 ```
-Encryption:
-  1. User chooses admin password (minimum 8 characters, strength meter shown)
-  2. Argon2id(password, random_salt, memory=64MB, iterations=3, parallelism=4) → 32-byte key
-  3. AES-256-GCM(mnemonic, key, random_iv) → encrypted blob
-  4. Store (encrypted_blob, salt, iv, tag) in SecureStore
-
-Decryption (to view seed):
-  1. Settings → Security → View Recovery Phrase
-  2. Enter admin password
-  3. Argon2id(password, stored_salt) → key → decrypt → 12 words shown
-  4. Auto-clear after 60 seconds
+┌──────────────────────────────────────────────────────────────┐
+│  BeanPoolIdentity (used for signing — unchanged)             │
+│  ├─ publicKey / privateKey / callsign / createdAt            │
+│  └─ mnemonic: REMOVED ← moves to the vault (see Part 8)      │
+│                                                              │
+│  SeedVault (separate entry, encrypted at rest)               │
+│  ├─ ciphertext / iv / tag                                    │
+│  ├─ salt + kdf_params (recorded, not assumed)                │
+│  ├─ protection: 'biometric' | 'password' | 'both'            │
+│  └─ biometricKeyId                                           │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Security**: Argon2id with 64MB memory cost makes brute-force extremely expensive — even with a GPU farm, testing each password guess takes ~1 second and 64MB of RAM. A 12-character password becomes effectively uncrackable. The password is never stored — only the salt. Argon2id is the winner of the Password Hashing Competition and is resistant to both GPU and ASIC attacks.
+`kdf_params` is stored rather than hard-coded because the PWA can't afford native Argon2 costs on the Android 8 / 1 GB-class devices this project targets — a blob made on one platform must open on the other.
 
-##### Mode 3: Both (Maximum Security)
+### Protection modes
 
 ```
-Encryption:
-  1. Generate hardware-backed AES key in Secure Enclave (Key A)
-  2. Argon2id(admin_password, salt) → Key B
-  3. Combined key = HKDF-SHA256(Key_A || Key_B, info="beanpool-seed-vault")
-  4. AES-256-GCM(mnemonic, combined_key) → encrypted blob
-
-Decryption (to view seed):
-  1. Settings → Security → View Recovery Phrase
-  2. Biometric prompt → unlocks Key A from hardware
-  3. Enter admin password → derives Key B
-  4. Combine → decrypt → 12 words shown
-  5. Auto-clear after 60 seconds
+┌───────────────────────────────────────┐
+│  👆 Face ID / Fingerprint (easiest)   │  key lives in Secure Enclave /
+│     Held in your phone's secure chip  │  StrongBox, can't be extracted
+├───────────────────────────────────────┤
+│  🔑 A password                        │  Argon2id → AES-256-GCM
+│     Works on any device               │
+├───────────────────────────────────────┤
+│  🛡️ Both (most locked down)           │  HKDF(hardware_key ‖ argon2_key)
+│     Two-factor encryption             │  — compromising one reveals nothing
+└───────────────────────────────────────┘
 ```
 
-**Security**: An attacker needs BOTH physical biometric presence at the device AND knowledge of the password. Compromising one factor without the other reveals nothing. This is true two-factor encryption — not just two-factor authentication gating plaintext.
+`expo-secure-store`'s `requireAuthentication: true` maps to Secure Enclave (iOS, `SecAccessControlCreateWithFlags` + `kSecAttrTokenIDSecureEnclave`) and StrongBox/TEE (Android, `setUserAuthenticationRequired` + `setIsStrongBoxBacked`). PWA uses WebAuthn/passkey PRF where available, else an Argon2id passphrase.
 
-#### Defence-in-Depth: Additional Hardening
+### Defence-in-depth
 
 | Threat | Defence |
 |---|---|
-| **Jailbroken/rooted device** | Mnemonic encrypted at rest — extracting SecureStore yields only ciphertext. Biometric key is in Secure Enclave, inaccessible even with root. |
-| **Stolen unlocked phone** | Seed Vault requires biometric re-authentication and/or password. App lock (existing `LocalAuth`) prevents app access entirely. |
-| **Screen recording / screenshot malware** | When 12 words are displayed: (1) set `FLAG_SECURE` (Android) / block screenshots (iOS) on the view, (2) 60-second auto-clear timer, (3) words shown one-at-a-time or behind a "hold to reveal" interaction. |
-| **Shoulder surfing** | Optional "hold to reveal" interaction — each word is masked until the user long-presses on it. Words are never all visible simultaneously unless the user taps "Show All". |
-| **Clipboard exfiltration** | "Copy All Words" button copies to clipboard and sets a 60-second auto-clear timer via `Clipboard.setStringAsync()` with expiration. Warning shown: "Copied — clipboard will auto-clear in 60 seconds." |
-| **Memory dump / cold boot** | Mnemonic plaintext is held in a local variable only during display, zeroed immediately when the screen is dismissed or backgrounded. Never stored in React state that persists across navigation. |
-| **Brute-force (password mode)** | Argon2id with 64MB memory cost. After 5 failed password attempts, exponential backoff (30s → 5min → 1hr). After 10 failed attempts, require biometric + password regardless of mode. |
-| **Device without biometric hardware** | Falls back to password-only mode. Shown a nudge: "Your device doesn't support biometrics. Set a strong password to protect your recovery phrase." |
+| **Jailbroken/rooted device** | Words encrypted at rest; hardware key inaccessible even with root |
+| **Stolen unlocked phone** | Vault requires biometric and/or password; existing `LocalAuth` app lock gates the app |
+| **Screenshot malware** | `FLAG_SECURE` / iOS screenshot blocking on the view, 60 s auto-clear, hold-to-reveal per word |
+| **Shoulder surfing** | Words masked until long-pressed; all-visible only on explicit "Show All" |
+| **Clipboard exfiltration** | App-owned 60 s timer overwrites the clipboard. **Note**: `Clipboard.setStringAsync` has no expiry parameter (Revision 1 implied it did) and an app-owned timer doesn't survive app kill — the warning copy must not overpromise |
+| **Memory dump** | Plaintext in a local variable during display only, zeroed on dismiss/background, never in persisted React state |
+| **Brute force (password mode)** | Argon2id 64 MB. 5 failures → 30 s / 5 min / 1 hr backoff. 10 failures → require biometric + password |
+| **No biometric hardware** | Falls back to password-only with an explanation |
 
-#### Settings → Security UI
+### Settings → Security
 
 ```
 ┌─────────────────────────────────────────────┐
 │  🔒 Security                                │
-│                                              │
 │  App Lock                                    │
 │  ├─ Require Face ID on launch    [toggle]    │
-│                                              │
-│  ──────────────────────────────────────       │
-│                                              │
-│  Seed Vault                                  │
+│  ──────────────────────────────────────      │
+│  My Keepers                       4 of 3     │
+│  ├─ This phone's backup             ✅       │
+│  ├─ Mullum Community Hub            ✅       │
+│  ├─ Kim                             ✅       │
+│  ├─ Google (m•••@gmail.com)         ✅       │
+│  ├─ Add a keeper                  [→]        │
+│  └─ Remove a keeper               [→]        │
+│  ──────────────────────────────────────      │
+│  My Words                                    │
 │  ├─ View Recovery Phrase      [👆 locked]    │
-│  ├─ Protection Mode           Biometric 🟢   │
-│  ├─ Change Admin Password     [→]            │
-│  └─ Vault Status              Encrypted ✅   │
-│                                              │
-│  ──────────────────────────────────────       │
-│                                              │
-│  Guardians                                   │
-│  ├─ My Guardians (5)          [→]            │
-│  ├─ Seed Shard Status         Protected ✅   │
-│  └─ Recovery Requests         [→]            │
-│                                              │
+│  ├─ Locked with               Face ID 🟢     │
+│  └─ Change password           [→]            │
+│  ──────────────────────────────────────      │
+│  Recovery Requests                [→]        │
 └─────────────────────────────────────────────┘
 ```
 
-#### Implementation Notes
-
-**iOS (Secure Enclave)**:
-- Use `SecAccessControlCreateWithFlags` with `.biometryCurrentSet` + `.privateKeyUsage`
-- Key generated with `kSecAttrTokenIDSecureEnclave` — hardware-bound, non-exportable
-- `expo-secure-store` supports `requireAuthentication: true` which maps to this
-
-**Android (StrongBox / TEE)**:
-- Use `KeyGenParameterSpec.Builder` with `.setUserAuthenticationRequired(true)` + `.setIsStrongBoxBacked(true)`
-- Falls back to TEE if StrongBox unavailable (still hardware-backed, just not a separate chip)
-- `expo-secure-store` supports `requireAuthentication: true` for Keystore biometric binding
-
-**Argon2id Parameters** (password mode):
-```
-memory:      65536 KB (64 MB)
-iterations:  3
-parallelism: 4
-hashLength:  32 bytes
-salt:        32 bytes (crypto-random, stored alongside ciphertext)
-```
-
-These parameters are calibrated so a single hash takes ~1 second on a modern phone. On a GPU rig, the 64MB memory requirement makes parallel brute-force prohibitively expensive.
-
-### How the Layers Stack
-
-```
-┌─────────────────────────────────────────────────────┐
-│                                                      │
-│  🍎 Layer 1: Platform Backup (automatic, invisible) │
-│  ├─ Active from: account creation (Day 1)           │
-│  ├─ Covers: new phone, reinstall (same platform)    │
-│  ├─ User effort: zero                               │
-│  └─ Happens: silently, immediately                  │
-│                                                      │
-│  🛡️ Layer 2: Guardian Sharding (sovereign)          │
-│  ├─ Active from: guardians picked (Day 3–7)         │
-│  ├─ Covers: phone loss, platform switch, anything   │
-│  ├─ User effort: pick trusted people, then zero     │
-│  └─ Fully sovereign — no big-tech dependency        │
-│                                                      │
-│  🔐 Layer 3: Seed Vault (opt-in power user)          │
-│  ├─ Available: Settings → Security → Recovery Phrase │
-│  ├─ Protected by: biometric + admin password         │
-│  ├─ Encrypted at rest (Secure Enclave / Argon2id)    │
-│  ├─ Covers: everything, forever, offline             │
-│  └─ User effort: authenticate, then write down words │
-│                                                      │
-└─────────────────────────────────────────────────────┘
-```
-
-#### Real-World Scenario: Sarah Drops Her Phone in the Ocean
-
-**Attempt 1 — Layer 1 (automatic):**
-Sarah gets a new iPhone, signs into iCloud, installs BeanPool. Her identity is already synced from iCloud Keychain. The app shows "Welcome back, Sarah!" and she's straight in. **Zero effort.**
-
-**What if she switched iPhone → Android?** iCloud doesn't cross platforms. Layer 2 kicks in:
-
-**Attempt 2 — Layer 2 (guardians):**
-Sarah opens BeanPool on her new Android → "Recover via Guardians" → enters her callsign and node URL → texts Dave, Maria, and Tom → they each tap "Approve" in their app → 3 shares collected → original key reconstructed → "Welcome back, Sarah!" **Effort: 3 text messages.**
-
-**What if she's a power user who exported her 12 words?**
-
-**Attempt 3 — Layer 3 (manual):**
-Sarah enters her 12 words → done. **Same as today**, but it's an option, not the only path.
+"Remove a keeper" is required, not optional — a user must be able to revoke Google, or a buddy they've fallen out with. Removing a keeper deletes their piece and **re-splits the words across the remaining keepers**, so the removed piece is dead rather than merely orphaned.
 
 ---
 
-## Part 3: Onboarding Flow Comparison
+## Part 5: Server-Side Changes
 
-### Current Flow (All Users)
+Compared with Revision 2 this is a large deletion: no broker service, no OAuth credentials per node, no peppers, no magic-link mail, no `sso_bindings`, no `sso_key_backups`.
 
-```
-Welcome → Invite Code + Node URL + Callsign
-       → Avatar Selection
-       → 12-Word Seed Backup (BLOCKING ⛔)
-       → How It Works Guide
-       → Enter App
-
-Steps: 4  |  Friction: HIGH  |  Seed: mandatory, visible, blocking
-```
-
-### Proposed Flow (All Users — Unified)
-
-```
-Welcome → Invite Code + Node URL + Callsign
-       → Avatar Selection
-       → 🛡️ Protect Your Account (NEW — replaces seed phrase)
-            ├── Apple / Google / Facebook / GitHub / Email → one tap, done
-            └── Off-Grid / Sovereign → 12-word seed phrase (opt-in)
-       → How It Works Guide
-       → Enter App
-       → [Day 3-7: nudge to pick guardians]
-
-Steps: 4  |  Friction: LOW (SSO) or INTENTIONAL (Sovereign)
-Seed: invisible by default, visible only if Sovereign chosen
-```
-
-### Key Improvement
-
-The steps 1, 2, and 4 are **identical** regardless of which protection method the user chooses. Only Step 3 branches — and the SSO branch is a single tap. The user is never forced to see a seed phrase unless they specifically opt into the sovereign path.
-
----
-
-## Part 4: Server-Side Changes
-
-### New API Routes
+### New API routes
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| `POST` | `/api/sso/backup` | Signed (X-Signature + OAuth Token) | Store encrypted key backup (SSO users) |
-| `POST` | `/api/sso/recover` | Public (requires valid OAuth `id_token`) | Verify OAuth token & return encrypted backup blob |
-| `POST` | `/api/sso/enroll` | OAuth token verified server-side | Auto-enrollment for SSO-verified users (if node allows) |
-| `POST` | `/api/sso/magic-link/send` | Public | Send email magic link |
-| `GET` | `/api/sso/magic-link/verify/:token` | Public | Verify magic link token |
-| `POST` | `/api/guardians/shares` | Signed | Upload Shamir-encrypted shares after guardian selection |
-| `GET` | `/api/guardians/shares/:ownerPubkey` | Signed (by recovering device) | Retrieve encrypted shares during guardian recovery |
+| `POST` | `/api/recovery/shares` | Signed | Upload the encrypted pieces after a split or re-split |
+| `GET` | `/api/recovery/keepers/:callsign` | Public, rate-limited | List a member's keeper *types* (not identities) so the restore screen can be drawn |
+| `POST` | `/api/recovery/collect` | Per-piece (see below) | Request release of a specific piece |
+| `POST` | `/api/recovery/sso-verify` | Public + fresh OAuth token | Verify a provider login and release the K4 piece |
+| `DELETE` | `/api/recovery/shares/:holderId` | Signed | Remove a keeper (triggers re-split) |
 
-### New DB Tables
+The existing `/api/recovery/request`, `/approve`, `/status`, `/lookup` and `/pending` routes stay as they are — they still serve the migrate-to-new-key flow, and the approve endpoint gains a side effect: releasing that approver's piece.
 
-#### `sso_key_backups`
+### New DB table
 
 ```sql
-CREATE TABLE IF NOT EXISTS sso_key_backups (
+CREATE TABLE IF NOT EXISTS recovery_shares (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    provider TEXT NOT NULL,           -- 'facebook' | 'google' | 'github' | 'apple' | 'email'
-    provider_user_id TEXT NOT NULL,   -- stable OAuth subject ID
-    public_key TEXT NOT NULL,         -- Ed25519 public key this backup belongs to
-    salt TEXT NOT NULL,
-    iv TEXT NOT NULL,
-    ciphertext TEXT NOT NULL,
-    tag TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(provider, provider_user_id)
-);
-```
-
-#### `sso_bindings`
-
-```sql
-CREATE TABLE IF NOT EXISTS sso_bindings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    provider TEXT NOT NULL,
-    provider_user_id TEXT NOT NULL,
-    public_key TEXT NOT NULL,
-    email TEXT,
-    display_name TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(provider, provider_user_id),
-    UNIQUE(public_key, provider)
-);
-```
-
-#### `guardian_shares`
-
-```sql
-CREATE TABLE IF NOT EXISTS guardian_shares (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_pubkey TEXT NOT NULL,
-    guardian_pubkey TEXT NOT NULL,
-    share_index INTEGER NOT NULL,
+    owner_pubkey TEXT NOT NULL REFERENCES members(public_key),
+    holder_type TEXT NOT NULL,       -- 'device' | 'hub' | 'member' | 'sso'
+    holder_ref TEXT NOT NULL,        -- member pubkey | provider name | 'self'
+    share_index INTEGER NOT NULL,    -- Shamir evaluation point
     encrypted_share TEXT NOT NULL,
     share_iv TEXT NOT NULL,
     share_tag TEXT NOT NULL,
-    ephemeral_pubkey TEXT NOT NULL,
+    ephemeral_pubkey TEXT,           -- X25519 ephemeral, for 'member' holders
+    sso_lookup_hash TEXT,            -- SHA-256(sub || lookup_salt), for 'sso' holders
+    sso_lookup_salt TEXT,
+    kdf_params TEXT,
+    generation INTEGER NOT NULL DEFAULT 1,  -- bumped on every re-split
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(owner_pubkey, guardian_pubkey)
+    UNIQUE(owner_pubkey, holder_type, holder_ref, generation)
 );
+CREATE INDEX IF NOT EXISTS idx_recovery_shares_owner ON recovery_shares(owner_pubkey);
+CREATE INDEX IF NOT EXISTS idx_recovery_shares_sso ON recovery_shares(sso_lookup_hash);
 ```
 
-### New Node Configuration
+`generation` is what makes keeper removal real: a re-split bumps the generation and pieces from older generations are refused during collection, so pieces can never be mixed across splits.
+
+**The raw provider ID is never stored** — only `sso_lookup_hash`. A stolen database can't even enumerate which Google accounts are in use.
+
+### Node configuration
 
 ```typescript
 // local-config.ts additions
-sso?: {
-    enabled: boolean;
-    autoEnrollment: boolean;        // allow SSO users to join without invite code
-    providers: {
-        facebook?: { appId: string; appSecret: string; };
-        google?: { clientId: string; clientSecret: string; };
-        github?: { clientId: string; clientSecret: string; };
-        apple?: { clientId: string; teamId: string; keyId: string; privateKey: string; };
-        email?: { enabled: boolean; smtpUrl: string; fromAddress: string; };
-    };
+recovery?: {
+    hubShareKey: string;   // wraps the hub's own piece; MUST come from env, never the DB
+    ssoEnabled: boolean;   // whether this hub offers the sign-in keeper at all
 };
 ```
 
+No OAuth client secrets on nodes (D5 — the apps are central and the client talks to them directly). No `autoEnrollment` (D9).
+
 ---
 
-## Part 5: Dependencies
+## Part 6: Dependencies
 
-### Native App (Expo)
+### Native (Expo)
 
 | Package | Purpose |
 |---|---|
-| `expo-auth-session` | Google OAuth 2.0 / OIDC flow |
-| `expo-apple-authentication` | Native Apple Sign-In |
+| `expo-auth-session` | OAuth for the K4 keeper |
+| `expo-apple-authentication` | Native Apple Sign-In (App Store builds only) |
 | `expo-web-browser` | OAuth redirect handling |
-| `secrets.js-grempe` (or equivalent) | Shamir's Secret Sharing split/combine |
+| `shamir-secret-sharing` | Split/combine — TypeScript, maintained, Uint8Array API |
+| `hash-wasm` (or `react-native-argon2`) | Argon2id for the vault password only |
 
-### PWA (Web App) Parity & Mapping
+> Revision 1 specified `secrets.js-grempe`, unmaintained since 2019. For a library that splits every user's key, use one still receiving fixes. Whichever is chosen must be verified under Hermes and on the **Android 8 / API 26 floor** and 320 dp screens this project targets.
 
-The Progressive Web App (`apps/pwa`) runs in standard desktop and mobile browsers. Browser environments lack `expo-secure-store` and direct native Secure Enclave access, so security features map as follows:
+Deleted from Revision 2's list: `jose`, SMTP, and everything broker-related.
 
-| Security Feature | Native App (Expo) | PWA (Browser) |
+### PWA
+
+| Feature | Native | PWA |
 |---|---|---|
-| **Local Key Storage** | `expo-secure-store` | IndexedDB with WebCrypto AES-GCM encryption |
-| **Layer 1 Platform Backup** | iCloud Keychain / Google Auto Backup | Web Storage / Chrome Synced Storage (where supported) |
-| **Layer 3 Seed Vault Biometrics** | iOS Secure Enclave / Android StrongBox | **WebAuthn / Passkeys** (via `navigator.credentials.create`/`get`) using PRF extension or local PBKDF2 passphrase |
-| **SSO OAuth Flows** | `expo-auth-session` (native custom tabs) | Standard browser OAuth 2.0 redirects |
+| Local key storage | `expo-secure-store` | IndexedDB + WebCrypto AES-GCM (**currently plaintext** — fixing this is in scope) |
+| K1 phone-backup keeper | iCloud / Auto Backup file | **Not available** — browsers have no equivalent. PWA users start with 2 keepers and are prompted for a third |
+| Vault biometrics | Secure Enclave / StrongBox | WebAuthn/passkey PRF, else Argon2id passphrase |
+| OAuth | `expo-auth-session` | Standard browser redirects |
+
+**Cross-platform note**: the split payload is the **12 words**, never the private key. Native holds a raw 32-byte seed while the PWA holds a 48-byte PKCS8 key, so key bytes don't transfer between platforms — but the words derive correctly on both, since both run `sha256(sha256(words))`. Any implementation that splits key bytes instead of words will break cross-platform recovery.
 
 ---
 
-## Part 6: Cryptographic Details
+## Part 7: Cryptographic Details
 
-### Seed Phrase Generation (Unchanged)
-
-The existing pipeline is preserved exactly:
+### Seed phrase generation (unchanged)
 
 ```
 1. 16 bytes random entropy (expo-crypto.getRandomBytes)
 2. SHA-256 checksum → first 4 bits
-3. 128 + 4 = 132 bits → 12 × 11-bit chunks → BIP-39 English wordlist indices → 12 words
-4. Double SHA-256 of space-joined words → 32-byte Ed25519 private key seed
+3. 132 bits → 12 × 11-bit chunks → BIP-39 English wordlist → 12 words
+4. Double SHA-256 of the space-joined words → 32-byte Ed25519 seed
 5. @noble/ed25519 getPublicKey(seed) → public key
 ```
 
-> **Note**: This is a non-standard BIP-39 deviation — standard BIP-39 uses PBKDF2 with 2048 rounds. BeanPool uses double SHA-256. Same wordlist, different derived keys from the same words.
+> Non-standard BIP-39 deviation: standard BIP-39 uses PBKDF2 with 2048 rounds, BeanPool uses double SHA-256. Same wordlist, different derived keys. Changing it now would orphan every existing account.
 
-### Shamir's Secret Sharing Parameters
-
-```
-Secret:    12-word mnemonic (joined string, UTF-8 encoded, hex-represented)
-Shares:    N = number of guardians (minimum 3, recommended 5)
-Threshold: K = 3 (always — quorum matches the existing guardian approval threshold)
-Field:     GF(2^8) — standard 8-bit Galois field
-Library:   secrets.js-grempe (or audited equivalent)
-```
-
-### Share Encryption Per Guardian
-
-Each Shamir share is encrypted specifically for one guardian using ECDH key agreement:
+### The split
 
 ```
-1. Generate ephemeral X25519 keypair on the sharding device
-2. Convert guardian's Ed25519 public key → X25519 public key (standard birational map)
-3. ECDH(ephemeral_private, guardian_x25519_public) → shared secret
-4. HKDF-SHA256(shared_secret, salt="beanpool-guardian-share") → AES-256 key
-5. AES-256-GCM(share_plaintext, key, random_iv) → ciphertext + tag
-6. Store: (ciphertext, iv, tag, ephemeral_public_key) on the node
+Secret:    the 12 words (space-joined, UTF-8)
+Threshold: K = 3 (D2 — matches the existing guardian quorum)
+Shares:    N = number of keepers (3 at signup, 4 with sign-in, more with buddies)
+Field:     GF(2^8)
+Library:   shamir-secret-sharing — must pass a round-trip test on Hermes
 ```
 
-To decrypt, the guardian:
+Re-split (and `generation` bump) happens on: adding a keeper, removing a keeper, or a keeper's key changing.
+
+### Per-keeper encryption
+
+**Human keepers (K3, K5+)** — ECDH to their existing account key:
 
 ```
-1. Convert their own Ed25519 private key → X25519 private key
-2. ECDH(own_x25519_private, ephemeral_public) → same shared secret
-3. HKDF → same AES key → decrypt → plaintext share
+1. Ephemeral X25519 keypair on the splitting device
+2. Keeper's Ed25519 public key → X25519 (standard birational map)
+3. ECDH(ephemeral_private, keeper_x25519_public) → shared secret
+4. HKDF-SHA256(shared_secret, salt="beanpool-keeper-share") → AES-256 key
+5. AES-256-GCM(piece, key, random_iv) → ciphertext + tag
+6. Store (ciphertext, iv, tag, ephemeral_pubkey) on the node
 ```
 
-### SSO Key Backup Encryption
+The keeper decrypts by converting their own Ed25519 private key to X25519 and repeating the ECDH.
+
+**Sign-in keeper (K4)**:
 
 ```
-1. Extract `sub` claim from OAuth id_token (stable provider user ID)
-   — for Facebook: the `id` field; for GitHub: the `id` field;
-     for Google/Apple: the `sub` JWT claim; for email: the verified address
-2. Generate random 32-byte salt
-3. HKDF-SHA256(sub, salt, info="beanpool-sso-backup") → AES-256 key
-4. AES-256-GCM(mnemonic_string, key, random_iv) → ciphertext + tag
-5. Store: (provider, providerUserId, salt, iv, ciphertext, tag) on the node
+1. sub = provider subject claim (Google/Apple `sub`, Facebook/GitHub `id`)
+2. lookup_salt = random 32B;  sso_lookup_hash = SHA-256(sub ‖ lookup_salt)
+3. key = HKDF-SHA256(sub, salt, info="beanpool-keeper-sso-v1")
+4. AES-256-GCM(piece, key, random_iv)
+5. Store (ciphertext, iv, tag, sso_lookup_hash, lookup_salt) on the node
 ```
+
+This is deliberately weak-ish, and that's fine: `sub` is not a secret in general, and the node might derive it. What that yields is one piece. **Security here comes from the threshold, not from this key** — which is the entire architectural point of Revision 3.
+
+**Hub keeper (K2)**: AES-256-GCM under `recovery.hubShareKey`, sourced from the environment and never written to the database, so a stolen DB snapshot doesn't include it.
+
+**Device keeper (K1)**: written as an opaque file in the platform backup set. Secrecy is not load-bearing — a piece alone reveals nothing — so no user secret and no hardware key is involved. This is what makes K1 work at all, where Revisions 1 and 2 failed.
+
+### Argon2id parameters (vault password only)
+
+```
+Native:  m=65536 KB (64 MB), t=3, p=4, hashLength=32, salt=32B
+PWA:     m=32768 KB (32 MB), t=4, p=1, hashLength=32, salt=32B
+```
+
+Two profiles because a 64 MB wasm allocation in a browser tab risks an OOM kill on the 1 GB-class devices this project targets. Parameters are stored in the blob so either platform can open the other's vault. Both must be benchmarked on a real low-end device before being fixed.
 
 ---
 
-## Part 7: Open Design Questions
+## Part 8: Migration for Existing Users
 
-### Auto-Enrollment vs Invite Codes
+Revision 1 declared `mnemonic: REMOVED` from `BeanPoolIdentity` with no migration path. Four screens read that field directly — [welcome.tsx:542](../apps/native/app/welcome.tsx#L542), [settings.tsx:537,1776,1850](../apps/native/app/%28tabs%29/settings.tsx#L537), [SettingsPage.tsx:247,646](../apps/pwa/src/pages/SettingsPage.tsx#L247) — so removing it breaks all of them, and every existing user already has plaintext words in storage.
 
-Should SSO-verified users bypass the invite code requirement? Options:
+```
+1. Add getMnemonic(): Promise<string[] | null> — a vault-aware accessor that
+   reads the vault if present and falls back to identity.mnemonic.
+   Migrate all four call sites to it FIRST, with no behaviour change.
 
-1. **Always require invite** — SSO just makes the flow smoother, but gatekeeping is unchanged
-2. **Node operator opt-in** — configurable `sso.autoEnrollment` flag (default: off)
-3. **Hybrid** — SSO users skip invite but enter a "waiting room" for node operator approval
+2. On next launch after update, if the user has no keepers:
+   → non-blocking card: "Let's make sure you can't lose your account"
+   → accept → split now, distribute to hub + inviter (members.invited_by is
+     already recorded) + this phone's backup → offer sign-in as a spare
+   → dismiss → status quo, ask again in 7 days, never block
 
-Recommendation: Option 2 (node operator opt-in, default off). Preserves existing trust model while giving operators the option to open up.
+3. Separately and optionally, move the plaintext words into the vault.
 
-### Seed Phrase Visibility for SSO Users
+4. Only once telemetry shows the long tail has migrated does
+   identity.mnemonic become genuinely optional in the type.
+```
 
-Should SSO users ever see their 12 words? Options:
+An existing user whose inviter has left the community, or who joined before `invited_by` was populated, starts with two keepers and is prompted for a third. Nobody is ever blocked or logged out by this migration.
 
-1. **Never shown** — pure SSO + guardian recovery, simplest UX
-2. **Deferred** — available in Settings → Security → Export Recovery Phrase (recommended)
-3. **Shown during onboarding** but de-emphasised
+---
 
-Recommendation: Option 2. The words always exist — hiding them completely feels paternalistic. Making them available but not forced respects both audiences.
+## Part 9: Risk Register
 
-### Guardian Share Re-Encryption
+| # | Risk | Severity | Status |
+|---|---|---|---|
+| **R1** | **3 colluding human keepers take an account.** Instant release (D6) means no notification window and no cancel; because the original key is rebuilt rather than rotated, there's no revocation afterwards. | High | **Accepted** — chosen for recovery UX. Mitigations that cost no UX: keep the existing knowledge check, log every release, and notify the owner on every surviving device *after* the fact. The migrate-to-new-key flow remains the remedy once a takeover is discovered. |
+| **R2** | **Hub holds more than one envelope.** It stores K4's ciphertext and (for PWA users) serves the app code, so a dishonest operator can plausibly reach 2 pieces. | Medium | Contained by the threshold of 3 (D2). This is the specific reason the threshold cannot be lowered. |
+| **R3** | **One vendor controlling two keepers** — e.g. Google sign-in (K4) on an Android phone backed up to the same Google account (K1). | Medium | Contained by D7: the third piece is the hub's, which won't release automatically without a 24h delay and a notification. |
+| **R4** | **Central OAuth apps disappear** (policy change, account suspension, us going away). | Low | Every user loses one keeper out of 4+ and recovers via the rest. Degrades; doesn't destroy. This is what makes D5 compatible with Principle 8. |
+| **R5** | **Node data loss** takes the hub's piece and the stored copies of human pieces. | Low | Human keepers cache their own piece locally, so K3/K5+ survive. K1 is on the user's phone. Only the hub's own piece is lost. |
+| **R6** | **User has no cloud backup** (cheap Android, no Google account) → K1 is a phantom keeper. | Medium | Detected and shown honestly in the keeper list, never counted as present. Facebook (D10) covers many of these users, who often have one even without a Google account. Falls back to State B/C of step 3. |
+| **R7** | **Inviter declines or leaves** → 2 keepers. | Medium | Detected, surfaced, nudged. Not silent. |
+| **R8** | **Bulk/admin invites have no personal inviter** → user starts with 2 keepers. | Low | Step 3 State B asks for a third. |
+| **R9** | **PWA users have no K1 at all** — browsers have no cloud-backup equivalent — so they start on 2 keepers by default. | Medium | Step 3 State B makes sign-in the third keeper rather than a bonus. The PWA is a first-class client, so this is the normal path for a large share of users, not an edge case. |
 
-If a guardian recovers their own identity (getting a new keypair), their stored share is encrypted with their old public key and can no longer be decrypted by them. Options:
+**On users who don't reach 3 keepers**: they are **not** locked out and never have been. Their 12 words exist and are always available in Settings — they are exactly as protected as every user is today. The keeper model is an improvement layered on top of that floor, and a user who hasn't reached 3 keepers simply hasn't received the improvement yet. Any copy or design that implies otherwise is wrong.
 
-1. **Re-shard on guardian change** — when any guardian's key changes, the owner's device automatically re-shards and re-distributes
-2. **Notify the owner** — "Your guardian Dave changed devices. Tap to update your backup."
-3. **Redundancy absorbs it** — with 5 shares and threshold 3, losing 1–2 guardians is survivable
+Note what is **no longer** in this register: broker collusion, PIN brute-forcing, central escrow compromise, and a node operator being able to decrypt user keys. Those risks don't exist in this design rather than being mitigated in it.
 
-Recommendation: Option 3 as the default (redundancy), with Option 2 as a nudge when the count drops below threshold.
+---
 
-### Nostr Integration
+## Part 10: Open Questions
 
-Should we support NIP-07 browser extension / `nsec` import as a third onboarding path for users who already have Nostr keys? This maps naturally since Nostr also uses cryptographic keypairs, and the BeanPool ethos overlaps heavily with the Nostr community.
-
-Status: Deferred — worth exploring but not part of the initial SSO rollout.
+1. **Is D7 right?** The hub's piece waits 24h unless a human has approved. It's the one decision taken without an explicit ruling, and it's the thing standing between "Google plus your phone backup" and a silent account takeover. The alternative is instant release everywhere, consistent with D6.
+2. **Are we shipping on the App Store?** Apple Sign-In is only mandatory if other social logins are offered in an App Store build. If distribution stays APK + PWA, the Apple keeper and a paid developer account drop entirely. Biggest remaining scope lever.
+3. **Cross-node keepers.** Assumed same-node. Federation makes cross-hub pieces possible — wanted before v1?
+4. **Does `recovery.ssoEnabled` default on or off** for self-hosted hubs?
+5. **Weighted pieces.** A keeper can be given two evaluation points instead of one — e.g. the phone backup counting double, so "phone + one friend" recovers while "two friends" doesn't. More flexible, more code. Worth it, or keep every keeper equal?
+6. **Nostr / NIP-07** as an additional keeper type — deferred.
 
 ---
 
 ## Implementation Phasing
 
-### Phase A: Quick Win — Platform Backup + Optional Seed Confirmation (est. 1 day)
+### Phase A: Unblock onboarding + groundwork (est. 2–3 days)
 
-- Configure `expo-secure-store` for iCloud Keychain sync (iOS) / Auto Backup (Android)
-- Update Step 3 in onboarding: make seed confirmation optional (or default to "I'll back this up later")
-- Add "View Recovery Phrase" inside Settings → Security
-- Add guardian nudge banner (non-blocking)
+- Replace the blocking seed screen with a non-blocking version; add "Not now"
+- Fix How-It-Works card 4
+- Add `getMnemonic()` and migrate all four `identity.mnemonic` call sites
+- "View Recovery Phrase" in Settings → Security (plaintext for now)
+- **No native changes, no rebuild** — ships to PWA and native alike
 
-### Phase B: Guardian Seed Sharding (est. 1–2 weeks)
+### Phase B: The split and human keepers (est. 1–2 weeks)
 
-- Implement Shamir split/recombine (client-side library integration)
-- Add `guardian_shares` DB table and server routes
-- Modify guardian selection flow to trigger silent sharding
-- Enhance guardian recovery to relay shares and reconstruct original key
-- Add share re-encryption nudge system
+- Shamir split/combine, round-trip tested on Hermes and on an API 26 device
+- `recovery_shares` table, `generation` handling, re-split on keeper change
+- K2 (hub) and K3 (inviter) keepers; keeper-side local caching
+- Release wired into the existing approve flow, with D6 instant release and D7 for the hub
+- Keeper status UI ("4 of 3 — you can afford to lose 1")
+- Restore flow: hub first, then collect pieces
 
-### Phase C: SSO Integration & Account Protection Chooser (est. 2–3 weeks)
+**At the end of Phase B every user is protected, with no third party and no central service involved.**
 
-- Build Account Protection Chooser screen (Step 3 in unified wizard)
-- Facebook OAuth via `expo-auth-session`
-- Google OAuth via `expo-auth-session`
-- GitHub OAuth via `expo-auth-session`
-- Apple Sign-In via `expo-apple-authentication` (iOS only, required by App Store policy)
-- Email magic link flow (server SMTP route)
-- Token-gated SSO key backup (`POST /api/sso/backup`) and recovery (`POST /api/sso/recover`)
-- Server-side JWT verification using `jose` library
-- SSO recovery options on the restore screen
-- Auto-enrollment configuration for node operators
-- PWA parity (OAuth redirects + WebAuthn biometric vault)
+### Phase C: Seed Vault (est. 1 week)
+
+- Encrypted vault, biometric mode via `requireAuthentication`, password mode via Argon2id
+- PWA vault via WebCrypto + `hash-wasm` — this is also the fix for plaintext IndexedDB
+- Migration prompt (Part 8 step 3)
+- Requires a standalone rebuild to test
+
+### Phase D: K1 phone-backup keeper (est. 3–4 days)
+
+- Expo config plugin for backup-set file placement
+- Detection and honest reporting when no cloud backup exists (R6)
+- Requires a standalone rebuild to test
+
+### Phase E: K4 sign-in keeper (est. 1 week)
+
+- Register the central OAuth applications
+- `expo-auth-session` flows + PWA redirect parity
+- `/api/recovery/sso-verify` with rate limiting
+- Keeper add/remove from Settings
+
+Phases A–D contain no third-party dependency of any kind. Phase E is the only part touching Facebook/Google/Apple/GitHub, it is last, and nothing else depends on it. Within Phase E, build providers in D10 order — Facebook first, since it reaches the most users and its business verification has the longest lead time.
+
+---
+
+## Revision History
+
+**Revision 3.1 (2026-08-05)** — Facebook restored as a keeper provider and made the priority one (D10); step 3 rebuilt as three states driven by the real keeper count, so the screen never claims a keeper the user doesn't have; R9 added for PWA users; corrected the framing that fewer than 3 keepers means no recovery — it means the user falls back to the 12 words, exactly as today.
+
+**Revision 3 (2026-08-05)** — the keyholder model:
+- **The words are split at signup and no party ever holds a whole copy.** Sign-in becomes one keyholder among several rather than a vault
+- Central broker, peppers and the Recovery PIN all deleted — nothing holds a whole copy, so nothing needs that defence
+- Four keepers from day one: phone backup, community hub, inviter, optional sign-in. Threshold stays at 3
+- Layer 1 fixed by dissolving it: a single piece isn't a secret, so it can be an ordinary backed-up file
+- D7 added — the hub's piece won't release automatically without a delay and a notification
+- Keeper removal made real via `generation`; `sso_key_backups` / `sso_bindings` replaced by `recovery_shares`
+- Risk register rewritten: broker collusion, PIN brute-forcing and node-operator decryption no longer exist as risks
+
+**Revision 2 (2026-08-05)** — split the escrow key three ways (node / central broker / user PIN), fixed Revision 1's node-can-decrypt-everything flaw, corrected the Layer 1 mechanism, added migration and risk sections. Superseded: the broker was a central point of failure.
+
+**Revision 1** — original design. SSO escrow with the key derivable from data the node itself stored.

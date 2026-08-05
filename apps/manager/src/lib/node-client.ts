@@ -91,9 +91,16 @@ export async function fetchOnboardingFunnel(
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/onboarding-funnel`);
     url.searchParams.set('days', String(days));
-    if (adminPassword) {
-        url.searchParams.set('password', adminPassword);
-    }
+    // Password goes in the header only, never the query string. checkAdminAuth accepts
+    // the header on its own, and a credential in a URL ends up in proxy access logs,
+    // browser history and Referer headers. The node's own logger does redact
+    // `password=...`, but only at 12+ characters and only for its own logs — none of
+    // which helps once the URL has left the browser.
+    //
+    // NB fetchDiagnostics and fetchGatewayConfig above still pass it as a query param.
+    // Same fix applies, but it wants its own PR: if any deployment sits behind something
+    // that strips custom headers, removing their fallback locks that operator out of
+    // their own dashboard, and that needs testing against a real node first.
     const res = await fetch(url.toString(), {
         headers,
         cache: 'no-store',

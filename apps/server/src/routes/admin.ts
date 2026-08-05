@@ -234,8 +234,10 @@ router.post('/api/local/admin/diagnostics', getDiagnosticsHandler);
 const getOnboardingFunnelHandler = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        // Clamped rather than trusted — see clampDays.
-        const days = clampDays(ctx.query?.days ?? 30);
+        // Registered for POST as well as GET, so read the body too — otherwise a POST
+        // carrying {"days": 90} silently answers with 30 and looks like the window
+        // control is broken. Clamped rather than trusted; see clampDays.
+        const days = clampDays(ctx.query?.days ?? ctx.requestBody?.days ?? 30);
         ctx.body = { days, rows: getFunnel(days) };
     } catch (e: any) {
         ctx.status = 500;

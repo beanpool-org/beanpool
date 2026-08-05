@@ -49,6 +49,10 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
         let cancelled = false;
         setLoading(true);
         setError(null);
+        // Cleared before the request, not after it succeeds. Otherwise a failed switch
+        // leaves the previous node's numbers on screen under an error banner — and worse,
+        // shows one community's figures under another community's name.
+        setRows(null);
         fetchOnboardingFunnel(active.url, active.adminPassword, days)
             .then(res => { if (!cancelled) setRows(res.rows); })
             .catch(e => { if (!cancelled) setError(e.message || 'Could not reach this node'); })
@@ -82,7 +86,11 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
         const failures = rows
             .filter(r => r.event === 'invite_failed')
             .reduce<Record<string, number>>((acc, r) => {
-                acc[r.variant] = (acc[r.variant] || 0) + r.count;
+                // Every current call site passes a reason, but a future bare
+                // recordFunnelEvent('invite_failed') would otherwise render as a blank
+                // row with a number beside it.
+                const key = r.variant || 'unknown';
+                acc[key] = (acc[key] || 0) + r.count;
                 return acc;
             }, {});
 
@@ -103,7 +111,7 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl font-bold text-white tracking-tight m-0 flex items-center gap-2.5">
-                        🚪 Onboarding
+                        <span aria-hidden="true">🚪</span> Onboarding
                     </h2>
                     <p className="text-xs text-nature-400 m-0 mt-1">
                         How many people tried to join {active?.name || 'this node'}, and where they stopped.
@@ -115,21 +123,23 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                         <select
                             value={activeProfileId}
                             onChange={e => onSelectNode(e.target.value)}
+                            aria-label="Choose which node's funnel to show"
                             className="px-3 py-2 rounded-xl bg-nature-800 text-xs font-bold text-white border border-nature-700"
                         >
                             {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                     )}
-                    <div className="flex rounded-xl overflow-hidden border border-nature-700">
+                    <div role="group" aria-label="How far back to look" className="flex rounded-xl overflow-hidden border border-nature-700">
                         {WINDOWS.map(w => (
                             <button
                                 key={w}
                                 onClick={() => setDays(w)}
-                                className={`px-3 py-2 text-xs font-bold transition-all ${
+                                aria-pressed={days === w}
+                                className={`px-3 py-2 text-xs font-bold transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
                                     days === w ? 'bg-emerald-600 text-white' : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
                                 }`}
                             >
-                                {w}d
+                                {w} days
                             </button>
                         ))}
                     </div>
@@ -187,7 +197,19 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                                         </span>
                                     ) : (
                                         <>
-                                            <div className="w-32 h-2 rounded-full bg-nature-900 overflow-hidden hidden sm:block">
+                                            {/*
+                                              aria-hidden rather than role="progressbar":
+                                              the count and the percentage are both
+                                              rendered as text immediately to the right,
+                                              so marking this up as a progress bar would
+                                              have a screen reader announce the same
+                                              figure twice. The bar is decoration for the
+                                              number, not a second source of it.
+                                            */}
+                                            <div
+                                                aria-hidden="true"
+                                                className="w-32 h-2 rounded-full bg-nature-900 overflow-hidden hidden sm:block"
+                                            >
                                                 <div
                                                     className="h-full bg-emerald-500"
                                                     style={{ width: `${Math.min(100, pct)}%` }}

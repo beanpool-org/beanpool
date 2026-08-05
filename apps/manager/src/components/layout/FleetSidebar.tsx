@@ -50,8 +50,8 @@ export function FleetSidebar({
     const nodeScopedItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
         { id: 'gateway', label: 'Gateway Security', icon: '🛡️' },
         { id: 'members', label: 'Trust & Members', icon: '👥' },
-        { id: 'invites', label: 'Invites & Onboarding', icon: '🎫' },
-        { id: 'onboarding', label: 'Join Funnel', icon: '🚪' },
+        { id: 'invites', label: 'Invites & Codes', icon: '🎫' },
+        { id: 'onboarding', label: 'Onboarding Funnel', icon: '🚪' },
         { id: 'logs', label: 'System Streamer', icon: '📜' },
         { id: 'ai', label: 'Sovereign AI Copilot', icon: '🤖', badge: 'PRO' },
     ];

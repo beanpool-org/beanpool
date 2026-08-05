@@ -331,6 +331,7 @@ export default function PostDetailModal() {
     const [hasExistingRating, setHasExistingRating] = useState(false);
     const [showReportForm, setShowReportForm] = useState(false);
     const [reportReason, setReportReason] = useState('');
+    const [reportDetails, setReportDetails] = useState('');
     const [submittingReport, setSubmittingReport] = useState(false);
     const [isBlocking, setIsBlocking] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
@@ -1470,25 +1471,66 @@ export default function PostDetailModal() {
                         </View>
                         {showReportForm && (
                             <View style={[styles.confirmBox, { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border }]}>
-                                <Text style={styles.confirmBoxLabel}>REPORT REASON</Text>
-                                <View style={styles.editPickerWrap}>
-                                    <Picker selectedValue={reportReason} onValueChange={v => setReportReason(v)} style={styles.editPicker} dropdownIconColor={colors.feedback.danger.solid}>
-                                        <Picker.Item label="Select a reason..." value="" />
-                                        <Picker.Item label="Spam or scam" value="Spam or scam" />
-                                        <Picker.Item label="Offensive content" value="Offensive content" />
-                                        <Picker.Item label="Misleading post" value="Misleading post" />
-                                        <Picker.Item label="Other" value="Other" />
-                                    </Picker>
+                                <Text style={styles.confirmBoxLabel}>SELECT REPORT REASON</Text>
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                                    {['Spam or scam', 'Offensive content', 'Misleading post', 'Other'].map((r) => {
+                                        const isSelected = reportReason === r;
+                                        return (
+                                            <Pressable
+                                                key={r}
+                                                accessibilityRole="button"
+                                                accessibilityState={{ selected: isSelected }}
+                                                style={{
+                                                    paddingHorizontal: 14,
+                                                    paddingVertical: 8,
+                                                    borderRadius: 20,
+                                                    backgroundColor: isSelected ? colors.feedback.danger.solid : colors.surface.card,
+                                                    borderWidth: 1,
+                                                    borderColor: isSelected ? colors.feedback.danger.solid : colors.border.default,
+                                                }}
+                                                onPress={() => {
+                                                    setReportReason(r);
+                                                    hapticTick();
+                                                }}
+                                            >
+                                                <Text style={{ fontSize: 13, fontWeight: '700', color: isSelected ? colors.text.inverse : colors.text.body }}>
+                                                    {isSelected ? '✓ ' : ''}{r}
+                                                </Text>
+                                            </Pressable>
+                                        );
+                                    })}
                                 </View>
-                                <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, { backgroundColor: reportReason ? colors.feedback.danger.solid : colors.border.default }]} disabled={!reportReason || submittingReport} onPress={async () => {
-                                    if(!identity || !post.id) return;
-                                    try {
-                                        setSubmittingReport(true);
-                                        await reportAbuse(identity.publicKey, post.author_pubkey, reportReason, post.id);
-                                        setShowReportForm(false);
-                                        Alert.alert('Reported', 'Post was flagged for review.');
-                                    } catch(e:any) { Alert.alert('Error', e.message); } finally { setSubmittingReport(false); }
-                                }}>
+
+                                <TextInput
+                                    style={[styles.editInput, { minHeight: 48, marginBottom: 12, backgroundColor: colors.surface.card }]}
+                                    value={reportDetails}
+                                    onChangeText={setReportDetails}
+                                    placeholder="Optional details or comments..."
+                                    placeholderTextColor={colors.text.muted}
+                                    multiline
+                                />
+
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={[styles.confirmActionBtn, { backgroundColor: reportReason ? colors.feedback.danger.solid : colors.border.default }]}
+                                    disabled={!reportReason || submittingReport}
+                                    onPress={async () => {
+                                        if (!identity || !post.id) return;
+                                        try {
+                                            setSubmittingReport(true);
+                                            const finalReason = reportDetails ? `${reportReason}: ${reportDetails}` : reportReason;
+                                            await reportAbuse(identity.publicKey, post.author_pubkey, finalReason, post.id);
+                                            setShowReportForm(false);
+                                            setReportDetails('');
+                                            setReportReason('');
+                                            Alert.alert('Reported', 'Post was flagged for review.');
+                                        } catch (e: any) {
+                                            Alert.alert('Error', e.message);
+                                        } finally {
+                                            setSubmittingReport(false);
+                                        }
+                                    }}
+                                >
                                     <Text style={styles.confirmActionBtnText}>{submittingReport ? 'Sending...' : 'Submit Report'}</Text>
                                 </Pressable>
                             </View>

@@ -11,7 +11,7 @@ import { resolveBundledAvatar } from '../../utils/bundled-avatars';
 import { updateCallsign, wipeIdentity } from '../../utils/identity';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, getPendingRecoveryRequests, approveRecoveryRequest, rejectRecoveryRequest, signedRequest } from '../../utils/db';
-import { getBlockedUsers, clearBlocklist } from '../../utils/blocklist';
+import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
@@ -518,6 +518,30 @@ export default function SettingsScreen() {
     const [resyncTotalSteps, setResyncTotalSteps] = useState(5);
     const [resyncProgressStage, setResyncProgressStage] = useState('Initializing Database Reset...');
     const [appLockEnabled, setAppLockEnabledState] = useState(false);
+    const [showBlockedModal, setShowBlockedModal] = useState(false);
+    const [blockedUsersList, setBlockedUsersList] = useState<{ pubkey: string; callsign?: string }[]>([]);
+    const [loadingBlockedList, setLoadingBlockedList] = useState(false);
+
+    const handleOpenBlockedModal = async () => {
+        setLoadingBlockedList(true);
+        setShowBlockedModal(true);
+        try {
+            const pubkeys = await getBlockedUsers();
+            const items = await Promise.all(pubkeys.map(async (pk) => {
+                let callsign = pk.length > 16 ? `${pk.slice(0, 8)}...${pk.slice(-6)}` : pk;
+                try {
+                    const profile = await getMemberProfile(pk);
+                    if (profile?.callsign) callsign = profile.callsign;
+                } catch {}
+                return { pubkey: pk, callsign };
+            }));
+            setBlockedUsersList(items);
+        } catch (e) {
+            console.error('[Settings] Failed to load blocked users list:', e);
+        } finally {
+            setLoadingBlockedList(false);
+        }
+    };
 
     useEffect(() => {
         getAppLockEnabled().then(setAppLockEnabledState);
@@ -1207,28 +1231,7 @@ export default function SettingsScreen() {
                 {/* ─── Legal & Privacy ─── */}
                 <Text style={styles.sectionHeader}>LEGAL & PRIVACY</Text>
                 <View style={styles.menuGroup}>
-                    <Pressable style={styles.menuBtn} onPress={async () => {
-                        const list = await getBlockedUsers();
-                        if (!list || list.length === 0) {
-                            Alert.alert('Blocked Users', 'You currently have no blocked users.');
-                            return;
-                        }
-                        Alert.alert(
-                            'Blocked Users',
-                            `You have ${list.length} blocked user${list.length === 1 ? '' : 's'}. Clear your blocklist?`,
-                            [
-                                { text: 'Cancel', style: 'cancel' },
-                                {
-                                    text: `Unblock All (${list.length})`,
-                                    style: 'destructive',
-                                    onPress: async () => {
-                                        await clearBlocklist();
-                                        Alert.alert('Unblocked', 'All blocked users have been unblocked.');
-                                    }
-                                }
-                            ]
-                        );
-                    }} accessibilityRole="button">
+                    <Pressable style={styles.menuBtn} onPress={handleOpenBlockedModal} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚫</Text></View>
                         <Text style={[styles.menuText, { flex: 1 }]}>Manage Blocked Users</Text>
                         <Text style={styles.menuChevron} aria-hidden={true} importantForAccessibility="no">›</Text>
@@ -1925,6 +1928,75 @@ export default function SettingsScreen() {
                         <Text style={{ fontSize: 11, color: colors.text.secondary, textAlign: 'center', marginTop: 12, fontStyle: 'italic' }}>
                             Restoring members, posts, deals, and ratings. Please do not close the app.
                         </Text>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Blocked Users Management Modal */}
+            <Modal visible={showBlockedModal} transparent animationType="slide" onRequestClose={() => setShowBlockedModal(false)}>
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
+                    <View style={{ backgroundColor: colors.surface.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '80%', borderWidth: 1, borderColor: colors.border.default }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }}>🚫 Blocked Users</Text>
+                            <Pressable accessibilityRole="button" onPress={() => setShowBlockedModal(false)} style={{ padding: 4 }}>
+                                <Text style={{ fontSize: 18, color: colors.text.muted, fontWeight: 'bold' }}>✕</Text>
+                            </Pressable>
+                        </View>
+
+                        {loadingBlockedList ? (
+                            <ActivityIndicator size="large" color={colors.brand.primary} style={{ marginVertical: 32 }} />
+                        ) : blockedUsersList.length === 0 ? (
+                            <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+                                <Text style={{ fontSize: 14, color: colors.text.secondary }}>You currently have no blocked users.</Text>
+                            </View>
+                        ) : (
+                            <>
+                                <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
+                                    {blockedUsersList.map(item => (
+                                        <View key={item.pubkey} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
+                                            <View style={{ flex: 1, marginRight: 12 }}>
+                                                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.body }} numberOfLines={1}>
+                                                    {item.callsign}
+                                                </Text>
+                                                <Text style={{ fontSize: 11, color: colors.text.muted }} numberOfLines={1}>
+                                                    {item.pubkey.slice(0, 16)}...
+                                                </Text>
+                                            </View>
+                                            <Pressable
+                                                accessibilityRole="button"
+                                                style={{ backgroundColor: colors.feedback.danger.bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}
+                                                onPress={async () => {
+                                                    await unblockUser(item.pubkey);
+                                                    setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
+                                                }}
+                                            >
+                                                <Text style={{ color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
+                                            </Pressable>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={{ backgroundColor: colors.surface.app, paddingVertical: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.feedback.danger.border, marginBottom: 8 }}
+                                    onPress={async () => {
+                                        Alert.alert('Unblock All', 'Are you sure you want to unblock all users?', [
+                                            { text: 'Cancel', style: 'cancel' },
+                                            {
+                                                text: 'Unblock All',
+                                                style: 'destructive',
+                                                onPress: async () => {
+                                                    await clearBlocklist();
+                                                    setBlockedUsersList([]);
+                                                }
+                                            }
+                                        ]);
+                                    }}
+                                >
+                                    <Text style={{ color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 14 }}>Unblock All</Text>
+                                </Pressable>
+                            </>
+                        )}
                     </View>
                 </View>
             </Modal>

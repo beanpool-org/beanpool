@@ -222,6 +222,11 @@ export function WelcomePage({ onComplete }: Props) {
     }, [pendingIdentity]);
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [pendingInviteCode, setPendingInviteCode] = useState('');
+    // Whether this identity's invite has already been redeemed on the node. In-memory only,
+    // unlike native's persisted flag, because this wizard has no resume-after-reload path:
+    // a reload loses pendingIdentity, and the root then routes on the stored identity rather
+    // than re-entering the wizard. If a resume path is ever added, this needs persisting too.
+    const [inviteRedeemed, setInviteRedeemed] = useState(false);
     const [showOnboardingGuide, setShowOnboardingGuide] = useState(false);
     const [showNewUser, setShowNewUser] = useState(() => true);
     const [showMemberOptions, setShowMemberOptions] = useState(false);
@@ -389,6 +394,9 @@ export function WelcomePage({ onComplete }: Props) {
                     throw redeemErr;
                 }
             }
+            // Either it just succeeded or the node says this member is already registered.
+            // Both mean the final step has nothing left to redeem.
+            setInviteRedeemed(true);
 
             setShowAvatarSetup(true);
             setLoading(false);
@@ -443,7 +451,12 @@ export function WelcomePage({ onComplete }: Props) {
         if (!pendingIdentity) return;
         setLoading(true);
         try {
-            if (pendingInviteCode) {
+            // Skipped when the invite was already redeemed at Step 1, which is the normal
+            // path — redemption moved there so a member exists on the node from the moment
+            // they pick a name. Re-sending the same code here doubled the invite attempts in
+            // the onboarding funnel and spent a round trip at the tap where somebody is
+            // waiting to get in. Kept for the case where Step 1 never got that far.
+            if (pendingInviteCode && !inviteRedeemed) {
                 try {
                     if (pendingInviteCode.length > 20 && pendingInviteCode.startsWith('BP-')) {
                         // Offline ticket cryptographic redemption

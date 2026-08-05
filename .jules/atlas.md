@@ -41,3 +41,4 @@ Atlas's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native
 ## Journal — Critical Learnings Only
 
 Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [Any surprising setup or patterns discovered]\n**Action:** [How to find similar gaps next time]`
+## 2026-08-05 - [manager tests] computeSampleTrustSummary unit tests\n**Gap:** computeSampleTrustSummary in apps/manager/src/lib/engine-helpers.ts was untested.\n**Learning:** Vitest needed to be set up from scratch, which involved updating vite.config.ts (using vitest/config), creating setupTests.ts for jest-dom, and updating tsconfig.json types to include vitest/globals and @testing-library/jest-dom.\n**Action:** Check for existing lib/ helper files like profiles.ts and node-client.ts for future test coverage.

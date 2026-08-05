@@ -147,7 +147,9 @@ import {
     signSyncPayload as signSyncPayloadEngine,
     exportSyncState as exportSyncStateWrapper,
     importRemoteState as importRemoteStateEngine,
-    type ImportResult
+    writeSyncAuditLog,
+    type ImportResult,
+    type SyncAuditEntry,
 } from './engine/sync.js';
 
 
@@ -1970,7 +1972,8 @@ export type {
     NodeRole
 };
 
-export { getNodeRole, setNodeRole, getSyncCursor, setSyncCursor, recordSyncAttempt, getCurrentImportOrigin };
+export { getNodeRole, setNodeRole, getSyncCursor, setSyncCursor, recordSyncAttempt, getCurrentImportOrigin, writeSyncAuditLog };
+export type { SyncAuditEntry };
 
 export function getStateHash(): string {
     return getStateHashEngine(db);

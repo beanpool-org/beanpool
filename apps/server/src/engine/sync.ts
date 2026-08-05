@@ -27,6 +27,50 @@ export function getSyncCursor(peerId: string): string | null {
     return row?.last_synced_at ?? null;
 }
 
+/**
+ * #134: Write one row to sync_audit_log recording the identity and change counts
+ * of a completed importRemoteState() call. Exported separately so the production
+ * code path can be exercised in tests without a live libp2p signature.
+ * Failures are logged but never re-thrown — an audit write failure must never
+ * abort or mask a successful import.
+ */
+export interface SyncAuditEntry {
+    originPeerId: string;
+    originNodeId: string;
+    newMembers: number;
+    updatedMembers: number;
+    newPosts: number;
+    updatedPosts: number;
+    newTransactions: number;
+    accountChanges: number;
+    marketplaceTxns: number;
+    newMessages: number;
+    tombstonesApplied: number;
+    conflictsSkipped: number;
+}
+
+export function writeSyncAuditLog(entry: SyncAuditEntry): void {
+    try {
+        db.prepare(`
+            INSERT INTO sync_audit_log
+                (origin_peer_id, origin_node_id,
+                 new_members, updated_members, new_posts, updated_posts,
+                 new_transactions, account_changes, marketplace_txns,
+                 new_messages, tombstones_applied, conflicts_skipped)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+            entry.originPeerId, entry.originNodeId,
+            entry.newMembers, entry.updatedMembers,
+            entry.newPosts, entry.updatedPosts,
+            entry.newTransactions, entry.accountChanges,
+            entry.marketplaceTxns, entry.newMessages,
+            entry.tombstonesApplied, entry.conflictsSkipped
+        );
+    } catch (auditErr: any) {
+        console.error(`[Sync] ⚠️ Failed to write sync_audit_log row (import itself succeeded):`, auditErr?.message || auditErr);
+    }
+}
+
 export function setSyncCursor(peerId: string, cursor: string): void {
     const now = new Date().toISOString();
     db.prepare(`
@@ -696,24 +740,13 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     }
 
     // #134: Permanent audit trail — write one row per import with origin peer identity and change counts.
-    // Failures here must never abort the import itself; we log and continue.
-    try {
-        db.prepare(`
-            INSERT INTO sync_audit_log
-                (origin_peer_id, origin_node_id,
-                 new_members, updated_members, new_posts, updated_posts,
-                 new_transactions, account_changes, marketplace_txns,
-                 new_messages, tombstones_applied, conflicts_skipped)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).run(
-            signerPeerId, remote.nodeId,
-            newMembers, updatedMembers, newPosts, updatedPosts,
-            newTransactions, accountChanges, marketplaceTxns,
-            newMessages, tombstonesApplied, conflictsSkipped
-        );
-    } catch (auditErr: any) {
-        console.error(`[Sync] ⚠️ Failed to write sync_audit_log row (import itself succeeded):`, auditErr?.message || auditErr);
-    }
+    writeSyncAuditLog({
+        originPeerId: signerPeerId,
+        originNodeId: remote.nodeId,
+        newMembers, updatedMembers, newPosts, updatedPosts,
+        newTransactions, accountChanges, marketplaceTxns,
+        newMessages, tombstonesApplied, conflictsSkipped,
+    });
 
     return {
         newMembers,

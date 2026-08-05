@@ -81,7 +81,6 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
                     if (db) {
                         const oldDb = db;
                         db = null;
-                        currentDbName = null;
                         dbInitialized = false;
                         dbInitPromise = null;
                         try {

@@ -479,6 +479,12 @@ export function WelcomePage({ onComplete }: Props) {
                 }
             }
             
+            // Counted here, after registration has actually landed, rather than on the tap
+            // that started it. Both branches above bail out early with an error, so counting
+            // on the tap booked a completion for people who never got in — and booked it
+            // again each time they retried.
+            recordOnboardingEvent('guide_complete');
+
             // Onboarding complete — explicitly ask for location once
             if ('geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
@@ -918,12 +924,7 @@ export function WelcomePage({ onComplete }: Props) {
                             )}
 
                             <button
-                                onClick={() => {
-                                    // On the tap that ends onboarding, so it counts people who
-                                    // got through rather than people who saw the guide.
-                                    recordOnboardingEvent('guide_complete');
-                                    handleSeedConfirmed();
-                                }}
+                                onClick={handleSeedConfirmed}
                                 disabled={loading}
                                 style={{
                                     width: '100%', padding: '0.85rem', borderRadius: '10px',
@@ -975,6 +976,18 @@ export function WelcomePage({ onComplete }: Props) {
                                 ))}
                             </div>
 
+                            {/*
+                              Says out loud that this is not the only chance. Removing the
+                              gate without this just leaves people guessing whether skipping
+                              costs them something permanent — and the ones most likely to
+                              skip are the ones with no pen to hand, not the ones who do not
+                              care.
+                            */}
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                No pen handy? Carry on — you can come back to these any time under
+                                Settings → Recovery Phrase.
+                            </p>
+
                             <label htmlFor="seedConfirmed" style={{
                                 display: 'flex', alignItems: 'center', gap: '0.5rem',
                                 fontSize: '0.8rem', color: 'var(--text-muted)',
@@ -990,17 +1003,6 @@ export function WelcomePage({ onComplete }: Props) {
                                 I've written these words down somewhere safe
                             </label>
 
-                            {/*
-                              Says out loud that this is not the only chance. Removing the
-                              gate without this just leaves people guessing whether skipping
-                              costs them something permanent — and the ones most likely to
-                              skip are the ones with no pen to hand, not the ones who do not
-                              care.
-                            */}
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-                                No pen handy? Carry on — you can come back to these any time under
-                                Settings → Recovery Phrase.
-                            </p>
 
                             {error && (
                                 <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>
@@ -1031,7 +1033,7 @@ export function WelcomePage({ onComplete }: Props) {
                                     fontFamily: 'inherit', transition: 'background 0.2s',
                                 }}
                             >
-                                Continue →
+                                Next →
                             </button>
 
                             <button

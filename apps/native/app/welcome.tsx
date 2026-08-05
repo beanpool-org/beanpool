@@ -429,9 +429,6 @@ export default function WelcomeScreen() {
         if (!pendingIdentity) return;
         setLoading(true);
         setError(null);
-        // Counted here rather than on arrival at the guide: this is the tap that ends
-        // onboarding, so it measures people who got through, not people who saw it.
-        recordOnboardingEvent('guide_complete');
         try {
             // Member was already redeemed at Step 1, but run backup safety check if needed
             if (pendingInviteCode) {
@@ -477,6 +474,13 @@ export default function WelcomeScreen() {
 
             // Refresh node recognition
             await recheckNodeStatus().catch(() => {});
+
+            // Counted here, after the work above has actually landed, rather than on the
+            // tap that started it. Recording on the tap booked a completion for anyone the
+            // catch below then stranded with an error, and booked it again on every retry —
+            // the same mistake `hasNoAvatarYet` exists to prevent for step 2, where asking
+            // must happen before the write and counting after it.
+            recordOnboardingEvent('guide_complete');
 
             // Final step — enter the app
             setIdentity(pendingIdentity);
@@ -897,6 +901,11 @@ export default function WelcomeScreen() {
                             onPress={() => setSeedConfirmed(!seedConfirmed)}
                             accessibilityRole="checkbox"
                             accessibilityState={{ checked: seedConfirmed }}
+                            // Without this the announcement is "white large square, I've saved
+                            // these words, check box, unchecked" — the tick state read out
+                            // twice, once as a described emoji. The role and state already
+                            // carry it, so the label is just the sentence.
+                            accessibilityLabel="I've saved these words"
                         >
                             <Text style={styles.checkboxText}>
                                 {seedConfirmed ? '✅ ' : '⬜ '} I've saved these words
@@ -1021,7 +1030,10 @@ export default function WelcomeScreen() {
                         */}
                         <View style={guideStyles.card}>
                             <Text style={guideStyles.cardTitle}>🔑 Getting Back In</Text>
-                            <Text style={guideStyles.cardText}>
+                            {/* Spaced locally rather than by changing guideStyles.cardText,
+                                which has no marginBottom because the other three cards end on
+                                it. This is the only card where it is followed by bullets. */}
+                            <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
                                 Right now your 12 words are the only way back into your account. No
                                 email, no password reset — nobody, including your hub, can restore it
                                 for you.

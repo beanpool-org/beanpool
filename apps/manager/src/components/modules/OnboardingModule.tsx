@@ -71,16 +71,50 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
         const countingSince = countedDays.length ? countedDays.sort()[0] : null;
 
         const comparable = countingSince ? rows.filter(r => r.day >= countingSince) : [];
+        const tally = (event: string, from: FunnelRow[]) => sum(from.filter(r => r.event === event));
+
+        // The top of the funnel is people trying to join, and every percentage below is a
+        // share of it — so an already-a-member re-entry has to come off it. That is the
+        // same person arriving twice, not somebody new, which is why it is already kept
+        // out of `invite_failed`; leaving it in the denominator quietly halves every
+        // conversion rate instead. The first real test showed exactly that: one tablet
+        // signing up, submitting twice, read as 2 attempts and therefore 50% joined.
+        const submitted = tally('invite_attempt', comparable);
+        const comparableReentry = tally('invite_reentry', comparable);
+        const top = Math.max(0, submitted - comparableReentry);
 
         const steps = STEPS.map(step => {
-            const all = rows.filter(r => r.event === step.event);
-            const since = comparable.filter(r => r.event === step.event);
-            return {
-                ...step,
-                total: sum(all),                       // everything in the window
-                comparableTotal: sum(since),           // only since counting began
-                everSeen: all.length > 0,
-            };
+            const total = tally(step.event, rows);                 // everything in the window
+            const comparableTotal = tally(step.event, comparable); // only since counting began
+            const isTopRow = step.event === 'invite_attempt';
+
+            // Which figure this row shows. Once counting has begun, the number and the
+            // percentage beside it MUST describe the same span: rendering a 30-day derived
+            // total next to a percentage of the counted window produced rows reading
+            // "5 ... 50%" and "1 ... 0%", which is not arithmetic anyone can follow. The
+            // longer history is not thrown away — it moves to `note`.
+            const primary = !countingSince ? total : isTopRow ? top : comparableTotal;
+            const pct = top > 0 ? Math.round((primary / top) * 100) : 0;
+
+            let note: string | null = null;
+            if (isTopRow && comparableReentry > 0) {
+                note = `${submitted} submitted, ${comparableReentry} already a member${comparableReentry === 1 ? '' : 's'} excluded`;
+            } else if (countingSince && total > comparableTotal) {
+                note = `${total} across the full ${days} days`;
+            }
+
+            // Over 100% is reachable and is deliberately NOT clamped away. A derived step
+            // counts member rows, and a member can appear without any invite code being
+            // tallied — so a rate above 100% is real information: people are arriving by a
+            // route this funnel cannot see. Rounding it down to a comfortable 100% would
+            // erase the only clue. The bar is capped because a bar cannot overflow; the
+            // number is left alone and explained.
+            if (pct > 100) {
+                const why = 'more than the codes tallied — some arrived without one being counted';
+                note = note ? `${note} · ${why}` : why;
+            }
+
+            return { ...step, primary, note, pct, everSeen: total > 0 };
         });
 
         const failures = rows
@@ -102,9 +136,8 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                 return acc;
             }, {});
 
-        const top = steps[0].comparableTotal;
-        return { steps, failures, reentry, protectionStates, countingSince, top };
-    }, [rows]);
+        return { steps, failures, reentry, comparableReentry, protectionStates, countingSince, top };
+    }, [rows, days]);
 
     return (
         <div className="space-y-6 animate-fade-in font-sans">
@@ -164,8 +197,9 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                         <p className="text-[11px] text-nature-500 m-0">
                             Tallied steps have been counted since <span className="font-mono text-nature-300">{view.countingSince}</span>.
                             The two derived steps — <em>Joined</em> and <em>Actually got started</em> — are worked out from
-                            records this node already kept, so they reach further back. Percentages below use only the
-                            overlapping period, so they compare like with like.
+                            records this node already kept, so they reach further back. Every figure below is that
+                            overlapping period only, so each number and the percentage beside it describe the same
+                            stretch of time; where a step knows about more, it says so underneath.
                         </p>
                     ) : (
                         <p className="text-[11px] text-amber-400/90 m-0">
@@ -176,7 +210,6 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
 
                     <div className="space-y-2">
                         {view.steps.map(step => {
-                            const pct = view.top > 0 ? Math.round((step.comparableTotal / view.top) * 100) : 0;
                             const notYetBuilt = step.counted && !step.everSeen;
                             return (
                                 <div
@@ -186,6 +219,13 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                                     <div className="flex-1 min-w-0">
                                         <div className="text-sm font-bold text-white truncate">{step.label}</div>
                                         <div className="text-[10px] text-nature-500">{step.hint}</div>
+                                        {step.note && !notYetBuilt && (
+                                            // Not italic, and a step lighter than the hint above it: this line carries
+                                            // arithmetic the reader needs in order to trust the number beside it, so it
+                                            // has to be legible. Kept at the hint's size rather than bumped up, which
+                                            // would make the footnote louder than the label it hangs off.
+                                            <div className="text-[10px] text-nature-300 mt-0.5">{step.note}</div>
+                                        )}
                                     </div>
 
                                     {notYetBuilt ? (
@@ -212,15 +252,15 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                                             >
                                                 <div
                                                     className="h-full bg-emerald-500"
-                                                    style={{ width: `${Math.min(100, pct)}%` }}
+                                                    style={{ width: `${Math.min(100, step.pct)}%` }}
                                                 />
                                             </div>
                                             <div className="text-right shrink-0">
                                                 <div className="text-lg font-black text-white font-mono leading-none">
-                                                    {step.total}
+                                                    {step.primary}
                                                 </div>
                                                 {view.countingSince && (
-                                                    <div className="text-[10px] text-nature-500 font-mono">{pct}%</div>
+                                                    <div className="text-[10px] text-nature-500 font-mono">{step.pct}%</div>
                                                 )}
                                             </div>
                                         </>
@@ -251,8 +291,20 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                             )}
                             {view.reentry > 0 && (
                                 <p className="text-[10px] text-nature-500 mt-3 mb-0">
-                                    Plus <span className="font-mono text-nature-300">{view.reentry}</span> already-a-member
-                                    re-entries, which are neither rejections nor signups and are counted apart.
+                                    {/*
+                                      Quotes the figure the deduction actually used, not the
+                                      window-wide one. The two are equal today — a re-entry is
+                                      always recorded alongside an attempt, so no re-entry can
+                                      predate the first counted day — but a sentence that
+                                      explains an arithmetic step should cite the number that
+                                      step used, so it cannot drift from it later.
+                                    */}
+                                    Plus <span className="font-mono text-nature-300">
+                                        {view.countingSince ? view.comparableReentry : view.reentry}
+                                    </span>{' '}
+                                    already-a-member re-{(view.countingSince ? view.comparableReentry : view.reentry) === 1 ? 'entry' : 'entries'} —
+                                    neither rejections nor signups, so they are counted apart and taken off the top of
+                                    the funnel rather than diluting the rates above.
                                 </p>
                             )}
                         </div>

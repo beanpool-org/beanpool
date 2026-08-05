@@ -234,6 +234,8 @@ async function _doInitDB() {
             lng REAL,
             origin_node TEXT,
             photos TEXT,
+            reach TEXT DEFAULT 'local',
+            reach_peers TEXT,
             author_energy_cycled INTEGER DEFAULT 0,
             author_founding_needed INTEGER DEFAULT 1
         );
@@ -408,6 +410,9 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_energy_cycled INTEGER DEFAULT 0;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_founding_needed INTEGER DEFAULT 1;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE transactions ADD COLUMN tax_fee REAL DEFAULT 0.0;`); } catch (e) {}
+        // #143 step 4: per-listing reach control for federation
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach TEXT DEFAULT 'local';`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach_peers TEXT;`); } catch (e) {}
         // Ratings table migration for legacy setups where Schema wasn't ran
         try { 
             await database.execAsync(`
@@ -591,7 +596,7 @@ export async function getPost(id: string) {
                 await acquireSyncLock();
                 try {
                     await database.runAsync(
-                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                         [
                             p.id ?? id,
                             p.type ?? null,
@@ -617,7 +622,9 @@ export async function getPost(id: string) {
                             p.updated_at || p.updatedAt || null,
                             p.origin_node || p.originNode || null,
                             p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
-                            p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0)
+                            p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
+                            p.reach || 'local',
+                            (p.reach_peers || p.reachPeers) ? JSON.stringify(p.reach_peers || p.reachPeers) : null
                         ]
                     );
                 } finally {
@@ -1408,10 +1415,18 @@ export async function getReachablePeers(): Promise<{ peerId: string; callsign: s
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return [];
-        const res = await fetch(`${anchorUrl}/api/federation/reachable-peers`);
+        const cleanUrl = anchorUrl.trim().replace(/\/+$/, '');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const res = await fetch(`${cleanUrl}/api/federation/reachable-peers`, {
+            signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
         if (!res.ok) return [];
         const json = await res.json();
-        return json.peers ?? [];
+        return Array.isArray(json?.peers)
+            ? json.peers.filter((p: any) => typeof p?.peerId === 'string')
+            : [];
     } catch {
         return [];
     }
@@ -1503,11 +1518,12 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
-         post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null]
+         post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
+         post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
 }

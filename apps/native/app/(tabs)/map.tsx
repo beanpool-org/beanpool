@@ -406,7 +406,7 @@ export default function MapScreen() {
         reachPeerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
         reachPeerChip: {
             paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1,
-            borderColor: colors.border.default, backgroundColor: colors.surface.app, minHeight: 36,
+            borderColor: colors.border.default, backgroundColor: colors.surface.app, minHeight: 44,
         },
         reachPeerChipActive: {
             backgroundColor: colors.brand.dark,
@@ -866,9 +866,9 @@ export default function MapScreen() {
                 lng: postLng,
                 photos: postPhotos.length > 0 ? JSON.stringify(postPhotos) : null,
                 created_at: new Date().toISOString(),
-                // #143 step 4 — per-listing reach
-                reach: postReach,
-                ...(postReach === 'peers' ? { reachPeers: postReachPeers } : {}),
+                // #143 step 4 — per-listing reach (fallback to 'local' if 'peers' selected without chosen targets)
+                reach: (postReach === 'peers' && postReachPeers.length === 0) ? 'local' : postReach,
+                ...(postReach === 'peers' && postReachPeers.length > 0 ? { reachPeers: postReachPeers } : {}),
             });
             clearDraft();
             setTimeout(() => {
@@ -1441,12 +1441,14 @@ export default function MapScreen() {
                                     </View>
                                     {postReach === 'peers' && (
                                         <View style={styles.reachPeerRow}>
-                                            {reachablePeerList.map(p => {
+                                            {reachablePeerList.map((p, index) => {
                                                 const on = postReachPeers.includes(p.peerId);
+                                                const peerLabel = p.callsign || (p.peerId ? `Peer ${p.peerId.slice(-8)}` : 'Peer');
                                                 return (
                                                     <Pressable
-                                                        key={p.peerId}
+                                                        key={p.peerId || index}
                                                         accessibilityRole="button"
+                                                        accessibilityLabel={`Community ${peerLabel}`}
                                                         accessibilityState={{ selected: on }}
                                                         style={[
                                                             styles.reachPeerChip,
@@ -1458,7 +1460,7 @@ export default function MapScreen() {
                                                         <Text style={[
                                                             styles.reachPeerChipText,
                                                             on && styles.reachPeerChipTextActive,
-                                                        ]}>{on ? '✓ ' : ''}{p.callsign || `Peer ${p.peerId.slice(-8)}`}</Text>
+                                                        ]}>{on ? '✓ ' : ''}{peerLabel}</Text>
                                                     </Pressable>
                                                 );
                                             })}

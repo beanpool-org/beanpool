@@ -50,29 +50,34 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         const body = (ctx.request as any).body || {};
         const nodeId = body.nodeId;
 
-        if (nodeId === 'all' || !nodeId) {
-            const results = await harvestAllNodes(true);
-            ctx.body = { success: true, results };
-            return;
+        try {
+            if (nodeId === 'all' || !nodeId) {
+                const results = await harvestAllNodes(true);
+                ctx.body = { success: true, results };
+                return;
+            }
+
+            const slug = nodeSlug(nodeId);
+            const nodes = getNodes();
+            const found = nodes.find(n => n.id === nodeId || n.id === slug || nodeSlug(n) === slug);
+
+            const node: FleetNodeConfig = found ? {
+                ...found,
+                url: body.url || found.url,
+                adminPassword: body.adminPassword || body.password || found.adminPassword,
+            } : {
+                id: slug,
+                name: body.name || slug,
+                url: body.url || '',
+                adminPassword: body.adminPassword || body.password,
+            };
+
+            const result = await harvestNode(node, true);
+            ctx.body = { success: true, result };
+        } catch (e: any) {
+            ctx.status = 500;
+            ctx.body = { error: 'Harvest failed: ' + e.message };
         }
-
-        const slug = nodeSlug(nodeId);
-        const nodes = getNodes();
-        const found = nodes.find(n => n.id === nodeId || n.id === slug || nodeSlug(n) === slug);
-
-        const node: FleetNodeConfig = found ? {
-            ...found,
-            url: body.url || found.url,
-            adminPassword: body.adminPassword || body.password || found.adminPassword,
-        } : {
-            id: slug,
-            name: body.name || slug,
-            url: body.url || '',
-            adminPassword: body.adminPassword || body.password,
-        };
-
-        const result = await harvestNode(node, true);
-        ctx.body = { success: true, result };
     });
 
     // Download harvested state.db for a node

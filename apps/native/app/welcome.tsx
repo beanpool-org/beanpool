@@ -817,12 +817,30 @@ export default function WelcomeScreen() {
                             💡 Take a screenshot or write them down somewhere safe.
                         </Text>
                         <View style={styles.seedGrid}>
-                            {pendingWords?.map((word, i) => (
-                                <View key={i} style={styles.seedCell}>
+                            {/*
+                              The words arrive a tick after this screen mounts, since reading
+                              them is asynchronous. Without this branch the grid drew empty for
+                              that frame — a blank box where twelve words belong, on the one
+                              screen where a user is being asked to write them down.
+
+                              Each cell is one accessibility node. Left as two Texts, a screen
+                              reader stops on "1." and then on "apple" as separate items, so
+                              hearing the phrase in order means twenty-four stops and working
+                              out for yourself which number went with which word.
+                            */}
+                            {pendingWords ? pendingWords.map((word, i) => (
+                                <View
+                                    key={i}
+                                    style={styles.seedCell}
+                                    accessible={true}
+                                    accessibilityLabel={`Word ${i + 1}: ${word}`}
+                                >
                                     <Text style={styles.seedIndex}>{i + 1}.</Text>
                                     <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
                                 </View>
-                            ))}
+                            )) : (
+                                <ActivityIndicator color={palette.blue600} style={{ marginVertical: 24 }} />
+                            )}
                         </View>
 
                         {/* Copy to clipboard */}

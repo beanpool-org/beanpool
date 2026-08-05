@@ -9,6 +9,7 @@ import { processProfileImage } from '../../utils/image-processing';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
 import { resolveBundledAvatar } from '../../utils/bundled-avatars';
 import { updateCallsign, wipeIdentity, getMnemonic, hasMnemonic } from '../../utils/identity';
+import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, getPendingRecoveryRequests, approveRecoveryRequest, rejectRecoveryRequest, signedRequest } from '../../utils/db';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
@@ -565,6 +566,7 @@ export default function SettingsScreen() {
         const words = await getMnemonic(identity);
         if (!words) return;
         await Clipboard.setStringAsync(words.join(' '));
+        hapticTick();
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
     };
@@ -1827,8 +1829,20 @@ export default function SettingsScreen() {
                                         Never share this phrase with anyone. Write it down on paper and keep it secure.
                                     </Text>
                                     <View style={styles.seedGrid}>
+                                        {/*
+                                          One accessibility node per cell. As two separate
+                                          Texts a screen reader stops on "1." and then on
+                                          "apple", so hearing twelve words in order takes
+                                          twenty-four stops and leaves the listener to pair
+                                          the numbers with the words themselves.
+                                        */}
                                         {seedWords?.map((word, i) => (
-                                            <View key={i} style={styles.seedWord}>
+                                            <View
+                                                key={i}
+                                                style={styles.seedWord}
+                                                accessible={true}
+                                                accessibilityLabel={`Word ${i + 1}: ${word}`}
+                                            >
                                                 <Text style={styles.seedWordNum}>{i + 1}.</Text>
                                                 <Text style={styles.seedWordText}>{word}</Text>
                                             </View>

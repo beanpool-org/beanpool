@@ -47,6 +47,44 @@ export async function loadIdentity(): Promise<BeanPoolIdentity | null> {
 }
 
 /**
+ * The one way to read a user's recovery words.
+ *
+ * Today it returns `identity.mnemonic` and nothing more, which is the whole point: every
+ * screen that shows the words goes through one function BEFORE that function has anything
+ * interesting to do. When the encrypted vault lands (Phase C) this is where it is read
+ * from and where the biometric prompt happens, and no caller changes. Doing it in the
+ * other order would mean editing every one of these screens while also introducing a
+ * vault, and the plaintext fallback here is what keeps existing users working while the
+ * long tail migrates (Part 8).
+ *
+ * Async now, though it needs to be, so that callers are already awaiting by the time the
+ * vault makes it genuinely async. Returns null rather than throwing for a legacy identity
+ * with no words — every caller already has to render that case.
+ */
+export async function getMnemonic(identity: BeanPoolIdentity | null | undefined): Promise<string[] | null> {
+    if (!identity) return null;
+    const words = identity.mnemonic;
+    return words && words.length > 0 ? words : null;
+}
+
+/**
+ * Does this identity have recovery words at all — without reading them.
+ *
+ * Several screens only ask the yes/no question: whether to offer a "show my words" button,
+ * whether this is a legacy identity predating seed phrases. Those are guards on render
+ * paths, and making them await would hand every one of them a null first frame — enough,
+ * in the onboarding flow, to bounce someone to the wrong screen for a tick.
+ *
+ * So it stays synchronous, and can: whether words exist is not itself a secret. After the
+ * vault lands this consults a non-secret marker instead of the field, and still answers
+ * without a biometric prompt — which is the behaviour you want anyway, since asking for a
+ * fingerprint to decide whether to draw a button would be absurd.
+ */
+export function hasMnemonic(identity: BeanPoolIdentity | null | undefined): identity is BeanPoolIdentity {
+    return !!identity?.mnemonic && identity.mnemonic.length > 0;
+}
+
+/**
  * Generate a new Ed25519 identity from a 12-word mnemonic.
  */
 export async function createIdentity(callsign: string): Promise<BeanPoolIdentity> {

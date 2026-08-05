@@ -6,8 +6,8 @@
  * Recovery:   Enter 12-word phrase to recover identity
  */
 
-import React, { useState, useRef } from 'react';
-import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, type BeanPoolIdentity } from '../lib/identity';
+import React, { useState, useRef, useEffect } from 'react';
+import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
 import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership } from '../lib/api';
@@ -207,6 +207,19 @@ export function WelcomePage({ onComplete }: Props) {
     const [tempSocialIdentity, setTempSocialIdentity] = useState<BeanPoolIdentity | null>(null);
 
     const [pendingIdentity, setPendingIdentity] = useState<BeanPoolIdentity | null>(null);
+
+    // The words for the backup step. Read through the accessor and held in state, because
+    // that read becomes a vault read in Phase C and a render cannot await.
+    //
+    // Note the three guards on this page use hasMnemonic() rather than this: they ask "is
+    // there an identity mid-onboarding", not "what are the words". Routing them through the
+    // async read would give each a null first frame and flash the wrong onboarding step.
+    const [pendingWords, setPendingWords] = useState<string[] | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        getMnemonic(pendingIdentity).then(w => { if (!cancelled) setPendingWords(w); });
+        return () => { cancelled = true; };
+    }, [pendingIdentity]);
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [pendingInviteCode, setPendingInviteCode] = useState('');
     const [showOnboardingGuide, setShowOnboardingGuide] = useState(false);
@@ -540,7 +553,7 @@ export function WelcomePage({ onComplete }: Props) {
                     padding: '2rem',
                 }}>
                     {/* ===== SEED PHRASE DISPLAY (after create, before confirm) ===== */}
-                    {pendingIdentity?.mnemonic && showAvatarSetup ? (
+                    {hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
                         <>
                             <OnboardingStepper step={2} />
@@ -775,7 +788,7 @@ export function WelcomePage({ onComplete }: Props) {
                                 ← Back
                             </button>
                         </>
-                    ) : pendingIdentity?.mnemonic && showOnboardingGuide ? (
+                    ) : hasMnemonic(pendingIdentity) && showOnboardingGuide ? (
                         /* ===== ONBOARDING GUIDE (Step 4) ===== */
                         <>
                             <OnboardingStepper step={4} />
@@ -892,7 +905,7 @@ export function WelcomePage({ onComplete }: Props) {
                                 ← Back to Backup
                             </button>
                         </>
-                    ) : pendingIdentity?.mnemonic ? (
+                    ) : hasMnemonic(pendingIdentity) ? (
                         /* ===== SAFETY BACKUP (Step 3) ===== */
                         <>
                             <OnboardingStepper step={3} />
@@ -906,7 +919,7 @@ export function WelcomePage({ onComplete }: Props) {
                                 display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                                 gap: '0.4rem', marginBottom: '1rem',
                             }}>
-                                {pendingIdentity.mnemonic.map((word, i) => (
+                                {pendingWords?.map((word, i) => (
                                     <div key={i} style={{
                                         background: 'var(--bg-secondary, #1e293b)',
                                         borderRadius: 8, padding: '0.5rem 0.4rem',

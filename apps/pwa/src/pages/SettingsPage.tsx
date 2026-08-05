@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { type BeanPoolIdentity, wipeIdentity } from '../lib/identity';
+import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic } from '../lib/identity';
 import {
     getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getPendingRecoveryRequests,
@@ -243,9 +243,32 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
     // Seed phrase copy
     const [seedCopied, setSeedCopied] = useState(false);
 
-    const handleCopySeed = () => {
-        if (!identity.mnemonic) return;
-        navigator.clipboard.writeText(identity.mnemonic.join(' '));
+    // Read through the accessor rather than off the identity, so the vault (Phase C) — which
+    // is also what gets these words out of plaintext IndexedDB — lands without touching this
+    // screen. Held in state because that read is asynchronous and a render cannot await.
+    const [seedWords, setSeedWords] = useState<string[] | null>(null);
+    useEffect(() => {
+        // Gated on being ON the recovery screen, not merely on Settings existing.
+        //
+        // Reading on mount works today, and would be wrong the moment there is a vault:
+        // opening Settings for any reason at all — to change a notification toggle — would
+        // fire a password or biometric prompt for words the user never asked to see. It
+        // also kept them decrypted in component state for as long as Settings stayed open.
+        // Native gets this for free by loading at the reveal; the PWA has no reveal step,
+        // so entering the screen is the equivalent moment.
+        if (mode !== 'seed') {
+            setSeedWords(null);
+            return;
+        }
+        let cancelled = false;
+        getMnemonic(identity).then(w => { if (!cancelled) setSeedWords(w); });
+        return () => { cancelled = true; };
+    }, [identity, mode]);
+
+    const handleCopySeed = async () => {
+        const words = await getMnemonic(identity);
+        if (!words) return;
+        navigator.clipboard.writeText(words.join(' '));
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
     };
@@ -643,15 +666,25 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                             Your 12-word recovery phrase allows you to restore your identity on any device. Anyone with these words can control your account. Keep them secret and offline.
                         </p>
 
-                        {identity.mnemonic && identity.mnemonic.length === 12 ? (
+                        {hasMnemonic(identity) ? (
                             <>
-                                <div className="grid grid-cols-3 gap-2 mb-6">
-                                    {identity.mnemonic.map((word, i) => (
+                                {/*
+                                  The grid holds its height while the words load. They arrive a
+                                  tick after this screen opens, and without the placeholder the
+                                  panel drew as an empty box and then jumped as twelve cells
+                                  appeared underneath the buttons.
+                                */}
+                                <div className="grid grid-cols-3 gap-2 mb-6 min-h-[7.5rem]">
+                                    {seedWords ? seedWords.map((word, i) => (
                                         <div key={i} className="bg-oat-50 dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 rounded-xl p-2.5 text-center">
                                             <span className="text-[10px] text-nature-400 block font-mono mb-0.5">{i + 1}.</span>
                                             <span className="text-sm font-bold font-mono text-nature-900 dark:text-white">{word}</span>
                                         </div>
-                                    ))}
+                                    )) : (
+                                        <div className="col-span-3 flex items-center justify-center text-xs text-nature-400 animate-pulse">
+                                            Reading your recovery phrase…
+                                        </div>
+                                    )}
                                 </div>
 
                                 <button

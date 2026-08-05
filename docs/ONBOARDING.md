@@ -727,8 +727,9 @@ Note what is **no longer** in this register: broker collusion, PIN brute-forcing
 2. **Are we shipping on the App Store?** Apple Sign-In is only mandatory if other social logins are offered in an App Store build. If distribution stays APK + PWA, the Apple keeper and a paid developer account drop entirely. Biggest remaining scope lever.
 3. **Cross-node keepers.** Assumed same-node. Federation makes cross-hub pieces possible — wanted before v1?
 4. **Does `recovery.ssoEnabled` default on or off** for self-hosted hubs?
-5. **Weighted pieces.** A keeper can be given two evaluation points instead of one — e.g. the phone backup counting double, so "phone + one friend" recovers while "two friends" doesn't. More flexible, more code. Worth it, or keep every keeper equal?
-6. **Nostr / NIP-07** as an additional keeper type — deferred.
+5. **Nostr / NIP-07** as an additional keeper type — deferred.
+
+> **Closed 2026-08-05 — weighted pieces.** An earlier draft raised giving one keeper two pieces so it counted double. Rejected: every keeper holds exactly one piece. It bought a marginal recovery convenience in exchange for a rule that can't be explained in one sentence, and the `UNIQUE(owner_pubkey, holder_type, holder_ref, generation)` constraint now enforces one-piece-per-keeper as a schema invariant rather than a convention — so a bug can't quietly hand one keeper two.
 
 ---
 
@@ -851,6 +852,8 @@ Phases A–D contain no third-party dependency of any kind. Phase E is the only 
 ---
 
 ## Revision History
+
+**Revision 3.3 (2026-08-05)** — closed the weighted-pieces question: every keeper holds exactly one piece, enforced by the `recovery_shares` UNIQUE constraint rather than left as a convention.
 
 **Revision 3.2 (2026-08-05)** — added Part 11, the onboarding funnel: node-local aggregate counters surfaced through the existing manager dashboard, per-node only, no central collection (M1–M4). Sequenced as Phase 0 so the redesign has a baseline to be measured against.
 

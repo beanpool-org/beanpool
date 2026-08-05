@@ -15,13 +15,17 @@
  *   5. The genesis row is excluded — an operator seeding themselves is not a signup.
  *   6. activated is derived from a member's FIRST local post, so it is idempotent and
  *      needs no per-member "already counted" flag.
- *   7. recordFirstAvatar fires on the no-avatar → avatar transition only, so editing a
- *      photo later does not read as a fresh signup.
+ *   7. The first-avatar check is separate from recording it, so a profile update that
+ *      fails - a taken callsign, common on this very step - books nothing, and a later
+ *      photo edit does not read as a fresh signup.
+ *   8. Reading the funnel never deletes anything. Retention is an explicit call made at
+ *      startup, not a side effect of a query.
+ *   9. The genesis operator's own first post is not an activation.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-onboarding-funnel.ts
  */
 import { initStateEngine, getAdminPubkey } from './state-engine.js';
-import { recordFunnelEvent, recordFirstAvatar, getFunnel } from './engine/funnel.js';
+import { recordFunnelEvent, hasNoAvatarYet, getFunnel, pruneFunnel } from './engine/funnel.js';
 import { redeemInvite, generateInvite } from './engine/invites.js';
 import { db } from './db/db.js';
 
@@ -121,32 +125,63 @@ async function main(): Promise<void> {
     }
 
     // ---------- 6. activated is derived from the first post, and idempotent ----------
-    const poster = first;
-    const mkPost = (id: string, at: string) => db.prepare(
+    const mkPostBy = (id: string, author: string, at: string) => db.prepare(
         `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status)
          VALUES (?, 'offer', 'general', ?, '', 0, ?, ?, 'active')`
-    ).run(id, id, poster, at);
-    mkPost('p1', new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString());
-    mkPost('p2', new Date().toISOString());
+    ).run(id, id, author, at);
+    mkPostBy('p1', first, new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString());
+    mkPostBy('p2', first, new Date().toISOString());
     const activations = getFunnel(30).filter(r => r.event === 'activated');
     assert(activations.reduce((n, r) => n + r.count, 0) === 1,
         'two posts by one member is one activation, not two');
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     assert(activations[0]?.day === twoDaysAgo, 'activation lands on the day of the FIRST post');
 
-    // ---------- 7. first avatar only ----------
+    // The genesis operator posting is not a new member getting started. This filter lived
+    // only on the signup query at first, so the two derived queries now share one
+    // predicate rather than each carrying their own copy to drift out of step.
+    const activationsBefore = count('activated');
+    mkPostBy('genesis-post', admin, new Date().toISOString());
+    assert(count('activated') === activationsBefore,
+        'the genesis operator\'s own first post is not an activation');
+
+    // ---------- 7. first avatar only, and only once the write lands ----------
     const av = 'g'.repeat(64);
     db.prepare("INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)")
         .run(av, 'GetsAPhoto', new Date().toISOString());
-    recordFirstAvatar(av, 'data:image/png;base64,AAA');
-    assert(count('avatar_published') === 1, 'setting a first avatar counts');
 
+    assert(hasNoAvatarYet(av), 'a member with no photo yet is reported as such');
+
+    // What the route does: ask first, write, then count. The failure case is the point —
+    // a taken callsign on this very step must not book an avatar that was never saved.
+    const wouldCount = Boolean('data:image/png;base64,AAA') && hasNoAvatarYet(av);
+    assert(wouldCount, 'the route would count this one');
+    assert(count('avatar_published') === 0,
+        'asking the question does not itself count — nothing is booked before the write');
+
+    recordFunnelEvent('avatar_published');   // the write succeeded
     db.prepare("UPDATE members SET avatar_url = ? WHERE public_key = ?").run('stored.png', av);
-    recordFirstAvatar(av, 'data:image/png;base64,BBB');
-    assert(count('avatar_published') === 1, 'changing an existing avatar does not count again');
+    assert(count('avatar_published') === 1, 'a landed first avatar counts once');
 
-    recordFirstAvatar(av, undefined);
-    assert(count('avatar_published') === 1, 'a profile edit with no avatar does not count');
+    assert(!hasNoAvatarYet(av), 'a member who already has a photo is not a first-avatar case');
+    assert(!hasNoAvatarYet('z'.repeat(64)), 'an unknown member is not a first-avatar case');
+
+    // ---------- 8. reading never destroys history ----------
+    // getFunnel used to prune on every read, so asking for a year would delete everything
+    // past the 180-day window and then answer as if that was all there had ever been.
+    const ancient = '2020-01-01';
+    db.prepare("INSERT INTO onboarding_funnel (day, event, variant, count) VALUES (?, 'invite_attempt', '', 7)")
+        .run(ancient);
+    getFunnel(365);
+    const survived = db.prepare(
+        "SELECT count FROM onboarding_funnel WHERE day = ? AND event = 'invite_attempt'"
+    ).get(ancient) as { count: number } | undefined;
+    assert(survived?.count === 7, 'asking for a long window does not delete rows outside it');
+
+    // Pruning is a separate, explicit act, run at startup.
+    pruneFunnel();
+    const pruned = db.prepare("SELECT count FROM onboarding_funnel WHERE day = ?").get(ancient);
+    assert(!pruned, 'pruneFunnel drops rows past the retention window when called on purpose');
 
     // ---------- shape ----------
     assert(getFunnel(30).every(r => r.day <= today), 'no row is dated in the future');

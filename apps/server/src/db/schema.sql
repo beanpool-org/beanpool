@@ -713,6 +713,14 @@ CREATE TABLE IF NOT EXISTS onboarding_funnel (
     day     TEXT NOT NULL,              -- YYYY-MM-DD, UTC
     event   TEXT NOT NULL,              -- invite_attempt | invite_failed | avatar_published | ...
     variant TEXT NOT NULL DEFAULT '',   -- failure reason, keeper-count state, or choice made
-    count   INTEGER NOT NULL DEFAULT 0,
+    -- Only ever incremented, so it cannot go negative today. The CHECK is here so it
+    -- cannot start to: a tally that reads -3 is worse than one that refuses to write.
+    count   INTEGER NOT NULL DEFAULT 0 CHECK (count >= 0),
     PRIMARY KEY (day, event, variant)
 );
+-- The funnel derives "who joined" and "who got started" from these two tables rather than
+-- counting them, so both queries group over history every time the dashboard is opened.
+-- Partial indexes because both queries only ever look at local rows — a federation
+-- visitor is not a signup, and a federated listing is not somebody getting started here.
+CREATE INDEX IF NOT EXISTS idx_members_joined_at_local ON members(joined_at) WHERE home_node_url IS NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_author_created_local ON posts(author_pubkey, created_at) WHERE origin_node IS NULL;

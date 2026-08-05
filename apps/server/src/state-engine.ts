@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
+import { pruneFunnel } from './engine/funnel.js';
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
@@ -326,6 +327,12 @@ export function initStateEngine(): void {
     // affected accounts through this hook first — same dependency inversion, for the same module-cycle
     // reason as above.
     setDemurrageSettleHook(settleDemurrage);
+
+    // Onboarding funnel retention. Once at startup rather than behind the read, because a
+    // DELETE on the read path both takes a write lock and can destroy what the caller
+    // asked for — a request for a year of history would have pruned to 180 days first and
+    // then answered as though that was all there had ever been.
+    pruneFunnel();
 
     // CRITICAL: Restore persisted commons balance from DB
     // Without this, COMMONS_BALANCE resets to 0 on every restart, destroying accumulated demurrage

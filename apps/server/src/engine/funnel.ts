@@ -75,37 +75,50 @@ export function recordFunnelEvent(event: CountedEvent, variant = ''): void {
 }
 
 /**
- * Fires `avatar_published` only on the transition from no avatar to having one, so
- * a member editing their photo for the third time does not read as a fresh signup.
- * Call BEFORE the update, with the avatar that is about to be written.
+ * Does this member currently have no avatar? Answers the question `avatar_published`
+ * depends on, and only that — the caller records the event itself, AFTER its write has
+ * actually succeeded.
+ *
+ * Split that way on purpose. Asking has to happen before the write (afterwards there is
+ * no way to tell a first avatar from a fifth edit) but counting has to happen after it,
+ * or a failed profile update — a taken callsign, say, which is a common thing to hit on
+ * this very step — books an avatar that was never saved, and books it again on every
+ * retry.
  */
-export function recordFirstAvatar(publicKey: string, incomingAvatar: unknown): void {
-    if (!incomingAvatar) return;
+export function hasNoAvatarYet(publicKey: string): boolean {
     try {
         const row = db.prepare(
             'SELECT avatar_url FROM members WHERE public_key = ?'
         ).get(publicKey) as { avatar_url?: string | null } | undefined;
-        if (row && !row.avatar_url) recordFunnelEvent('avatar_published');
+        return !!row && !row.avatar_url;
     } catch (e) {
         console.error('funnel: failed to check first avatar', e);
+        return false;
     }
 }
 
 /**
- * Members who joined HERE, per day.
+ * What counts as somebody who joined this hub — used by BOTH derived queries, because
+ * they must agree on it.
  *
- * `home_node_url IS NULL` is what makes a member local — a non-null value marks a
- * federation visitor who belongs to a peer node. Without that filter every visiting
- * trader would land in this node's join funnel. The genesis row is excluded too: an
- * operator seeding themselves is not an onboarding event.
+ * `home_node_url IS NULL` is what makes a member local; a non-null value marks a
+ * federation visitor belonging to a peer node, and without the filter every visiting
+ * trader lands in this hub's join funnel. The genesis row goes too — an operator
+ * seeding themselves is not an onboarding event.
+ *
+ * Shared rather than written twice: the genesis clause was originally on the signup
+ * query and missing from the activation one, so the operator's first post counted as a
+ * new member getting started. Two copies of a predicate drift; one cannot.
  */
+const JOINED_HERE = `m.home_node_url IS NULL AND COALESCE(m.invite_code, '') != 'genesis'`;
+
+/** Members who joined HERE, per day. */
 function derivedMemberCreated(since: string): FunnelRow[] {
     const rows = db.prepare(`
-        SELECT date(joined_at) AS day, COUNT(*) AS count
-        FROM members
-        WHERE home_node_url IS NULL
-          AND COALESCE(invite_code, '') != 'genesis'
-          AND joined_at >= ?
+        SELECT date(m.joined_at) AS day, COUNT(*) AS count
+        FROM members m
+        WHERE ${JOINED_HERE}
+          AND m.joined_at >= ?
         GROUP BY day
     `).all(since) as { day: string; count: number }[];
     return rows.map(r => ({ day: r.day, event: 'member_created' as const, variant: '', count: r.count }));
@@ -131,7 +144,7 @@ function derivedActivated(since: string): FunnelRow[] {
             FROM posts p
             JOIN members m ON m.public_key = p.author_pubkey
             WHERE p.origin_node IS NULL
-              AND m.home_node_url IS NULL
+              AND ${JOINED_HERE}
             GROUP BY p.author_pubkey
         )
         WHERE first_post >= ?
@@ -140,8 +153,19 @@ function derivedActivated(since: string): FunnelRow[] {
     return rows.map(r => ({ day: r.day, event: 'activated' as const, variant: '', count: r.count }));
 }
 
-/** Drop counters past the retention window. Cheap, and reads are rare. */
-function prune(): void {
+/**
+ * Drop counters past the retention window.
+ *
+ * Deliberately NOT called from getFunnel. A DELETE takes a write lock, and putting one
+ * behind a read is both a contention risk and a way to lose data: asking for a year of
+ * history would have pruned everything past 180 days and then returned the truncated
+ * answer as if that were all there had ever been.
+ *
+ * Called once at startup instead. Precision does not matter here — these are daily
+ * counter rows, a few dozen a day, so even a node left up for a year holds a few
+ * thousand of them and a missed prune costs nothing.
+ */
+export function pruneFunnel(): void {
     try {
         db.prepare('DELETE FROM onboarding_funnel WHERE day < ?').run(dayNDaysAgo(RETENTION_DAYS));
     } catch (e) {
@@ -151,11 +175,10 @@ function prune(): void {
 
 /**
  * The whole funnel for the last `days` days: stored counters plus the derived steps,
- * sorted by day then event. Derived rows arrive with full history already in them,
- * which is why this is useful on the day it ships rather than a fortnight later.
+ * sorted by day then event. Read-only. Derived rows arrive with full history already in
+ * them, which is why this is useful on the day it ships rather than a fortnight later.
  */
 export function getFunnel(days = 30): FunnelRow[] {
-    prune();
     const since = dayNDaysAgo(days);
 
     const counted = db.prepare(`

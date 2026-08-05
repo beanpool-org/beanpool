@@ -732,7 +732,80 @@ Note what is **no longer** in this register: broker collusion, PIN brute-forcing
 
 ---
 
+## Part 11: Measuring It — The Onboarding Funnel
+
+### Why this comes first
+
+Nothing in the app currently tracks how onboarding actually goes. The manager dashboard shows CPU, RAM, DB size and peer counts — all infrastructure. An operator can see how many members exist and cannot see how many people *tried* to join or where they gave up.
+
+That matters most right now, because this document proposes rewriting the join flow. **Without a baseline, the redesign ships and nobody can say whether it worked.** The funnel is a small job and it should land before Phase A, so there's a before to compare the after against.
+
+### Where the data lives
+
+**On each node, in its own SQLite database.** Nowhere else.
+
+This falls out of how the dashboard already works: [apps/manager](../apps/manager) has no database at all. It's a React app that calls `fetchDiagnostics(nodeUrl, adminPassword)` ([node-client.ts:45](../apps/manager/src/lib/node-client.ts#L45)) and renders whatever the node returns, computed live. So funnel counters on the node, read through the same admin-authenticated call, need **no new service, no new database and no new credentials** — and an operator running several nodes sees them all in one dashboard because the manager already polls each one.
+
+Explicitly **not** Supabase. The Supabase edge function in [directory-publisher.ts:7](../apps/server/src/services/directory-publisher.ts#L7) exists so a node can announce that it exists; no user data goes near it, and none should start.
+
+### Decisions
+
+| # | Decision | Rationale |
+|---|---|---|
+| **M1** | **Per-node only.** Each operator sees their own community. No cross-node roll-up, no central collector, no reporting outward — not opt-in, not default-off, none. | A community's join data belongs to that community. Operators running multiple nodes already see them all through the fleet manager |
+| **M2** | **Aggregate daily counters, never per-user event trails.** `(day, event, variant, count)`. No pubkeys, no callsigns, no session IDs, no individual journeys. | An operator should learn "14 reached the protection screen, 5 finished" and be unable to learn what any one person did. A per-user event log inside a sovereignty project is a surveillance tool with a nice dashboard, and the difference is one schema decision made at the start |
+| **M3** | **Client events must be signed by an existing member.** No anonymous ingest endpoint. | An unauthenticated counter endpoint is trivially spammable, and pre-membership tracking is also the most privacy-sensitive part. Both problems disappear together |
+| **M4** | **Pre-signup drop-off is measured server-side only**, from invite redemption attempts the node already handles. | The node already sees these. No client instrumentation, no data about people who chose not to join beyond counts it inherently has |
+
+### The funnel
+
+| Step | Event | Source |
+|---|---|---|
+| 1 | `invite_attempt` / `invite_failed` (+ reason) | **Server — already visible.** Step 1 redeems on the node, and rejection reasons already flow back to the client |
+| 2 | `member_created` (step 1 complete) | **Server — already visible** |
+| 3 | `avatar_published` (step 2 complete) | **Server — already visible** |
+| 4 | `protection_shown` (+ variant `A`/`B`/`C`) | New — signed client event |
+| 5 | `protection_choice` (+ variant `sso`/`words`/`skip`) | New — signed client event |
+| 6 | `guide_complete` (step 4) | New — signed client event |
+| 7 | `activated` (first connection, post or trade) | **Server — already visible** |
+
+Four of the seven need no new instrumentation whatsoever — the node already has that data and just isn't counting it. Only steps 4–6 need client events, and those are precisely the steps this redesign changes, so they're where the numbers matter most. Recording the step-3 variant is what makes it possible to tell whether State B users (2 keepers) behave differently from State A users.
+
+### Schema
+
+```sql
+CREATE TABLE IF NOT EXISTS onboarding_funnel (
+    day TEXT NOT NULL,                   -- YYYY-MM-DD
+    event TEXT NOT NULL,                 -- funnel step above
+    variant TEXT NOT NULL DEFAULT '',    -- protection state, choice, or failure reason
+    count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, event, variant)
+);
+```
+
+Incremented with an UPSERT. No foreign keys to `members`, deliberately — there is nothing to join to a person. At a few hundred rows a year this is measured in kilobytes, so 180-day retention costs nothing.
+
+### Surfacing it
+
+- `GET /api/admin/onboarding-funnel?days=30` — admin-authenticated, same as the existing diagnostics route
+- A funnel panel in the manager dashboard beside `TelemetryModule`: counts per step, drop-off percentage between steps, and the step-3 variant split
+
+### Honest limits
+
+**In a small community, aggregate is not anonymous.** If one person joined yesterday, a daily counter is about that person. Post-signup steps add little exposure — the operator can already see members and join dates — but it's worth naming rather than pretending the aggregation buys privacy it doesn't at those numbers.
+
+**Counters can't tell you why.** They'll show that people stop at the protection screen; they won't say whether it was confusion, distrust or a dead battery. Treat the funnel as a way to find the questions, not the answers.
+
+---
+
 ## Implementation Phasing
+
+### Phase 0: Onboarding funnel (est. 1–2 days)
+
+- `onboarding_funnel` table and UPSERT helper
+- Wire the four server-side events that need no client changes
+- `GET /api/admin/onboarding-funnel`, manager dashboard panel
+- Ship and **let it run for a couple of weeks before Phase A**, so the redesign has a baseline
 
 ### Phase A: Unblock onboarding + groundwork (est. 2–3 days)
 
@@ -778,6 +851,8 @@ Phases A–D contain no third-party dependency of any kind. Phase E is the only 
 ---
 
 ## Revision History
+
+**Revision 3.2 (2026-08-05)** — added Part 11, the onboarding funnel: node-local aggregate counters surfaced through the existing manager dashboard, per-node only, no central collection (M1–M4). Sequenced as Phase 0 so the redesign has a baseline to be measured against.
 
 **Revision 3.1 (2026-08-05)** — Facebook restored as a keeper provider and made the priority one (D10); step 3 rebuilt as three states driven by the real keeper count, so the screen never claims a keeper the user doesn't have; R9 added for PWA users; corrected the framing that fewer than 3 keepers means no recovery — it means the user falls back to the 12 words, exactly as today.
 

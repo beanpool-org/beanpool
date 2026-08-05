@@ -480,7 +480,8 @@ export async function startHttpsServer(port: number): Promise<void> {
         ctx.set('X-Content-Type-Options', 'nosniff');
         ctx.set('X-Frame-Options', 'DENY');
         ctx.set('X-XSS-Protection', '1; mode=block');
-        ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org *; frame-ancestors 'none'");
+        // #131: Removed connect-src wildcard; https: permits PWA→peer-node fetch calls, wss: permits encrypted WebSockets only
+        ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'");
         ctx.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         await next();
     });
@@ -492,21 +493,28 @@ export async function startHttpsServer(port: number): Promise<void> {
         const gwConfig = getGatewayConfig();
         const clientIp = replicationClientIp(ctx);
 
-        // 1. Dynamic CORS Allowed Origins Handling
-        const requestOrigin = ctx.get('Origin') || '*';
-        const allowedOrigins = (gwConfig.corsAllowedOrigins && gwConfig.corsAllowedOrigins.length > 0)
-            ? gwConfig.corsAllowedOrigins
-            : ['*'];
+        // 1. Dynamic CORS Allowed Origins Handling (#131)
+        const requestOrigin = ctx.get('Origin');
+        const allowedOrigins = gwConfig.corsAllowedOrigins || [];
 
-        const isAllowed = allowedOrigins.includes('*') || (requestOrigin !== '*' && allowedOrigins.includes(requestOrigin));
+        if (requestOrigin) {
+            // Normalize trailing slashes to match browser Origin header format (mirrors federation-api.ts)
+            const normalizedReq = requestOrigin.replace(/\/+$/, '');
+            const isExplicitlyAllowed = allowedOrigins.some(o => o.replace(/\/+$/, '') === normalizedReq);
+            const isWildcardAllowed = allowedOrigins.includes('*');
 
-        if (isAllowed) {
-            ctx.set('Access-Control-Allow-Origin', requestOrigin);
-            if (requestOrigin !== '*') {
+            if (isExplicitlyAllowed) {
+                // Explicitly allowed origin: set origin & credentials
+                ctx.set('Access-Control-Allow-Origin', requestOrigin);
                 ctx.set('Access-Control-Allow-Credentials', 'true');
+                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, x-signature, x-public-key, x-timestamp, x-nonce');
+                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            } else if (isWildcardAllowed) {
+                // Wildcard allowed: set '*' origin, DO NOT set Access-Control-Allow-Credentials to true
+                ctx.set('Access-Control-Allow-Origin', '*');
+                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, x-signature, x-public-key, x-timestamp, x-nonce');
+                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
             }
-            ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, x-signature, x-public-key, x-timestamp, x-nonce');
-            ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         }
 
         if (ctx.method === 'OPTIONS') {

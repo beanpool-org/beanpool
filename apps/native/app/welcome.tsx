@@ -63,6 +63,10 @@ export default function WelcomeScreen() {
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [inviteCode, setInviteCode] = useState('');
     const [pendingInviteCode, setPendingInviteCode] = useState('');
+    // Whether this identity's invite has already been redeemed on the node. Set once Step 1
+    // succeeds, and restored from the persisted wizard record so it survives the app being
+    // killed mid-join.
+    const [inviteRedeemed, setInviteRedeemed] = useState(false);
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
@@ -310,6 +314,7 @@ export default function WelcomeScreen() {
             setCallsign(pending.callsign || stored.callsign);
             setInviteCode(pending.inviteCode);
             setPendingInviteCode(pending.inviteCode);
+            setInviteRedeemed(pending.redeemed === true);
             if (pending.anchorUrl) setCreateAnchorUrl(pending.anchorUrl);
             if (pending.avatar) setPendingAvatar(pending.avatar);
             if (pending.step !== 'create') setPendingIdentity(stored);
@@ -407,12 +412,17 @@ export default function WelcomeScreen() {
                 }
             }
 
+            // Redemption is done — either it just succeeded, or the node told us this
+            // member was already registered. Both mean the final step has nothing left to do.
+            setInviteRedeemed(true);
+
             // Record wizard state so an interrupted setup (avatar/seed) resumes
             await setPendingOnboarding({
                 step: 'profileSetup',
                 inviteCode: parsedCode,
                 anchorUrl: nodeUrl,
                 callsign: callsign.trim(),
+                redeemed: true,
             });
 
             // Go to avatar selection (Step 2)
@@ -430,13 +440,23 @@ export default function WelcomeScreen() {
         setLoading(true);
         setError(null);
         try {
-            // Member was already redeemed at Step 1, but run backup safety check if needed
-            if (pendingInviteCode) {
+            // Only if Step 1 never got to redeem. It normally did — redemption moved to
+            // Step 1 so that a member exists on the node from the moment they pick a name —
+            // and this call then re-sent the same code on every single join, which the
+            // server answered with `alreadyMember`. Harmless to the member, but it doubled
+            // the invite attempts in the onboarding funnel and spent a signed round trip at
+            // the worst possible moment: the tap where someone is waiting to get in, often
+            // on a poor connection.
+            //
+            // Kept rather than deleted for the one case that is real: the app being killed
+            // mid-wizard and resumed from a record that predates this flag, where the final
+            // step genuinely cannot assume the member exists.
+            if (pendingInviteCode && !inviteRedeemed) {
                 try {
                     const { redeemInvite } = await import('../utils/db');
                     await redeemInvite(pendingInviteCode, pendingIdentity.callsign, pendingIdentity);
                 } catch {
-                    /* already redeemed at Step 1 */
+                    /* already a member, or the code is spent — either way, carry on */
                 }
             }
 
@@ -653,7 +673,11 @@ export default function WelcomeScreen() {
                     setPendingAvatar(null);
                     setSeedConfirmed(false);
                     setSeedCopied(false);
-                    updatePendingOnboarding({ step: 'create', avatar: null }).catch(() => {});
+                    // Going back discards the identity, so what was redeemed no longer
+                    // describes what is about to be submitted. Cleared in the persisted
+                    // record too, or a kill-and-resume would restore the stale answer.
+                    setInviteRedeemed(false);
+                    updatePendingOnboarding({ step: 'create', avatar: null, redeemed: false }).catch(() => {});
                     setMode('create');
                     setError(null);
                 }},
@@ -800,8 +824,8 @@ export default function WelcomeScreen() {
                         <Pressable
                             style={styles.backBtn}
                             onPress={() => {
-                                updatePendingOnboarding({ step: 'create', avatar: null }).catch(() => {});
-                                setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setShowAvatarPicker(false); setError(null);
+                                updatePendingOnboarding({ step: 'create', avatar: null, redeemed: false }).catch(() => {});
+                                setMode('create'); setPendingIdentity(null); setPendingAvatar(null); setInviteRedeemed(false); setShowAvatarPicker(false); setError(null);
                             }}
                             disabled={loading}
                             accessibilityRole="button"

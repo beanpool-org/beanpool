@@ -222,6 +222,11 @@ export function WelcomePage({ onComplete }: Props) {
     }, [pendingIdentity]);
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [pendingInviteCode, setPendingInviteCode] = useState('');
+    // Whether this identity's invite has already been redeemed on the node. In-memory only,
+    // unlike native's persisted flag, because this wizard has no resume-after-reload path:
+    // a reload loses pendingIdentity, and the root then routes on the stored identity rather
+    // than re-entering the wizard. If a resume path is ever added, this needs persisting too.
+    const [inviteRedeemed, setInviteRedeemed] = useState(false);
     const [showOnboardingGuide, setShowOnboardingGuide] = useState(false);
     const [showNewUser, setShowNewUser] = useState(() => true);
     const [showMemberOptions, setShowMemberOptions] = useState(false);
@@ -389,6 +394,9 @@ export function WelcomePage({ onComplete }: Props) {
                     throw redeemErr;
                 }
             }
+            // Either it just succeeded or the node says this member is already registered.
+            // Both mean the final step has nothing left to redeem.
+            setInviteRedeemed(true);
 
             setShowAvatarSetup(true);
             setLoading(false);
@@ -443,28 +451,54 @@ export function WelcomePage({ onComplete }: Props) {
         if (!pendingIdentity) return;
         setLoading(true);
         try {
-            if (pendingInviteCode) {
-                try {
-                    if (pendingInviteCode.length > 20 && pendingInviteCode.startsWith('BP-')) {
-                        // Offline ticket cryptographic redemption
-                        const ticketB64 = pendingInviteCode.slice(3); // Remove 'BP-' prefix
-                        await redeemOfflineTicket(ticketB64, pendingIdentity.publicKey, pendingIdentity.callsign);
-                    } else {
-                        // Legacy short-hash central database redemption
-                        await redeemInvite(pendingInviteCode, pendingIdentity.publicKey, pendingIdentity.callsign);
+            // Wraps the whole thing, rather than being folded into the first condition.
+            //
+            // The two inner branches are "redeem a code" and "register without one", and
+            // they are alternatives to each other — not to being already registered. Adding
+            // `&& !inviteRedeemed` to the outer `if` instead sent the normal path, an
+            // invited member whose code was redeemed at Step 1, down the else and into
+            // registerMember(), which is the no-invite path: a wasted request at best, and
+            // at worst an error that returns early and strands somebody on the last screen
+            // of a join they had already completed.
+            //
+            // Skipped entirely once Step 1 has redeemed, which is the normal path —
+            // redemption moved there so a member exists on the node from the moment they
+            // pick a name. Re-sending the code here doubled the invite attempts in the
+            // funnel and spent a round trip at the tap where somebody is waiting to get in.
+            if (!inviteRedeemed) {
+                if (pendingInviteCode) {
+                    try {
+                        if (pendingInviteCode.length > 20 && pendingInviteCode.startsWith('BP-')) {
+                            // Offline ticket cryptographic redemption
+                            const ticketB64 = pendingInviteCode.slice(3); // Remove 'BP-' prefix
+                            await redeemOfflineTicket(ticketB64, pendingIdentity.publicKey, pendingIdentity.callsign);
+                        } else {
+                            // Legacy short-hash central database redemption
+                            await redeemInvite(pendingInviteCode, pendingIdentity.publicKey, pendingIdentity.callsign);
+                        }
+                    } catch (err: any) {
+                        // Already-redeemed is not a failure here. Step 1 treats it as
+                        // success and carries on; this step used to strand the user on an
+                        // error instead, so a code that had in fact been redeemed — by a
+                        // Step 1 that ran before this flag existed, or by the same person
+                        // retrying — blocked the join it had already completed. The two
+                        // steps now agree about what "already a member" means.
+                        const alreadyIn = err?.message?.includes('already a member')
+                            || err?.message?.includes('already been used');
+                        if (!alreadyIn) {
+                            setError(err.message || 'Invalid invite code');
+                            setLoading(false);
+                            return;
+                        }
                     }
-                } catch (err: any) {
-                    setError(err.message || 'Invalid invite code');
-                    setLoading(false);
-                    return;
-                }
-            } else {
-                try {
-                    await registerMember(pendingIdentity.publicKey, pendingIdentity.callsign);
-                } catch (err: any) {
-                    setError(err.message || 'Registration failed.');
-                    setLoading(false);
-                    return;
+                } else {
+                    try {
+                        await registerMember(pendingIdentity.publicKey, pendingIdentity.callsign);
+                    } catch (err: any) {
+                        setError(err.message || 'Registration failed.');
+                        setLoading(false);
+                        return;
+                    }
                 }
             }
 
@@ -789,6 +823,9 @@ export function WelcomePage({ onComplete }: Props) {
                                 onClick={() => {
                                     setPendingIdentity(null);
                                     setPendingAvatar(null);
+                                    // Going back discards the identity, so what was redeemed
+                                    // no longer describes what is about to be submitted.
+                                    setInviteRedeemed(false);
                                     setShowAvatarSetup(false);
                                     setError(null);
                                 }}

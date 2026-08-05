@@ -12,6 +12,7 @@ import { registerForPushNotifications, setupNotificationResponseHandler } from '
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, extractNodeOrigin } from '../utils/invite-parser';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { retryPendingReports } from '../utils/blocklist';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
@@ -685,6 +686,7 @@ export default function RootLayout() {
         const subscription = AppState.addEventListener('change', nextAppState => {
             if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
                 requestSync();
+                retryPendingReports();
                 // Clear app icon badge when user opens the app (only in custom client / standalone builds)
                 if (Constants.appOwnership !== 'expo') {
                     try {

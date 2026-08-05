@@ -4,6 +4,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal } from '../../utils/db';
+import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -203,16 +204,28 @@ export default function ChatsScreen() {
             const keepIfSame = <T,>(prev: T, next: T): T =>
                 JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
 
-            const loadData = () => {
+            const getPeerKey = (obj: any): string | undefined =>
+                obj?.peer_pubkey ?? obj?.peerPublicKey ?? obj?.peer_public_key ?? undefined;
+
+            const loadData = async () => {
                 if (identity?.publicKey && active) {
+                    const blocked = await getBlockedUsers();
                     getConversations(identity.publicKey)
                         .then(res => {
-                            if (active) setConversations(prev => keepIfSame(prev, res));
+                            const filtered = (res || []).filter((c: any) => {
+                                const pk = getPeerKey(c);
+                                return !pk || !blocked.includes(pk);
+                            });
+                            if (active) setConversations(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);
                     getActionableDeals(identity.publicKey)
                         .then(res => {
-                            if (active) setDeals(prev => keepIfSame(prev, res));
+                            const filtered = (res || []).filter((d: any) => {
+                                const pk = getPeerKey(d);
+                                return !pk || !blocked.includes(pk);
+                            });
+                            if (active) setDeals(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);
                     getFriendsLocal(identity.publicKey)
@@ -237,6 +250,7 @@ export default function ChatsScreen() {
             }
 
             const sub = DeviceEventEmitter.addListener('sync_data_updated', loadData);
+            const blockSub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, loadData);
 
             const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
                 if (identity?.publicKey && active) {
@@ -249,6 +263,7 @@ export default function ChatsScreen() {
             return () => {
                 active = false;
                 sub.remove();
+                blockSub.remove();
                 wsSub.remove();
             };
         }, [identity])

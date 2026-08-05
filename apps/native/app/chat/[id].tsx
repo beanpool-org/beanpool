@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Platform, Linking, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Platform, Linking, Modal, DeviceEventEmitter } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, AndroidSoftInputModes, useKeyboardHandler, useKeyboardState } from 'react-native-keyboard-controller';
 import { scheduleOnRN } from 'react-native-worklets';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage } from '../../utils/db';
+import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
 import { MemberAvatar } from '../../components/MemberAvatar';
@@ -105,6 +106,7 @@ export default function ChatScreen() {
     const [draft, setDraft] = useState('');
     const [peerName, setPeerName] = useState('Loading...');
     const [peerPubkey, setPeerPubkey] = useState<string | null>(null);
+    const [isPeerBlocked, setIsPeerBlocked] = useState(false);
     const [peerAvatar, setPeerAvatar] = useState<string | null>(null);
     // True when this thread is a 2-party DM (the only threads we E2E-encrypt).
     const [isEncrypted, setIsEncrypted] = useState(false);
@@ -516,6 +518,22 @@ export default function ChatScreen() {
         }
     }, [identity?.publicKey]);
 
+    useEffect(() => {
+        if (!peerPubkey) return;
+        let isMounted = true;
+        isUserBlocked(peerPubkey).then(blocked => {
+            if (isMounted) setIsPeerBlocked(blocked);
+        });
+        const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, async () => {
+            const blocked = await isUserBlocked(peerPubkey);
+            if (isMounted) setIsPeerBlocked(blocked);
+        });
+        return () => {
+            isMounted = false;
+            sub.remove();
+        };
+    }, [peerPubkey]);
+
     const loadConversationData = useCallback(async () => {
         if (id && identity?.publicKey) {
             const res = await getConversation(id as string, identity.publicKey);
@@ -699,7 +717,7 @@ export default function ChatScreen() {
         // draftRef note. Guarding on state made the button silently swallow presses
         // whenever state lagged the box (the "chat locked up" report, 2026-07-18).
         const currentDraft = draftRef.current.trim();
-        if (!currentDraft || !identity?.publicKey) return;
+        if (!currentDraft || !identity?.publicKey || isPeerBlocked) return;
         if (sendingRef.current) return;
 
         sendingRef.current = true;
@@ -1604,47 +1622,42 @@ export default function ChatScreen() {
                 )}
 
                 {/* Input Area */}
-                <View style={[
-                    styles.inputContainer,
-                    { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 12) }
-                ]}>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Attach image" style={styles.attachBtn} onPress={pickAndSendImage}>
-                        <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />
-                    </Pressable>
-                    <TextInput
-                        ref={inputRef}
-                        accessibilityLabel="Message"
-                        style={[styles.input, { height: inputHeight }]}
-                        // JS-owned height: Android's native autosize only ever grows —
-                        // after a programmatic clear the box stays multi-line until the
-                        // next keystroke. Measure, clamp, and let resetInputBox collapse it.
-                        onContentSizeChange={e => setInputHeight(Math.min(CHAT_INPUT_MAX_HEIGHT,
-                            Math.max(CHAT_INPUT_MIN_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height) + CHAT_INPUT_V_PADDING)))}
-                        placeholder="Message..."
-                        placeholderTextColor={colors.text.muted}
-                        // UNCONTROLLED on purpose — no `value` prop. A controlled input
-                        // round-trips every keystroke through the JS thread; when JS is
-                        // busy (sync payload parsing), React writes a STALE value back
-                        // into the native field and typed characters are lost — messages
-                        // arrived at the server with letters missing on slower devices.
-                        // The native field is the source of truth. updateDraft mirrors it
-                        // into draftRef (synchronously — handleSend's guard and payload)
-                        // and into `draft` state (async — send-button styling only; state
-                        // reaches handlers via render closures that lag under load, which
-                        // truncated sends to a stale prefix before draftRef existed).
-                        onChangeText={updateDraft}
-                        multiline
-                        submitBehavior="newline"
-                    />
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Send message"
-                        style={[styles.sendBtn, draft.trim().length > 0 ? styles.sendBtnActive : styles.sendBtnInactive]}
-                        onPress={handleSend}
-                    >
-                        <MaterialCommunityIcons name="send" size={20} color={draft.trim().length > 0 ? colors.text.inverse : colors.text.muted} />
-                    </Pressable>
-                </View>
+                {isPeerBlocked ? (
+                    <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ padding: 14, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, alignItems: 'center', marginHorizontal: 12, marginBottom: Math.max(insets.bottom, 12), borderRadius: 12 }}>
+                        <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' }}>
+                            <Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>You have blocked this user. Messaging is disabled.
+                        </Text>
+                    </View>
+                ) : (
+                    <View style={[
+                        styles.inputContainer,
+                        { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 12) }
+                    ]}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Attach image" style={styles.attachBtn} onPress={pickAndSendImage}>
+                            <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />
+                        </Pressable>
+                        <TextInput
+                            ref={inputRef}
+                            accessibilityLabel="Message"
+                            style={[styles.input, { height: inputHeight }]}
+                            onContentSizeChange={e => setInputHeight(Math.min(CHAT_INPUT_MAX_HEIGHT,
+                                Math.max(CHAT_INPUT_MIN_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height) + CHAT_INPUT_V_PADDING)))}
+                            placeholder="Message..."
+                            placeholderTextColor={colors.text.muted}
+                            onChangeText={updateDraft}
+                            multiline
+                            submitBehavior="newline"
+                        />
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Send message"
+                            style={[styles.sendBtn, draft.trim().length > 0 ? styles.sendBtnActive : styles.sendBtnInactive]}
+                            onPress={handleSend}
+                        >
+                            <MaterialCommunityIcons name="send" size={20} color={draft.trim().length > 0 ? colors.text.inverse : colors.text.muted} />
+                        </Pressable>
+                    </View>
+                )}
             </KeyboardAvoidingView>
 
             {promptReviewForTx && reviewModalReady && (

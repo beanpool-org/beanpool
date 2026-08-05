@@ -1099,7 +1099,7 @@ export default function WelcomeScreen() {
 
                         <Text style={styles.tosText}>
                             By joining you agree to our{' '}
-                            <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>Terms of Service</Text>
+                            <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/terms')}>Terms of Service & EULA</Text>
                             {' '}and{' '}
                             <Text style={styles.tosLink} onPress={() => openLink('https://beanpool.org/privacy')}>Privacy Policy</Text>.
                         </Text>

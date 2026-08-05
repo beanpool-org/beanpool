@@ -22,6 +22,7 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
+import { blockUser } from '../../utils/blocklist';
 import { colors, palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 
@@ -331,6 +332,7 @@ export default function PostDetailModal() {
     const [showReportForm, setShowReportForm] = useState(false);
     const [reportReason, setReportReason] = useState('');
     const [submittingReport, setSubmittingReport] = useState(false);
+    const [isBlocking, setIsBlocking] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
 
     // Request Rejection Modal State
@@ -1404,9 +1406,60 @@ export default function PostDetailModal() {
                             </View>
                         )}
 
-                        <Pressable accessibilityRole="button" style={[styles.messageBtn, { marginTop: 12, borderColor: 'transparent', backgroundColor: 'transparent' }]} onPress={() => setShowReportForm(!showReportForm)}>
-                            <Text style={[styles.messageBtnText, { color: colors.feedback.danger.solid, fontSize: 13 }]}>🚩 Report Post</Text>
-                        </Pressable>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 12 }}>
+                            <Pressable 
+                                accessibilityRole="button"
+                                accessibilityLabel="Report Post"
+                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                onPress={() => setShowReportForm(!showReportForm)}
+                            >
+                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' }}>🚩 Report Post</Text>
+                            </Pressable>
+                            <Text style={{ color: colors.text.muted }}>•</Text>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Block user ${post?.author_callsign || ''}`}
+                                accessibilityState={{ busy: isBlocking }}
+                                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                                disabled={isBlocking}
+                                style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingVertical: 4 }}
+                                onPress={() => {
+                                    if (!post?.author_pubkey || isBlocking) return;
+                                    const authorName = post.author_callsign || 'this user';
+                                    Alert.alert(
+                                        `Block ${authorName}?`,
+                                        `This will instantly hide all posts from ${authorName} and notify moderation.`,
+                                        [
+                                            { text: 'Cancel', style: 'cancel' },
+                                            {
+                                                text: 'Block User',
+                                                style: 'destructive',
+                                                onPress: async () => {
+                                                    try {
+                                                        setIsBlocking(true);
+                                                        await blockUser(post.author_pubkey, identity?.publicKey, 'Abusive content reported via Post', post.id);
+                                                        Alert.alert('User Blocked', `${authorName} has been blocked and removed from your feed.`, [
+                                                            { text: 'OK', onPress: () => router.back() }
+                                                        ]);
+                                                    } catch (e) {
+                                                        Alert.alert('Error', 'Failed to block user. Please try again.');
+                                                    } finally {
+                                                        setIsBlocking(false);
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    );
+                                }}
+                            >
+                                {isBlocking ? (
+                                    <ActivityIndicator size="small" color={colors.feedback.danger.solid} style={{ marginRight: 4 }} />
+                                ) : null}
+                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700', opacity: isBlocking ? 0.6 : 1 }}>
+                                    {isBlocking ? 'Blocking…' : (<><Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>Block User</>)}
+                                </Text>
+                            </Pressable>
+                        </View>
                         {showReportForm && (
                             <View style={[styles.confirmBox, { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border }]}>
                                 <Text style={styles.confirmBoxLabel}>REPORT REASON</Text>

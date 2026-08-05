@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     loadNodeProfiles,
     addNodeProfile,
@@ -41,6 +41,43 @@ import { InvitesModule } from './components/modules/InvitesModule';
 import { LogsModule } from './components/modules/LogsModule';
 import { AiServicesModule } from './components/modules/AiServicesModule';
 
+/**
+ * Does this error mean "wrong password" rather than "node unreachable"?
+ *
+ * `fetchDiagnostics` throws `HTTP 401: Unauthorized`; the friendlier per-endpoint
+ * messages say the same thing in words. Both are matched, because retrying is futile
+ * either way — no amount of waiting turns a rejected password into an accepted one.
+ */
+function isAuthFailure(message: string): boolean {
+    return /\b401\b/.test(message) || /unauthor/i.test(message) || /admin password/i.test(message);
+}
+
+/**
+ * A short digest of a stored password, used only to tell whether the credential we are
+ * blocked on is still the one sitting in the profile.
+ *
+ * Not a security boundary: the password itself already lives in localStorage, and this
+ * never leaves the tab. It exists so the block lifts by itself the moment the value
+ * changes — however it changed, whether through the edit modal, an imported profile
+ * list, or someone editing localStorage by hand — without keeping a second copy of the
+ * secret around to do it.
+ *
+ * Being 32-bit it can in principle collide, which would leave the poll switched off for
+ * one node after a password change. The length prefix narrows it further, the odds are
+ * remote, and the cost is one press of Refresh — so a wider hash would buy nothing here.
+ * `charCodeAt` over UTF-16 units is fine for the same reason: it only ever has to be
+ * consistent with itself, within one tab, for as long as that tab is open.
+ */
+function credentialDigest(password?: string): string {
+    if (!password) return 'none';
+    let h = 0x811c9dc5;
+    for (let i = 0; i < password.length; i++) {
+        h ^= password.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+    }
+    return `${password.length}:${(h >>> 0).toString(36)}`;
+}
+
 export function App() {
     const [profiles, setProfiles] = useState<NodeProfile[]>(() => loadNodeProfiles());
     const [activeProfileId, setActiveProfileId] = useState<string>(() => loadActiveProfileId());
@@ -72,6 +109,18 @@ export function App() {
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingNode, setEditingNode] = useState<NodeProfile | null>(null);
+
+    /**
+     * Nodes whose stored admin password the node itself rejected — profile id → digest of
+     * the credential that was refused.
+     *
+     * A ref rather than state on purpose. The 5-second poll below is created once per
+     * `profiles` change, so a state value read inside it would be the one captured when
+     * that effect ran: permanently empty, and the skip would never fire. Nothing renders
+     * from this either — the card's "🔒 Auth Required" prompt comes from the error left
+     * sitting in `fleetDiags`.
+     */
+    const authBlockedRef = useRef<Record<string, string>>({});
 
     const [nodeHealthMap, setNodeHealthMap] = useState<Record<string, NodeHealthStatus>>({});
     const [historyMap, setHistoryMap] = useState<Record<string, TelemetryHistoryPoint[]>>({});
@@ -146,15 +195,45 @@ export function App() {
         });
     }, [fleetDiags, profiles]);
 
-    // Load fleet-wide diagnostics and health flags for all connected nodes
-    const refreshFleetDiagnostics = async () => {
+    /**
+     * Load fleet-wide diagnostics and health flags for all connected nodes.
+     *
+     * `manual` marks a refresh the operator asked for. Pass it from event handlers with an
+     * arrow function rather than handing this straight to an `onClick` — React would supply
+     * the click event as `opts`, `opts.manual` would be undefined, and the press would be
+     * treated as an automatic poll that skips the very node being retried. The prop types
+     * involved are `() => void`, so the compiler will not catch that for you.
+     */
+    const refreshFleetDiagnostics = async (opts?: { manual?: boolean }) => {
         profiles.forEach(async (p) => {
+            // A node that rejected its password five seconds ago will reject it again
+            // now, and retrying regardless did real harm. The server tarpits failed admin
+            // auth with a delay that grows per failure (https-server.ts), that counter is
+            // per-process rather than per-caller, and its 60-second reset never arrived
+            // while this loop kept feeding it — so one wrong password in this manager put
+            // a five-second delay on every admin request to that node, the operator's own
+            // included. It also hid the cause: clearing `error` before each attempt left
+            // the card reading "Connecting..." forever instead of showing the "Set
+            // Password" prompt that was already written for exactly this situation.
+            //
+            // Only the automatic poll is held back. Anything the operator asks for by
+            // hand still goes through, and re-blocks if it fails again.
+            if (!opts?.manual && authBlockedRef.current[p.id] === credentialDigest(p.adminPassword)) {
+                return;
+            }
             setFleetDiags((prev) => ({
                 ...prev,
                 [p.id]: { ...(prev[p.id] || { diag: null }), loading: true, error: null },
             }));
             try {
                 const data = await fetchDiagnostics(p.url, p.adminPassword);
+                // Lifted on any success, not just on a credential edit. The password can
+                // also start working without this manager touching it — the operator
+                // resets it on the node itself to the value already stored here — and
+                // without this the digest would still match, so the automatic poll would
+                // stay switched off for a node that is answering perfectly well, until
+                // somebody thought to open the edit modal and press save.
+                delete authBlockedRef.current[p.id];
                 setFleetDiags((prev) => ({
                     ...prev,
                     [p.id]: { diag: data, loading: false, error: null },
@@ -203,11 +282,19 @@ export function App() {
             } catch (e: any) {
                 const errMsg = e.message || 'Failed to connect';
                 if (!errMsg.includes('429')) {
+                    const authFailed = isAuthFailure(errMsg);
+                    if (authFailed) {
+                        authBlockedRef.current[p.id] = credentialDigest(p.adminPassword);
+                    }
                     setFleetDiags((prev) => ({
                         ...prev,
                         [p.id]: { diag: null, loading: false, error: errMsg },
                     }));
-                    setNodeHealthMap((prev) => ({ ...prev, [p.id]: 'offline' }));
+                    // A rejected password is not an outage. Reporting it as `offline` sent
+                    // someone hunting a network fault on a node that was up and answering
+                    // every request it was asked — the sidebar now says which of the two
+                    // it is, and they need different things done about them.
+                    setNodeHealthMap((prev) => ({ ...prev, [p.id]: authFailed ? 'auth_required' : 'offline' }));
                     if (p.id === activeNode?.id) {
                         setDiagError(errMsg);
                     }
@@ -294,11 +381,28 @@ export function App() {
     };
 
     const refreshAll = () => {
-        refreshFleetDiagnostics();
+        // Manual: every caller of this is a human action — selecting a node, saving
+        // credentials, pressing refresh — so an auth-blocked node gets another attempt.
+        refreshFleetDiagnostics({ manual: true });
         loadGateway();
         loadNodeData();
         loadLogs();
     };
+
+    /**
+     * Bumped to ask for a refresh that must see freshly-saved state.
+     *
+     * Calling refreshAll() straight after setProfiles() re-fetched with the profile list
+     * from the render that was on screen when the operator hit save — i.e. with the OLD
+     * password. Entering the correct one therefore produced one more 401 and a flash of
+     * "Auth Required" on the node that had just been fixed, which reads as the fix having
+     * failed. Running it from an effect instead means it fires after the state has
+     * flushed, so it sees what was actually saved.
+     */
+    const [refreshToken, setRefreshToken] = useState(0);
+    useEffect(() => {
+        if (refreshToken > 0) refreshAll();
+    }, [refreshToken]);
 
     useEffect(() => {
         refreshFleetDiagnostics();
@@ -342,7 +446,11 @@ export function App() {
         const updatedProfiles = updateNodeProfile(id, updates);
         setProfiles(updatedProfiles);
         setEditingNode(null);
-        refreshAll();
+        // Cleared outright, on top of the digest check: saving the SAME password again is
+        // a deliberate "try it once more", and deserves an attempt rather than a silent
+        // nothing-changed.
+        delete authBlockedRef.current[id];
+        setRefreshToken((n) => n + 1);
     };
 
     const handleRemoveNode = (id: string) => {
@@ -352,6 +460,7 @@ export function App() {
         }
         if (confirm('Are you sure you want to remove this node profile from Fleet Manager?')) {
             removeNodeProfile(id);
+            delete authBlockedRef.current[id];
             const remaining = loadNodeProfiles();
             setProfiles(remaining);
             setActiveProfileId(remaining[0].id);
@@ -485,7 +594,7 @@ export function App() {
                                 setActiveTab('members');
                             }}
                             onEditNode={(node: NodeProfile) => setEditingNode(node)}
-                            onRefreshFleet={refreshFleetDiagnostics}
+                            onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
                             onSelectTab={(tab) => setActiveTab(tab)}
                         />
                     )}
@@ -498,7 +607,7 @@ export function App() {
                             historyMap={historyMap}
                             onSelectNode={(id: string) => setActiveProfileId(id)}
                             onEditNode={(node: NodeProfile) => setEditingNode(node)}
-                            onRefreshFleet={refreshFleetDiagnostics}
+                            onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
                         />
                     )}
 

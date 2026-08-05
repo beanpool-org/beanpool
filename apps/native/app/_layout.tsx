@@ -19,7 +19,7 @@ import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboa
 import { ThemeProvider, useTheme } from './ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
-import Constants from 'expo-constants';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import appConfig from '../app.json';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -688,7 +688,7 @@ export default function RootLayout() {
                 requestSync();
                 retryPendingReports();
                 // Clear app icon badge when user opens the app (only in custom client / standalone builds)
-                if (Constants.appOwnership !== 'expo') {
+                if (Constants.executionEnvironment !== ExecutionEnvironment.StoreClient) {
                     try {
                         const Notif = require('expo-notifications');
                         Notif.setBadgeCountAsync(0).catch(() => {});

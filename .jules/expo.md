@@ -39,3 +39,4 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
 ## Journal — Critical Learnings Only
 
 Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n**Learning:** [Why it existed]\n**Pattern:** [How to find similar issues]`
+## 2026-08-05 - [Replace deprecated Constants.appOwnership]\n**Issue:** Constants.appOwnership was deprecated in expo-constants.\n**Learning:** Replaced with Constants.executionEnvironment === ExecutionEnvironment.StoreClient.\n**Pattern:** Search for deprecated Constants.appOwnership usages in expo apps.

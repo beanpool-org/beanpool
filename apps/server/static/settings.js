@@ -506,17 +506,30 @@
         let currentBackupCodes = [];
 
         async function load2faStatus() {
+            const badge = document.getElementById('totp-status-badge');
+            const boxDisabled = document.getElementById('totp-box-disabled');
+            const boxSetup = document.getElementById('totp-box-setup');
+            const boxEnabled = document.getElementById('totp-box-enabled');
+
+            const setFallbackUI = () => {
+                if (badge) {
+                    badge.textContent = 'Disabled';
+                    badge.style.background = 'rgba(148, 163, 184, 0.1)';
+                    badge.style.border = '1px solid #475569';
+                    badge.style.color = '#94a3b8';
+                }
+                boxEnabled?.classList.add('hidden');
+                boxSetup?.classList.add('hidden');
+                boxDisabled?.classList.remove('hidden');
+            };
+
             try {
                 const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
+                if (!password) { setFallbackUI(); return; }
                 const headers = { 'X-Admin-Password': password };
                 const res = await fetch(`${API}/local/admin/2fa/status`, { headers });
-                if (!res.ok) return;
+                if (!res.ok) { setFallbackUI(); return; }
                 const data = await res.json();
-                
-                const badge = document.getElementById('totp-status-badge');
-                const boxDisabled = document.getElementById('totp-box-disabled');
-                const boxSetup = document.getElementById('totp-box-setup');
-                const boxEnabled = document.getElementById('totp-box-enabled');
                 
                 if (badge) {
                     if (data.enabled) {
@@ -546,6 +559,7 @@
                 }
             } catch (e) {
                 console.error('Failed to load 2FA status:', e);
+                setFallbackUI();
             }
         }
 
@@ -1029,10 +1043,16 @@
                 });
                 if (res.ok) {
                     authToken = np;
+                    sessionStorage.setItem('bp-admin-token', np);
                     showStatus('pwd-status', 'Password updated!', 'success');
                     document.getElementById('new-pwd').value = '';
                     document.getElementById('new-pwd-confirm').value = '';
                     reqBox.style.display = 'none';
+                    load2faStatus().catch(err => console.error(err));
+                    if (logsWs) {
+                        try { logsWs.close(); } catch (_) {}
+                        initLogsWs();
+                    }
                 } else {
                     const err = await res.json();
                     showStatus('pwd-status', err.error || 'Failed', 'error');
@@ -3666,7 +3686,8 @@
             }
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/logs?auth=${encodeURIComponent(authToken)}`;
+            const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
+            const wsUrl = `${protocol}//${window.location.host}/ws/logs?auth=${encodeURIComponent(password)}`;
 
             logsWs = new WebSocket(wsUrl);
 

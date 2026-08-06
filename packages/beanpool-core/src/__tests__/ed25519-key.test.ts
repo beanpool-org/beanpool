@@ -4,6 +4,7 @@ import {
     ED25519_PKCS8_HEADER,
     ED25519_PKCS8_LENGTH,
     ED25519_SEED_LENGTH,
+    getEd25519Pkcs8Header,
     toEd25519Pkcs8,
     toEd25519Seed,
 } from '../ed25519-key.js';
@@ -61,6 +62,20 @@ describe('Ed25519 private-key formats', () => {
             expect(() => toEd25519Seed(new Uint8Array(bad))).toThrow(/Unrecognised Ed25519 private key/);
             expect(() => toEd25519Pkcs8(new Uint8Array(bad))).toThrow(/Unrecognised Ed25519 private key/);
         }
+    });
+
+    it('refuses 48-byte keys with corrupted ASN.1 PKCS8 headers', () => {
+        const corrupt = new Uint8Array(pkcs8);
+        corrupt[0] ^= 0xff;
+        expect(() => toEd25519Seed(corrupt)).toThrow(/Invalid PKCS8 header/);
+        expect(() => toEd25519Pkcs8(corrupt)).toThrow(/Invalid PKCS8 header/);
+    });
+
+    it('returns a fresh copy of header via getEd25519Pkcs8Header', () => {
+        const h1 = getEd25519Pkcs8Header();
+        const h2 = getEd25519Pkcs8Header();
+        expect(h1).toEqual(ED25519_PKCS8_HEADER);
+        expect(h1).not.toBe(h2);
     });
 
     it('states the two lengths consistently', () => {

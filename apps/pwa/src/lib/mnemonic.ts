@@ -10,6 +10,7 @@
 
 import { WORDLIST } from './bip39-wordlist';
 import { toEd25519Pkcs8 } from '@beanpool/core';
+import { hexToBytes } from '@noble/hashes/utils.js';
 
 /**
  * Generate a new 12-word mnemonic from cryptographically secure random entropy.
@@ -173,9 +174,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
 export async function signWithPrivateKey(privateKeyHex: string, payloadString: string): Promise<string> {
     // Identities imported from a native device carry the raw 32-byte seed; WebCrypto needs
     // it PKCS8-wrapped. Accepts either form — see @beanpool/core/ed25519-key.
-    const pkcs8Bytes = toEd25519Pkcs8(
-        new Uint8Array(privateKeyHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)))
-    );
+    const pkcs8Bytes = toEd25519Pkcs8(hexToBytes(privateKeyHex));
 
     const privateKey = await crypto.subtle.importKey(
         'pkcs8',

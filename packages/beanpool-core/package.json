@@ -9,6 +9,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./ed25519-key": {
+      "types": "./dist/ed25519-key.d.ts",
+      "import": "./dist/ed25519-key.js",
+      "default": "./dist/ed25519-key.js"
     }
   },
   "scripts": {

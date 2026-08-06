@@ -44,13 +44,17 @@ export function isEncryptedNonce(nonce: string | null | undefined): boolean {
 }
 
 function deriveKey(ctx: DMKeyContext): Uint8Array {
-  // Normalised rather than length-checked here: the X25519 secret must be derived from
-  // the seed, and a PKCS8-wrapped key silently derives a different one.
-  const myPrivBytes = toEd25519Seed(hexToBytes(ctx.myEdPrivHex));
-  const myXPriv = ed25519.utils.toMontgomerySecret(myPrivBytes);
-  const peerXPub = ed25519.utils.toMontgomery(hexToBytes(ctx.peerEdPubHex));
-  const shared = x25519.getSharedSecret(myXPriv, peerXPub);
-  return hkdf(sha256, shared, utf8ToBytes(ctx.conversationId), HKDF_INFO, 32);
+  try {
+    // Normalised rather than length-checked here: the X25519 secret must be derived from
+    // the seed, and a PKCS8-wrapped key silently derives a different one.
+    const myPrivBytes = toEd25519Seed(hexToBytes(ctx.myEdPrivHex));
+    const myXPriv = ed25519.utils.toMontgomerySecret(myPrivBytes);
+    const peerXPub = ed25519.utils.toMontgomery(hexToBytes(ctx.peerEdPubHex));
+    const shared = x25519.getSharedSecret(myXPriv, peerXPub);
+    return hkdf(sha256, shared, utf8ToBytes(ctx.conversationId), HKDF_INFO, 32);
+  } catch (e: any) {
+    throw new Error(`Failed to derive DM encryption key: ${e?.message || e}`);
+  }
 }
 
 /** Encrypt a DM. Returns the ciphertext + versioned nonce to store/send. */

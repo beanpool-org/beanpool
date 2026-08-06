@@ -967,7 +967,7 @@ export async function startHttpsServer(port: number): Promise<void> {
                 if (ticket && isValidWsTicket(ticket)) {
                     authorized = true;
                 } else if (auth && config.adminHash && config.salt && verifyPassword(auth, config.adminHash, config.salt)) {
-                    logger.warn('[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
+                    logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
                     authorized = true;
                 }
 

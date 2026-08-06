@@ -61,6 +61,7 @@
             if (tabName === 'identity') {
                 if (settingsMap) setTimeout(() => settingsMap.invalidateSize(), 50);
                 loadNodeConfig();
+                load2faStatus();
             }
             if (tabName === 'network') {
                 loadGatewayConfig();
@@ -447,23 +448,36 @@
         // ======================== LOGIN ========================
         document.getElementById('login-btn').addEventListener('click', async () => {
             const password = document.getElementById('login-password').value;
+            const totpCode = document.getElementById('login-totp')?.value?.trim() || '';
             if (!password) { showStatus('login-status', 'Enter your password', 'error'); return; }
             try {
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'X-Admin-Password': password,
+                };
+                if (totpCode) headers['X-Admin-TOTP'] = totpCode;
                 const res = await fetch(`${API}/verify-password`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password })
+                    headers,
+                    body: JSON.stringify({ password, totpCode })
                 });
                 if (!res.ok) {
                     const err = await res.json();
-                    showStatus('login-status', err.error || 'Invalid password', 'error');
+                    if (err.totpRequired) {
+                        document.getElementById('login-2fa-field')?.classList.remove('hidden');
+                        showStatus('login-status', '2FA code required. Enter code from your authenticator app.', 'error');
+                        document.getElementById('login-totp')?.focus();
+                        return;
+                    }
+                    showStatus('login-status', err.error || 'Invalid password or 2FA code', 'error');
                     return;
                 }
                 authToken = password;
                 sessionStorage.setItem('bp-admin-token', password);
+                if (totpCode) sessionStorage.setItem('bp-admin-totp', totpCode);
                 initLogsWs();
                 let dashboardData = null;
-                const dashRes = await fetch(`${API}/dashboard`);
+                const dashRes = await fetch(`${API}/dashboard`, { headers: { 'X-Admin-Password': password, 'X-Admin-TOTP': totpCode } });
                 if (dashRes.ok) {
                     dashboardData = await dashRes.json();
                     hydrateSettings(dashboardData);
@@ -474,6 +488,7 @@
                 loadThresholds();
                 loadCommunityInfo();
                 loadAdminData();
+                load2faStatus();
                 switchTab(sessionStorage.getItem('bp-settings-tab') || 'identity');
                 setTimeout(() => {
                     initMap(
@@ -485,6 +500,156 @@
                 }, 150);
             } catch (err) {
                 showStatus('login-status', 'Login failed', 'error');
+            }
+        });
+
+        // ======================== TOTP 2FA MANAGEMENT ========================
+        let currentBackupCodes = [];
+
+        async function load2faStatus() {
+            try {
+                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
+                const totpCode = sessionStorage.getItem('bp-admin-totp') || '';
+                const headers = { 'X-Admin-Password': password };
+                if (totpCode) headers['X-Admin-TOTP'] = totpCode;
+                const res = await fetch(`${API}/admin/2fa/status`, { headers });
+                if (!res.ok) return;
+                const data = await res.json();
+                
+                const badge = document.getElementById('totp-status-badge');
+                const boxDisabled = document.getElementById('totp-box-disabled');
+                const boxSetup = document.getElementById('totp-box-setup');
+                const boxEnabled = document.getElementById('totp-box-enabled');
+                
+                if (badge) {
+                    if (data.enabled) {
+                        badge.textContent = 'Active (2FA On)';
+                        badge.style.background = 'rgba(16, 185, 129, 0.12)';
+                        badge.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                        badge.style.color = '#34d399';
+                        
+                        boxDisabled?.classList.add('hidden');
+                        boxSetup?.classList.add('hidden');
+                        boxEnabled?.classList.remove('hidden');
+                        
+                        const countEl = document.getElementById('totp-backup-count-text');
+                        if (countEl) countEl.textContent = `${data.remainingBackupCodes ?? 0} emergency backup code(s) remaining`;
+                    } else {
+                        badge.textContent = 'Disabled';
+                        badge.style.background = 'rgba(148, 163, 184, 0.1)';
+                        badge.style.border = '1px solid #475569';
+                        badge.style.color = '#94a3b8';
+                        
+                        boxEnabled?.classList.add('hidden');
+                        if (!data.pendingSetup) {
+                            boxSetup?.classList.add('hidden');
+                            boxDisabled?.classList.remove('hidden');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load 2FA status:', e);
+            }
+        }
+
+        document.getElementById('btn-totp-start-setup')?.addEventListener('click', async () => {
+            try {
+                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
+                const res = await fetch(`${API}/admin/2fa/setup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password }
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(err.error || 'Failed to initialize 2FA setup');
+                    return;
+                }
+                const data = await res.json();
+                document.getElementById('totp-qr-img').src = data.qrDataUrl;
+                document.getElementById('totp-secret-text').value = data.formattedSecret || data.secret;
+                currentBackupCodes = data.backupCodes || [];
+
+                document.getElementById('totp-box-disabled')?.classList.add('hidden');
+                document.getElementById('totp-box-setup')?.classList.remove('hidden');
+                document.getElementById('totp-setup-code')?.focus();
+            } catch (e) {
+                alert('Failed to start 2FA setup');
+            }
+        });
+
+        document.getElementById('btn-totp-copy-secret')?.addEventListener('click', () => {
+            const secret = document.getElementById('totp-secret-text')?.value?.replace(/\s+/g, '');
+            if (secret) navigator.clipboard.writeText(secret).then(() => alert('Secret key copied to clipboard!'));
+        });
+
+        document.getElementById('btn-totp-cancel-setup')?.addEventListener('click', () => {
+            document.getElementById('totp-box-setup')?.classList.add('hidden');
+            document.getElementById('totp-box-disabled')?.classList.remove('hidden');
+        });
+
+        document.getElementById('btn-totp-verify-setup')?.addEventListener('click', async () => {
+            const code = document.getElementById('totp-setup-code')?.value?.trim();
+            if (!code) { showStatus('totp-setup-status', 'Enter 6-digit code from your app', 'error'); return; }
+            try {
+                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
+                const res = await fetch(`${API}/admin/2fa/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password },
+                    body: JSON.stringify({ totpCode: code })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    showStatus('totp-setup-status', data.error || 'Verification failed — check code', 'error');
+                    return;
+                }
+                sessionStorage.setItem('bp-admin-totp', code);
+                document.getElementById('totp-box-setup')?.classList.add('hidden');
+                
+                // Render backup codes
+                const listEl = document.getElementById('totp-backup-codes-list');
+                if (listEl && currentBackupCodes.length > 0) {
+                    listEl.innerHTML = currentBackupCodes.map(c => `<div>${c}</div>`).join('');
+                    document.getElementById('totp-box-backup-codes')?.classList.remove('hidden');
+                } else {
+                    load2faStatus();
+                }
+            } catch (e) {
+                showStatus('totp-setup-status', 'Verification failed', 'error');
+            }
+        });
+
+        document.getElementById('btn-totp-copy-backups')?.addEventListener('click', () => {
+            if (currentBackupCodes.length === 0) return;
+            const text = currentBackupCodes.join('\n');
+            navigator.clipboard.writeText(text).then(() => alert('Emergency backup codes copied to clipboard!'));
+        });
+
+        document.getElementById('btn-totp-done-backups')?.addEventListener('click', () => {
+            document.getElementById('totp-box-backup-codes')?.classList.add('hidden');
+            load2faStatus();
+        });
+
+        document.getElementById('btn-totp-disable')?.addEventListener('click', async () => {
+            const code = document.getElementById('totp-disable-code')?.value?.trim();
+            if (!code) { showStatus('totp-disable-status', 'Enter current 2FA or backup code to confirm', 'error'); return; }
+            if (!confirm('Are you sure you want to disable 2FA for this node?')) return;
+            try {
+                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
+                const res = await fetch(`${API}/admin/2fa/disable`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password, 'X-Admin-TOTP': code },
+                    body: JSON.stringify({ totpCode: code })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    showStatus('totp-disable-status', data.error || 'Failed to disable 2FA', 'error');
+                    return;
+                }
+                sessionStorage.removeItem('bp-admin-totp');
+                showStatus('totp-disable-status', '2FA disabled', 'success');
+                setTimeout(() => load2faStatus(), 1000);
+            } catch (e) {
+                showStatus('totp-disable-status', 'Failed to disable 2FA', 'error');
             }
         });
 

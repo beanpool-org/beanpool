@@ -164,7 +164,7 @@ router.post('/api/local/admin/data', async (ctx) => {
         profiles: getAllProfiles(),
         posts: getPosts().filter(p => p.status !== 'cancelled'),
         health: getCommunityHealth(),
-        reports: getReports(),
+        reports: getReports().reports,
         reportCount: getReportCount(),
         memberStats: getMemberStats(),
     };
@@ -457,17 +457,68 @@ router.post('/api/local/admin/announcements', async (ctx) => {
 
 // ======================== MODERATION: REPORT MANAGEMENT ========================
 
+/**
+ * GET /api/local/admin/reports — List abuse reports with optional status filtering and pagination (#172).
+ * Query params:
+ *   - status: 'pending' | 'reviewed' | 'actioned' | 'all' (default: 'all')
+ *   - limit: max items (clamped [1, 500], default 50)
+ *   - offset: item offset for pagination (default 0)
+ */
+router.get('/api/local/admin/reports', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        const statusFilter = ctx.query.status ? String(ctx.query.status).toLowerCase() : 'all';
+        const parsedLimit = parseInt(String(ctx.query.limit), 10);
+        const limit = Math.max(1, Math.min(isNaN(parsedLimit) ? 50 : parsedLimit, 500));
+        const parsedOffset = parseInt(String(ctx.query.offset), 10);
+        const offset = Math.max(0, isNaN(parsedOffset) ? 0 : parsedOffset);
+
+        const result = getReports(statusFilter, limit, offset);
+        ctx.body = {
+            success: true,
+            reports: result.reports,
+            total: result.total,
+            pendingCount: result.pendingCount,
+            limit,
+            offset,
+        };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to fetch abuse reports' };
+    }
+});
+
 router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const ok = dismissReport(ctx.params.id);
-    ctx.body = { success: ok };
+    try {
+        const ok = dismissReport(ctx.params.id);
+        if (!ok) {
+            ctx.status = 404;
+            ctx.body = { success: false, error: 'Abuse report not found' };
+            return;
+        }
+        ctx.body = { success: true, message: 'Report dismissed' };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to dismiss report' };
+    }
 });
 
 router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { deletePost } = (ctx as any).requestBody || {};
-    const ok = actionReport(ctx.params.id, !!deletePost);
-    ctx.body = { success: ok };
+    try {
+        const { deletePost, suspendUser } = (ctx as any).requestBody || {};
+        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser);
+        if (!ok) {
+            ctx.status = 404;
+            ctx.body = { success: false, error: 'Abuse report not found' };
+            return;
+        }
+        ctx.body = { success: true, message: 'Report actioned successfully' };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to action report' };
+    }
 });
 
 router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {

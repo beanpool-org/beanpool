@@ -63,7 +63,6 @@ export interface PostFilter {
     sync?: boolean;
     /** #108: exclude listings with a cash outlay — the beans-only browse. */
     beansOnly?: boolean;
-    includeInactive?: boolean;
 }
 
 // Server-side photo limits. Clients resize to ≤800px JPEG at 0.7 quality.
@@ -238,9 +237,7 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     `;
     const params: any[] = [];
 
-    if (filter?.includeInactive) {
-        // Do not restrict p.active when includeInactive is requested
-    } else if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
+    if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
         query += selfView
             ? " AND p.active = 1 AND p.status IN ('active', 'pending', 'paused')"

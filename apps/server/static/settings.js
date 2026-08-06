@@ -2,6 +2,15 @@
 
         const API = '/api/local';
         let authToken = sessionStorage.getItem('bp-admin-token') || null;
+        let tfaSessionToken = sessionStorage.getItem('bp-2fa-session') || null;
+
+        /** Returns standard admin headers including 2FA session token if available. */
+        function adminHeaders(extra) {
+            const h = { 'X-Admin-Password': authToken };
+            if (tfaSessionToken) h['X-Admin-2FA-Session'] = tfaSessionToken;
+            if (extra) Object.assign(h, extra);
+            return h;
+        }
         let settingsMap, settingsMarker;
         let radiusCircle;
 
@@ -127,7 +136,7 @@
             try {
                 pollLiveLogs();
                 const res = await fetch(`${API}/admin/public-address/status`, {
-                    headers: { 'X-Admin-Password': authToken }
+                    headers: adminHeaders()
                 });
                 const d = await res.json().catch(() => ({}));
                 if (res.ok && (d.status === 'live' || d.status === 'pending' || d.status === 'none')) {
@@ -201,7 +210,7 @@
         async function pollLiveLogs() {
             try {
                 const res = await fetch(`${API}/admin/public-address/logs`, {
-                    headers: { 'X-Admin-Password': authToken }
+                    headers: adminHeaders()
                 });
                 if (res.ok) {
                     const data = await res.json();
@@ -265,7 +274,7 @@
             startLiveMonitor();
             try {
                 const res = await fetch(`${API}/admin/public-address/claim`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': authToken },
+                    method: 'POST', headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken, name, mode, communityName, contact })
                 });
                 const d = await res.json().catch(() => ({}));
@@ -289,7 +298,7 @@
             startLiveMonitor();
             try {
                 const res = await fetch(`${API}/admin/public-address/restart-sidecar`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': authToken },
+                    method: 'POST', headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken })
                 });
                 const d = await res.json().catch(() => ({}));
@@ -307,7 +316,7 @@
             startLiveMonitor();
             try {
                 const res = await fetch(`${API}/admin/public-address/offline`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': authToken },
+                    method: 'POST', headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken })
                 });
                 const d = await res.json().catch(() => ({}));
@@ -474,9 +483,15 @@
                 }
                 authToken = password;
                 sessionStorage.setItem('bp-admin-token', password);
+                // Store 2FA session token so subsequent API calls can skip TOTP re-entry
+                const loginData = await res.json();
+                if (loginData.tfaSessionToken) {
+                    tfaSessionToken = loginData.tfaSessionToken;
+                    sessionStorage.setItem('bp-2fa-session', tfaSessionToken);
+                }
                 initLogsWs();
                 let dashboardData = null;
-                const dashRes = await fetch(`${API}/dashboard`, { headers: { 'X-Admin-Password': password, 'X-Admin-TOTP': totpCode } });
+                const dashRes = await fetch(`${API}/dashboard`, { headers: adminHeaders() });
                 if (dashRes.ok) {
                     dashboardData = await dashRes.json();
                     hydrateSettings(dashboardData);
@@ -540,8 +555,7 @@
             try {
                 const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 if (!password) { setFallbackUI(); return; }
-                const headers = { 'X-Admin-Password': password };
-                const res = await fetch(`${API}/admin/2fa/status`, { headers });
+                const res = await fetch(`${API}/admin/2fa/status`, { headers: adminHeaders() });
                 if (!res.ok) {
                     if (res.status === 401) { setFallbackUI(); }
                     else { setErrorUI(); }
@@ -2549,9 +2563,7 @@
             try {
                 const res = await fetch(`/api/local/admin/restore`, {
                     method: 'POST',
-                    headers: {
-                        'X-Admin-Password': authToken
-                    },
+                    headers: adminHeaders(),
                     body: file // Send as raw binary stream
                 });
 
@@ -2775,7 +2787,7 @@
             try {
                 const res = await fetch(`${API}/admin/backup-enroll`, {
                     method: 'GET',
-                    headers: { 'X-Admin-Password': authToken }
+                    headers: adminHeaders()
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({ error: 'Unknown error' }));
@@ -3161,7 +3173,7 @@
             try {
                 const res = await fetch(`${API}/admin/snapshots/download?name=${encodeURIComponent(name)}`, {
                     method: 'GET',
-                    headers: { 'X-Admin-Password': authToken }
+                    headers: adminHeaders()
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({ error: 'Unknown error' }));
@@ -3722,7 +3734,7 @@
                 // Request a short-lived, single-use ticket via POST header auth (prevents passwords in URL query strings)
                 const ticketRes = await fetch(`${API}/admin/ws-ticket`, {
                     method: 'POST',
-                    headers: { 'X-Admin-Password': password }
+                    headers: adminHeaders()
                 });
                 if (!ticketRes.ok) {
                     const statusBanner = document.getElementById('log-ws-status');
@@ -4003,7 +4015,7 @@
         async function loadGatewayConfig() {
             try {
                 const res = await fetch('/api/local/admin/gateway', {
-                    headers: { 'X-Admin-Password': authToken }
+                    headers: adminHeaders()
                 });
                 if (!res.ok) return;
                 const config = await res.json();
@@ -4064,10 +4076,7 @@
 
                 const res = await fetch('/api/local/admin/gateway', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Admin-Password': authToken
-                    },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(payload)
                 });
 

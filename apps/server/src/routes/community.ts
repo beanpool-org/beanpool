@@ -74,24 +74,63 @@ router.get('/api/local/status', async (ctx) => {
 router.post('/api/local/verify-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const config = getLocalConfig();
-    const { password } = (ctx as any).requestBody || {};
+    const body = (ctx as any).requestBody || {};
+    const password = body.password;
+    const headerPass = ctx.request?.headers?.['x-admin-password'] || (ctx as any).headers?.['x-admin-password'];
 
-    if (!password) {
+    if (!password && !headerPass) {
         ctx.status = 400;
         ctx.body = { error: 'Password required' };
         return;
     }
 
+    const pw = password || headerPass;
     if (!config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+        !verifyPassword(pw, config.adminHash, config.salt)) {
         logger.security('AUTH', 'Failed administrative login attempt.');
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
     }
 
+    // #135: Check TOTP 2FA if enabled
+    if (config.totpEnabled && config.totpSecret) {
+        const totpCode = body.totpCode || ctx.request?.headers?.['x-admin-totp'] || (ctx as any).headers?.['x-admin-totp'] || '';
+        if (!totpCode) {
+            ctx.status = 401;
+            ctx.body = { error: '2FA code required', totpRequired: true };
+            return;
+        }
+        const { verifyTotpCode, verifyAndFindBackupCodeHash } = await import('../totp.js');
+        const cleanCode = String(totpCode).trim();
+        let totpValid = verifyTotpCode(cleanCode, config.totpSecret);
+
+        // Check backup codes if TOTP didn't match
+        const backupHashes = config.totpBackupCodesHashes || [];
+        if (!totpValid && backupHashes.length > 0) {
+            const { updateLocalConfig } = await import('../config/local-config.js');
+            const codeIndex = verifyAndFindBackupCodeHash(cleanCode, backupHashes);
+            if (codeIndex !== -1) {
+                totpValid = true;
+                const updatedHashes = [...backupHashes];
+                updatedHashes.splice(codeIndex, 1);
+                updateLocalConfig({ totpBackupCodesHashes: updatedHashes });
+            }
+        }
+
+        if (!totpValid) {
+            ctx.status = 401;
+            ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+            return;
+        }
+    }
+
+    // Issue 2FA session token so subsequent API calls can skip TOTP re-entry
+    const { issue2faSessionToken } = await import('../admin-auth.js');
+    const tfaSession = config.totpEnabled ? issue2faSessionToken() : undefined;
+
     logger.security('AUTH', 'Successful administrative login.');
-    ctx.body = { success: true };
+    ctx.body = { success: true, ...(tfaSession ? { tfaSessionToken: tfaSession } : {}) };
 });
 
 // Admin: Generate invite codes — supports tiered genesis invites

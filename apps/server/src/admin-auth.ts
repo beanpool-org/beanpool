@@ -43,6 +43,14 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     // Re-fetch fresh config to avoid reading a stale snapshot across the async password verify boundary.
     const currentConfig = getLocalConfig();
     if (currentConfig.totpEnabled && currentConfig.totpSecret) {
+        // Check for a valid 2FA session token first (issued after successful TOTP login).
+        // This allows subsequent API calls to skip TOTP re-entry within the session.
+        const sessionToken = (typeof ctx.get === 'function' ? ctx.get('x-admin-2fa-session') : null) ||
+            ctx.request?.headers?.['x-admin-2fa-session'] ||
+            ctx.headers?.['x-admin-2fa-session'];
+        if (sessionToken && isValid2faSession(sessionToken)) {
+            // Session token is valid — 2FA already verified this session
+        } else {
         const totpHeader = (typeof ctx.get === 'function' ? ctx.get('x-admin-totp') : null) ||
             ctx.request?.headers?.['x-admin-totp'] ||
             ctx.headers?.['x-admin-totp'] ||
@@ -79,6 +87,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
             return false;
         }
+        } // end of else block (no valid 2FA session token)
     }
 
     // #135 CR2: Reset tarpit failure count on successful authentication
@@ -168,4 +177,38 @@ export function isValidWsTicket(ticket: string): boolean {
     if (!expiry) return false;
     wsTickets.delete(ticket); // Single-use: consume immediately
     return Date.now() <= expiry;
+}
+
+// ===================== 2FA SESSION TOKEN STORE =====================
+// After successful password + TOTP login, a session token is issued so the
+// frontend doesn't need to re-enter TOTP on every API call. Tokens expire
+// after 4 hours (same as CSRF tokens). Multi-use within the session.
+const TFA_SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const tfaSessionTokens = new Map<string, number>(); // token → expiry
+
+export function issue2faSessionToken(): string {
+    const token = crypto.randomBytes(32).toString('hex');
+    tfaSessionTokens.set(token, Date.now() + TFA_SESSION_TTL_MS);
+    // Prune expired tokens opportunistically
+    const now = Date.now();
+    for (const [t, exp] of tfaSessionTokens) {
+        if (now > exp) tfaSessionTokens.delete(t);
+    }
+    return token;
+}
+
+export function isValid2faSession(token: string): boolean {
+    const expiry = tfaSessionTokens.get(token);
+    if (!expiry) return false;
+    if (Date.now() > expiry) {
+        tfaSessionTokens.delete(token);
+        return false;
+    }
+    // Sliding window: refresh TTL on valid use
+    tfaSessionTokens.set(token, Date.now() + TFA_SESSION_TTL_MS);
+    return true;
+}
+
+export function revoke2faSession(token: string): void {
+    tfaSessionTokens.delete(token);
 }

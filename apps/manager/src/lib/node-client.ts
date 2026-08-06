@@ -107,6 +107,43 @@ export function isTotpRequired(responseBody: any): boolean {
     return responseBody?.totpRequired === true;
 }
 
+/**
+ * 2FA session token storage — sessionStorage so it lives for the browser
+ * session (survives page reloads within the same tab) but is cleared when
+ * the tab closes, unlike localStorage which persists to disk indefinitely.
+ *
+ * This is a security tradeoff: the token is a TOTP bypass, so keeping it
+ * off disk limits the XSS exposure window to the current session only.
+ */
+const TFA_SESSION_KEY_PREFIX = 'bp_tfa_session_';
+
+export function getTfaSessionToken(profileId: string): string | undefined {
+    try {
+        return sessionStorage.getItem(TFA_SESSION_KEY_PREFIX + profileId) || undefined;
+    } catch { return undefined; }
+}
+
+export function setTfaSessionToken(profileId: string, token: string | undefined): void {
+    try {
+        if (token) {
+            sessionStorage.setItem(TFA_SESSION_KEY_PREFIX + profileId, token);
+        } else {
+            sessionStorage.removeItem(TFA_SESSION_KEY_PREFIX + profileId);
+        }
+    } catch { /* sessionStorage unavailable */ }
+}
+
+export function clearAllTfaSessionTokens(): void {
+    try {
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+            const key = sessionStorage.key(i);
+            if (key?.startsWith(TFA_SESSION_KEY_PREFIX)) {
+                sessionStorage.removeItem(key);
+            }
+        }
+    } catch { /* sessionStorage unavailable */ }
+}
+
 // ======================== END 2FA HELPERS ========================
 
 /**

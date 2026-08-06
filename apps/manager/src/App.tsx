@@ -25,6 +25,8 @@ import {
     seedTreasuryOffer,
     loginToNode,
     buildAdminHeaders,
+    getTfaSessionToken,
+    setTfaSessionToken,
     type DiagnosticsResponse,
     type GatewayConfig,
 } from './lib/node-client';
@@ -125,6 +127,12 @@ export function App() {
      * Returns the 2FA session token on success, empty string if cancelled.
      */
     const promptForTotp = (profileId: string, nodeName: string, nodeUrl: string): Promise<string> => {
+        // Guard: if a TOTP prompt is already active for another node, don't
+        // overwrite the pending promise — return empty (cancelled) so the
+        // caller doesn't hang forever.
+        if (pendingTotpResolve.current) {
+            return Promise.resolve('');
+        }
         return new Promise((resolve) => {
             setTotpError(null);
             setTotpPromptNode({ profileId, name: nodeName, url: nodeUrl });
@@ -133,7 +141,6 @@ export function App() {
                 pendingTotpResolve.current = null;
                 resolve(code);
             };
-            // If the modal is closed without submitting, resolve null
         });
     };
 
@@ -154,10 +161,7 @@ export function App() {
             }
             const loginRes = await loginToNode(totpPromptNode.url, profile.adminPassword, code);
             if (loginRes.tfaSessionToken) {
-                const updatedProfiles = updateNodeProfile(totpPromptNode.profileId, {
-                    tfaSessionToken: loginRes.tfaSessionToken,
-                });
-                setProfiles(updatedProfiles);
+                setTfaSessionToken(totpPromptNode.profileId, loginRes.tfaSessionToken);
                 // Resolve the pending promise with the token so refreshFleetDiagnostics
                 // can retry with the session token
                 if (pendingTotpResolve.current) {
@@ -203,7 +207,7 @@ export function App() {
         // Fetch node gateway config for security alerts
         (async () => {
             try {
-                const gHeaders = buildAdminHeaders(p.adminPassword, p.tfaSessionToken);
+                const gHeaders = buildAdminHeaders(p.adminPassword, getTfaSessionToken(p.id));
                 const gUrl = new URL(p.url);
                 if (!gUrl.pathname.endsWith('/')) gUrl.pathname += '/';
                 gUrl.pathname += 'api/local/admin/gateway';
@@ -221,7 +225,7 @@ export function App() {
         // Fetch node data to check for active abuse/security flags
         (async () => {
             try {
-                const ndHeaders = buildAdminHeaders(p.adminPassword, p.tfaSessionToken);
+                const ndHeaders = buildAdminHeaders(p.adminPassword, getTfaSessionToken(p.id));
                 const ndUrl = new URL(p.url);
                 if (!ndUrl.pathname.endsWith('/')) ndUrl.pathname += '/';
                 ndUrl.pathname += 'api/local/admin/data';
@@ -386,10 +390,11 @@ export function App() {
                 const diagUrl = new URL(p.url);
                 if (!diagUrl.pathname.endsWith('/')) diagUrl.pathname += '/';
                 diagUrl.pathname += 'api/local/admin/diagnostics';
-                const diagHeaders = buildAdminHeaders(p.adminPassword, p.tfaSessionToken);
+                const diagHeaders = buildAdminHeaders(p.adminPassword, getTfaSessionToken(p.id));
                 const diagRes = await fetch(diagUrl.toString(), { headers: diagHeaders, cache: 'no-store' });
 
                 let totpRetry = false;
+                let sessionToken: string | undefined;
                 if (diagRes.status === 401) {
                     let body: any = null;
                     try { body = await diagRes.json(); } catch {}
@@ -397,21 +402,20 @@ export function App() {
                         // Node requires 2FA and we don't have a valid session token.
                         // If we already have a stored session token, it may have expired —
                         // clear it and try to re-auth.
-                        if (p.tfaSessionToken) {
-                            p.tfaSessionToken = undefined; // clear stale token
+                        if (getTfaSessionToken(p.id)) {
+                            setTfaSessionToken(p.id, undefined);
                         }
                         // Prompt operator for TOTP code (handleTotpSubmit in App.tsx
                         // performs the actual loginToNode call and stores the session
                         // token in the profile). promptForTotp resolves with the token
                         // if successful, or empty string if cancelled.
-                        const sessionToken = await promptForTotp(p.id, p.name, p.url);
+                        sessionToken = await promptForTotp(p.id, p.name, p.url);
                         if (sessionToken) {
-                            p.tfaSessionToken = sessionToken;
                             totpRetry = true;
                         }
                         if (totpRetry) {
                             // Retry diagnostics with the session token
-                            const retryHeaders = buildAdminHeaders(p.adminPassword, p.tfaSessionToken);
+                            const retryHeaders = buildAdminHeaders(p.adminPassword, sessionToken);
                             const retryRes = await fetch(diagUrl.toString(), { headers: retryHeaders, cache: 'no-store' });
                             if (!retryRes.ok) {
                                 throw new Error(`HTTP ${retryRes.status}: ${retryRes.statusText}`);
@@ -461,7 +465,7 @@ export function App() {
         setDiagLoading(true);
         setDiagError(null);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, activeNode.tfaSessionToken);
+            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             const diagUrl = new URL(activeNode.url);
             if (!diagUrl.pathname.endsWith('/')) diagUrl.pathname += '/';
             diagUrl.pathname += 'api/local/admin/diagnostics';
@@ -490,7 +494,7 @@ export function App() {
         if (!activeNode) return;
         setGatewayLoading(true);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, activeNode.tfaSessionToken);
+            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             const gwUrl = new URL(activeNode.url);
             if (!gwUrl.pathname.endsWith('/')) gwUrl.pathname += '/';
             gwUrl.pathname += 'api/local/admin/gateway';
@@ -514,7 +518,7 @@ export function App() {
         if (!activeNode) return;
         setNodeDataLoading(true);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, activeNode.tfaSessionToken);
+            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             const ndUrl = new URL(activeNode.url);
             if (!ndUrl.pathname.endsWith('/')) ndUrl.pathname += '/';
             ndUrl.pathname += 'api/local/admin/data';
@@ -549,7 +553,7 @@ export function App() {
     const loadLogs = async () => {
         if (!activeNode) return;
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, activeNode.tfaSessionToken);
+            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             const logUrl = new URL(activeNode.url);
             if (!logUrl.pathname.endsWith('/')) logUrl.pathname += '/';
             logUrl.pathname += 'api/local/admin/logs';
@@ -611,7 +615,7 @@ export function App() {
         if (!activeNode || !gateway) return;
         setGatewaySuccess(null);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, activeNode.tfaSessionToken);
+            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             const res = await fetch(`${activeNode.url.replace(/\/+$/, '')}/api/local/admin/gateway`, {
                 method: 'POST',
                 headers,
@@ -641,7 +645,7 @@ export function App() {
         // If password is being changed, also clear any stored 2FA session token
         // so the operator re-authenticates with TOTP for the new credential.
         if (updates.adminPassword !== undefined) {
-            updates.tfaSessionToken = undefined;
+            setTfaSessionToken(id, undefined);
         }
         const updatedProfiles = updateNodeProfile(id, updates);
         setProfiles(updatedProfiles);
@@ -836,7 +840,7 @@ export function App() {
                             onRefresh={() => loadNodeData()}
                             onFreezeUser={async (pubkey, freeze) => {
                                 if (activeNode) {
-                                    const headers = buildAdminHeaders(activeNode.adminPassword, activeNode.tfaSessionToken);
+                                    const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                                     const url = `${activeNode.url.replace(/\/+$/, '')}/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`;
                                     await fetch(url, {
                                         method: 'POST',
@@ -847,7 +851,7 @@ export function App() {
                             }}
                             onPruneUser={async (pubkey) => {
                                 if (activeNode) {
-                                    const headers = buildAdminHeaders(activeNode.adminPassword, activeNode.tfaSessionToken);
+                                    const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                                     const url = `${activeNode.url.replace(/\/+$/, '')}/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`;
                                     await fetch(url, {
                                         method: 'POST',

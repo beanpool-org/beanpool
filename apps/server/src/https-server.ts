@@ -885,7 +885,14 @@ export async function startHttpsServer(port: number): Promise<void> {
     // the token and send X-Admin-2FA-Session on subsequent requests.
     app.use(async (ctx, next) => {
         await next();
-        if (ctx.state?.tfaSessionToken && typeof ctx.body === 'object' && ctx.body !== null) {
+        if (
+            ctx.state?.tfaSessionToken &&
+            typeof ctx.body === 'object' &&
+            ctx.body !== null &&
+            !Array.isArray(ctx.body) &&
+            !Buffer.isBuffer(ctx.body) &&
+            typeof (ctx.body as any).pipe !== 'function'
+        ) {
             ctx.body = { ...ctx.body, tfaSessionToken: ctx.state.tfaSessionToken };
         }
     });

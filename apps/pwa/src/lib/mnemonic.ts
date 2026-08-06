@@ -9,6 +9,8 @@
  */
 
 import { WORDLIST } from './bip39-wordlist';
+import { toEd25519Pkcs8 } from '@beanpool/core';
+import { hexToBytes } from '@noble/hashes/utils.js';
 
 /**
  * Generate a new 12-word mnemonic from cryptographically secure random entropy.
@@ -63,24 +65,17 @@ export async function mnemonicToKeypair(words: string[]): Promise<{
     const hash1 = await crypto.subtle.digest('SHA-256', phraseBytes) as ArrayBuffer;
     const seed = new Uint8Array(await crypto.subtle.digest('SHA-256', hash1) as ArrayBuffer);
 
-    // Build PKCS8 wrapper for Ed25519 private key
-    // ASN.1 structure: SEQUENCE { INTEGER 0, SEQUENCE { OID 1.3.101.112 }, OCTET STRING { OCTET STRING { seed } } }
-    const pkcs8Header = new Uint8Array([
-        0x30, 0x2e, // SEQUENCE, 46 bytes
-        0x02, 0x01, 0x00, // INTEGER 0
-        0x30, 0x05, // SEQUENCE, 5 bytes
-        0x06, 0x03, 0x2b, 0x65, 0x70, // OID 1.3.101.112 (Ed25519)
-        0x04, 0x22, // OCTET STRING, 34 bytes
-        0x04, 0x20, // OCTET STRING, 32 bytes (the seed)
-    ]);
-    const pkcs8 = new Uint8Array(pkcs8Header.length + 32);
-    pkcs8.set(pkcs8Header);
-    pkcs8.set(seed, pkcs8Header.length);
+    // Wrap the seed for WebCrypto. The ASN.1 prefix lives in @beanpool/core so this file,
+    // signWithPrivateKey below, and the native client cannot disagree about it.
+    const pkcs8 = toEd25519Pkcs8(seed);
 
     // Import as Ed25519 private key
     const privateKey = await crypto.subtle.importKey(
         'pkcs8',
-        pkcs8,
+        // Cast as in api.ts: TS types BufferSource as ArrayBufferView<ArrayBuffer>, and a
+        // Uint8Array crossing a package boundary is the wider ArrayBufferLike. Runtime is
+        // identical — WebCrypto reads the bytes either way.
+        pkcs8 as unknown as BufferSource,
         { name: 'Ed25519' } as any,
         true,
         ['sign']
@@ -177,19 +172,13 @@ export function bytesToBase64(bytes: Uint8Array): string {
  * Returns the Base64 representation of the cryptographic signature.
  */
 export async function signWithPrivateKey(privateKeyHex: string, payloadString: string): Promise<string> {
-    let pkcs8Bytes = new Uint8Array(privateKeyHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-    // Identities imported from a native device carry the raw 32-byte seed; WebCrypto
-    // needs it PKCS8-wrapped. Wrap if raw; leave already-wrapped 48-byte keys alone.
-    if (pkcs8Bytes.length === 32) {
-        const wrapped = new Uint8Array(16 + 32);
-        wrapped.set([0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20]);
-        wrapped.set(pkcs8Bytes, 16);
-        pkcs8Bytes = wrapped;
-    }
+    // Identities imported from a native device carry the raw 32-byte seed; WebCrypto needs
+    // it PKCS8-wrapped. Accepts either form — see @beanpool/core/ed25519-key.
+    const pkcs8Bytes = toEd25519Pkcs8(hexToBytes(privateKeyHex));
 
     const privateKey = await crypto.subtle.importKey(
         'pkcs8',
-        pkcs8Bytes,
+        pkcs8Bytes as unknown as BufferSource,
         { name: 'Ed25519' } as any,
         false,
         ['sign']

@@ -2,6 +2,7 @@ import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { getPublicKey, sign, verify, etc, hashes } from '@noble/ed25519';
 import * as Crypto from 'expo-crypto';
 import { WORDLIST } from '../../pwa/src/lib/bip39-wordlist';
+import { toEd25519Seed } from '@beanpool/core';
 
 if (typeof global.crypto !== 'object') {
     (global as any).crypto = {};
@@ -173,12 +174,10 @@ export async function mnemonicToKeypair(words: string[]): Promise<{
 }
 
 export async function signData(message: Uint8Array, privateKey: Uint8Array): Promise<Uint8Array> {
-    // Identities imported from the PWA store the Ed25519 seed wrapped in a 48-byte
-    // PKCS8 envelope (16-byte ASN.1 header + 32-byte seed). noble's sign() wants the
-    // raw 32-byte seed, so strip the header. This is the single signing chokepoint
-    // (buildSignedHeaders + people.tsx tickets both route through here), so doing it
-    // once heals every cross-platform-imported identity. Mirrors e2e-crypto's strip.
-    const seed = privateKey.length === 48 ? privateKey.slice(16) : privateKey;
+    // Identities imported from the PWA arrive PKCS8-wrapped; noble signs with the raw
+    // seed. Both forms are normalised in @beanpool/core so the two clients cannot drift
+    // apart on it — see ed25519-key.ts.
+    const seed = toEd25519Seed(privateKey);
     return sign(message, seed);
 }
 

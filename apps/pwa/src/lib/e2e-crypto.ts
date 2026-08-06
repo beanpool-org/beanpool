@@ -18,6 +18,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes, utf8ToBytes, randomBytes } from '@noble/hashes/utils.js';
+import { toEd25519Seed } from '@beanpool/core';
 
 export const V2_NONCE_PREFIX = 'x25519-xc20p-v2:';
 const HKDF_INFO = utf8ToBytes('beanpool-dm-v2');
@@ -48,10 +49,9 @@ export function isEncryptedNonce(nonce: string | null | undefined): boolean {
 }
 
 function deriveKey(ctx: DMKeyContext): Uint8Array {
-    let myPrivBytes = hexToBytes(ctx.myEdPrivHex);
-    if (myPrivBytes.length === 48) {
-        myPrivBytes = myPrivBytes.slice(16);
-    }
+    // Normalised rather than length-checked here: the X25519 secret must be derived from
+    // the seed, and a PKCS8-wrapped key silently derives a different one.
+    const myPrivBytes = toEd25519Seed(hexToBytes(ctx.myEdPrivHex));
     const myXPriv = ed25519.utils.toMontgomerySecret(myPrivBytes);
     const peerXPub = ed25519.utils.toMontgomery(hexToBytes(ctx.peerEdPubHex));
     const shared = x25519.getSharedSecret(myXPriv, peerXPub);

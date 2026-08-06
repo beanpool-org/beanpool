@@ -4,6 +4,7 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity } from './identity';
+import { toEd25519Pkcs8 } from '@beanpool/core';
 
 export function getNodeApiUrl(): string {
     const custom = localStorage.getItem('bp_node_url') || ((import.meta as any).env?.VITE_BEANPOOL_NODE_URL as string);
@@ -62,24 +63,12 @@ function bytesToBase64(bytes: Uint8Array): string {
     return btoa(String.fromCharCode(...bytes));
 }
 
-// PKCS8 ASN.1 prefix for an Ed25519 private key (16 bytes), followed by the 32-byte seed.
-const PKCS8_ED25519_HEADER = new Uint8Array([
-    0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
-]);
-
 // Native devices persist the raw 32-byte Ed25519 seed; WebCrypto's importKey('pkcs8')
-// needs it wrapped in a PKCS8 envelope. Accept either so transfer-code imports from a
-// phone can still sign here. Already-wrapped 48-byte keys pass through untouched.
-function toPkcs8Ed25519(key: Uint8Array): Uint8Array {
-    if (key.length !== 32) return key;
-    const out = new Uint8Array(PKCS8_ED25519_HEADER.length + 32);
-    out.set(PKCS8_ED25519_HEADER);
-    out.set(key, PKCS8_ED25519_HEADER.length);
-    return out;
-}
-
+// needs it wrapped. toEd25519Pkcs8 accepts either form, so a key imported from a phone
+// signs here — and the wrapping bytes are stated once, in @beanpool/core, rather than
+// copied into each file that needs them.
 async function signEd25519(privateKeyHex: string, message: string): Promise<string> {
-    const pkcs8 = toPkcs8Ed25519(hexToBytes(privateKeyHex));
+    const pkcs8 = toEd25519Pkcs8(hexToBytes(privateKeyHex));
     const privateKey = await crypto.subtle.importKey(
         'pkcs8',
         pkcs8 as unknown as BufferSource,

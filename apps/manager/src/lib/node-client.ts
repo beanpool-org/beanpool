@@ -52,6 +52,63 @@ export function normalizeNodeUrl(rawUrl: string): string {
 // The server still accepts all four transports, so this is a client-side hardening: no
 // node needs redeploying for it, and nothing breaks if one is on an older build.
 
+// ======================== 2FA / TOTP HELPERS ========================
+
+/**
+ * Authenticate to a node with password + TOTP code via /api/admin/login.
+ * Returns the 2FA session token on success, which should be stored and sent
+ * as X-Admin-2FA-Session on subsequent requests to skip TOTP re-entry.
+ *
+ * Also injected into responses from any endpoint that calls checkAdminAuth
+ * with a valid TOTP code — so even direct API calls (e.g. fetchDiagnostics
+ * with X-Admin-Password + X-Admin-TOTP headers) will return a tfaSessionToken
+ * in the response body.
+ */
+export interface LoginResponse {
+    success: boolean;
+    tfaSessionToken?: string;
+}
+
+export async function loginToNode(
+    nodeUrl: string,
+    adminPassword: string,
+    totpCode: string,
+): Promise<LoginResponse> {
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword, totpCode }),
+    });
+    if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+            const body = await res.json();
+            if (body?.error) detail = body.error;
+        } catch { /* status is all we have */ }
+        throw new Error(detail);
+    }
+    return res.json();
+}
+
+/**
+ * Build headers with admin password and optional 2FA session token for node API calls.
+ * Every fetch helper below uses this so TOTP-enabled nodes work transparently.
+ */
+export function buildAdminHeaders(adminPassword?: string, tfaSessionToken?: string): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    if (tfaSessionToken) headers['X-Admin-2FA-Session'] = tfaSessionToken;
+    return headers;
+}
+
+/** Check if a response body indicates TOTP is required. */
+export function isTotpRequired(responseBody: any): boolean {
+    return responseBody?.totpRequired === true;
+}
+
+// ======================== END 2FA HELPERS ========================
+
 /**
  * Download an admin-gated file without putting the credential in a URL.
  *

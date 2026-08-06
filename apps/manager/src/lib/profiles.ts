@@ -7,6 +7,10 @@ export interface NodeProfile {
     adminPassword?: string;
     replicationToken?: string;
     isPrimary?: boolean;
+    /** 2FA session token issued after successful password + TOTP login.
+     *  Stored in localStorage and sent as X-Admin-2FA-Session on API calls
+     *  to skip TOTP re-entry within the 4-hour session window. */
+    tfaSessionToken?: string;
 }
 
 const PROFILES_KEY = 'bp_fleet_profiles';

@@ -878,6 +878,18 @@ export async function startHttpsServer(port: number): Promise<void> {
     // Mount federation routes
     mountFederationRoutes(router);
 
+    // 2FA session token injection middleware
+    // When checkAdminAuth validates a TOTP code, it issues a session token on
+    // ctx.state.tfaSessionToken. This middleware picks it up and injects it into
+    // the JSON response body so headless clients (e.g. fleet manager) can stash
+    // the token and send X-Admin-2FA-Session on subsequent requests.
+    app.use(async (ctx, next) => {
+        await next();
+        if (ctx.state?.tfaSessionToken && typeof ctx.body === 'object' && ctx.body !== null) {
+            ctx.body = { ...ctx.body, tfaSessionToken: ctx.state.tfaSessionToken };
+        }
+    });
+
     app.use(router.routes());
     app.use(router.allowedMethods());
 

@@ -9,6 +9,7 @@
  * E. Valid 6-digit TOTP code grants admin access
  * F. Single-use backup code grants admin access and is consumed
  * G. Disabling 2FA restores password-only access
+ * H. Pending secret setup protection — calling /2fa/setup does NOT disarm active 2FA (#135 CR)
  */
 import assert from 'node:assert';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri } from './totp.js';
@@ -63,6 +64,8 @@ updateLocalConfig({
     totpEnabled: false,
     totpSecret: null,
     totpBackupCodes: [],
+    totpPendingSecret: null,
+    totpPendingBackupCodes: [],
 });
 
 // Seed password hash into local-config
@@ -125,11 +128,27 @@ resetAdminAuthTarpit();
     assert.strictEqual(okReuse, false, 'F. Reusing consumed backup code must fail');
     console.log('  F. Backup code authentication and single-use consumption working correctly');
 
+    // H. Pending secret setup protection (#135 CR)
+    const newPendingSecret = generateTotpSecret();
+    updateLocalConfig({
+        totpPendingSecret: newPendingSecret,
+        totpPendingBackupCodes: generateBackupCodes(8),
+    });
+    // active totpEnabled must still be true and active secret must still be required for auth
+    const currentActiveCode = generateTotpCode(secret);
+    resetAdminAuthTarpit();
+    const ctxPendingCheck = mockCtx({ 'x-admin-password': testPass, 'x-admin-totp': currentActiveCode });
+    const okPendingCheck = await checkAdminAuth(ctxPendingCheck);
+    assert.strictEqual(okPendingCheck, true, 'H. Active secret must still authenticate while a new setup is pending');
+    console.log('  H. Pending setup secret does NOT disarm currently active 2FA');
+
     // G. Disabling 2FA restores password-only access
     updateLocalConfig({
         totpEnabled: false,
         totpSecret: null,
         totpBackupCodes: [],
+        totpPendingSecret: null,
+        totpPendingBackupCodes: [],
     });
 
     resetAdminAuthTarpit();

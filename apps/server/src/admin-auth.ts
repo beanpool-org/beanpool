@@ -28,7 +28,16 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         ctx.body = { error: 'Invalid password' };
         return false;
     }
-    if (adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
+    // #133: If a CSRF token is present, validate it as defence-in-depth BEFORE state mutations (like 2FA backup code consumption).
+    const csrfHeader: string | undefined =
+        (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
+        ctx.request?.headers?.['x-csrf-token'] ||
+        ctx.headers?.['x-csrf-token'];
+    if (csrfHeader && !validateCsrfToken(ctx)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Invalid or expired CSRF token' };
+        return false;
+    }
 
     // #135: TOTP 2FA Verification
     // If 2FA is enabled on the node config, require a valid 6-digit TOTP code or backup code.
@@ -53,7 +62,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             const codeIndex = config.totpBackupCodes.findIndex(c => c.toLowerCase() === cleanCode.toLowerCase());
             if (codeIndex !== -1) {
                 totpValid = true;
-                // Consume used single-use backup code
+                // Consume used single-use backup code (CSRF has already been validated above)
                 const updatedCodes = [...config.totpBackupCodes];
                 updatedCodes.splice(codeIndex, 1);
                 updateLocalConfig({ totpBackupCodes: updatedCodes });
@@ -62,25 +71,12 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         }
 
         if (!totpValid) {
+            // #135 CR: Increment tarpit counter on 2FA code failure so TOTP codes cannot be brute-forced
+            adminAuthFailures++;
             ctx.status = 401;
             ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
             return false;
         }
-    }
-
-    // #133: If a CSRF token is present, validate it as defence-in-depth.
-    // Clients that have fetched a token via POST /api/local/admin/csrf-token must
-    // send it back. Clients that haven't yet adopted CSRF tokens are unaffected
-    // (token absent → skip check). This makes enforcement opt-in but strictly
-    // validated once opted in, avoiding a lockout during the migration window.
-    const csrfHeader: string | undefined =
-        (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
-        ctx.request?.headers?.['x-csrf-token'] ||
-        ctx.headers?.['x-csrf-token'];
-    if (csrfHeader && !validateCsrfToken(ctx)) {
-        ctx.status = 403;
-        ctx.body = { error: 'Invalid or expired CSRF token' };
-        return false;
     }
 
     return true;

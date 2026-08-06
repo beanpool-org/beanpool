@@ -416,7 +416,7 @@ router.get('/api/local/admin/2fa/status', async (ctx) => {
 
 /**
  * POST /api/local/admin/2fa/setup — Generates a new secret + QR code + backup codes for setup.
- * Does NOT enable 2FA yet until verified via /2fa/verify.
+ * Does NOT disarm existing active 2FA or overwrite totpSecret until verified via /2fa/verify.
  */
 router.post('/api/local/admin/2fa/setup', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -428,16 +428,19 @@ router.post('/api/local/admin/2fa/setup', async (ctx) => {
 
     try {
         const qrDataUrl = await qrcode.toDataURL(otpauthUri);
-        // Stash pending secret & backup codes in config (unverified until user confirms with a 6-digit code)
+        // #135 CR: Stash in totpPendingSecret so active 2FA is NOT disarmed during re-setup.
         updateLocalConfig({
-            totpSecret: secret,
-            totpBackupCodes: backupCodes,
-            totpEnabled: false, // Ensure false until verified
+            totpPendingSecret: secret,
+            totpPendingBackupCodes: backupCodes,
         });
+
+        // #135 CR: Return formattedSecret (e.g. "ABCD EFGH IJKL MNOP") for manual entry legibility.
+        const formattedSecret = secret.match(/.{1,4}/g)?.join(' ') || secret;
 
         ctx.body = {
             success: true,
             secret,
+            formattedSecret,
             qrDataUrl,
             otpauthUri,
             backupCodes,
@@ -452,7 +455,6 @@ router.post('/api/local/admin/2fa/setup', async (ctx) => {
  * POST /api/local/admin/2fa/verify — Verifies initial setup code and enables 2FA.
  */
 router.post('/api/local/admin/2fa/verify', async (ctx) => {
-    // Note: If 2FA is not yet enabled (totpEnabled is false during setup), password check passes here.
     if (!(await checkAdminAuth(ctx as any))) return;
     const { code } = (ctx as any).requestBody || ctx.request?.body || {};
     if (!code) {
@@ -462,21 +464,30 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
     }
 
     const config = getLocalConfig();
-    if (!config.totpSecret) {
+    // Check pending secret first (from /2fa/setup), fallback to active secret if verifying an active 2FA
+    const secretToVerify = config.totpPendingSecret || config.totpSecret;
+    if (!secretToVerify) {
         ctx.status = 400;
         ctx.body = { success: false, error: 'No 2FA setup in progress — call /2fa/setup first' };
         return;
     }
 
-    const valid = verifyTotpCode(String(code).trim(), config.totpSecret);
+    const valid = verifyTotpCode(String(code).trim(), secretToVerify);
     if (!valid) {
         ctx.status = 400;
         ctx.body = { success: false, error: 'Invalid 6-digit 2FA code — check authenticator app time sync' };
         return;
     }
 
-    // Enable 2FA permanently in config
-    updateLocalConfig({ totpEnabled: true });
+    // Promote pending secret & backup codes to active configuration
+    const activeBackupCodes = config.totpPendingBackupCodes || config.totpBackupCodes || [];
+    updateLocalConfig({
+        totpSecret: secretToVerify,
+        totpBackupCodes: activeBackupCodes,
+        totpEnabled: true,
+        totpPendingSecret: null,
+        totpPendingBackupCodes: [],
+    });
     console.log('🔒 [AdminAuth] TOTP 2FA successfully enabled for admin account');
     ctx.body = { success: true, message: '2FA enabled successfully', totpEnabled: true };
 });
@@ -490,6 +501,8 @@ router.post('/api/local/admin/2fa/disable', async (ctx) => {
         totpEnabled: false,
         totpSecret: null,
         totpBackupCodes: [],
+        totpPendingSecret: null,
+        totpPendingBackupCodes: [],
     });
     console.log('🔓 [AdminAuth] TOTP 2FA disabled for admin account');
     ctx.body = { success: true, message: '2FA disabled successfully', totpEnabled: false };

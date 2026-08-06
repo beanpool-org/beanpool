@@ -32,6 +32,8 @@ export interface LocalConfig {
     totpEnabled?: boolean;
     totpSecret?: string | null;
     totpBackupCodes?: string[];
+    totpPendingSecret?: string | null;
+    totpPendingBackupCodes?: string[];
     thresholds?: Thresholds;
     gateway?: GatewayConfig;
     communityName: string | null;

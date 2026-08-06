@@ -105,6 +105,7 @@ import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
+import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import type { RouteDeps } from './routes/types.js';
 
 
@@ -869,6 +870,9 @@ export async function startHttpsServer(port: number): Promise<void> {
         createTreasuryRoutes(deps),
         createPublicAddressRoutes(deps),
         createManagerBackupsRoutes(deps),
+        // Temporary Apple `sub` parity probe. Registers nothing unless APPLE_PROBE=1
+        // (the domain-association file aside) — see routes/apple-probe.ts.
+        createAppleProbeRoutes(),
     ];
     for (const mod of routeModules) {
         router.use(mod.routes());

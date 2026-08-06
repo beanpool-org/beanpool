@@ -154,7 +154,8 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-secure-store",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-apple-authentication"
     ],
     "extra": {
       "router": {},

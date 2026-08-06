@@ -269,8 +269,21 @@ function main() {
     const undeclared: string[] = [];
     const schemaText = fs.readFileSync(SCHEMA_PATH, 'utf-8');
     const dbText = fs.readFileSync(DB_TS_PATH, 'utf-8');
+
+    // Located ONCE and guarded, because `indexOf` returning -1 is silently catastrophic for both
+    // checks below (CR finding). `slice(-1)` is the LAST CHARACTER of the file, not an error — so the
+    // straggler regex would match nothing, `stragglers` would be empty, and the ordering assertion
+    // would pass by having stopped looking. `slice(0, -1)` is the whole file bar one character, which
+    // sweeps every late column into `early` instead. A reformat of this one string, or a rename of the
+    // variable it references, is all it would take. lateAddedColumns() already throws for this reason.
+    const execMarker = dbText.indexOf('db.exec(schemaSql)');
+    if (execMarker < 0) {
+        throw new Error('Could not find db.exec(schemaSql) in db.ts — the ordering checks below cannot '
+            + 'locate the boundary they depend on and would pass vacuously. Update this anchor.');
+    }
+
     const early = [...new Set(
-        [...dbText.slice(0, dbText.indexOf('db.exec(schemaSql)')).matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)]
+        [...dbText.slice(0, execMarker).matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)]
             .map(m => `${m[1]}.${m[2]}`),
     )];
     for (const col of early) {
@@ -299,7 +312,7 @@ function main() {
     // object can ever reference a column that has not been added yet. The cost is one convention —
     // "migrations go above the exec, and their columns go in schema.sql too" — which the `undeclared`
     // check enforces as the other half.
-    const stragglers = [...dbText.slice(dbText.indexOf('db.exec(schemaSql)')).matchAll(
+    const stragglers = [...dbText.slice(execMarker).matchAll(
         /db\.prepare\(`ALTER TABLE (\w+) ADD COLUMN (\w+)/g)].map(m => `${m[1]}.${m[2]}`);
     assert(stragglers.length === 0,
         stragglers.length

@@ -63,6 +63,7 @@ export interface PostFilter {
     sync?: boolean;
     /** #108: exclude listings with a cash outlay — the beans-only browse. */
     beansOnly?: boolean;
+    includeInactive?: boolean;
 }
 
 // Server-side photo limits. Clients resize to ≤800px JPEG at 0.7 quality.
@@ -239,15 +240,17 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
 
     if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
-        query += selfView
-            ? " AND p.active = 1 AND p.status IN ('active', 'pending', 'paused')"
-            : " AND p.active = 1 AND p.status IN ('active', 'pending')";
+        if (!filter?.includeInactive) {
+            query += selfView
+                ? " AND p.active = 1 AND p.status IN ('active', 'pending', 'paused')"
+                : " AND p.active = 1 AND p.status IN ('active', 'pending')";
+        }
         if (!filter?.authorPubkey) {
             query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
         }
     } else if (filter?.updatedAfter || filter?.sync) {
         // Include completed/cancelled/deleted states for sync
-    } else {
+    } else if (!filter?.includeInactive) {
         query += " AND p.active = 1";
     }
 

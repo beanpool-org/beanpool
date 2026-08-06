@@ -541,7 +541,7 @@
                 const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 if (!password) { setFallbackUI(); return; }
                 const headers = { 'X-Admin-Password': password };
-                const res = await fetch(`${API}/local/admin/2fa/status`, { headers });
+                const res = await fetch(`${API}/admin/2fa/status`, { headers });
                 if (!res.ok) {
                     if (res.status === 401) { setFallbackUI(); }
                     else { setErrorUI(); }
@@ -584,7 +584,7 @@
         document.getElementById('btn-totp-start-setup')?.addEventListener('click', async () => {
             try {
                 const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
-                const res = await fetch(`${API}/local/admin/2fa/setup`, {
+                const res = await fetch(`${API}/admin/2fa/setup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password }
                 });
@@ -631,10 +631,10 @@
             if (!code) { showStatus('totp-setup-status', 'Enter 6-digit code from your app', 'error'); return; }
             try {
                 const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
-                const res = await fetch(`${API}/local/admin/2fa/verify`, {
+                const res = await fetch(`${API}/admin/2fa/verify`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password },
-                    body: JSON.stringify({ totpCode: code })
+                    body: JSON.stringify({ code })
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {
@@ -686,10 +686,10 @@
             if (!confirm('Are you sure you want to disable 2FA for this node?')) return;
             try {
                 const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
-                const res = await fetch(`${API}/local/admin/2fa/disable`, {
+                const res = await fetch(`${API}/admin/2fa/disable`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password, 'X-Admin-TOTP': code },
-                    body: JSON.stringify({ totpCode: code })
+                    body: JSON.stringify({ code })
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {
@@ -3722,7 +3722,7 @@
             isInitializingLogsWs = true;
             try {
                 // Request a short-lived, single-use ticket via POST header auth (prevents passwords in URL query strings)
-                const ticketRes = await fetch(`${API}/local/admin/ws-ticket`, {
+                const ticketRes = await fetch(`${API}/admin/ws-ticket`, {
                     method: 'POST',
                     headers: { 'X-Admin-Password': password }
                 });

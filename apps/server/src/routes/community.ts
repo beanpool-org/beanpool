@@ -1358,7 +1358,8 @@ router.get('/api/members', async (ctx) => {
 
 router.post('/api/admin/reports', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    ctx.body = { reports: getReports() };
+    const result = getReports();
+    ctx.body = { reports: result.reports, total: result.total, pendingCount: result.pendingCount };
 });
 
 

@@ -263,6 +263,7 @@ export function initSchema() {
     } catch { }
     // Moderation: Add status tracking to abuse reports
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC)`).run(); } catch { }
     // Marketplace hygiene: track when a lingering escrow deal was last nudged
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
     // Edit-message window: timestamp of the most recent edit (null = never edited)

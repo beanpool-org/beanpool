@@ -237,6 +237,10 @@ export interface AbuseReport {
     targetPostId?: string;
     reason: string;
     createdAt: string;
+    status?: string;
+    reporterCallsign?: string;
+    targetCallsign?: string;
+    postTitle?: string | null;
 }
 
 export type { FriendEntry };
@@ -733,7 +737,7 @@ export function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new Error('Member not found');
-    if (member.status === 'disabled') throw new Error('Account is disabled');
+    if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
 }
 
@@ -2260,11 +2264,28 @@ export function submitReport(reporterPubkey: string, targetPubkey: string, reaso
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, reason.slice(0, 500), createdAt);
-    return { id, reporterPubkey, targetPubkey, targetPostId, reason: reason.slice(0, 500), createdAt };
+    return { id, reporterPubkey, targetPubkey, targetPostId, reason: reason.slice(0, 500), createdAt, status: 'pending' };
 }
 
-export function getReports(): AbuseReport[] {
-    const rows = db.prepare(`
+export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
+    let whereClause = '';
+    const params: any[] = [];
+
+    if (statusFilter && statusFilter !== 'all') {
+        if (statusFilter === 'pending') {
+            whereClause = "WHERE ar.status = 'pending' OR ar.status IS NULL";
+        } else {
+            whereClause = 'WHERE ar.status = ?';
+            params.push(statusFilter);
+        }
+    }
+
+    const countSql = `SELECT COUNT(*) as c FROM abuse_reports ar ${whereClause}`;
+    const total = (db.prepare(countSql).get(...params) as any)?.c || 0;
+
+    const pendingCount = (db.prepare("SELECT COUNT(*) as c FROM abuse_reports WHERE status = 'pending' OR status IS NULL").get() as any)?.c || 0;
+
+    let querySql = `
         SELECT ar.*, 
                mr.callsign as reporter_callsign, 
                mt.callsign as target_callsign,
@@ -2273,16 +2294,31 @@ export function getReports(): AbuseReport[] {
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
         LEFT JOIN posts p ON ar.target_post_id = p.id
+        ${whereClause}
         ORDER BY ar.created_at DESC
-    `).all() as any[];
-    return rows.map(r => ({ 
+    `;
+
+    const queryParams = [...params];
+    if (typeof limit === 'number' && limit > 0) {
+        querySql += ' LIMIT ?';
+        queryParams.push(limit);
+        if (typeof offset === 'number' && offset >= 0) {
+            querySql += ' OFFSET ?';
+            queryParams.push(offset);
+        }
+    }
+
+    const rows = db.prepare(querySql).all(...queryParams) as any[];
+    const reports = rows.map(r => ({ 
         id: r.id, reporterPubkey: r.reporter_pubkey, targetPubkey: r.target_pubkey, 
         targetPostId: r.target_post_id, reason: r.reason, createdAt: r.created_at,
         status: r.status || 'pending',
-        reporterCallsign: r.reporter_callsign || r.reporter_pubkey.substring(0, 8),
-        targetCallsign: r.target_callsign || r.target_pubkey.substring(0, 8),
+        reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
+        targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
         postTitle: r.post_title || null
     }));
+
+    return { reports, total, pendingCount };
 }
 
 export function getReportCount(): number {
@@ -2345,16 +2381,25 @@ export function dismissReport(reportId: string): boolean {
     return res.changes > 0;
 }
 
-export function actionReport(reportId: string, deletePost: boolean = false): boolean {
-    const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
-    if (!report) return false;
-    
-    db.prepare("UPDATE abuse_reports SET status = 'actioned' WHERE id = ?").run(reportId);
-    
-    if (deletePost && report.target_post_id) {
-        adminDeletePost(report.target_post_id);
-    }
-    return true;
+export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false): boolean {
+    return db.transaction(() => {
+        const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
+        if (!report) return false;
+        
+        db.prepare("UPDATE abuse_reports SET status = 'actioned' WHERE id = ?").run(reportId);
+        
+        if (deletePost && report.target_post_id) {
+            adminDeletePost(report.target_post_id);
+        }
+
+        if (suspendUser && report.target_pubkey) {
+            // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
+            db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
+            // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
+            db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
+        }
+        return true;
+    })();
 }
 
 export function adminBulkDeletePosts(postIds: string[]): number {

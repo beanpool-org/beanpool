@@ -1,6 +1,7 @@
 import * as Device from 'expo-device';
 import { Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { signedRequest } from '../utils/db';
@@ -66,10 +67,9 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
             projectId: projectId || '17a2a61a-9cbe-457e-bb10-84d8a666e6eb',
         });
         const token = tokenData.data;
-        console.log('[Push] Expo push token:', token);
 
         // Store locally
-        await AsyncStorage.setItem('bp_push_token', token);
+        await SecureStore.setItemAsync('bp_push_token', token);
 
         // Register with the BeanPool server
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -130,7 +130,7 @@ export async function unregisterPushToken(publicKey: string): Promise<void> {
     if (isExpoGo || !Notifications) return;
 
     try {
-        const token = await AsyncStorage.getItem('bp_push_token');
+        const token = await SecureStore.getItemAsync('bp_push_token');
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         const identity = await loadIdentity();
 
@@ -147,7 +147,7 @@ export async function unregisterPushToken(publicKey: string): Promise<void> {
             });
         }
 
-        await AsyncStorage.removeItem('bp_push_token');
+        await SecureStore.deleteItemAsync('bp_push_token');
         console.log('[Push] Token unregistered');
     } catch (error) {
         console.warn('[Push] Error unregistering token:', error);

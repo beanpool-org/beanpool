@@ -464,10 +464,12 @@ router.post('/api/local/admin/announcements', async (ctx) => {
  *   - limit: max items (clamped [1, 500], default 50)
  *   - offset: item offset for pagination (default 0)
  */
+const ALLOWED_STATUSES = new Set(['pending', 'reviewed', 'actioned', 'all']);
 router.get('/api/local/admin/reports', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const statusFilter = ctx.query.status ? String(ctx.query.status).toLowerCase() : 'all';
+        const rawStatus = String(ctx.query.status || 'all').toLowerCase();
+        const statusFilter = ALLOWED_STATUSES.has(rawStatus) ? rawStatus : 'all';
         const parsedLimit = parseInt(String(ctx.query.limit), 10);
         const limit = Math.max(1, Math.min(isNaN(parsedLimit) ? 50 : parsedLimit, 500));
         const parsedOffset = parseInt(String(ctx.query.offset), 10);

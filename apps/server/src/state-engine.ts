@@ -737,7 +737,7 @@ export function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new Error('Member not found');
-    if (member.status === 'disabled') throw new Error('Account is disabled');
+    if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
 }
 
@@ -2313,8 +2313,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         id: r.id, reporterPubkey: r.reporter_pubkey, targetPubkey: r.target_pubkey, 
         targetPostId: r.target_post_id, reason: r.reason, createdAt: r.created_at,
         status: r.status || 'pending',
-        reporterCallsign: r.reporter_callsign || r.reporter_pubkey.substring(0, 8),
-        targetCallsign: r.target_callsign || r.target_pubkey.substring(0, 8),
+        reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
+        targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
         postTitle: r.post_title || null
     }));
 
@@ -2382,19 +2382,24 @@ export function dismissReport(reportId: string): boolean {
 }
 
 export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false): boolean {
-    const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
-    if (!report) return false;
-    
-    db.prepare("UPDATE abuse_reports SET status = 'actioned' WHERE id = ?").run(reportId);
-    
-    if (deletePost && report.target_post_id) {
-        adminDeletePost(report.target_post_id);
-    }
+    return db.transaction(() => {
+        const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
+        if (!report) return false;
+        
+        db.prepare("UPDATE abuse_reports SET status = 'actioned' WHERE id = ?").run(reportId);
+        
+        if (deletePost && report.target_post_id) {
+            adminDeletePost(report.target_post_id);
+        }
 
-    if (suspendUser && report.target_pubkey) {
-        db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(report.target_pubkey);
-    }
-    return true;
+        if (suspendUser && report.target_pubkey) {
+            // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
+            db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
+            // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
+            db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
+        }
+        return true;
+    })();
 }
 
 export function adminBulkDeletePosts(postIds: string[]): number {

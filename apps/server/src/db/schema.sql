@@ -263,11 +263,13 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     target_pubkey TEXT NOT NULL REFERENCES members(public_key),
     target_post_id TEXT,
     reason TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated_at);
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC);
 
 -- 8. Config
 CREATE TABLE IF NOT EXISTS node_config (

@@ -97,6 +97,15 @@ assert.strictEqual(Boolean(postAfterAction?.active), false, 'E. Actioning report
 const offenderMember = getMember(offenderKey);
 assert.strictEqual(offenderMember?.status, 'suspended', 'E. Actioning report with suspendUser=true must suspend offender');
 
+// G. Verify assertMemberActive rejects suspended member
+import { assertMemberActive } from './state-engine.js';
+assert.throws(
+    () => assertMemberActive(offenderKey),
+    /Account is suspended or disabled/,
+    'G. assertMemberActive must throw error for suspended members'
+);
+console.log('  G. assertMemberActive correctly rejects suspended members');
+
 const actionedReports = getReports('actioned');
 assert.strictEqual(actionedReports.reports.length, 1, 'E. Actioned filter must return 1 item');
 assert.strictEqual(actionedReports.reports[0].id, r2.id, 'E. Actioned report ID must match');

@@ -54,7 +54,11 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     used_by TEXT REFERENCES members(public_key),
     used_at DATETIME,
-    intended_for TEXT
+    intended_for TEXT,
+    -- Protocol v1 Admin Genesis Invites. Declared here as well as in db.ts's ALTER because the
+    -- ALTER now runs BEFORE this file is exec'd: on a fresh database the table does not exist yet,
+    -- the ALTER fails into its empty catch, and this line is the only thing that creates the column.
+    genesis_type TEXT DEFAULT 'standard'
 );
 
 -- 3. Ledger Accounts & Transactions
@@ -189,7 +193,11 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     completed_at DATETIME,
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Marketplace hygiene: when a lingering escrow deal was last nudged. Same reasoning as
+    -- invite_codes.genesis_type above — the ALTER runs pre-exec, so a fresh database gets the
+    -- column from here or not at all.
+    last_reminded_at DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);

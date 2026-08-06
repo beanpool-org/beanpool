@@ -224,8 +224,19 @@ function main() {
     // easier to keep than "indexes need it, triggers do not, and here is why".
     const late = lateAddedColumns();
     const objects = schemaObjects();
-    assert(late.length > 0 && objects.length > 0,
-        `the static check found real input to work with (${late.length} late columns, ${objects.length} schema objects)`);
+    // Vacuity guard. This used to require `late.length > 0`, which was sensible while migrations lived
+    // on both sides of the exec — but every one has now been hoisted above it, so zero late columns is
+    // the CORRECT end state and that form of the assertion would fail forever.
+    //
+    // What still has to hold is that the parsing works. If either regex stops matching (db.ts is
+    // reformatted, schema.sql changes shape), `late` and `objects` go empty and every check below
+    // passes by finding nothing — a green suite that has stopped looking. So the guard now asserts the
+    // inputs were found at all, which is the property that was actually being protected.
+    const allMigrations = [...fs.readFileSync(DB_TS_PATH, 'utf-8')
+        .matchAll(/db\.prepare\(`ALTER TABLE (\w+) ADD COLUMN (\w+)/g)];
+    assert(allMigrations.length > 0 && objects.length > 0,
+        `the static check can still parse its inputs (${allMigrations.length} migrations, `
+        + `${objects.length} schema objects, ${late.length} of them late)`);
 
     const fatal: string[] = [];
     const defensive: string[] = [];
@@ -278,6 +289,25 @@ function main() {
               + '\n     never created. Add it to the CREATE TABLE in schema.sql as well.'
             : `every one of the ${early.length} columns added before the exec is also declared in schema.sql, so fresh installs get them`);
 
+    // The rule above is conditional: an ALTER below the exec is only fatal once some schema.sql object
+    // happens to name its column. That makes safety depend on a coincidence — 15 migrations sat below
+    // the exec harmlessly for months, and #172 was simply the first time someone added an index over
+    // one of them. The person who adds that index has no reason to look in db.ts.
+    //
+    // So the ALTERs were all hoisted above the exec and this asserts the position directly. It is a
+    // stricter rule than the checks above and subsumes them: with nothing below the exec, no schema.sql
+    // object can ever reference a column that has not been added yet. The cost is one convention —
+    // "migrations go above the exec, and their columns go in schema.sql too" — which the `undeclared`
+    // check enforces as the other half.
+    const stragglers = [...dbText.slice(dbText.indexOf('db.exec(schemaSql)')).matchAll(
+        /db\.prepare\(`ALTER TABLE (\w+) ADD COLUMN (\w+)/g)].map(m => `${m[1]}.${m[2]}`);
+    assert(stragglers.length === 0,
+        stragglers.length
+            ? `ORDERING — ${stragglers.length} ALTER(s) still run after db.exec(schemaSql):\n     `
+              + stragglers.join('\n     ')
+              + '\n     Harmless only until schema.sql names one of those columns. Move them above the exec.'
+            : 'and no ALTER ... ADD COLUMN runs after the exec at all, so the trap cannot be re-armed');
+
     assert(defensive.length === 0,
         defensive.length
             ? `ORDERING RULE — a schema.sql TRIGGER depends on a column added after the exec (${defensive.length}):\n     `
@@ -291,10 +321,15 @@ function main() {
     // dynamically, on the tables whose columns schema.sql objects really did depend on:
     //   posts    — idx_posts_updated_at, posts_touch_updated_at, and the posts_ai/ad/au FTS triggers
     //   members  — members_touch_updated_at's AFTER UPDATE OF whitelist
+    //   abuse_reports — idx_abuse_reports_status_created, the #172 recurrence. Section 5 flags this
+    //                   statically; booting it proves the flag corresponds to a real refusal to start.
+    //                   Verified against a real 30MB node database before being written down here:
+    //                   the pre-fix image dies with `no such column: status` and the fixed one boots.
     const LEGACY_SHAPES: Record<string, string[]> = {
         posts: ['updated_at', 'search_keywords', 'price_type', 'cash_also_needed'],
         members: ['earned_credit', 'profile_updated_at', 'updated_at', 'is_treasury', 'can_operate',
                   'can_vouch', 'vouch_credit', 'credit_frozen', 'elder_vouched_by'],
+        abuse_reports: ['status', 'updated_at'],
     };
     for (const [table, missing] of Object.entries(LEGACY_SHAPES)) {
         const dir = tmp(`legacy-${table}`);

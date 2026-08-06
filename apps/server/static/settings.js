@@ -511,6 +511,11 @@
             const boxSetup = document.getElementById('totp-box-setup');
             const boxEnabled = document.getElementById('totp-box-enabled');
 
+            if (badge && !badge.hasAttribute('role')) {
+                badge.setAttribute('role', 'status');
+                badge.setAttribute('aria-live', 'polite');
+            }
+
             const setFallbackUI = () => {
                 if (badge) {
                     badge.textContent = 'Disabled';
@@ -523,12 +528,25 @@
                 boxDisabled?.classList.remove('hidden');
             };
 
+            const setErrorUI = () => {
+                if (badge) {
+                    badge.textContent = 'Error Checking';
+                    badge.style.background = 'rgba(239, 68, 68, 0.12)';
+                    badge.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                    badge.style.color = '#f87171';
+                }
+            };
+
             try {
                 const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 if (!password) { setFallbackUI(); return; }
                 const headers = { 'X-Admin-Password': password };
                 const res = await fetch(`${API}/local/admin/2fa/status`, { headers });
-                if (!res.ok) { setFallbackUI(); return; }
+                if (!res.ok) {
+                    if (res.status === 401) { setFallbackUI(); }
+                    else { setErrorUI(); }
+                    return;
+                }
                 const data = await res.json();
                 
                 if (badge) {
@@ -559,7 +577,7 @@
                 }
             } catch (e) {
                 console.error('Failed to load 2FA status:', e);
-                setFallbackUI();
+                setErrorUI();
             }
         }
 
@@ -1044,15 +1062,26 @@
                 if (res.ok) {
                     authToken = np;
                     sessionStorage.setItem('bp-admin-token', np);
+                    sessionStorage.removeItem('bp-csrf-token'); // Invalidate stale CSRF token
+                    
+                    const pwdStatusEl = document.getElementById('pwd-status');
+                    if (pwdStatusEl && !pwdStatusEl.hasAttribute('role')) {
+                        pwdStatusEl.setAttribute('role', 'status');
+                        pwdStatusEl.setAttribute('aria-live', 'polite');
+                    }
                     showStatus('pwd-status', 'Password updated!', 'success');
                     document.getElementById('new-pwd').value = '';
                     document.getElementById('new-pwd-confirm').value = '';
                     reqBox.style.display = 'none';
                     load2faStatus().catch(err => console.error(err));
+                    
                     if (logsWs) {
-                        try { logsWs.close(); } catch (_) {}
-                        initLogsWs();
+                        const oldWs = logsWs;
+                        oldWs.onclose = null;
+                        logsWs = null;
+                        try { oldWs.close(); } catch (_) {}
                     }
+                    initLogsWs();
                 } else {
                     const err = await res.json();
                     showStatus('pwd-status', err.error || 'Failed', 'error');

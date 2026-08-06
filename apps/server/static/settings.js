@@ -550,7 +550,7 @@
                 const data = await res.json();
                 
                 if (badge) {
-                    if (data.enabled) {
+                    if (data.totpEnabled) {
                         badge.textContent = 'Active (2FA On)';
                         badge.style.background = 'rgba(16, 185, 129, 0.12)';
                         badge.style.border = '1px solid rgba(16, 185, 129, 0.3)';
@@ -561,7 +561,7 @@
                         boxEnabled?.classList.remove('hidden');
                         
                         const countEl = document.getElementById('totp-backup-count-text');
-                        if (countEl) countEl.textContent = `${data.remainingBackupCodes ?? 0} emergency backup code(s) remaining`;
+                        if (countEl) countEl.textContent = `${data.backupCodesRemaining ?? 0} emergency backup code(s) remaining`;
                     } else {
                         badge.textContent = 'Disabled';
                         badge.style.background = 'rgba(148, 163, 184, 0.1)';

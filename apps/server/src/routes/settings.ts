@@ -402,10 +402,19 @@ router.post('/api/admin/check-update', async (ctx) => {
 
 /**
  * GET /api/local/admin/2fa/status — Returns current 2FA status (enabled/disabled).
+ * Uses password-only auth (no 2FA enforcement) to avoid a chicken-and-egg problem:
+ * the UI needs to know if 2FA is enabled BEFORE the user can provide a TOTP code.
  */
 router.get('/api/local/admin/2fa/status', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
     const config = getLocalConfig();
+    const headerPass = (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-password') : null)
+        || ctx.request?.headers?.['x-admin-password']
+        || (ctx as any).headers?.['x-admin-password'];
+    if (!headerPass || !config.adminHash || !config.salt || !verifyPassword(headerPass, config.adminHash, config.salt)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid password' };
+        return;
+    }
     ctx.body = {
         success: true,
         totpEnabled: !!config.totpEnabled,

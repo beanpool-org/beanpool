@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     loadNodeProfiles,
     addNodeProfile,
@@ -23,6 +23,10 @@ import {
     fetchNodeTreasuries,
     createNodeTreasury,
     seedTreasuryOffer,
+    loginToNode,
+    buildAdminHeaders,
+    getTfaSessionToken,
+    setTfaSessionToken,
     type DiagnosticsResponse,
     type GatewayConfig,
 } from './lib/node-client';
@@ -30,6 +34,7 @@ import {
 import { FleetSidebar, type TabId, type NodeHealthStatus, type AlertCounts } from './components/layout/FleetSidebar';
 import { AddNodeModal } from './components/nodes/AddNodeModal';
 import { EditNodeModal } from './components/nodes/EditNodeModal';
+import { TotpModal } from './components/nodes/TotpModal';
 
 import { TelemetryModule, type NodeDiagnosticState, type TelemetryHistoryPoint } from './components/modules/TelemetryModule';
 import { AnalyticsModule } from './components/modules/AnalyticsModule';
@@ -109,6 +114,142 @@ export function App() {
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingNode, setEditingNode] = useState<NodeProfile | null>(null);
+
+    // 2FA / TOTP prompt state — when a node returns totpRequired, this modal pops up
+    const [totpPromptNode, setTotpPromptNode] = useState<{ profileId: string; name: string; url: string } | null>(null);
+    const [totpError, setTotpError] = useState<string | null>(null);
+    // Tracks pending retry after TOTP login completes (resolves the pending promise)
+    const pendingTotpResolve = useRef<((token: string) => void) | null>(null);
+
+    /**
+     * Show the TOTP prompt modal and wait for the operator to complete 2FA.
+     * The modal handles loginToNode internally via handleTotpSubmit.
+     * Returns the 2FA session token on success, empty string if cancelled.
+     */
+    const promptForTotp = (profileId: string, nodeName: string, nodeUrl: string): Promise<string> => {
+        // Guard: if a TOTP prompt is already active for another node, reject
+        // with a distinct sentinel so the caller can retry on the next poll
+        // instead of permanently blocking.
+        if (pendingTotpResolve.current) {
+            return Promise.reject(new Error('2FA_PROMPT_BUSY'));
+        }
+        return new Promise((resolve, reject) => {
+            setTotpError(null);
+            setTotpPromptNode({ profileId, name: nodeName, url: nodeUrl });
+            pendingTotpResolve.current = (code: string) => {
+                setTotpPromptNode(null);
+                pendingTotpResolve.current = null;
+                if (code) resolve(code);
+                else reject(new Error('2FA_CANCELLED'));
+            };
+        });
+    };
+
+    /**
+     * Handle TOTP code submission from the modal.
+     * Attempts login and stores the session token on success.
+     * On failure, shows the error inline so the operator can retry.
+     */
+    const handleTotpSubmit = async (code: string) => {
+        if (!totpPromptNode) return;
+        setTotpError(null);
+        try {
+            // Find the profile to get the admin password
+            const profile = profiles.find(p => p.id === totpPromptNode.profileId);
+            if (!profile || !profile.adminPassword) {
+                setTotpError('No admin password configured for this node');
+                return;
+            }
+            const loginRes = await loginToNode(totpPromptNode.url, profile.adminPassword, code);
+            if (loginRes.tfaSessionToken) {
+                setTfaSessionToken(totpPromptNode.profileId, loginRes.tfaSessionToken);
+                // Resolve the pending promise with the token so refreshFleetDiagnostics
+                // can retry with the session token
+                if (pendingTotpResolve.current) {
+                    pendingTotpResolve.current(loginRes.tfaSessionToken);
+                    pendingTotpResolve.current = null;
+                }
+            } else {
+                setTotpError('Server did not issue a session token');
+            }
+        } catch (e: any) {
+            setTotpError(e.message || 'Verification failed');
+        }
+    };
+
+    /**
+     * Handle TOTP modal cancellation.
+     */
+    const handleTotpCancel = () => {
+        setTotpPromptNode(null);
+        setTotpError(null);
+        if (pendingTotpResolve.current) {
+            pendingTotpResolve.current(''); // empty string = cancelled
+            pendingTotpResolve.current = null;
+        }
+    };
+
+    /**
+     * Handle successful diagnostics response: update state, fetch secondary data.
+     */
+    const diagSuccess = useCallback((p: NodeProfile, data: DiagnosticsResponse) => {
+        // Lifted on any success, not just on a credential edit. The password can
+        // also start working without this manager touching it — the operator
+        // resets it on the node itself to the value already stored here — and
+        // without this the digest would still match, so the automatic poll would
+        // stay switched off for a node that is answering perfectly well, until
+        // somebody thought to open the edit modal and press save.
+        delete authBlockedRef.current[p.id];
+        setFleetDiags((prev) => ({
+            ...prev,
+            [p.id]: { diag: data, loading: false, error: null },
+        }));
+
+        // Fetch node gateway config for security alerts
+        (async () => {
+            try {
+                const gData = await fetchGatewayConfig(p.url, p.adminPassword, getTfaSessionToken(p.id));
+                if (gData) {
+                    setFleetGateways((prev) => ({ ...prev, [p.id]: gData }));
+                    if (p.id === activeNode?.id && gData) {
+                        setGateway((prev) => (prev === null ? gData : prev));
+                    }
+                }
+            } catch {}
+        })();
+
+        // Fetch node data to check for active abuse/security flags
+        (async () => {
+            try {
+                const nData = await fetchNodeData(p.url, p.adminPassword, getTfaSessionToken(p.id));
+                setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
+
+                let savedDismissed = new Set<string>();
+                try {
+                    const saved = localStorage.getItem('bp_dismissed_flags');
+                    if (saved) savedDismissed = new Set(JSON.parse(saved));
+                } catch {}
+
+                const flags = (nData?.health?.flags || []).filter(
+                    (f: any) => !savedDismissed.has(f.id || f.type || f.description)
+                );
+                const reports = (nData?.reports || []).filter(
+                    (r: any) => !savedDismissed.has(r.id || r.targetPubkey || r.reason)
+                );
+
+                const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
+                const hasWarning = flags.some((f: any) => f.severity === 'warning');
+
+                const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
+                setNodeHealthMap((prev) => ({ ...prev, [p.id]: status }));
+            } catch {}
+        })();
+
+        if (p.id === activeNode?.id) {
+            setDiag(data);
+            setDiagError(null);
+        }
+    }, [activeNode]);
 
     /**
      * Nodes whose stored admin password the node itself rejected — profile id → digest of
@@ -218,7 +359,9 @@ export function App() {
             //
             // Only the automatic poll is held back. Anything the operator asks for by
             // hand still goes through, and re-blocks if it fails again.
-            if (!opts?.manual && authBlockedRef.current[p.id] === credentialDigest(p.adminPassword)) {
+            //
+            // Also skip if we're already waiting for a TOTP code for this node.
+            if (!opts?.manual && (authBlockedRef.current[p.id] === credentialDigest(p.adminPassword) || totpPromptNode?.profileId === p.id)) {
                 return;
             }
             setFleetDiags((prev) => ({
@@ -226,64 +369,62 @@ export function App() {
                 [p.id]: { ...(prev[p.id] || { diag: null }), loading: true, error: null },
             }));
             try {
-                const data = await fetchDiagnostics(p.url, p.adminPassword);
-                // Lifted on any success, not just on a credential edit. The password can
-                // also start working without this manager touching it — the operator
-                // resets it on the node itself to the value already stored here — and
-                // without this the digest would still match, so the automatic poll would
-                // stay switched off for a node that is answering perfectly well, until
-                // somebody thought to open the edit modal and press save.
-                delete authBlockedRef.current[p.id];
-                setFleetDiags((prev) => ({
-                    ...prev,
-                    [p.id]: { diag: data, loading: false, error: null },
-                }));
+                // Use raw fetch instead of fetchDiagnostics so we can inspect
+                // the response body for totpRequired errors (which node-client's
+                // helper throws away).
+                const diagUrl = new URL(p.url);
+                if (!diagUrl.pathname.endsWith('/')) diagUrl.pathname += '/';
+                diagUrl.pathname += 'api/local/admin/diagnostics';
+                const diagHeaders = buildAdminHeaders(p.adminPassword, getTfaSessionToken(p.id));
+                const diagRes = await fetch(diagUrl.toString(), { headers: diagHeaders, cache: 'no-store' });
 
-                // Fetch node gateway config for security alerts
-                try {
-                    const gData = await fetchGatewayConfig(p.url, p.adminPassword);
-                    setFleetGateways((prev) => ({ ...prev, [p.id]: gData }));
-                    if (p.id === activeNode?.id && gData) {
-                        setGateway((prev) => (prev === null ? gData : prev));
+                let totpRetry = false;
+                let sessionToken: string | undefined;
+                if (diagRes.status === 401) {
+                    let body: any = null;
+                    try { body = await diagRes.json(); } catch {}
+                    if (body?.totpRequired) {
+                        // Node requires 2FA and we don't have a valid session token.
+                        // If we already have a stored session token, it may have expired —
+                        // clear it and try to re-auth.
+                        if (getTfaSessionToken(p.id)) {
+                            setTfaSessionToken(p.id, undefined);
+                        }
+                        // Prompt operator for TOTP code (handleTotpSubmit in App.tsx
+                        // performs the actual loginToNode call and stores the session
+                        // token in the profile). promptForTotp resolves with the token
+                        // if successful, or empty string if cancelled.
+                        sessionToken = await promptForTotp(p.id, p.name, p.url);
+                        if (sessionToken) {
+                            totpRetry = true;
+                        }
+                        if (totpRetry) {
+                            // Retry diagnostics with the session token
+                            const retryHeaders = buildAdminHeaders(p.adminPassword, sessionToken);
+                            const retryRes = await fetch(diagUrl.toString(), { headers: retryHeaders, cache: 'no-store' });
+                            if (!retryRes.ok) {
+                                throw new Error(`HTTP ${retryRes.status}: ${retryRes.statusText}`);
+                            }
+                            const data = await retryRes.json();
+                            diagSuccess(p, data);
+                        } else {
+                            // User cancelled the TOTP prompt
+                            throw new Error('2FA code required');
+                        }
+                        return; // handled above, don't fall through to catch
                     }
-                } catch {}
-
-                // Fetch node data to check for active abuse/security flags
-                try {
-                    const nData = await fetchNodeData(p.url, p.adminPassword);
-                    setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
-
-                    let savedDismissed = new Set<string>();
-                    try {
-                        const saved = localStorage.getItem('bp_dismissed_flags');
-                        if (saved) savedDismissed = new Set(JSON.parse(saved));
-                    } catch {}
-
-                    const flags = (nData?.health?.flags || []).filter(
-                        (f: any) => !savedDismissed.has(f.id || f.type || f.description)
-                    );
-                    const reports = (nData?.reports || []).filter(
-                        (r: any) => !savedDismissed.has(r.id || r.targetPubkey || r.reason)
-                    );
-
-                    const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
-                    const hasWarning = flags.some((f: any) => f.severity === 'warning');
-
-                    const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
-                    setNodeHealthMap((prev) => ({ ...prev, [p.id]: status }));
-                } catch {
-                    // Do not flip status to offline on rate limits
                 }
 
-                if (p.id === activeNode?.id) {
-                    setDiag(data);
-                    setDiagError(null);
+                if (!diagRes.ok) {
+                    throw new Error(`HTTP ${diagRes.status}: ${diagRes.statusText}`);
                 }
+                const data = await diagRes.json();
+                diagSuccess(p, data);
             } catch (e: any) {
                 const errMsg = e.message || 'Failed to connect';
-                if (!errMsg.includes('429')) {
-                    const authFailed = isAuthFailure(errMsg);
-                    if (authFailed) {
+                if (!errMsg.includes('429') && errMsg !== '2FA_PROMPT_BUSY') {
+                    const authFailed = isAuthFailure(errMsg) || errMsg === '2FA_CANCELLED';
+                    if (authFailed && errMsg !== '2FA_CANCELLED') {
                         authBlockedRef.current[p.id] = credentialDigest(p.adminPassword);
                     }
                     setFleetDiags((prev) => ({
@@ -309,7 +450,7 @@ export function App() {
         setDiagLoading(true);
         setDiagError(null);
         try {
-            const data = await fetchDiagnostics(activeNode.url, activeNode.adminPassword);
+            const data = await fetchDiagnostics(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setDiag(data);
             setFleetDiags((prev) => ({
                 ...prev,
@@ -330,7 +471,7 @@ export function App() {
         if (!activeNode) return;
         setGatewayLoading(true);
         try {
-            const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword);
+            const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setGateway(data);
         } catch (e: any) {
             const errMsg = e.message || '';
@@ -348,7 +489,7 @@ export function App() {
         if (!activeNode) return;
         setNodeDataLoading(true);
         try {
-            const data = await fetchNodeData(activeNode.url, activeNode.adminPassword);
+            const data = await fetchNodeData(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setNodeData(data);
             setFleetNodeData((prev) => ({ ...prev, [activeNode.id]: data }));
 
@@ -373,8 +514,9 @@ export function App() {
     const loadLogs = async () => {
         if (!activeNode) return;
         try {
-            const logs = await fetchNodeLogs(activeNode.url, activeNode.adminPassword);
-            setNodeLogs(logs);
+            const data = await fetchNodeLogs(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                setNodeLogs(data.logs || []);
+            }
         } catch (e: any) {
             // Keep existing logs on error
         }
@@ -424,7 +566,7 @@ export function App() {
         if (!activeNode || !gateway) return;
         setGatewaySuccess(null);
         try {
-            const updated = await updateGatewayConfig(activeNode.url, gateway, activeNode.adminPassword);
+            const updated = await updateGatewayConfig(activeNode.url, gateway, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setGateway(updated);
             setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');
@@ -443,6 +585,11 @@ export function App() {
     };
 
     const handleSaveNodeEdit = (id: string, updates: Partial<NodeProfile>) => {
+        // If password is being changed, also clear any stored 2FA session token
+        // so the operator re-authenticates with TOTP for the new credential.
+        if (updates.adminPassword !== undefined) {
+            setTfaSessionToken(id, undefined);
+        }
         const updatedProfiles = updateNodeProfile(id, updates);
         setProfiles(updatedProfiles);
         setEditingNode(null);
@@ -636,12 +783,24 @@ export function App() {
                             onRefresh={() => loadNodeData()}
                             onFreezeUser={async (pubkey, freeze) => {
                                 if (activeNode) {
-                                    await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword);
+                                    const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                    const url = `${activeNode.url.replace(/\/+$/, '')}/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`;
+                                    await fetch(url, {
+                                        method: 'POST',
+                                        headers,
+                                        body: JSON.stringify({ freeze, password: activeNode.adminPassword }),
+                                    });
                                 }
                             }}
                             onPruneUser={async (pubkey) => {
                                 if (activeNode) {
-                                    await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword);
+                                    const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                    const url = `${activeNode.url.replace(/\/+$/, '')}/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`;
+                                    await fetch(url, {
+                                        method: 'POST',
+                                        headers,
+                                        body: JSON.stringify({ password: activeNode.adminPassword }),
+                                    });
                                 }
                             }}
                             onUpdateTier={async (pubkey, tier) => {
@@ -705,6 +864,16 @@ export function App() {
                     node={editingNode}
                     onClose={() => setEditingNode(null)}
                     onSave={handleSaveNodeEdit}
+                />
+            )}
+
+            {/* 2FA / TOTP Prompt Modal */}
+            {totpPromptNode && (
+                <TotpModal
+                    nodeName={totpPromptNode.name}
+                    error={totpError || undefined}
+                    onClose={handleTotpCancel}
+                    onSubmit={handleTotpSubmit}
                 />
             )}
         </div>

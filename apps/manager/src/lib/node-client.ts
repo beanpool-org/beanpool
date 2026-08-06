@@ -52,6 +52,96 @@ export function normalizeNodeUrl(rawUrl: string): string {
 // The server still accepts all four transports, so this is a client-side hardening: no
 // node needs redeploying for it, and nothing breaks if one is on an older build.
 
+// ======================== 2FA / TOTP HELPERS ========================
+
+/**
+ * Authenticate to a node with password + TOTP code via /api/admin/login.
+ * Returns the 2FA session token on success, which should be stored and sent
+ * as X-Admin-2FA-Session on subsequent requests to skip TOTP re-entry.
+ *
+ * Also injected into responses from any endpoint that calls checkAdminAuth
+ * with a valid TOTP code — so even direct API calls (e.g. fetchDiagnostics
+ * with X-Admin-Password + X-Admin-TOTP headers) will return a tfaSessionToken
+ * in the response body.
+ */
+export interface LoginResponse {
+    success: boolean;
+    tfaSessionToken?: string;
+}
+
+export async function loginToNode(
+    nodeUrl: string,
+    adminPassword: string,
+    totpCode: string,
+): Promise<LoginResponse> {
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const res = await fetch(`${cleanUrl}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword, totpCode }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+        throw new Error(body?.error || `HTTP ${res.status}`);
+    }
+    return body;
+}
+
+/**
+ * Build headers with admin password and optional 2FA session token for node API calls.
+ * Every fetch helper below uses this so TOTP-enabled nodes work transparently.
+ */
+export function buildAdminHeaders(adminPassword?: string, tfaSessionToken?: string): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    if (tfaSessionToken) headers['X-Admin-2FA-Session'] = tfaSessionToken;
+    return headers;
+}
+
+/** Check if a response body indicates TOTP is required. */
+export function isTotpRequired(responseBody: any): boolean {
+    return responseBody?.totpRequired === true;
+}
+
+/**
+ * 2FA session token storage — sessionStorage so it lives for the browser
+ * session (survives page reloads within the same tab) but is cleared when
+ * the tab closes, unlike localStorage which persists to disk indefinitely.
+ *
+ * This is a security tradeoff: the token is a TOTP bypass, so keeping it
+ * off disk limits the XSS exposure window to the current session only.
+ */
+const TFA_SESSION_KEY_PREFIX = 'bp_tfa_session_';
+
+export function getTfaSessionToken(profileId: string): string | undefined {
+    try {
+        return sessionStorage.getItem(TFA_SESSION_KEY_PREFIX + profileId) || undefined;
+    } catch { return undefined; }
+}
+
+export function setTfaSessionToken(profileId: string, token: string | undefined): void {
+    try {
+        if (token) {
+            sessionStorage.setItem(TFA_SESSION_KEY_PREFIX + profileId, token);
+        } else {
+            sessionStorage.removeItem(TFA_SESSION_KEY_PREFIX + profileId);
+        }
+    } catch { /* sessionStorage unavailable */ }
+}
+
+export function clearAllTfaSessionTokens(): void {
+    try {
+        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+            const key = sessionStorage.key(i);
+            if (key?.startsWith(TFA_SESSION_KEY_PREFIX)) {
+                sessionStorage.removeItem(key);
+            }
+        }
+    } catch { /* sessionStorage unavailable */ }
+}
+
+// ======================== END 2FA HELPERS ========================
+
 /**
  * Download an admin-gated file without putting the credential in a URL.
  *
@@ -143,15 +233,11 @@ export async function downloadAdminFile(
     }
 }
 
-export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string): Promise<DiagnosticsResponse> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/diagnostics`);
     const res = await fetch(url.toString(), {
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
     });
     if (!res.ok) {
@@ -208,15 +294,11 @@ export async function fetchOnboardingFunnel(
     return res.json();
 }
 
-export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string): Promise<GatewayConfig> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<GatewayConfig> {
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/gateway`);
     const res = await fetch(url.toString(), {
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
     });
     if (!res.ok) {
@@ -228,16 +310,13 @@ export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string
 export async function updateGatewayConfig(
     nodeUrl: string,
     updates: Partial<GatewayConfig>,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<GatewayConfig> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const res = await fetch(`${cleanUrl}/api/local/admin/gateway`, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...updates, password: adminPassword }),
     });
     if (!res.ok) {
@@ -247,15 +326,11 @@ export async function updateGatewayConfig(
     return data.gateway || data;
 }
 
-export async function fetchNodeData(nodeUrl: string, adminPassword?: string): Promise<any> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any> {
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const res = await fetch(`${cleanUrl}/api/local/admin/data`, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {
@@ -264,15 +339,11 @@ export async function fetchNodeData(nodeUrl: string, adminPassword?: string): Pr
     return res.json();
 }
 
-export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string): Promise<any[]> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any[]> {
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const res = await fetch(`${cleanUrl}/api/local/admin/logs`, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword, limit: 50 }),
     });
     if (!res.ok) {

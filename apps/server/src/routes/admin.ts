@@ -95,6 +95,11 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
         return;
     }
     // Sanitize reason: strip control characters and cap at 500 chars to prevent log injection.
+    // The control characters ARE the target here. This strips them out of an admin-supplied reason
+    // before it reaches the logs, so a crafted string cannot forge log lines or smuggle terminal
+    // escapes into an operator's console. Matching them is the whole point of the expression; the
+    // rule exists to catch them appearing by accident, which is not this.
+    // eslint-disable-next-line no-control-regex
     const sanitizedReason = String(reason).replace(/[\r\n\t\x00-\x1F\x7F]/g, ' ').trim().slice(0, 500);
     try {
         const result = runLedgerAudit();

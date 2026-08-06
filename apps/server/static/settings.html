@@ -835,7 +835,7 @@
             <div class="glass" data-tab="identity">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
                     <h3 style="margin: 0;">🔐 Two-Factor Authentication (TOTP)</h3>
-                    <span id="totp-status-badge" class="badge" style="font-weight: 600; font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; background: rgba(148, 163, 184, 0.1); border: 1px solid #475569; color: #94a3b8;">Checking...</span>
+                    <span id="totp-status-badge" class="badge" role="status" aria-live="polite" style="font-weight: 600; font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; background: rgba(148, 163, 184, 0.1); border: 1px solid #475569; color: #94a3b8;">Disabled</span>
                 </div>
                 
                 <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 1rem; line-height: 1.4;">
@@ -843,7 +843,7 @@
                 </p>
 
                 <!-- State A: Disabled -->
-                <div id="totp-box-disabled" class="hidden">
+                <div id="totp-box-disabled">
                     <button class="btn btn-primary" id="btn-totp-start-setup">Setup 2FA</button>
                 </div>
 

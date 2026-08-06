@@ -3709,16 +3709,28 @@
             }
         }
 
-        function initLogsWs() {
+        async function initLogsWs() {
             if (logsWs && (logsWs.readyState === WebSocket.CONNECTING || logsWs.readyState === WebSocket.OPEN)) {
                 return;
             }
 
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
-            const wsUrl = `${protocol}//${window.location.host}/ws/logs?auth=${encodeURIComponent(password)}`;
+            if (!password) return;
 
-            logsWs = new WebSocket(wsUrl);
+            try {
+                // Request a short-lived, single-use ticket via POST header auth (prevents passwords in URL query strings)
+                const ticketRes = await fetch(`${API}/local/admin/ws-ticket`, {
+                    method: 'POST',
+                    headers: { 'X-Admin-Password': password }
+                });
+                if (!ticketRes.ok) return;
+                const ticketData = await ticketRes.json();
+                if (!ticketData.ticket) return;
+
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws/logs?ticket=${encodeURIComponent(ticketData.ticket)}`;
+
+                logsWs = new WebSocket(wsUrl);
 
             logsWs.onopen = () => {
                 const statusBanner = document.getElementById('log-ws-status');
@@ -3796,6 +3808,9 @@
             logsWs.onerror = (err) => {
                 console.error('Logs WebSocket error:', err);
             };
+            } catch (e) {
+                console.error('Failed to initialize logs WebSocket:', e);
+            }
         }
 
         async function exportLogsHistory(format) {

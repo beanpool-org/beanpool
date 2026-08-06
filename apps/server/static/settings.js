@@ -3709,21 +3709,31 @@
             }
         }
 
+        let isInitializingLogsWs = false;
+
         async function initLogsWs() {
-            if (logsWs && (logsWs.readyState === WebSocket.CONNECTING || logsWs.readyState === WebSocket.OPEN)) {
+            if (isInitializingLogsWs || (logsWs && (logsWs.readyState === WebSocket.CONNECTING || logsWs.readyState === WebSocket.OPEN))) {
                 return;
             }
 
             const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
             if (!password) return;
 
+            isInitializingLogsWs = true;
             try {
                 // Request a short-lived, single-use ticket via POST header auth (prevents passwords in URL query strings)
                 const ticketRes = await fetch(`${API}/local/admin/ws-ticket`, {
                     method: 'POST',
                     headers: { 'X-Admin-Password': password }
                 });
-                if (!ticketRes.ok) return;
+                if (!ticketRes.ok) {
+                    const statusBanner = document.getElementById('log-ws-status');
+                    if (statusBanner) {
+                        statusBanner.innerHTML = '<span>✕ Failed to acquire WebSocket ticket</span>';
+                        statusBanner.style.color = '#f87171';
+                    }
+                    return;
+                }
                 const ticketData = await ticketRes.json();
                 if (!ticketData.ticket) return;
 
@@ -3810,6 +3820,8 @@
             };
             } catch (e) {
                 console.error('Failed to initialize logs WebSocket:', e);
+            } finally {
+                isInitializingLogsWs = false;
             }
         }
 

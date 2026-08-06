@@ -16,7 +16,7 @@ import {
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
     getGatewayConfig,
 } from '../config/local-config.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri } from '../totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
@@ -410,7 +410,8 @@ router.get('/api/local/admin/2fa/status', async (ctx) => {
         success: true,
         totpEnabled: !!config.totpEnabled,
         hasSecret: !!config.totpSecret,
-        backupCodesRemaining: config.totpBackupCodes ? config.totpBackupCodes.length : 0,
+        pendingSetup: !!config.totpPendingSecret,
+        backupCodesRemaining: config.totpBackupCodesHashes ? config.totpBackupCodesHashes.length : 0,
     };
 });
 
@@ -423,15 +424,16 @@ router.post('/api/local/admin/2fa/setup', async (ctx) => {
     const config = getLocalConfig();
     const secret = generateTotpSecret();
     const backupCodes = generateBackupCodes(8);
+    const backupCodesHashes = backupCodes.map(hashBackupCode);
     const label = config.communityName || config.callsign || 'Admin';
     const otpauthUri = generateOtpauthUri(secret, label, 'BeanPool');
 
     try {
         const qrDataUrl = await qrcode.toDataURL(otpauthUri);
-        // #135 CR: Stash in totpPendingSecret so active 2FA is NOT disarmed during re-setup.
+        // #135 CR: Stash in totpPendingSecret and SHA-256 hashes so active 2FA is NOT disarmed during re-setup.
         updateLocalConfig({
             totpPendingSecret: secret,
-            totpPendingBackupCodes: backupCodes,
+            totpPendingBackupCodesHashes: backupCodesHashes,
         });
 
         // #135 CR: Return formattedSecret (e.g. "ABCD EFGH IJKL MNOP") for manual entry legibility.
@@ -479,14 +481,18 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
         return;
     }
 
-    // Promote pending secret & backup codes to active configuration
-    const activeBackupCodes = config.totpPendingBackupCodes || config.totpBackupCodes || [];
+    // Promote pending secret & backup code hashes to active configuration
+    // #135 CR2 fix: Check array length (Boolean([]) is truthy in JS, so [] would overwrite active hashes!)
+    const activeBackupHashes = (config.totpPendingBackupCodesHashes && config.totpPendingBackupCodesHashes.length > 0)
+        ? config.totpPendingBackupCodesHashes
+        : (config.totpBackupCodesHashes || []);
+
     updateLocalConfig({
         totpSecret: secretToVerify,
-        totpBackupCodes: activeBackupCodes,
+        totpBackupCodesHashes: activeBackupHashes,
         totpEnabled: true,
         totpPendingSecret: null,
-        totpPendingBackupCodes: [],
+        totpPendingBackupCodesHashes: [],
     });
     console.log('🔒 [AdminAuth] TOTP 2FA successfully enabled for admin account');
     ctx.body = { success: true, message: '2FA enabled successfully', totpEnabled: true };
@@ -500,9 +506,9 @@ router.post('/api/local/admin/2fa/disable', async (ctx) => {
     updateLocalConfig({
         totpEnabled: false,
         totpSecret: null,
-        totpBackupCodes: [],
+        totpBackupCodesHashes: [],
         totpPendingSecret: null,
-        totpPendingBackupCodes: [],
+        totpPendingBackupCodesHashes: [],
     });
     console.log('🔓 [AdminAuth] TOTP 2FA disabled for admin account');
     ctx.body = { success: true, message: '2FA disabled successfully', totpEnabled: false };

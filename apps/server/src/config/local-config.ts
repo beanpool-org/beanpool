@@ -31,9 +31,9 @@ export interface LocalConfig {
     // --- TOTP 2FA for Admin (#135) ---
     totpEnabled?: boolean;
     totpSecret?: string | null;
-    totpBackupCodes?: string[];
+    totpBackupCodesHashes?: string[];
     totpPendingSecret?: string | null;
-    totpPendingBackupCodes?: string[];
+    totpPendingBackupCodesHashes?: string[];
     thresholds?: Thresholds;
     gateway?: GatewayConfig;
     communityName: string | null;

@@ -3,16 +3,17 @@
  *
  * Verifies:
  * A. TOTP secret generation, RFC 6238 code verification, and ±1 window drift tolerance
- * B. Backup code generation and single-use consumption
+ * B. Backup code generation, SHA-256 hashing, and single-use consumption
  * C. checkAdminAuth allows password-only login when 2FA disabled
  * D. checkAdminAuth requires 2FA code (x-admin-totp header) when 2FA enabled
- * E. Valid 6-digit TOTP code grants admin access
- * F. Single-use backup code grants admin access and is consumed
+ * E. Valid 6-digit TOTP code grants admin access (including space/hyphen formatting)
+ * F. Single-use backup code grants admin access via SHA-256 timing-safe hash lookup and is consumed
  * G. Disabling 2FA restores password-only access
  * H. Pending secret setup protection — calling /2fa/setup does NOT disarm active 2FA (#135 CR)
+ * I. otpauth URI formatting preserves unencoded colon label separator (#135 CR2)
  */
 import assert from 'node:assert';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri } from './totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from './totp.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
 import { initStateEngine } from './state-engine.js';
@@ -32,19 +33,30 @@ assert.ok(/^\d{6}$/.test(currentCode), 'A. Code must contain only digits');
 assert.strictEqual(verifyTotpCode(currentCode, secret), true, 'A. Current code must verify as valid');
 assert.strictEqual(verifyTotpCode('000000', secret), false, 'A. Invalid code must fail verification');
 
+// E. Space and hyphen formatted 6-digit codes
+const formattedSpaceCode = `${currentCode.slice(0, 3)} ${currentCode.slice(3)}`;
+const formattedHyphenCode = `${currentCode.slice(0, 3)}-${currentCode.slice(3)}`;
+assert.strictEqual(verifyTotpCode(formattedSpaceCode, secret), true, 'E. Code with spaces (123 456) must verify as valid');
+assert.strictEqual(verifyTotpCode(formattedHyphenCode, secret), true, 'E. Code with hyphens (123-456) must verify as valid');
+
 const prevWindowCode = generateTotpCode(secret, -1);
 assert.strictEqual(verifyTotpCode(prevWindowCode, secret), true, 'A. Code from 30s ago (drift window -1) must verify as valid');
 
+// I. otpauth URI formatting test
 const otpUri = generateOtpauthUri(secret, 'test-admin', 'BeanPool');
-assert.ok(otpUri.includes('otpauth://totp/'), 'A. otpauth URI must have correct scheme');
-assert.ok(otpUri.includes(secret), 'A. otpauth URI must include secret');
-console.log('  A. TOTP core generator & verifier working correctly');
+assert.ok(otpUri.includes('otpauth://totp/BeanPool:test-admin?'), 'I. otpauth URI label must preserve unencoded colon separator');
+assert.ok(otpUri.includes(secret), 'I. otpauth URI must include secret');
+console.log('  A & I. TOTP core generator, verifier & URI formatting working correctly');
 
 // B. Backup codes generator test
 const backupCodes = generateBackupCodes(8);
 assert.strictEqual(backupCodes.length, 8, 'B. Must generate 8 backup codes');
 assert.strictEqual(backupCodes[0].length, 8, 'B. Backup code must be 8 hex characters');
-console.log('  B. Backup code generator working correctly');
+
+const backupHashes = backupCodes.map(hashBackupCode);
+assert.strictEqual(backupHashes.length, 8, 'B. Must hash 8 backup codes');
+assert.strictEqual(backupHashes[0].length, 64, 'B. SHA-256 hash must be 64 hex characters');
+console.log('  B. Backup code generator & SHA-256 hashing working correctly');
 
 // Setup mock ctx helper
 const mockCtx = (headers: Record<string, string> = {}, body: any = {}) => ({
@@ -63,9 +75,9 @@ updateLocalConfig({
     salt: null,
     totpEnabled: false,
     totpSecret: null,
-    totpBackupCodes: [],
+    totpBackupCodesHashes: [],
     totpPendingSecret: null,
-    totpPendingBackupCodes: [],
+    totpPendingBackupCodesHashes: [],
 });
 
 // Seed password hash into local-config
@@ -86,7 +98,7 @@ resetAdminAuthTarpit();
     updateLocalConfig({
         totpEnabled: true,
         totpSecret: secret,
-        totpBackupCodes: [...backupCodes],
+        totpBackupCodesHashes: [...backupHashes],
     });
 
     resetAdminAuthTarpit();
@@ -110,29 +122,28 @@ resetAdminAuthTarpit();
     assert.strictEqual(okValid2FA, true, 'E. Login with valid 6-digit TOTP code must succeed');
     console.log('  E. Valid 6-digit TOTP code grants admin access');
 
-    // F. Single-use backup code grants access and is consumed
+    // F. Single-use backup code grants access via SHA-256 hash matching and is consumed
     resetAdminAuthTarpit();
     const firstBackupCode = backupCodes[0];
     const ctxBackup = mockCtx({ 'x-admin-password': testPass, 'x-admin-totp': firstBackupCode });
     const okBackup = await checkAdminAuth(ctxBackup);
-    assert.strictEqual(okBackup, true, 'F. Login with valid backup code must succeed');
+    assert.strictEqual(okBackup, true, 'F. Login with valid backup code must succeed via SHA-256 hash lookup');
 
     const updatedConfig = getLocalConfig();
-    assert.strictEqual(updatedConfig.totpBackupCodes?.length, 7, 'F. Backup code must be consumed after single use');
-    assert.strictEqual(updatedConfig.totpBackupCodes?.includes(firstBackupCode), false, 'F. Used backup code must no longer exist in config');
+    assert.strictEqual(updatedConfig.totpBackupCodesHashes?.length, 7, 'F. Backup code hash must be consumed after single use');
 
     // Trying same backup code again fails
     resetAdminAuthTarpit();
     const ctxReuseBackup = mockCtx({ 'x-admin-password': testPass, 'x-admin-totp': firstBackupCode });
     const okReuse = await checkAdminAuth(ctxReuseBackup);
     assert.strictEqual(okReuse, false, 'F. Reusing consumed backup code must fail');
-    console.log('  F. Backup code authentication and single-use consumption working correctly');
+    console.log('  F. Backup code SHA-256 hash verification and single-use consumption working correctly');
 
     // H. Pending secret setup protection (#135 CR)
     const newPendingSecret = generateTotpSecret();
     updateLocalConfig({
         totpPendingSecret: newPendingSecret,
-        totpPendingBackupCodes: generateBackupCodes(8),
+        totpPendingBackupCodesHashes: generateBackupCodes(8).map(hashBackupCode),
     });
     // active totpEnabled must still be true and active secret must still be required for auth
     const currentActiveCode = generateTotpCode(secret);
@@ -146,9 +157,9 @@ resetAdminAuthTarpit();
     updateLocalConfig({
         totpEnabled: false,
         totpSecret: null,
-        totpBackupCodes: [],
+        totpBackupCodesHashes: [],
         totpPendingSecret: null,
-        totpPendingBackupCodes: [],
+        totpPendingBackupCodesHashes: [],
     });
 
     resetAdminAuthTarpit();

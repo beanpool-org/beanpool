@@ -76,10 +76,11 @@ export function generateTotpCode(secretBase32: string, timeStepWindow = 0, stepS
 
 /**
  * Verify a 6-digit TOTP token against a Base32 secret, checking a ±1 window (30s drift tolerance).
+ * Handles copy-pasted tokens with spaces or hyphens (e.g. "123 456" or "123-456").
  */
 export function verifyTotpCode(token: string, secretBase32: string, window = 1): boolean {
     if (!token || typeof token !== 'string') return false;
-    const cleanToken = token.trim();
+    const cleanToken = token.replace(/[\s-]/g, '').trim();
     if (!/^\d{6}$/.exec(cleanToken)) return false;
 
     for (let errorWindow = -window; errorWindow <= window; errorWindow++) {
@@ -103,10 +104,35 @@ export function generateBackupCodes(count = 8): string[] {
 }
 
 /**
+ * Hash a backup code with SHA-256 for secure storage at rest.
+ */
+export function hashBackupCode(code: string): string {
+    return crypto.createHash('sha256').update(code.trim().toLowerCase()).digest('hex');
+}
+
+/**
+ * Verify a candidate backup code against an array of stored SHA-256 hashes using timingSafeEqual.
+ * Returns the matching index or -1 if not found.
+ */
+export function verifyAndFindBackupCodeHash(candidateCode: string, storedHashes: string[]): number {
+    if (!candidateCode || !Array.isArray(storedHashes)) return -1;
+    const candidateHashBuf = Buffer.from(hashBackupCode(candidateCode));
+
+    for (let i = 0; i < storedHashes.length; i++) {
+        const storedBuf = Buffer.from(storedHashes[i]);
+        if (candidateHashBuf.length === storedBuf.length && crypto.timingSafeEqual(candidateHashBuf, storedBuf)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/**
  * Generate otpauth:// URI for QR code rendering.
+ * Encodes issuer and accountName separately so the colon path separator is preserved unencoded.
  */
 export function generateOtpauthUri(secretBase32: string, accountName = 'admin', issuer = 'BeanPool'): string {
-    const label = encodeURIComponent(`${issuer}:${accountName}`);
+    const label = `${encodeURIComponent(issuer)}:${encodeURIComponent(accountName)}`;
     const encIssuer = encodeURIComponent(issuer);
     return `otpauth://totp/${label}?secret=${secretBase32}&issuer=${encIssuer}&algorithm=SHA1&digits=6&period=30`;
 }

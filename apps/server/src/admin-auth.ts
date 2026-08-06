@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync } from './config/local-config.js';
-import { verifyTotpCode } from './totp.js';
+import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
 // event loop — concurrent dashboard admin POSTs no longer serialize on a
@@ -40,8 +40,9 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     }
 
     // #135: TOTP 2FA Verification
-    // If 2FA is enabled on the node config, require a valid 6-digit TOTP code or backup code.
-    if (config.totpEnabled && config.totpSecret) {
+    // Re-fetch fresh config to avoid reading a stale snapshot across the async password verify boundary.
+    const currentConfig = getLocalConfig();
+    if (currentConfig.totpEnabled && currentConfig.totpSecret) {
         const totpHeader = (typeof ctx.get === 'function' ? ctx.get('x-admin-totp') : null) ||
             ctx.request?.headers?.['x-admin-totp'] ||
             ctx.headers?.['x-admin-totp'] ||
@@ -55,18 +56,19 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         }
 
         const cleanCode = String(totpHeader).trim();
-        let totpValid = verifyTotpCode(cleanCode, config.totpSecret);
+        let totpValid = verifyTotpCode(cleanCode, currentConfig.totpSecret);
 
-        // Check backup codes if 6-digit TOTP code check didn't match
-        if (!totpValid && config.totpBackupCodes && config.totpBackupCodes.length > 0) {
-            const codeIndex = config.totpBackupCodes.findIndex(c => c.toLowerCase() === cleanCode.toLowerCase());
+        // Check backup code SHA-256 hashes using timingSafeEqual if 6-digit TOTP code check didn't match
+        const backupHashes = currentConfig.totpBackupCodesHashes || [];
+        if (!totpValid && backupHashes.length > 0) {
+            const codeIndex = verifyAndFindBackupCodeHash(cleanCode, backupHashes);
             if (codeIndex !== -1) {
                 totpValid = true;
                 // Consume used single-use backup code (CSRF has already been validated above)
-                const updatedCodes = [...config.totpBackupCodes];
-                updatedCodes.splice(codeIndex, 1);
-                updateLocalConfig({ totpBackupCodes: updatedCodes });
-                console.log(`[AdminAuth] 🔑 Admin authenticated using 2FA backup code (${updatedCodes.length} remaining)`);
+                const updatedHashes = [...backupHashes];
+                updatedHashes.splice(codeIndex, 1);
+                updateLocalConfig({ totpBackupCodesHashes: updatedHashes });
+                console.log(`[AdminAuth] 🔑 Admin authenticated using 2FA backup code (${updatedHashes.length} remaining)`);
             }
         }
 
@@ -78,6 +80,9 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             return false;
         }
     }
+
+    // #135 CR2: Reset tarpit failure count on successful authentication
+    if (adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
 
     return true;
 }

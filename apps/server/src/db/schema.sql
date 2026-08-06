@@ -365,6 +365,59 @@ CREATE TABLE IF NOT EXISTS recovery_approvals (
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_approvals_created_at ON recovery_approvals(created_at);
 
+-- 14b. Keyholder model (docs/ONBOARDING.md Part 0) — one encrypted fragment per keeper.
+--
+-- Distinct from recovery_requests above, which is the guardian-quorum flow for migrating an
+-- account to a NEW key. This table serves the other half: rebuilding the ORIGINAL phrase from
+-- fragments, so the member keeps the key they had. Both exist, and the approve endpoint feeds
+-- both — approving a request also releases that approver's fragment.
+--
+-- Nothing here is a secret on its own. Every row is ciphertext under a key this table does not
+-- hold: member fragments are ECDH-wrapped to the keeper's account key, the hub's own fragment is
+-- wrapped with `recovery.hubShareKey` which comes from the environment and is deliberately never
+-- written to the database, and the sign-in fragment is derived from a provider subject claim the
+-- node may well be able to guess. That last one is fine, and is exactly why the threshold is 3
+-- rather than 2: a stolen database yields at most two fragments, and two are nothing.
+CREATE TABLE IF NOT EXISTS recovery_shares (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_pubkey TEXT NOT NULL REFERENCES members(public_key),
+    holder_type TEXT NOT NULL CHECK (holder_type IN ('device', 'hub', 'member', 'sso')),
+    holder_ref TEXT NOT NULL,        -- member pubkey | provider name | 'self'
+    share_index INTEGER NOT NULL,    -- Shamir evaluation point (the fragment's x-coordinate)
+    encrypted_share TEXT NOT NULL,
+    share_iv TEXT NOT NULL,
+    share_tag TEXT NOT NULL,
+    ephemeral_pubkey TEXT,           -- X25519 ephemeral, for 'member' holders
+    sso_lookup_hash TEXT,            -- SHA-256(sub || lookup_salt), for 'sso' holders
+    sso_lookup_salt TEXT,
+    kdf_params TEXT,
+    -- Bumped on every re-split. This is what makes removing a keeper real rather than cosmetic:
+    -- a removed keeper physically keeps whatever fragment they already had, so the only way to
+    -- revoke it is to make it useless. A re-split does that — fragments of different generations
+    -- describe different polynomials and cannot be mixed — and collection refuses any generation
+    -- but the current one.
+    generation INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Watermark for delta backup. Rows are never updated in place (a re-split writes a new
+    -- generation and drops the old), so there is no touch trigger — created_at and updated_at
+    -- move together by construction. The column exists so the table can join the delta set
+    -- without a later migration; wiring it into engine/sync.ts is a separate, deliberate step.
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Column order is deliberate: leading with (owner_pubkey, generation) means this constraint's
+    -- implicit index also serves every read in engine/recovery-shares.ts, all of which filter on
+    -- exactly that pair. A separate owner+generation index would duplicate it for no gain.
+    UNIQUE(owner_pubkey, generation, holder_type, holder_ref)
+);
+-- UNIQUE rather than a plain index. `sso_lookup_hash` is SHA-256(sub ‖ per-split random salt), so
+-- two owners colliding is not a realistic event — which is the point: if it ever happens it means
+-- the salt is not doing its job, and that is a bug worth failing loudly on at write time rather
+-- than discovering as findShareBySsoLookup serving one arbitrary row of two at recovery. Partial,
+-- because the column is NULL for every keeper that is not a sign-in keeper.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_shares_sso
+    ON recovery_shares(sso_lookup_hash)
+    WHERE sso_lookup_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_recovery_shares_updated_at ON recovery_shares(updated_at);
+
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

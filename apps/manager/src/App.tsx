@@ -514,9 +514,11 @@ export function App() {
     const loadLogs = async () => {
         if (!activeNode) return;
         try {
-            const data = await fetchNodeLogs(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                setNodeLogs(data.logs || []);
-            }
+            // fetchNodeLogs already unwraps to the array (`data.logs || []`) and throws on a non-OK
+            // response, so there is nothing left to unwrap or guard here. Indexing `.logs` again
+            // yields undefined and silently empties the panel.
+            const logs = await fetchNodeLogs(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            setNodeLogs(logs);
         } catch (e: any) {
             // Keep existing logs on error
         }

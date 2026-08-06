@@ -403,10 +403,19 @@ CREATE TABLE IF NOT EXISTS recovery_shares (
     -- move together by construction. The column exists so the table can join the delta set
     -- without a later migration; wiring it into engine/sync.ts is a separate, deliberate step.
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    UNIQUE(owner_pubkey, holder_type, holder_ref, generation)
+    -- Column order is deliberate: leading with (owner_pubkey, generation) means this constraint's
+    -- implicit index also serves every read in engine/recovery-shares.ts, all of which filter on
+    -- exactly that pair. A separate owner+generation index would duplicate it for no gain.
+    UNIQUE(owner_pubkey, generation, holder_type, holder_ref)
 );
-CREATE INDEX IF NOT EXISTS idx_recovery_shares_owner ON recovery_shares(owner_pubkey, generation);
-CREATE INDEX IF NOT EXISTS idx_recovery_shares_sso ON recovery_shares(sso_lookup_hash);
+-- UNIQUE rather than a plain index. `sso_lookup_hash` is SHA-256(sub ‖ per-split random salt), so
+-- two owners colliding is not a realistic event — which is the point: if it ever happens it means
+-- the salt is not doing its job, and that is a bug worth failing loudly on at write time rather
+-- than discovering as findShareBySsoLookup serving one arbitrary row of two at recovery. Partial,
+-- because the column is NULL for every keeper that is not a sign-in keeper.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_shares_sso
+    ON recovery_shares(sso_lookup_hash)
+    WHERE sso_lookup_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_recovery_shares_updated_at ON recovery_shares(updated_at);
 
 -- 15. Administrative System Logs

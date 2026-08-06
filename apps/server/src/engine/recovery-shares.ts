@@ -138,8 +138,6 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         }
     }
 
-    const nextGeneration = getCurrentGeneration(ownerPubkey) + 1;
-
     const insert = db.prepare(`
         INSERT INTO recovery_shares (
             owner_pubkey, holder_type, holder_ref, share_index,
@@ -149,7 +147,24 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
     `);
     const dropOlder = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?');
 
+    // The generation is read INSIDE the transaction, so the read-modify-write is atomic.
+    //
+    // Today's driver is synchronous and the server is one process, so nothing can interleave
+    // between a read out here and the write below — the hazard is latent rather than live. It is
+    // moved in anyway because the cost is nothing and the failure it prevents is unrecoverable:
+    // two re-splits landing on the same generation number would mix fragments from two different
+    // polynomials into one set, and a member whose fragments are drawn from two splits cannot
+    // rebuild their phrase from any combination of them. That is a silent, permanent loss of the
+    // account, discovered only at recovery.
+    //
+    // Keeping it correct under concurrency also means a later async refactor, a second process,
+    // or WAL-mode readers cannot quietly reintroduce it.
     const write = db.transaction(() => {
+        const row = db.prepare(
+            'SELECT MAX(generation) AS gen FROM recovery_shares WHERE owner_pubkey = ?'
+        ).get(ownerPubkey) as { gen: number | null } | undefined;
+        const nextGeneration = (row?.gen ?? 0) + 1;
+
         for (const s of shares) {
             insert.run(
                 ownerPubkey, s.holderType, s.holderRef, s.shareIndex,
@@ -159,10 +174,10 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
             );
         }
         dropOlder.run(ownerPubkey, nextGeneration);
+        return nextGeneration;
     });
-    write();
 
-    return nextGeneration;
+    return write();
 }
 
 function rowToShare(r: Record<string, unknown>): StoredKeeperShare {

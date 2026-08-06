@@ -77,6 +77,14 @@ const PHRASE_OFFSET = 1 + RECOVERY_CHECKSUM_LENGTH;
  *
  * Overwhelmingly this means too few shares, or one belonging to a different split — see the
  * module note on why that has to be an error rather than a wrong answer.
+ *
+ * **These messages are for developers and logs, not for members.** They are deliberately precise
+ * rather than kind, because the person who needs them is whoever is debugging a failed restore.
+ * A member hitting this is mid-recovery and frightened, and the words they see should come from
+ * the client, matched on the error TYPE — the same split the trust model already uses, where the
+ * server returns a structured `FLOOR_LOCKED` and the client owns the sentence. Rendering this
+ * string straight into a recovery screen would be a bug: it cannot be translated, cannot carry
+ * an action button, and talks about polynomials to somebody who has lost their phone.
  */
 export class RecoveryCombineError extends Error {
     constructor(message: string) {

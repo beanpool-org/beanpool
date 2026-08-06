@@ -206,6 +206,20 @@ function main() {
     );
     assert(getCurrentGeneration('rejectPK') === 0, 'no rejected batch left a partial write behind');
 
+    // ── 7b. Two owners cannot share a sign-in lookup hash ──
+    // The hash is SHA-256(sub ‖ per-split random salt), so a collision means the salt is not doing
+    // its job. Failing here is the point: the alternative is findShareBySsoLookup quietly serving
+    // one arbitrary row of two, at recovery, to the wrong person.
+    seedMember('collidePK');
+    throws(
+        () => putShareGeneration('collidePK', [
+            ...baseTrio(),
+            share({ holderType: 'sso', holderRef: 'apple', shareIndex: 77, ssoLookupHash: 'sso-hash-v2' }),
+        ]),
+        'UNIQUE',
+        'refuses a sign-in lookup hash already claimed by another member',
+    );
+
     // ── 8. Keeper summary exposes types, never identities ──
     const summary = listKeeperTypes('ssoOwnerPK');
     const serialised = JSON.stringify(summary);

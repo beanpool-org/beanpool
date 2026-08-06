@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     loadNodeProfiles,
     addNodeProfile,
@@ -127,19 +127,20 @@ export function App() {
      * Returns the 2FA session token on success, empty string if cancelled.
      */
     const promptForTotp = (profileId: string, nodeName: string, nodeUrl: string): Promise<string> => {
-        // Guard: if a TOTP prompt is already active for another node, don't
-        // overwrite the pending promise — return empty (cancelled) so the
-        // caller doesn't hang forever.
+        // Guard: if a TOTP prompt is already active for another node, reject
+        // with a distinct sentinel so the caller can retry on the next poll
+        // instead of permanently blocking.
         if (pendingTotpResolve.current) {
-            return Promise.resolve('');
+            return Promise.reject(new Error('2FA_PROMPT_BUSY'));
         }
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             setTotpError(null);
             setTotpPromptNode({ profileId, name: nodeName, url: nodeUrl });
             pendingTotpResolve.current = (code: string) => {
                 setTotpPromptNode(null);
                 pendingTotpResolve.current = null;
-                resolve(code);
+                if (code) resolve(code);
+                else reject(new Error('2FA_CANCELLED'));
             };
         });
     };
@@ -191,7 +192,7 @@ export function App() {
     /**
      * Handle successful diagnostics response: update state, fetch secondary data.
      */
-    const diagSuccess = (p: NodeProfile, data: DiagnosticsResponse) => {
+    const diagSuccess = useCallback((p: NodeProfile, data: DiagnosticsResponse) => {
         // Lifted on any success, not just on a credential edit. The password can
         // also start working without this manager touching it — the operator
         // resets it on the node itself to the value already stored here — and
@@ -207,13 +208,8 @@ export function App() {
         // Fetch node gateway config for security alerts
         (async () => {
             try {
-                const gHeaders = buildAdminHeaders(p.adminPassword, getTfaSessionToken(p.id));
-                const gUrl = new URL(p.url);
-                if (!gUrl.pathname.endsWith('/')) gUrl.pathname += '/';
-                gUrl.pathname += 'api/local/admin/gateway';
-                const gRes = await fetch(gUrl.toString(), { headers: gHeaders, cache: 'no-store' });
-                if (gRes.ok) {
-                    const gData = await gRes.json();
+                const gData = await fetchGatewayConfig(p.url, p.adminPassword, getTfaSessionToken(p.id));
+                if (gData) {
                     setFleetGateways((prev) => ({ ...prev, [p.id]: gData }));
                     if (p.id === activeNode?.id && gData) {
                         setGateway((prev) => (prev === null ? gData : prev));
@@ -225,38 +221,27 @@ export function App() {
         // Fetch node data to check for active abuse/security flags
         (async () => {
             try {
-                const ndHeaders = buildAdminHeaders(p.adminPassword, getTfaSessionToken(p.id));
-                const ndUrl = new URL(p.url);
-                if (!ndUrl.pathname.endsWith('/')) ndUrl.pathname += '/';
-                ndUrl.pathname += 'api/local/admin/data';
-                const ndRes = await fetch(ndUrl.toString(), {
-                    method: 'POST',
-                    headers: ndHeaders,
-                    body: JSON.stringify({ password: p.adminPassword }),
-                });
-                if (ndRes.ok) {
-                    const nData = await ndRes.json();
-                    setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
+                const nData = await fetchNodeData(p.url, p.adminPassword, getTfaSessionToken(p.id));
+                setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
 
-                    let savedDismissed = new Set<string>();
-                    try {
-                        const saved = localStorage.getItem('bp_dismissed_flags');
-                        if (saved) savedDismissed = new Set(JSON.parse(saved));
-                    } catch {}
+                let savedDismissed = new Set<string>();
+                try {
+                    const saved = localStorage.getItem('bp_dismissed_flags');
+                    if (saved) savedDismissed = new Set(JSON.parse(saved));
+                } catch {}
 
-                    const flags = (nData?.health?.flags || []).filter(
-                        (f: any) => !savedDismissed.has(f.id || f.type || f.description)
-                    );
-                    const reports = (nData?.reports || []).filter(
-                        (r: any) => !savedDismissed.has(r.id || r.targetPubkey || r.reason)
-                    );
+                const flags = (nData?.health?.flags || []).filter(
+                    (f: any) => !savedDismissed.has(f.id || f.type || f.description)
+                );
+                const reports = (nData?.reports || []).filter(
+                    (r: any) => !savedDismissed.has(r.id || r.targetPubkey || r.reason)
+                );
 
-                    const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
-                    const hasWarning = flags.some((f: any) => f.severity === 'warning');
+                const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
+                const hasWarning = flags.some((f: any) => f.severity === 'warning');
 
-                    const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
-                    setNodeHealthMap((prev) => ({ ...prev, [p.id]: status }));
-                }
+                const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
+                setNodeHealthMap((prev) => ({ ...prev, [p.id]: status }));
             } catch {}
         })();
 
@@ -264,7 +249,7 @@ export function App() {
             setDiag(data);
             setDiagError(null);
         }
-    };
+    }, [activeNode]);
 
     /**
      * Nodes whose stored admin password the node itself rejected — profile id → digest of
@@ -376,7 +361,7 @@ export function App() {
             // hand still goes through, and re-blocks if it fails again.
             //
             // Also skip if we're already waiting for a TOTP code for this node.
-            if (!opts?.manual && (authBlockedRef.current[p.id] === credentialDigest(p.adminPassword) || pendingTotpResolve.current)) {
+            if (!opts?.manual && (authBlockedRef.current[p.id] === credentialDigest(p.adminPassword) || totpPromptNode?.profileId === p.id)) {
                 return;
             }
             setFleetDiags((prev) => ({
@@ -437,9 +422,9 @@ export function App() {
                 diagSuccess(p, data);
             } catch (e: any) {
                 const errMsg = e.message || 'Failed to connect';
-                if (!errMsg.includes('429')) {
-                    const authFailed = isAuthFailure(errMsg);
-                    if (authFailed) {
+                if (!errMsg.includes('429') && errMsg !== '2FA_PROMPT_BUSY') {
+                    const authFailed = isAuthFailure(errMsg) || errMsg === '2FA_CANCELLED';
+                    if (authFailed && errMsg !== '2FA_CANCELLED') {
                         authBlockedRef.current[p.id] = credentialDigest(p.adminPassword);
                     }
                     setFleetDiags((prev) => ({
@@ -465,15 +450,7 @@ export function App() {
         setDiagLoading(true);
         setDiagError(null);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-            const diagUrl = new URL(activeNode.url);
-            if (!diagUrl.pathname.endsWith('/')) diagUrl.pathname += '/';
-            diagUrl.pathname += 'api/local/admin/diagnostics';
-            const res = await fetch(diagUrl.toString(), { headers, cache: 'no-store' });
-            if (!res.ok) {
-                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
-            const data = await res.json();
+            const data = await fetchDiagnostics(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setDiag(data);
             setFleetDiags((prev) => ({
                 ...prev,
@@ -494,13 +471,7 @@ export function App() {
         if (!activeNode) return;
         setGatewayLoading(true);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-            const gwUrl = new URL(activeNode.url);
-            if (!gwUrl.pathname.endsWith('/')) gwUrl.pathname += '/';
-            gwUrl.pathname += 'api/local/admin/gateway';
-            const res = await fetch(gwUrl.toString(), { headers, cache: 'no-store' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
+            const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setGateway(data);
         } catch (e: any) {
             const errMsg = e.message || '';
@@ -518,17 +489,7 @@ export function App() {
         if (!activeNode) return;
         setNodeDataLoading(true);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-            const ndUrl = new URL(activeNode.url);
-            if (!ndUrl.pathname.endsWith('/')) ndUrl.pathname += '/';
-            ndUrl.pathname += 'api/local/admin/data';
-            const res = await fetch(ndUrl.toString(), {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ password: activeNode.adminPassword }),
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
+            const data = await fetchNodeData(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setNodeData(data);
             setFleetNodeData((prev) => ({ ...prev, [activeNode.id]: data }));
 
@@ -553,17 +514,7 @@ export function App() {
     const loadLogs = async () => {
         if (!activeNode) return;
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-            const logUrl = new URL(activeNode.url);
-            if (!logUrl.pathname.endsWith('/')) logUrl.pathname += '/';
-            logUrl.pathname += 'api/local/admin/logs';
-            const res = await fetch(logUrl.toString(), {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ password: activeNode.adminPassword, limit: 50 }),
-            });
-            if (res.ok) {
-                const data = await res.json();
+            const data = await fetchNodeLogs(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                 setNodeLogs(data.logs || []);
             }
         } catch (e: any) {
@@ -615,15 +566,7 @@ export function App() {
         if (!activeNode || !gateway) return;
         setGatewaySuccess(null);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-            const res = await fetch(`${activeNode.url.replace(/\/+$/, '')}/api/local/admin/gateway`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ ...gateway, password: activeNode.adminPassword }),
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const result = await res.json();
-            const updated = result.gateway || result;
+            const updated = await updateGatewayConfig(activeNode.url, gateway, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setGateway(updated);
             setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');

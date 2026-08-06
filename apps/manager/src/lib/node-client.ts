@@ -80,15 +80,11 @@ export async function loginToNode(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: adminPassword, totpCode }),
     });
+    const body = await res.json();
     if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-            const body = await res.json();
-            if (body?.error) detail = body.error;
-        } catch { /* status is all we have */ }
-        throw new Error(detail);
+        throw new Error(body?.error || `HTTP ${res.status}`);
     }
-    return res.json();
+    return body;
 }
 
 /**
@@ -237,15 +233,11 @@ export async function downloadAdminFile(
     }
 }
 
-export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string): Promise<DiagnosticsResponse> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/diagnostics`);
     const res = await fetch(url.toString(), {
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
     });
     if (!res.ok) {
@@ -302,15 +294,11 @@ export async function fetchOnboardingFunnel(
     return res.json();
 }
 
-export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string): Promise<GatewayConfig> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<GatewayConfig> {
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const url = new URL(`${cleanUrl}/api/local/admin/gateway`);
     const res = await fetch(url.toString(), {
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
     });
     if (!res.ok) {
@@ -322,16 +310,13 @@ export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string
 export async function updateGatewayConfig(
     nodeUrl: string,
     updates: Partial<GatewayConfig>,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<GatewayConfig> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const res = await fetch(`${cleanUrl}/api/local/admin/gateway`, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...updates, password: adminPassword }),
     });
     if (!res.ok) {
@@ -341,15 +326,11 @@ export async function updateGatewayConfig(
     return data.gateway || data;
 }
 
-export async function fetchNodeData(nodeUrl: string, adminPassword?: string): Promise<any> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any> {
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const res = await fetch(`${cleanUrl}/api/local/admin/data`, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {
@@ -358,15 +339,11 @@ export async function fetchNodeData(nodeUrl: string, adminPassword?: string): Pr
     return res.json();
 }
 
-export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string): Promise<any[]> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any[]> {
     const cleanUrl = normalizeNodeUrl(nodeUrl);
     const res = await fetch(`${cleanUrl}/api/local/admin/logs`, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword, limit: 50 }),
     });
     if (!res.ok) {

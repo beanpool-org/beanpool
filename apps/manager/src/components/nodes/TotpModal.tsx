@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface TotpModalProps {
     nodeName: string;
@@ -10,6 +10,36 @@ interface TotpModalProps {
 export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps) {
     const [code, setCode] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const dialogRef = useRef<HTMLDivElement>(null);
+
+    // Focus trap: keep Tab within the dialog
+    useEffect(() => {
+        const el = dialogRef.current;
+        if (!el) return;
+        const focusable = el.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const trap = (e: KeyboardEvent) => {
+            if (e.key !== 'Tab') return;
+            if (e.shiftKey) {
+                if (document.activeElement === first) {
+                    e.preventDefault();
+                    last?.focus();
+                }
+            } else {
+                if (document.activeElement === last) {
+                    e.preventDefault();
+                    first?.focus();
+                }
+            }
+        };
+        // Focus the first element on mount
+        first?.focus();
+        el.addEventListener('keydown', trap);
+        return () => el.removeEventListener('keydown', trap);
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -24,8 +54,13 @@ export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[60] animate-fade-in font-sans">
-            <div role="dialog" aria-modal="true" aria-labelledby="totp-title"
+        // Outer overlay: Escape closes, click-outside closes
+        <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[60] animate-fade-in font-sans"
+            onKeyDown={(e) => e.key === 'Escape' && onClose()}
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="totp-title" aria-describedby="totp-desc"
                  className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
                 <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                     <div className="flex items-center gap-2.5">
@@ -44,7 +79,7 @@ export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps
                     </button>
                 </div>
 
-                <p className="text-xs text-nature-300 leading-relaxed m-0">
+                <p id="totp-desc" className="text-xs text-nature-300 leading-relaxed m-0">
                     <strong className="text-white">{nodeName}</strong> has 2FA enabled.
                     Enter the 6-digit code from your authenticator app to connect.
                 </p>
@@ -67,7 +102,7 @@ export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps
                             placeholder="000000"
                             maxLength={7}
                             required
-                            className="w-full bg-nature-950 border border-nature-800 px-3.5 py-3 rounded-xl text-white text-center text-2xl font-mono tracking-[0.5em] focus:outline-none focus:border-amber-500 shadow-inner"
+                            className={`w-full bg-nature-950 border px-3.5 py-3 rounded-xl text-white text-center text-2xl font-mono tracking-[0.5em] focus:outline-none shadow-inner ${error ? 'border-red-500 focus:border-red-500' : 'border-nature-800 focus:border-amber-500'}`}
                             autoFocus
                         />
                     </div>

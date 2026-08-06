@@ -880,20 +880,13 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // 2FA session token injection middleware
     // When checkAdminAuth validates a TOTP code, it issues a session token on
-    // ctx.state.tfaSessionToken. This middleware picks it up and injects it into
-    // the JSON response body so headless clients (e.g. fleet manager) can stash
-    // the token and send X-Admin-2FA-Session on subsequent requests.
+    // ctx.state.tfaSessionToken. This middleware picks it up and delivers it
+    // via an X-Admin-2FA-Session response header, keeping the JSON body clean
+    // and avoiding accidental persistence into client state/configs.
     app.use(async (ctx, next) => {
         await next();
-        if (
-            ctx.state?.tfaSessionToken &&
-            typeof ctx.body === 'object' &&
-            ctx.body !== null &&
-            !Array.isArray(ctx.body) &&
-            !Buffer.isBuffer(ctx.body) &&
-            typeof (ctx.body as any).pipe !== 'function'
-        ) {
-            ctx.body = { ...ctx.body, tfaSessionToken: ctx.state.tfaSessionToken };
+        if (ctx.state?.tfaSessionToken) {
+            ctx.set('X-Admin-2FA-Session', ctx.state.tfaSessionToken);
         }
     });
 

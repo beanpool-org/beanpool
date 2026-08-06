@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
-import { getLocalConfig, verifyPasswordAsync } from './config/local-config.js';
+import { getLocalConfig, updateLocalConfig, verifyPasswordAsync } from './config/local-config.js';
+import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
 // event loop — concurrent dashboard admin POSTs no longer serialize on a
@@ -27,13 +28,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         ctx.body = { error: 'Invalid password' };
         return false;
     }
-    if (adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
-
-    // #133: If a CSRF token is present, validate it as defence-in-depth.
-    // Clients that have fetched a token via POST /api/local/admin/csrf-token must
-    // send it back. Clients that haven't yet adopted CSRF tokens are unaffected
-    // (token absent → skip check). This makes enforcement opt-in but strictly
-    // validated once opted in, avoiding a lockout during the migration window.
+    // #133: If a CSRF token is present, validate it as defence-in-depth BEFORE state mutations (like 2FA backup code consumption).
     const csrfHeader: string | undefined =
         (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
         ctx.request?.headers?.['x-csrf-token'] ||
@@ -43,6 +38,51 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         ctx.body = { error: 'Invalid or expired CSRF token' };
         return false;
     }
+
+    // #135: TOTP 2FA Verification
+    // Re-fetch fresh config to avoid reading a stale snapshot across the async password verify boundary.
+    const currentConfig = getLocalConfig();
+    if (currentConfig.totpEnabled && currentConfig.totpSecret) {
+        const totpHeader = (typeof ctx.get === 'function' ? ctx.get('x-admin-totp') : null) ||
+            ctx.request?.headers?.['x-admin-totp'] ||
+            ctx.headers?.['x-admin-totp'] ||
+            ctx.requestBody?.totpCode ||
+            ctx.request?.body?.totpCode;
+
+        if (!totpHeader) {
+            ctx.status = 401;
+            ctx.body = { error: '2FA code required', totpRequired: true };
+            return false;
+        }
+
+        const cleanCode = String(totpHeader).trim();
+        let totpValid = verifyTotpCode(cleanCode, currentConfig.totpSecret);
+
+        // Check backup code SHA-256 hashes using timingSafeEqual if 6-digit TOTP code check didn't match
+        const backupHashes = currentConfig.totpBackupCodesHashes || [];
+        if (!totpValid && backupHashes.length > 0) {
+            const codeIndex = verifyAndFindBackupCodeHash(cleanCode, backupHashes);
+            if (codeIndex !== -1) {
+                totpValid = true;
+                // Consume used single-use backup code (CSRF has already been validated above)
+                const updatedHashes = [...backupHashes];
+                updatedHashes.splice(codeIndex, 1);
+                updateLocalConfig({ totpBackupCodesHashes: updatedHashes });
+                console.log(`[AdminAuth] 🔑 Admin authenticated using 2FA backup code (${updatedHashes.length} remaining)`);
+            }
+        }
+
+        if (!totpValid) {
+            // #135 CR: Increment tarpit counter on 2FA code failure so TOTP codes cannot be brute-forced
+            adminAuthFailures++;
+            ctx.status = 401;
+            ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+            return false;
+        }
+    }
+
+    // #135 CR2: Reset tarpit failure count on successful authentication
+    if (adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
 
     return true;
 }

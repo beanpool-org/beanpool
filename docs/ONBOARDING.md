@@ -72,7 +72,7 @@ Every new member gets these, automatically, at signup:
 | **K1** | **This phone's own backup** (iCloud / Google Auto Backup) | Restoring the phone | Lives in the user's own device ecosystem; no BeanPool involvement |
 | **K2** | **Your community hub** | The hub releasing it (see [release rules](#release-rules)) | Run by your community, not by us |
 | **K3** | **Whoever invited you** | That person tapping Approve | A real human you already trust — guaranteed to exist, since `members.invited_by` is recorded |
-| **K4** | **Your sign-in account** (Facebook / Google / Apple / GitHub) | Logging in with that account | Optional. A different corporation again |
+| **K4** | **Your sign-in account** (Google / Apple — D11) | Logging in with that account | Optional. A different corporation again |
 
 And then, over time:
 
@@ -94,10 +94,11 @@ At a threshold of 3, that's absorbed: hub's own piece + a captured K4 piece = 2,
 |---|---|---|
 | **D1** | **No party ever holds a whole copy of the words.** Split first, distribute second. | Removes the need for any keyholder to be trusted, and removes the central broker with it |
 | **D2** | **Threshold is 3, always.** Matches the quorum the existing guardian flow already uses. | See above |
-| **D3** | **Sign-in is a keyholder, not a vault.** Facebook/Google/Apple/GitHub hold one piece each, same as a person. | Retains the one-tap experience without making a corporation a custodian |
+| **D3** | **Sign-in is a keyholder, not a vault.** The provider holds one piece each, same as a person. | Retains the one-tap experience without making a corporation a custodian |
 | **D4** | **No broker, no pepper, no PIN.** All deleted. | Nothing holds a whole copy, so there is nothing that needs that level of defence |
-| **D5** | **Central OAuth apps are acceptable** — BeanPool registers the Facebook/Google/Apple/GitHub applications. | They are now a *login convenience*, not a custodian. If they vanished, every user loses one keyholder out of four or more and recovers through the rest. Loss degrades the system; it does not cost anyone an account (Principle 8) |
-| **D10** | **Facebook is a first-class provider, and the priority one.** Order by reach for this project's actual audience: Facebook, Google, Apple, GitHub. | Facebook is frequently the *only* account a user in a developing market has, often instead of a Google account. Business verification is a one-off cost for us under D5, not a per-hub burden. GitHub is there for the developer crossover and reaches the fewest users |
+| **D5** | **Central OAuth apps are acceptable** — BeanPool registers the provider applications, and **no client secret ever reaches a node** (which is what selects the providers in D11). | They are now a *login convenience*, not a custodian. If they vanished, every user loses one keyholder out of four or more and recovers through the rest. Loss degrades the system; it does not cost anyone an account (Principle 8) |
+| **D10** | ~~**Facebook is a first-class provider, and the priority one.**~~ **SUPERSEDED by D11 (2026-08-06).** Kept for the reach argument, which still stands and is the cost D11 accepts. | Facebook is frequently the *only* account a user in a developing market has, often instead of a Google account. GitHub is there for the developer crossover and reaches the fewest users |
+| **D11** | **Google and Apple only. Facebook and GitHub are paused, not rejected.** | Both paused providers require an OAuth **client secret** to verify a token properly — Facebook's `/debug_token` needs an app access token, and GitHub's code exchange needs a client secret with no PKCE alternative. D5 puts no secrets on nodes, and nodes are self-hosted, so honouring D5 would mean handing every operator BeanPool's app secrets. The alternative — calling `/me` or `GET /user` with no secret — proves a token is *valid* but not that it was issued to *us*, which is token substitution. Google and Apple issue OIDC `id_token`s verifiable against public JWKS with no secret anywhere, so the contradiction disappears rather than being worked around. Facebook additionally carried the only multi-week external dependency (business verification) and the only likely native-SDK requirement. **Reversible:** if Facebook's OIDC/Limited Login path proves clean across iOS, Android and web, D10's reach argument makes it the first candidate to restore |
 | **D6** | **Human pieces release instantly on Approve.** No cooldown, no owner-cancellable window. | Chosen for recovery UX. Residual risk recorded as [R1](#part-9-risk-register) |
 | **D7** | **The hub's piece releases instantly *once at least one human has approved*, otherwise after 24h with notification.** | Prevents an all-automated trio (hub + sign-in + phone backup) from silently taking an account. Costs a real user nothing when any human is available. **This is the one call made without an explicit ruling — see [Open Questions](#part-10-open-questions).** |
 | **D8** | **Recovery starts with the community hub**, not the provider. | The pieces live on one specific node; the recovering device has to know which. Registrar (`<name>.beanpool.org`) assists |
@@ -162,16 +163,13 @@ This is **one screen with three states**, chosen by counting the keepers the use
 │  spare, in case one goes missing?       │
 │                                         │
 │  ┌─────────────────────────────────┐    │
-│  │  f  Add my Facebook account     │    │
-│  └─────────────────────────────────┘    │
-│  ┌─────────────────────────────────┐    │
 │  │  G  Add my Google account       │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
 │  │    Add my Apple account        │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
-│  │  🐙 Add my GitHub account       │    │
+│  │  👥 Ask a friend to hold a piece │    │
 │  └─────────────────────────────────┘    │
 │                                         │
 │  Rather write down 12 words? →          │
@@ -195,8 +193,7 @@ This is **one screen with three states**, chosen by counting the keepers the use
 │  Quickest way — sign in with an         │
 │  account you already have:              │
 │                                         │
-│  [ f Facebook ] [ G Google ]            │
-│  [  Apple ]   [ 🐙 GitHub ]            │
+│  [ G Google ]  [  Apple ]              │
 │                                         │
 │  Or write down 12 words instead →       │
 │  I'll sort it later →                   │
@@ -230,11 +227,11 @@ This is **one screen with three states**, chosen by counting the keepers the use
 
 - It **opens with good news** wherever it truthfully can. In State A the user is protected before they tap anything.
 - The screen never claims a keeper the user doesn't have. Revision 3's first draft said "Not now → you're still covered by 3" unconditionally, which was false for every PWA user — told to exactly the people who most needed the truth.
-- Per Principle 7, one line sits under the sign-in buttons: *"Facebook just holds one piece — it can't open your account on its own."*
+- Per Principle 7, one line sits under the sign-in buttons: *"Google just holds one piece — it can't open your account on its own."* This line does double duty under D11, because it is also the only thing stopping a user reading the button as "log in with Google" — which it emphatically is not (D9). Signing in here creates no account and logs nobody in; it hands back one piece. Someone who tapped it during setup **will** tap it on a new phone expecting to be logged in, so this copy has to work harder than one line normally would.
 - Nothing here is a hard gate, in any state. State C shows words because they're genuinely the user's only route, not as a punishment.
 - **Nobody is ever locked out.** A user on fewer than 3 keepers is exactly as protected as every user is today: their words exist and are always available in Settings. The keeper model is an improvement layered on top, and a user who doesn't reach 3 has simply not received that improvement yet.
 
-Provider buttons are ordered by reach for this audience — Facebook, Google, Apple, GitHub (D10) — not by what a developer would pick.
+Provider buttons are Google then Apple (D11). Facebook and GitHub are paused — see D11 for why, and note that the reach argument that once put Facebook first is the cost being paid, not an oversight.
 
 ### Step 4: How It Works
 
@@ -281,7 +278,7 @@ Welcome Screen
     │   Step 2: Choose Avatar                                  │
     │        │                                                 │
     │   Step 3: 🛡️ "You're covered"                           │
-    │        ├── Add Facebook/Google/Apple/GitHub ──► K4, 1 tap│
+    │        ├── Add Google/Apple ─────────────────► K4, 1 tap│
     │        ├── "Rather write down 12 words?" ──► sovereign   │
     │        └── "Not now" ──► still covered by 3              │
     │                                                          │
@@ -335,18 +332,20 @@ The inviter can decline, which deletes their piece and drops the user to two kee
 **Piece stored**: on the node as `AES-256-GCM(piece, HKDF-SHA256(sub, salt))`, indexed by `SHA-256(sub ‖ lookup_salt)`.
 **Released**: by the node on proof of a fresh provider login, rate-limited.
 
-The node **may be able to derive this piece** — GitHub and Facebook account IDs are short numbers that can be guessed against the lookup hash, and for the PWA the node serves the app code and could capture `sub` in transit. This is documented, accepted, and harmless: it gives the node a second piece, and two pieces are nothing. It is also precisely why the threshold cannot drop to 2.
+The node **may be able to derive this piece** — a provider subject claim is not a secret in general, and for the PWA the node serves the app code and could capture `sub` in transit. This is documented, accepted, and harmless: it gives the node a second piece, and two pieces are nothing. It is also precisely why the threshold cannot drop to 2.
 
-**Providers, in priority order (D10):**
+**Providers, in priority order (D11):**
 
-| Provider | Reach for this audience | Notes |
-|---|---|---|
-| **Facebook** | Highest | Often the only account a user in a developing market has. Requires business verification — a one-off cost for us under D5, not a per-hub burden |
-| **Google** | High | Overlaps heavily with the Android cloud-backup keeper (K1), so it adds less independence than it appears to — see [R3](#part-9-risk-register) |
-| **Apple** | Medium, iOS only | Mandatory *only* if we ship an App Store build offering other social logins |
-| **GitHub** | Lowest | Developer crossover. Cheapest to register, reaches the fewest users |
+| Provider | Status | Reach for this audience | Notes |
+|---|---|---|---|
+| **Google** | **Build first** | High | OIDC `id_token`, verifiable against public JWKS with no secret anywhere. Overlaps heavily with the Android cloud-backup keeper (K1), so it adds less independence than it appears to — see [R3](#part-9-risk-register) |
+| **Apple** | **Build second** | Medium, iOS only | OIDC, no node secret. Now **unavoidable rather than optional**: App Store Guideline 4.8 requires Sign in with Apple in any iOS build that offers Google. The developer account already exists, so the $99/yr is sunk and the Team ID is already stable — which removes most of the `sub`-drift risk below. Two things remain: the **App Group configuration** (see below) and a client secret that is a **JWT expiring within 6 months**. Automate that rotation while building it, or Apple recovery dies silently months later |
+| ~~Facebook~~ | **Paused (D11)** | Highest | Verifying a token properly needs an app access token (`/debug_token`). Also carried the only multi-week external dependency (business verification) and the likeliest native-SDK requirement. First candidate to restore if its OIDC/Limited Login path proves clean across all three platforms |
+| ~~GitHub~~ | **Paused (D11)** | Lowest | Cheap to register, but the code exchange needs a client secret and GitHub has no PKCE for OAuth Apps. Device Flow is the only secret-free path, and its UX is a code-entry dance. Least reach of the four, so not worth a design exception |
 
 Central OAuth applications (D5). If they disappear, users lose one keeper and recover through the others.
+
+**What D11 costs, recorded so it is not rediscovered as a surprise.** D10's reach argument was correct and is the price being paid: dropping Facebook removes the provider most likely to be a developing-market user's *only* account, and what remains is iOS owners plus Google users whose Google account already overlaps K1. K4 therefore stops being the broad safety net this document first imagined and becomes a useful extra for part of the userbase. **The consequence is that K5+ backup buddies carry more weight**, being the only keeper type that works for every user, on every platform, in every country — worth reflecting in how hard step 3 pushes for a buddy.
 
 ### K5+ — Backup buddies
 
@@ -652,7 +651,7 @@ The keeper decrypts by converting their own Ed25519 private key to X25519 and re
 **Sign-in keeper (K4)**:
 
 ```
-1. sub = provider subject claim (Google/Apple `sub`, Facebook/GitHub `id`)
+1. sub = provider subject claim (Google/Apple OIDC `sub`)
 2. lookup_salt = random 32B;  sso_lookup_hash = SHA-256(sub ‖ lookup_salt)
 3. key = HKDF-SHA256(sub, salt, info="beanpool-keeper-sso-v1")
 4. AES-256-GCM(piece, key, random_iv)
@@ -840,18 +839,33 @@ Incremented with an UPSERT. No foreign keys to `members`, deliberately — there
 - Detection and honest reporting when no cloud backup exists (R6)
 - Requires a standalone rebuild to test
 
-### Phase E: K4 sign-in keeper (est. 1 week)
+### Phase E: K4 sign-in keeper (est. 1 week) — **Google + Apple only (D11)**
 
-- Register the central OAuth applications
-- `expo-auth-session` flows + PWA redirect parity
-- `/api/recovery/sso-verify` with rate limiting
+- Register the central OAuth applications (Google, then Apple)
+- `expo-auth-session` flows + PWA redirect parity, PKCE public client — **no client secret on any node**
+- `/api/recovery/sso-verify`: verify the `id_token` against the provider's public JWKS, check `aud` matches our client ID, extract `sub`. Rate-limited
+- Automated rotation for Apple's 6-month client-secret JWT
 - Keeper add/remove from Settings
 
-Phases A–D contain no third-party dependency of any kind. Phase E is the only part touching Facebook/Google/Apple/GitHub, it is last, and nothing else depends on it. Within Phase E, build providers in D10 order — Facebook first, since it reaches the most users and its business verification has the longest lead time.
+Phases A–D contain no third-party dependency of any kind. Phase E is the only part touching Google/Apple, it is last, and nothing else depends on it — if it slips, every other phase still delivers a complete keyholder system with no third party involved.
+
+**Why the order is Google then Apple.** Google is the cleanest to verify and the widest of the two. Apple follows because Guideline 4.8 makes it compulsory the moment an App Store build offers Google, so it is not separable from shipping on iOS.
+
+**The `sub` stability trap.** The piece is unwrapped by a key derived from the provider's subject claim, so if `sub` ever changes the piece is dead — and nothing notices until a recovery attempt, which is the worst possible moment. Google's `sub` is stable. Apple's is scoped to the developer **Team ID**, which this project already owns and will not be changing, so the drift risk there is largely closed.
+
+**The Apple cross-platform trap, which is the live one.** Apple's `sub` is stable per user *per developer team*, but the native App ID and the **Services ID** used for the web/PWA/Android flow must be configured under the same primary App ID / App Group. Configured separately, the same human signing in from the PWA gets a **different `sub`** than they got on the phone — so a piece stored during signup on native simply will not unwrap during a recovery attempted from the browser.
+
+That matters here more than it would in most projects, because cross-platform recovery is an explicit goal (Part 6: the split payload is the words precisely so it works on both), and because a plausible recovery story is "my phone is gone, I'm on a laptop". It also fails in the project's least favourite way — silently, at recovery time, with everything looking correctly configured. **Verify the grouping against Apple's current documentation when setting up the Services ID, and cover it with a real cross-platform round-trip before Phase E is called done.**
+
+The threshold of 3 absorbs one dead keeper, but absorption is not detection: re-verify keepers periodically and tell the user "your Apple keeper stopped working" while they still have the others.
+
+**The endpoint is a membership oracle.** `sso-verify` answers, to anyone who asks, whether a given provider account belongs to a member of this node. Rate limiting reduces the volume, not the property. Accepted — it is the same class as the node being able to derive this piece at all — but it belongs in the risk register rather than being discovered later.
 
 ---
 
 ## Revision History
+
+**Revision 3.4 (2026-08-06)** — **Facebook and GitHub paused; Phase E is Google + Apple (D11).** Both paused providers need an OAuth client secret to verify a token as genuinely ours, which D5 forbids on self-hosted nodes; Google and Apple issue OIDC `id_token`s verifiable against public JWKS with no secret, so the contradiction is removed rather than worked around. Also takes Meta business verification — the only multi-week external dependency in the whole plan — off the critical path. Records the cost (reach drops; K5+ buddies matter more), Apple's newly-compulsory status under Guideline 4.8 and its 6-month secret rotation, the `sub` stability trap, and the membership-oracle property of `sso-verify`.
 
 **Revision 3.3 (2026-08-05)** — closed the weighted-pieces question: every keeper holds exactly one piece, enforced by the `recovery_shares` UNIQUE constraint rather than left as a convention.
 

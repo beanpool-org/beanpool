@@ -250,7 +250,7 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         }
     } else if (filter?.updatedAfter || filter?.sync) {
         // Include completed/cancelled/deleted states for sync
-    } else {
+    } else if (!filter?.includeInactive) {
         query += " AND p.active = 1";
     }
 

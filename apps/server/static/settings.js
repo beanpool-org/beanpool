@@ -634,7 +634,7 @@
                 const res = await fetch(`${API}/admin/2fa/verify`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password },
-                    body: JSON.stringify({ totpCode: code })
+                    body: JSON.stringify({ code })
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {
@@ -689,7 +689,7 @@
                 const res = await fetch(`${API}/admin/2fa/disable`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password, 'X-Admin-TOTP': code },
-                    body: JSON.stringify({ totpCode: code })
+                    body: JSON.stringify({ code })
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {

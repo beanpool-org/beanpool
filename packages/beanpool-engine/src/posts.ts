@@ -238,13 +238,13 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     `;
     const params: any[] = [];
 
-    if (filter?.includeInactive) {
-        // Do not restrict p.active when includeInactive is requested
-    } else if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
+    if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
-        query += selfView
-            ? " AND p.active = 1 AND p.status IN ('active', 'pending', 'paused')"
-            : " AND p.active = 1 AND p.status IN ('active', 'pending')";
+        if (!filter?.includeInactive) {
+            query += selfView
+                ? " AND p.active = 1 AND p.status IN ('active', 'pending', 'paused')"
+                : " AND p.active = 1 AND p.status IN ('active', 'pending')";
+        }
         if (!filter?.authorPubkey) {
             query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
         }

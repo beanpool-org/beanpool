@@ -458,7 +458,8 @@ router.post('/api/local/admin/2fa/setup', async (ctx) => {
  */
 router.post('/api/local/admin/2fa/verify', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { code } = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const code = body.code || body.totpCode;
     if (!code) {
         ctx.status = 400;
         ctx.body = { success: false, error: 'code is required' };

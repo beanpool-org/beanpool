@@ -667,8 +667,8 @@
                     </div>
                 </div>
                 <div class="field hidden" id="login-2fa-field">
-                    <label>2FA Verification Code</label>
-                    <input type="text" id="login-totp" placeholder="Enter 6-digit code or backup code" style="font-family: monospace; text-align: center; letter-spacing: 0.15em;">
+                    <label for="login-totp">2FA Verification Code</label>
+                    <input type="text" id="login-totp" name="totp" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit code or backup code" style="font-family: monospace; text-align: center; letter-spacing: 0.15em;">
                 </div>
                 <button class="btn btn-primary btn-full" id="login-btn">Unlock Settings</button>
                 <div class="status-msg" id="login-status"></div>

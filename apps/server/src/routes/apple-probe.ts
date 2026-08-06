@@ -24,16 +24,16 @@
  * per-request, not hidden behind a flag in the handler, simply absent from the routing table
  * unless deliberately switched on. Default off, so a normal deploy cannot expose it.
  *
- * The domain-association file is deliberately NOT behind that gate. Apple re-verifies domains
- * periodically, and tying that to a debug flag would mean verification silently lapsing months
- * later when the flag is long forgotten. It serves whenever its content is configured, which is
- * safe: the file is a public verification token by design.
+ * The domain-association file deliberately does NOT live in this file at all. Apple re-verifies
+ * domains on its own schedule, and this file is meant to be deleted once the answer is recorded —
+ * so a route defined here would take domain verification down with it, months later, which is the
+ * exact silent lapse the gating was trying to avoid. It lives in `public-address.ts`, alongside
+ * the node's other public-identity routes, and outlives the probe.
  *
  * ## Environment
  *
  *   APPLE_PROBE=1                  register the probe pages (default: off)
  *   APPLE_SERVICES_ID              Services ID / OAuth client_id (default: org.beanpool.web)
- *   APPLE_DOMAIN_ASSOCIATION       verbatim contents of Apple's association file
  *   APPLE_PROBE_REDIRECT_URI       override the callback URL (default: derived from Host)
  */
 
@@ -51,6 +51,35 @@ function escapeHtml(s: string): string {
 }
 
 /**
+ * JSON safe to embed inside a `<script>` block.
+ *
+ * `JSON.stringify` alone is NOT enough: it leaves `<` untouched, so a value containing
+ * `</script>` closes the block early and everything after it is parsed as HTML. One of the values
+ * below derives from the request's Host header, which makes that a reachable XSS rather than a
+ * theoretical one. U+2028/U+2029 are escaped too — they are literal line terminators in JS source
+ * but legal inside a JSON string, so they can break a script block on their own.
+ */
+function jsonForScript(value: unknown): string {
+    return JSON.stringify(value)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/&/g, '\\u0026')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
+
+/**
+ * The Host header, or null when it is not a plausible hostname.
+ *
+ * Host is client-controlled and reaches the page, so it is checked at the source as well as
+ * escaped on the way out. A hostname is a narrow character set; anything outside it is not a
+ * hostname worth echoing, whatever the escaping does downstream.
+ */
+function safeHost(host: string | undefined): string | null {
+    return host && /^[A-Za-z0-9.-]+(:\d{1,5})?$/.test(host) ? host : null;
+}
+
+/**
  * Read the raw request body.
  *
  * Necessary because the server's body-parser middleware only handles `application/json`
@@ -64,8 +93,11 @@ function readRawBody(req: Koa.Context['req']): Promise<string> {
         req.on('data', (chunk: Buffer) => {
             total += chunk.length;
             if (total > MAX_CALLBACK_BYTES) {
+                // Pause rather than destroy. Destroying tears the socket down, and the 413 the
+                // handler then tries to write has nowhere to go — an unhandled socket error
+                // instead of a clean response.
+                req.pause();
                 reject(new Error('callback body too large'));
-                req.destroy();
                 return;
             }
             chunks.push(chunk);
@@ -119,16 +151,6 @@ ${body}
 export function createAppleProbeRoutes(): Router {
     const router = new Router();
 
-    // Served whenever configured, independent of the probe gate — Apple re-verifies domains on
-    // its own schedule, and a verification that depends on a debug flag is one that lapses later.
-    const association = process.env.APPLE_DOMAIN_ASSOCIATION;
-    if (association) {
-        router.get('/.well-known/apple-developer-domain-association.txt', async (ctx: Koa.Context) => {
-            ctx.type = 'text/plain; charset=utf-8';
-            ctx.body = association;
-        });
-    }
-
     if (process.env.APPLE_PROBE !== '1') {
         // Not registered at all. The point of returning an empty router rather than checking a
         // flag inside each handler: there is no reachable path to switch on by accident.
@@ -136,8 +158,21 @@ export function createAppleProbeRoutes(): Router {
     }
 
     router.get('/apple-probe', async (ctx: Koa.Context) => {
+        // Host is client-controlled and lands inside a <script> block below, so it is validated
+        // here as well as escaped there. An unusable Host yields no redirect URI rather than a
+        // sanitised guess: the value has to match what is registered on the Services ID exactly,
+        // so a fabricated one would be rejected by Apple anyway.
+        const host = safeHost(ctx.request.host);
         const redirectUri = process.env.APPLE_PROBE_REDIRECT_URI
-            || `${ctx.request.protocol}://${ctx.request.host}/apple-probe`;
+            || (host ? `${ctx.request.protocol}://${host}/apple-probe` : '');
+
+        if (!redirectUri) {
+            ctx.type = 'html';
+            ctx.body = page('Apple probe — unusable Host', `<h1>Cannot derive a redirect URI</h1>
+<p class="sub">The Host header is not a plausible hostname. Set
+<code>APPLE_PROBE_REDIRECT_URI</code> explicitly.</p>`);
+            return;
+        }
 
         ctx.type = 'html';
         ctx.body = page('Apple sub parity probe', `
@@ -156,9 +191,9 @@ derive keys from <code>sub</code>. Different means it cannot.</p>
 <script src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>
 <script>
   AppleID.auth.init({
-    clientId: ${JSON.stringify(SERVICES_ID)},
+    clientId: ${jsonForScript(SERVICES_ID)},
     scope: 'name email',
-    redirectURI: ${JSON.stringify(redirectUri)},
+    redirectURI: ${jsonForScript(redirectUri)},
     usePopup: false
   });
 </script>`);

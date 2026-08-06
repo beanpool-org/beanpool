@@ -113,12 +113,17 @@ export default function AppleProbeScreen() {
                 />
             )}
 
-            {error && <Text style={styles.error}>{error}</Text>}
+            {error && <Text style={styles.error} accessibilityRole="alert">{error}</Text>}
 
             {tokenSub && (
                 <>
                     <Text style={styles.label}>Token sub — compare this with the web probe</Text>
-                    <TouchableOpacity onPress={() => Clipboard.setStringAsync(tokenSub)}>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Copy the token sub to the clipboard"
+                        accessibilityHint="Copies the value so you can compare it with the web probe"
+                        onPress={() => Clipboard.setStringAsync(tokenSub)}
+                    >
                         <Text style={styles.value}>{tokenSub}</Text>
                         <Text style={styles.muted}>tap to copy</Text>
                     </TouchableOpacity>

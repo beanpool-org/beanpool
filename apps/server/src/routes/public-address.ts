@@ -79,6 +79,28 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { checkAdminAuth } = deps;
 
+    /**
+     * Apple's domain-verification file, served whenever its contents are configured.
+     *
+     * Here rather than with the Sign in with Apple code that needs it, because Apple re-verifies
+     * domains on its own schedule and this has to keep answering long after any particular feature
+     * — or diagnostic — is gone. A route that lived beside a temporary probe would be deleted with
+     * it, and verification would lapse silently months later.
+     *
+     * Public by design: the file is a verification token Apple fetches anonymously, and it grants
+     * nothing. Same reasoning as `/api/attest` below.
+     */
+    router.get('/.well-known/apple-developer-domain-association.txt', async (ctx) => {
+        const association = process.env.APPLE_DOMAIN_ASSOCIATION;
+        if (!association) {
+            ctx.status = 404;
+            ctx.body = 'not configured';
+            return;
+        }
+        ctx.type = 'text/plain; charset=utf-8';
+        ctx.body = association;
+    });
+
     router.get('/api/attest', async (ctx) => {
         const nonce = String(ctx.query.nonce || '');
         if (!nonce || nonce.length > 256) { ctx.status = 400; ctx.body = { error: 'nonce required' }; return; }

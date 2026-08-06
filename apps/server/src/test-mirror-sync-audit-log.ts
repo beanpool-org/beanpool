@@ -118,3 +118,10 @@ assert.strictEqual(filtered.length, 2, 'G. Peer-filtered query returns exactly 2
 console.log(`  G. Peer-filtered query: ${filtered.length} rows`);
 
 console.log('✅ #134 mirror sync audit log test PASSED!');
+
+// Exit explicitly. This suite leaves the engine's timers and handles open, so returning normally
+// keeps the event loop alive and the process never terminates — it prints a pass and then hangs.
+// In CI that is indistinguishable from a slow run and blocks every suite after it (scripts/test-all.sh
+// runs them in sequence), which is how a single test burns hours of Actions time. Reaching here means
+// every assertion above held; a failure throws and exits non-zero long before this line.
+process.exit(0);

@@ -109,6 +109,27 @@ else
   skip_check "federation"
 fi
 
+# Per-suite wall clock. A suite that never exits — one that leaves the engine's timers open and
+# returns normally instead of calling process.exit — otherwise blocks every suite queued behind it,
+# and the whole job with them. Runs on this repo have been cancelled at 14, 17, 22 and 360 minutes
+# for exactly that reason, and a hang is indistinguishable from a slow day until someone gives up.
+#
+# The timeout does not fix a hang; it converts one into a named failure with the suite's name
+# attached, which is the difference between "CI is flaky" and "test-x hangs". 300s is roughly 100x
+# the whole suite's healthy runtime, so it cannot fire on a merely slow machine.
+#
+# `timeout` is GNU coreutils; macOS has it as `gtimeout` via brew, or not at all. Absent, suites run
+# unguarded exactly as before — a local convenience should never change what CI verifies.
+if command -v timeout >/dev/null 2>&1; then
+  SUITE_TIMEOUT="timeout --kill-after=10s 300s"
+elif command -v gtimeout >/dev/null 2>&1; then
+  SUITE_TIMEOUT="gtimeout --kill-after=10s 300s"
+else
+  SUITE_TIMEOUT=""
+  echo "⚠️  no timeout(1) — suites run unguarded; a hanging suite will block this run"
+fi
+export SUITE_TIMEOUT
+
 run_federation_suites() {
   bash -c '
     cd apps/server
@@ -119,8 +140,11 @@ run_federation_suites() {
     for t in test-schema-upgrade test-commons-conservation test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-moderation-admin test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
-      ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" pnpm exec tsx "src/$t.ts"
-      if [ $? -ne 0 ]; then FAILED="$FAILED $t"; fi
+      ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
+      RC=$?
+      # 124 is timeout(1) reporting the wall clock expired. Named separately so a hang reads as a
+      # hang in the summary rather than as an ordinary failure.
+      if [ $RC -eq 124 ]; then FAILED="$FAILED $t(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED $t"; fi
       rm -rf "$TMP_DIR"
     done
 
@@ -136,8 +160,9 @@ run_federation_suites() {
       echo "━━━ $t (settlement ON) ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true FEDERATION_SETTLEMENT=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-        pnpm exec tsx "src/$t.ts"
-      if [ $? -ne 0 ]; then FAILED="$FAILED $t(on)"; fi
+        $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
+      RC=$?
+      if [ $RC -eq 124 ]; then FAILED="$FAILED $t(on,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED $t(on)"; fi
       rm -rf "$TMP_DIR"
     done
     if [ -n "$FAILED" ]; then

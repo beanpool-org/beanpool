@@ -133,6 +133,11 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE messages ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE friends ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // Moderation status. MUST be before the schema.sql exec below: schema.sql declares
+    // idx_abuse_reports_status_created ON abuse_reports(status, ...), and on a node whose
+    // abuse_reports table predates this column the exec hits that index, fails, and the node does
+    // not boot. Adding the column afterwards is too late — the exec has already thrown.
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
 
     // #104 step 3b: the settlement exchange needs four more columns on `settlements`.
@@ -261,8 +266,8 @@ export function initSchema() {
         db.prepare(`DROP INDEX IF EXISTS idx_settlements_unfinalised`).run();
         db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(created_at) WHERE state IN ('escrowed', 'reserved', 'committed', 'held')`).run();
     } catch { }
-    // Moderation: Add status tracking to abuse reports
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
+    // Moderation status column moved ABOVE the schema.sql exec — see the note there. The index
+    // stays: it is idempotent, and it covers a node that somehow reached this point without it.
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC)`).run(); } catch { }
     // Marketplace hygiene: track when a lingering escrow deal was last nudged
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }

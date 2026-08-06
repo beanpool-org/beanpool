@@ -569,10 +569,8 @@
                         badge.style.color = '#94a3b8';
                         
                         boxEnabled?.classList.add('hidden');
-                        if (!data.pendingSetup) {
-                            boxSetup?.classList.add('hidden');
-                            boxDisabled?.classList.remove('hidden');
-                        }
+                        boxSetup?.classList.add('hidden');
+                        boxDisabled?.classList.remove('hidden');
                     }
                 }
             } catch (e) {

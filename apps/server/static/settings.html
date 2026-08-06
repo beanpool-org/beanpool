@@ -666,6 +666,10 @@
                         <button class="pwd-eye" aria-label="Toggle password visibility" title="Toggle password visibility">👁</button>
                     </div>
                 </div>
+                <div class="field hidden" id="login-2fa-field">
+                    <label for="login-totp">2FA Verification Code</label>
+                    <input type="text" id="login-totp" name="totp" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit code or backup code" style="font-family: monospace; text-align: center; letter-spacing: 0.15em;">
+                </div>
                 <button class="btn btn-primary btn-full" id="login-btn">Unlock Settings</button>
                 <div class="status-msg" id="login-status"></div>
             </div>
@@ -825,6 +829,85 @@
                 </div>
                 <button class="btn btn-outline btn-full" id="change-pwd-btn">Update Password</button>
                 <div class="status-msg" id="pwd-status"></div>
+            </div>
+
+            <!-- 🔐 Two-Factor Authentication (2FA) -->
+            <div class="glass" data-tab="identity">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                    <h3 style="margin: 0;">🔐 Two-Factor Authentication (TOTP)</h3>
+                    <span id="totp-status-badge" class="badge" style="font-weight: 600; font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; background: rgba(148, 163, 184, 0.1); border: 1px solid #475569; color: #94a3b8;">Checking...</span>
+                </div>
+                
+                <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 1rem; line-height: 1.4;">
+                    Protect node admin operations with standard RFC 6238 time-based authenticator apps (Google Authenticator, Authy, Apple Keychain, 1Password).
+                </p>
+
+                <!-- State A: Disabled -->
+                <div id="totp-box-disabled" class="hidden">
+                    <button class="btn btn-primary" id="btn-totp-start-setup">Setup 2FA</button>
+                </div>
+
+                <!-- State B: Setup in Progress -->
+                <div id="totp-box-setup" class="hidden" style="background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 12px; padding: 1.25rem; margin-top: 1rem;">
+                    <h4 style="font-size: 0.85rem; color: #f8fafc; margin-bottom: 0.75rem; font-weight: 600;">1. Scan QR Code or Enter Key</h4>
+                    <div style="display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; margin-bottom: 1rem;">
+                        <div style="background: white; padding: 10px; border-radius: 8px; display: inline-block;">
+                            <img id="totp-qr-img" src="" alt="2FA QR Code" style="width: 160px; height: 160px; display: block;" />
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label>Secret Key</label>
+                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                <input type="text" id="totp-secret-text" readonly style="font-family: monospace; letter-spacing: 0.1em; color: #38bdf8; font-weight: 600;" />
+                                <button class="btn btn-outline" id="btn-totp-copy-secret" style="white-space: nowrap;">Copy</button>
+                            </div>
+                            <p style="font-size: 0.75rem; color: #64748b; margin: 0;">Scan QR code or paste key into your authenticator app.</p>
+                        </div>
+                    </div>
+
+                    <h4 style="font-size: 0.85rem; color: #f8fafc; margin-bottom: 0.75rem; font-weight: 600;">2. Verify Authenticator Code</h4>
+                    <div class="field" style="max-width: 280px;">
+                        <input type="text" id="totp-setup-code" maxlength="7" placeholder="e.g. 123 456" style="font-size: 1.1rem; letter-spacing: 0.2em; text-align: center; font-weight: 700; font-family: monospace;" />
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-primary" id="btn-totp-verify-setup">Verify &amp; Enable 2FA</button>
+                        <button class="btn btn-outline" id="btn-totp-cancel-setup">Cancel</button>
+                    </div>
+                    <div class="status-msg" id="totp-setup-status"></div>
+                </div>
+
+                <!-- State C: Enabled -->
+                <div id="totp-box-enabled" class="hidden">
+                    <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 1rem; margin-bottom: 1rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <strong style="color: #10b981; font-size: 0.85rem;">✓ 2FA is active</strong>
+                                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.2rem;" id="totp-backup-count-text">Emergency backup codes available</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="totp-disable-form" style="margin-top: 1rem; background: rgba(15, 23, 42, 0.4); border: 1px solid #1e293b; border-radius: 12px; padding: 1rem;">
+                        <h4 style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 0.75rem; font-weight: 600;">Disable 2FA</h4>
+                        <div class="field" style="max-width: 280px;">
+                            <label>Current 2FA Code</label>
+                            <input type="text" id="totp-disable-code" placeholder="6-digit code or backup code" style="font-family: monospace; text-align: center; letter-spacing: 0.15em;" />
+                        </div>
+                        <button class="btn btn-outline" id="btn-totp-disable" style="border-color: #f43f5e; color: #f43f5e;">Disable Two-Factor Auth</button>
+                        <div class="status-msg" id="totp-disable-status"></div>
+                    </div>
+                </div>
+
+                <!-- Emergency Backup Codes Display Box (shown immediately after setup) -->
+                <div id="totp-box-backup-codes" class="hidden" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 1.25rem; margin-top: 1rem;">
+                    <h4 style="color: #f59e0b; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 600;">⚠️ Emergency Backup Codes</h4>
+                    <p style="font-size: 0.75rem; color: #cbd5e1; margin-bottom: 0.75rem;">
+                        Each code can be used once if you lose access to your phone or authenticator app. Store these securely.
+                    </p>
+                    <div id="totp-backup-codes-list" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; font-family: monospace; font-size: 0.85rem; background: #0f172a; border: 1px solid #334155; padding: 0.75rem; border-radius: 8px; color: #fbbf24; margin-bottom: 0.75rem; text-align: center;">
+                    </div>
+                    <button class="btn btn-outline btn-sm" id="btn-totp-copy-backups">Copy Backup Codes</button>
+                    <button class="btn btn-primary btn-sm" id="btn-totp-done-backups" style="margin-left: 0.5rem;">I Have Saved These Codes</button>
+                </div>
             </div>
 
             <!-- Invite Management -->

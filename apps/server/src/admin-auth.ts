@@ -135,3 +135,37 @@ export function validateCsrfToken(ctx: any): boolean {
 export function revokeCsrfToken(token: string): void {
     csrfTokens.delete(token);
 }
+
+// ===================== WS TICKET STORE =====================
+// Ephemeral single-use tickets for WebSocket connection upgrades.
+// Prevents transmitting raw admin passwords in URL query parameters.
+const WS_TICKET_TTL_MS = 30_000; // 30 seconds
+const wsTickets = new Map<string, number>(); // ticket -> expiry timestamp
+
+// Periodic background cleanup for expired WebSocket tickets
+if (typeof setInterval !== 'undefined') {
+    const wsCleanupTimer = setInterval(() => {
+        const now = Date.now();
+        for (const [t, exp] of wsTickets) {
+            if (now > exp) wsTickets.delete(t);
+        }
+    }, 60_000);
+    if (wsCleanupTimer.unref) wsCleanupTimer.unref();
+}
+
+export function issueWsTicket(): string {
+    const ticket = crypto.randomBytes(32).toString('hex');
+    wsTickets.set(ticket, Date.now() + WS_TICKET_TTL_MS);
+    const now = Date.now();
+    for (const [t, exp] of wsTickets) {
+        if (now > exp) wsTickets.delete(t);
+    }
+    return ticket;
+}
+
+export function isValidWsTicket(ticket: string): boolean {
+    const expiry = wsTickets.get(ticket);
+    if (!expiry) return false;
+    wsTickets.delete(ticket); // Single-use: consume immediately
+    return Date.now() <= expiry;
+}

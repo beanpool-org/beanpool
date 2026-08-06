@@ -41,7 +41,7 @@ import { federationCors, mountFederationRoutes } from './federation-api.js';
 import { federatedRelayMessage, federatedVerifyMember } from './federation-protocol.js';
 import { getP2PNode } from './p2p.js';
 import { WebSocketServer } from 'ws';
-import { checkAdminAuth } from './admin-auth.js';
+import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
 import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
 import {
@@ -960,8 +960,18 @@ export async function startHttpsServer(port: number): Promise<void> {
                 });
             } else if (pathname === '/ws/logs') {
                 const auth = parsedUrl.searchParams.get('auth');
+                const ticket = parsedUrl.searchParams.get('ticket');
                 const config = getLocalConfig();
-                if (!auth || !config.adminHash || !config.salt || !verifyPassword(auth, config.adminHash, config.salt)) {
+                let authorized = false;
+
+                if (ticket && isValidWsTicket(ticket)) {
+                    authorized = true;
+                } else if (auth && config.adminHash && config.salt && verifyPassword(auth, config.adminHash, config.salt)) {
+                    logger.warn('[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
+                    authorized = true;
+                }
+
+                if (!authorized) {
                     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
                     socket.destroy();
                     return;

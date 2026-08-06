@@ -33,12 +33,21 @@ import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
-import { issueCsrfToken } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { checkAdminAuth, activeConnections, calculateAnalytics } = deps;
+
+// ===================== WS TICKET ENDPOINT =====================
+// Issues short-lived single-use ticket for WebSocket authentication to avoid exposing
+// admin passwords in URL query strings (which browser console & proxy logs capture).
+router.post('/api/local/admin/ws-ticket', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const ticket = issueWsTicket();
+    ctx.body = { ticket };
+});
 
 // ===================== CSRF TOKEN ENDPOINT =====================
 // #133: Clients call this with their password to receive a short-lived CSRF token.

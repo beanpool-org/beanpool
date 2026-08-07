@@ -426,6 +426,66 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_shares_sso
     WHERE sso_lookup_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_recovery_shares_updated_at ON recovery_shares(updated_at);
 
+-- 14b. Recovery collection — one attempt to gather enough fragments to rebuild a phrase.
+--
+-- A device doing this has NO identity yet: that is the whole situation. It cannot sign as the
+-- owner, because the owner's key is precisely what it is trying to rebuild. So the session id is
+-- an unguessable bearer secret, handed to whoever opened the session and to nobody else, and
+-- every fragment released into it is still gated by its own rule on top. Holding the id alone
+-- yields nothing — member fragments are re-wrapped to `requester_ephemeral_pubkey` by the keeper
+-- who approves, so the node never sees a plaintext piece and neither does anyone who guesses.
+--
+-- `generation` is pinned when the session opens and every release checks it. An owner who
+-- re-splits mid-collection kills the session — which is not an edge case but the DEFENCE: if you
+-- notice a recovery you did not start, re-splitting is how you stop it (R1).
+CREATE TABLE IF NOT EXISTS recovery_collections (
+    id TEXT PRIMARY KEY,                                   -- 32 random bytes, base64url
+    owner_pubkey TEXT NOT NULL REFERENCES members(public_key),
+    generation INTEGER NOT NULL,
+    -- X25519 public key of the recovering device. Keepers wrap their decrypted fragment to this,
+    -- so a released piece is readable only by the device that opened the session.
+    requester_ephemeral_pubkey TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'complete', 'cancelled', 'expired')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    expires_at TEXT NOT NULL,
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_recovery_collections_owner ON recovery_collections(owner_pubkey, status);
+CREATE INDEX IF NOT EXISTS idx_recovery_collections_updated_at ON recovery_collections(updated_at);
+
+-- One fragment released into one collection. The unique constraint is what makes a release
+-- idempotent rather than cumulative: a keeper tapping Approve twice, or a client retrying a
+-- request that already succeeded, must not look like two of the three pieces.
+CREATE TABLE IF NOT EXISTS recovery_releases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    collection_id TEXT NOT NULL REFERENCES recovery_collections(id),
+    -- NO foreign key to recovery_shares, deliberately. A release is a historical record of a
+    -- fragment that was handed over; the row it came from is DELETED by the next re-split, which
+    -- is the entire mechanism by which removing a keeper means anything. Declaring the reference
+    -- would assert a lifetime the design breaks on purpose — and while `foreign_keys` is OFF today
+    -- so nothing would enforce it, that makes it worse rather than better: correctness would be
+    -- resting on a pragma, and turning enforcement on later would break re-splitting for every
+    -- member who had ever started a recovery.
+    share_id INTEGER NOT NULL,
+    holder_type TEXT NOT NULL CHECK (holder_type IN ('hub', 'member', 'sso')),
+    share_index INTEGER NOT NULL,
+    -- The fragment as the recovering device will read it. For 'member' this is the keeper's
+    -- re-wrap to requester_ephemeral_pubkey; for 'hub' and 'sso' it is the stored ciphertext,
+    -- which that device can already open (it holds the hub release or has just proved the sub).
+    payload TEXT NOT NULL,
+    payload_iv TEXT NOT NULL,
+    payload_tag TEXT NOT NULL,
+    ephemeral_pubkey TEXT,
+    -- The keeper who approved, for 'member' releases. NULL for machine-released pieces, which is
+    -- exactly the distinction D7 turns on.
+    released_by TEXT,
+    released_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(collection_id, share_id)
+);
+CREATE INDEX IF NOT EXISTS idx_recovery_releases_collection ON recovery_releases(collection_id);
+CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases(updated_at);
+
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

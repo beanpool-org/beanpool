@@ -103,8 +103,12 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         );
     }
 
+    /** Keeper types there can only be one of. A member has many buddies but one phone and one hub. */
+    const SINGLETON_TYPES = new Set<KeeperType>(['hub', 'device']);
+
     const holders = new Set<string>();
     const indices = new Set<number>();
+    const singletons = new Map<KeeperType, string>();
     for (const s of shares) {
         const holderKey = `${s.holderType}:${s.holderRef}`;
         if (holders.has(holderKey)) {
@@ -127,6 +131,31 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
             );
         }
         indices.add(s.shareIndex);
+
+        // Machine keepers are SINGLETONS (CR on #224).
+        //
+        // There is one phone and one hub per split, so `hub` and `device` may appear at most once
+        // in a generation. The UNIQUE constraint does not say this: it is on (owner, generation,
+        // holder_type, holder_ref), so two hub fragments under different refs are perfectly legal
+        // to it, and the release path — which asks for "the" hub fragment — then cannot resolve
+        // which. That is a permanently unreleasable hub keeper for that member: D7 broken for one
+        // account, surfacing as a confused support case rather than a test failure.
+        //
+        // The constraint is on the COUNT, not on the name. `holder_ref` is decorative for a
+        // machine keeper (the schema's vocabulary is "member pubkey | provider name | 'self'", and
+        // #214's own fixtures use 'self' for both), so pinning a magic string would have broken
+        // existing data to enforce a convention that was never agreed. Release looks these up by
+        // holder_type for the same reason.
+        if (SINGLETON_TYPES.has(s.holderType)) {
+            if (singletons.has(s.holderType)) {
+                throw new RecoveryShareError(
+                    `A split may have only one ${s.holderType} fragment, and this one has two `
+                    + `('${singletons.get(s.holderType)}' and '${s.holderRef}'). Which of them is `
+                    + `the real ${s.holderType} could not be answered at recovery time.`,
+                );
+            }
+            singletons.set(s.holderType, s.holderRef);
+        }
 
         if (s.holderType === 'sso' && !s.ssoLookupHash) {
             throw new RecoveryShareError('A sign-in fragment needs an sso_lookup_hash to be findable.');

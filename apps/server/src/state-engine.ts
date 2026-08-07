@@ -31,7 +31,8 @@ import {
     registerMember as registerMemberEngine,
     registerVisitor,
     updateProfile as updateProfileEngine,
-    isCallsignAvailable
+    isCallsignAvailable,
+    findRecoveryCandidates
 } from './engine/members.js';
 import {
     generateInvite,
@@ -820,7 +821,8 @@ export function updateProfile(publicKey: string, update: any): MemberProfile | n
 
 // Per-node callsign availability (case-insensitive). Pure read — re-exported as-is
 // for the /api/members/callsign-available endpoint and any caller that needs it.
-export { isCallsignAvailable };
+// findRecoveryCandidates backs /api/recovery/lookup and shares that status predicate.
+export { isCallsignAvailable, findRecoveryCandidates };
 
 // ===================== TRUST STATS =====================
 
@@ -2866,7 +2868,11 @@ export function createTreasury(
     const trimmed = (name || '').trim();
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
     if (!avatar && !opts.systemCreated) throw new Error('Treasury needs an avatar image');
-    if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status!='migrated'").get(trimmed)) {
+    // Same predicate as idx_members_callsign_unique (`status NOT IN ('migrated', 'pruned')`),
+    // so this pre-check agrees with the index that will actually enforce it on INSERT. Under
+    // the old `status!='migrated'` a pruned member's callsign still read as taken here, while
+    // the index happily allowed it — a treasury name refused for a member the node has let go.
+    if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status NOT IN ('migrated', 'pruned')").get(trimmed)) {
         throw new Error('That name is already taken');
     }
     const line = Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.round(creditLine)));

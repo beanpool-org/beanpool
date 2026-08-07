@@ -1,10 +1,12 @@
 import {
-    verifyGoogleIdToken,
-    getConfiguredGoogleAudiences,
+    verifyIdToken,
+    getConfiguredAudiences,
+    isSsoProvider,
     ssoLookupHash,
     newSsoLookupSalt,
     SsoVerificationError,
-} from '../sso-google.js';
+    type SsoProvider,
+} from '../sso.js';
 import {
     putShareGeneration,
     RecoveryShareError,
@@ -12,17 +14,23 @@ import {
 } from './recovery-shares.js';
 
 /**
- * Depositing a keeper generation that includes a Google (K4) fragment.
+ * Depositing a keeper generation that includes a sign-in (K4) fragment — Google or Apple.
  *
  * THE ONE PROPERTY THIS FILE EXISTS FOR
  * ------------------------------------
  * `sso_lookup_hash` is derived HERE, from the `sub` inside a token this node just verified — never
  * taken from the request. If the client supplied it, anyone could deposit a fragment indexed under
- * someone else's Google account and then "recover" it by signing in as themselves; the lookup is
+ * someone else's provider account and then "recover" it by signing in as themselves; the lookup is
  * what a restore flow searches on, so a client-controlled value is a client-controlled account
  * takeover. A request that carries one is refused rather than ignored, because a client sending it
  * is a client that believes it decides identity, and silently overwriting the value would leave
  * that belief intact until it mattered.
+ *
+ * The provider gets the same treatment for the same reason. `holderRef` is not the string the
+ * request asked for — it is the provider whose issuer, audience and signature the token actually
+ * satisfied. A request claiming 'apple' with a Google token fails verification rather than filing
+ * a Google fragment under Apple, which would be undiscoverable until the member tried to recover
+ * with the wrong account and was told, correctly and uselessly, that no fragment matched.
  *
  * WHY A WHOLE GENERATION
  * ----------------------
@@ -31,6 +39,10 @@ import {
  * is really "re-split and store the new set". That is not overhead — fragments from two different
  * splits cannot be recombined, so a partial write is an unrecoverable account, discovered only at
  * restore.
+ *
+ * It also means Google and Apple cannot both be added in one call: each deposit is a fresh split,
+ * so adding the second provider is a re-split that carries the first one's fragment along. That is
+ * a constraint on the route, and the multi-`sso` rejection below is where it is enforced.
  */
 
 export class KeeperDepositError extends Error {
@@ -40,20 +52,30 @@ export class KeeperDepositError extends Error {
     }
 }
 
-export interface GoogleKeeperDeposit {
+export interface SsoKeeperDeposit {
+    /** Which provider the client believes it signed in with. Verified, not trusted. */
+    provider: SsoProvider;
     /** The authenticated caller — `ctx.state.actor`. Owner of the split. */
     ownerPubkey: string;
-    /** The COMPLETE new generation. Exactly one fragment must be the Google one. */
+    /** The COMPLETE new generation. Exactly one fragment must be the sign-in one. */
     shares: KeeperShareInput[];
-    /** Google `id_token` from the client. */
-    googleIdToken: string;
+    /** The provider's `id_token` from the client. */
+    idToken: string;
     /** The nonce this node issued to THIS member (see issueNonce). */
     nonce: string;
 }
 
-export interface GoogleKeeperResult {
+export interface SsoKeeperResult {
     generation: number;
-    /** For display only — "Google (m•••@gmail.com)". Never persisted. */
+    /** The provider that actually verified. Equals the requested one or the call threw. */
+    provider: SsoProvider;
+    /**
+     * For display only — "Google (m•••@gmail.com)". Never persisted.
+     *
+     * Routinely undefined for Apple, which returns the email on first authorization only. The
+     * keeper list must render "Apple" on its own rather than treating a missing address as an
+     * error; there is nothing wrong and nothing to retry.
+     */
     email?: string;
     shareCount: number;
 }
@@ -69,11 +91,19 @@ export function maskEmail(email: string | undefined): string | undefined {
     return `${trimmed[0]}•••${trimmed.slice(at)}`;
 }
 
-export async function depositGoogleKeeperGeneration(
-    deposit: GoogleKeeperDeposit,
-): Promise<GoogleKeeperResult> {
-    const { ownerPubkey, shares, googleIdToken, nonce } = deposit;
+export async function depositSsoKeeperGeneration(
+    deposit: SsoKeeperDeposit,
+): Promise<SsoKeeperResult> {
+    const { provider, ownerPubkey, shares, idToken, nonce } = deposit;
 
+    // Checked before anything else because `provider` becomes `holderRef`, which is a stored,
+    // member-visible string taking part in a UNIQUE constraint. An unrecognised value must not
+    // reach storage even by way of a verification error.
+    if (!isSsoProvider(provider)) {
+        throw new KeeperDepositError(
+            `'${provider}' is not a sign-in provider this node can verify. Supported: google, apple.`,
+        );
+    }
     if (!ownerPubkey) throw new KeeperDepositError('No member is signed in for this deposit.');
     if (!Array.isArray(shares) || shares.length === 0) {
         throw new KeeperDepositError('No recovery fragments were supplied.');
@@ -113,28 +143,32 @@ export async function depositGoogleKeeperGeneration(
     // generation exactly as it was — the member's current keepers are what they fall back on.
     let identity;
     try {
-        identity = await verifyGoogleIdToken(
-            googleIdToken,
-            getConfiguredGoogleAudiences(),
+        identity = await verifyIdToken(
+            provider,
+            idToken,
+            getConfiguredAudiences(provider),
             nonce,
             ownerPubkey,
         );
     } catch (e) {
         if (e instanceof SsoVerificationError) throw e;
-        throw new KeeperDepositError(`Google sign-in could not be checked: ${(e as Error).message}`);
+        throw new KeeperDepositError(`Sign-in could not be checked: ${(e as Error).message}`);
     }
 
     const salt = newSsoLookupSalt();
-    const lookupHash = await ssoLookupHash('google', identity.sub, salt);
+    // identity.provider, not the request's — they are equal here by construction, and writing it
+    // this way keeps them equal if that ever stops being true.
+    const lookupHash = await ssoLookupHash(identity.provider, identity.sub, salt);
 
     const resolved: KeeperShareInput[] = shares.map(s =>
         s === ssoShare
             ? {
                   ...s,
-                  // 'google' rather than the sub: holder_ref is shown to the member and takes part in
-                  // the UNIQUE(owner, generation, holder_type, holder_ref) constraint, so it must not
-                  // carry the identifier the lookup hash exists to keep out of the database.
-                  holderRef: 'google',
+                  // The provider name rather than the sub: holder_ref is shown to the member and
+                  // takes part in the UNIQUE(owner, generation, holder_type, holder_ref)
+                  // constraint, so it must not carry the identifier the lookup hash exists to keep
+                  // out of the database.
+                  holderRef: identity.provider,
                   ssoLookupHash: lookupHash,
                   ssoLookupSalt: salt,
               }
@@ -143,7 +177,12 @@ export async function depositGoogleKeeperGeneration(
 
     try {
         const generation = putShareGeneration(ownerPubkey, resolved);
-        return { generation, email: maskEmail(identity.email), shareCount: resolved.length };
+        return {
+            generation,
+            provider: identity.provider,
+            email: maskEmail(identity.email),
+            shareCount: resolved.length,
+        };
     } catch (e) {
         if (e instanceof RecoveryShareError) throw e;
         throw new KeeperDepositError(`Could not store the recovery fragments: ${(e as Error).message}`);

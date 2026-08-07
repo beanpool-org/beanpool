@@ -5,6 +5,7 @@ import {
     ssoLookupHash,
     newSsoLookupSalt,
     SsoVerificationError,
+    SSO_PROVIDERS,
     type SsoProvider,
 } from '../sso.js';
 import {
@@ -100,8 +101,13 @@ export async function depositSsoKeeperGeneration(
     // member-visible string taking part in a UNIQUE constraint. An unrecognised value must not
     // reach storage even by way of a verification error.
     if (!isSsoProvider(provider)) {
+        // The supported list comes from the provider table, not from this line (CR). Un-pausing a
+        // provider is one row in sso.ts, and a hardcoded list here would go stale silently — in a
+        // message whose entire job is to tell the caller which values are valid. `String()` rather
+        // than bare interpolation because a symbol would throw inside the template.
         throw new KeeperDepositError(
-            `'${provider}' is not a sign-in provider this node can verify. Supported: google, apple.`,
+            `'${String(provider)}' is not a sign-in provider this node can verify. `
+            + `Supported: ${SSO_PROVIDERS.join(', ')}.`,
         );
     }
     if (!ownerPubkey) throw new KeeperDepositError('No member is signed in for this deposit.');

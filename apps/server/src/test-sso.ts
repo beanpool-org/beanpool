@@ -31,6 +31,7 @@ import {
     newSsoLookupSalt,
     getConfiguredAudiences,
     isSsoProvider,
+    SSO_PROVIDERS,
     SsoVerificationError,
     _resetJwksCacheForTests,
     _clearNoncesForTests,
@@ -311,6 +312,30 @@ async function battery(f: Fixture): Promise<void> {
             `malformed input is refused (${what})`);
     }
 
+    // ── oversized input ───────────────────────────────────────────────────────────────────────
+    // Rejected on length BEFORE any split, base64 decode or JSON.parse. `decodeSegment` has to
+    // parse the header before anything is verified — the kid lives there — so without this a
+    // multi-megabyte blob buys an attacker a large allocation and a large parse per request.
+    only(f);
+    nonce = issueNonce(SUBJECT);
+    const real = mint({ nonce });
+    assert(real.length < 8192, 'a genuine token is well under the size ceiling');
+    // Padded inside the payload segment, so it stays a structurally valid JWT: this proves the
+    // rejection is the size guard and not the malformed-input check catching it by accident.
+    const huge = (() => {
+        const [h, , s] = real.split('.');
+        const now = Math.floor(Date.now() / 1000);
+        const p = b64({ iss: f.iss, aud, sub: 'x'.repeat(64_000), iat: now, exp: now + 3600, nonce });
+        return `${h}.${p}.${s}`;
+    })();
+    assert(huge.split('.').length === 3 && huge.length > 8192,
+        '...and the oversized one is still a three-segment JWT, so the size guard is what catches it');
+    await rejects(() => verifyIdToken(provider, huge, [aud], nonce, SUBJECT),
+        'an implausibly large token is refused on length, before it is decoded');
+    // And the nonce it carried was never reached, let alone consumed.
+    const afterHuge = await verifyIdToken(provider, real, [aud], nonce, SUBJECT);
+    assert(afterHuge.sub === f.sub, '...and the legitimate token with that nonce still works');
+
     // ── unknown kid ───────────────────────────────────────────────────────────────────────────
     // Cache holds a key, token names a different one. The verifier refetches once and then gives up
     // rather than trusting a key it does not have. The refetch reaches the real JWKS if there is a
@@ -363,6 +388,13 @@ async function main(): Promise<void> {
     assert(!isSsoProvider('facebook') && !isSsoProvider('') && !isSsoProvider(undefined)
         && !isSsoProvider('constructor'),
         'and facebook, empty and Object.prototype keys are not');
+
+    // The exported list must BE the table, not a copy of it that drifts (CR). Checked against
+    // isSsoProvider in both directions so neither can gain an entry the other lacks.
+    assert(SSO_PROVIDERS.length === 2 && SSO_PROVIDERS.every(isSsoProvider),
+        'SSO_PROVIDERS lists exactly the providers isSsoProvider accepts');
+    assert(SSO_PROVIDERS.includes('google') && SSO_PROVIDERS.includes('apple'),
+        'and names both of them, so a message built from it cannot go stale (D11)');
 
     // ── Apple's quirks ────────────────────────────────────────────────────────────────────────
     console.log('\n── Apple specifics ──────────────────────────────────────');

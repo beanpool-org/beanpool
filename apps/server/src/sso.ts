@@ -110,6 +110,33 @@ export function isSsoProvider(value: unknown): value is SsoProvider {
     return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PROVIDERS, value);
 }
 
+/**
+ * The providers this node can verify, in the order they are offered.
+ *
+ * Derived from the table rather than written out anywhere, so un-pausing a provider (D11) is one
+ * row here and no stale list elsewhere claiming otherwise. A member reading "Supported: google,
+ * apple" on a node that also does Facebook has been told something false by a message whose whole
+ * job was to tell them what to do next.
+ */
+export const SSO_PROVIDERS = Object.keys(PROVIDERS) as SsoProvider[];
+
+/**
+ * Ceiling on a token before it is split, decoded or verified.
+ *
+ * Real `id_token`s are ~1 KB — Google's runs to about 1.3 KB with the profile scope attached,
+ * Apple's to roughly 0.9 KB — so 8 KB is several times any legitimate token and rejects nothing
+ * real. Without it, `decodeSegment` must `JSON.parse` the header before anything is verified (the
+ * `kid` lives there), so a 10 MB base64 blob buys an attacker a multi-megabyte buffer allocation
+ * and a large JSON parse per request, on 1-CPU VMs, for free.
+ *
+ * Review called this defence-in-depth on the grounds that the route's rate limiter bounds it. That
+ * is the right instinct and the wrong fact: the routes do not exist yet, so today there is no
+ * limiter, and the guard that belongs in the verifier should not be waiting on the layer above to
+ * be written. Same reasoning as making ssoLookupHash async in #218 — cheapest to fix while the
+ * function has no callers.
+ */
+const MAX_ID_TOKEN_BYTES = 8192;
+
 function providerConfig(provider: SsoProvider): ProviderConfig {
     const config = PROVIDERS[provider];
     // Reachable from a route that forwards a body field. Named rather than a crash, because the
@@ -395,6 +422,13 @@ export async function verifyIdToken(
     }
     if (!expectedNonce) {
         throw new SsoVerificationError(`${config.label} sign-in is missing its nonce.`);
+    }
+
+    // Length first, before split/decode/parse — see MAX_ID_TOKEN_BYTES. Byte length, not character
+    // length: a JWT is base64url so the two agree, but measuring what is actually allocated is the
+    // point of the check.
+    if (typeof idToken === 'string' && Buffer.byteLength(idToken, 'utf-8') > MAX_ID_TOKEN_BYTES) {
+        throw new SsoVerificationError(`${config.label} token is implausibly large.`);
     }
 
     const parts = idToken?.split('.');

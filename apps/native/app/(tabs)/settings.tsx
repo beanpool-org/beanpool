@@ -1146,6 +1146,9 @@ export default function SettingsScreen() {
                                         { borderColor: lightPalette === 'classic' ? colors.brand.primary : colors.border.default }
                                     ]}
                                     onPress={() => setLightPalette('classic')}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Classic Palette"
+                                    accessibilityState={{ selected: lightPalette === 'classic' }}
                                 >
                                     <View style={[styles.schemeDot, { backgroundColor: '#10b981' }]} />
                                     <Text style={[styles.schemeText, lightPalette === 'classic' && styles.schemeTextActive]}>Classic</Text>
@@ -1157,6 +1160,9 @@ export default function SettingsScreen() {
                                         { borderColor: lightPalette === 'earth' ? '#647664' : colors.border.default }
                                     ]}
                                     onPress={() => setLightPalette('earth')}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Earth Palette"
+                                    accessibilityState={{ selected: lightPalette === 'earth' }}
                                 >
                                     <View style={[styles.schemeDot, { backgroundColor: '#647664' }]} />
                                     <Text style={[styles.schemeText, lightPalette === 'earth' && styles.schemeTextActive]}>Earth</Text>
@@ -1168,6 +1174,9 @@ export default function SettingsScreen() {
                                         { borderColor: lightPalette === 'slate' ? '#2563eb' : colors.border.default }
                                     ]}
                                     onPress={() => setLightPalette('slate')}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Slate Palette"
+                                    accessibilityState={{ selected: lightPalette === 'slate' }}
                                 >
                                     <View style={[styles.schemeDot, { backgroundColor: '#2563eb' }]} />
                                     <Text style={[styles.schemeText, lightPalette === 'slate' && styles.schemeTextActive]}>Slate</Text>

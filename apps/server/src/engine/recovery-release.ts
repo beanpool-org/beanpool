@@ -239,8 +239,21 @@ export function collectionState(id: string): {
     const collection = getCollection(id);
     if (!collection) return null;
 
-    if (collection.status === 'cancelled') return { collection, live: false, reason: 'cancelled' };
-    if (collection.status === 'complete') return { collection, live: false, reason: 'complete' };
+    // ANYTHING that is not 'open' is dead, rather than the three statuses being enumerated (CR).
+    //
+    // Enumerating missed 'expired', which is what pruneCollectionsFor writes when it evicts a
+    // session over the per-owner cap — and eviction leaves `expires_at` in the FUTURE, so the
+    // time check below did not catch it either. The result was the worst possible combination:
+    // the session stayed live and could still collect fragments, while `openCollectionsFor`
+    // (status = 'open') hid it from the owner and `cancelCollection` refused it for not being
+    // open. Invisible, uncancellable, and still working, for up to 72 hours.
+    //
+    // Written as a default-dead check so the next status added to the CHECK constraint fails
+    // closed. A liveness test that has to be remembered is one that will eventually be forgotten,
+    // and this one was — by the person who added the status three hours earlier.
+    if (collection.status !== 'open') {
+        return { collection, live: false, reason: collection.status };
+    }
     if (Date.parse(collection.expiresAt) <= Date.now()) {
         return { collection, live: false, reason: 'expired' };
     }

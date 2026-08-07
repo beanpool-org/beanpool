@@ -406,6 +406,38 @@ function main(): void {
     assert(collectionState(afterFlood.id)!.live === true,
         'CRITICAL: a flood never locks the real member out — they can always open a fresh session');
 
+    // An EVICTED session must be dead (CR). Eviction sets status='expired' while leaving
+    // expires_at in the FUTURE, so a liveness check that enumerates statuses and then compares the
+    // clock catches neither. That left the worst possible combination: still collecting fragments,
+    // while openCollectionsFor hid it from the owner and cancelCollection refused it for not being
+    // open. Invisible, uncancellable, and working — for up to 72 hours.
+    // It has to be a session with a RELEASE, because an evicted empty one is deleted outright by
+    // the same prune pass — so the surviving evicted row is exactly the one that matters, the one
+    // kept as evidence. That is also the one an attacker would have: they got a fragment, then got
+    // pushed out of the cap.
+    const victimOwner = member();
+    const victimBuddy = member();
+    split(victimOwner, victimBuddy, crypto.randomBytes(32).toString('base64url'));
+    const evictedId = openCollection(victimOwner, EPH).id;
+    releaseMemberFragment(evictedId, victimBuddy, rewrap('pre-eviction'));
+    for (let i = 0; i < 12; i++) openCollection(victimOwner, EPH);
+
+    const evictedRow = db.prepare('SELECT status, expires_at FROM recovery_collections WHERE id = ?')
+        .get(evictedId) as { status: string; expires_at: string } | undefined;
+    assert(evictedRow?.status === 'expired' && Date.parse(evictedRow.expires_at) > Date.now(),
+        "the evicted session is marked 'expired' while its expiry is still in the FUTURE...");
+    assert(!openCollectionsFor(victimOwner).some(x => x.id === evictedId),
+        '...and the owner can no longer see it, so they could not cancel it either...');
+    const evictedState = collectionState(evictedId)!;
+    assert(evictedState.live === false && evictedState.reason === 'expired',
+        '...so it had BETTER be dead — liveness is default-closed, not a list of statuses to remember');
+    rejects(() => releaseMemberFragment(evictedId, victimBuddy, rewrap('post-eviction')),
+        '...and nothing more can be released into it');
+    assert(collectionProgress(evictedId)!.hubEligibleAt === null,
+        '...and it shows no hub countdown');
+    assert(listReleases(evictedId).length === 1,
+        '...while the fragment it already took is still on record as evidence');
+
     // ── expiry ────────────────────────────────────────────────────────────────────────────────
     const old = openCollection(owner, EPH);
     db.prepare('UPDATE recovery_collections SET expires_at = ? WHERE id = ?')

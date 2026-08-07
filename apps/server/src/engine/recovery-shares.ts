@@ -151,7 +151,7 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
                 throw new RecoveryShareError(
                     `A split may have only one ${s.holderType} fragment, and this one has two `
                     + `('${singletons.get(s.holderType)}' and '${s.holderRef}'). Which of them is `
-                    + 'THE hub could not be answered at recovery time.',
+                    + `the real ${s.holderType} could not be answered at recovery time.`,
                 );
             }
             singletons.set(s.holderType, s.holderRef);

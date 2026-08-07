@@ -1,0 +1,308 @@
+/**
+ * Collection and release — D6, D7, and the piece the node will not hand over at all.
+ *
+ * This is the layer that can lose somebody their account, in either direction: too strict and a
+ * real person cannot get back in, too loose and a stranger walks off with one. So the tests are
+ * arranged around the four things that must hold no matter what a caller asks for:
+ *
+ *   1. The node NEVER releases a K1 device fragment. Not "after a delay" — not at all. If it did,
+ *      hub + sign-in + device is three pieces the node can assemble on its own behalf and the
+ *      threshold protects nobody from the party holding everything.
+ *   2. A human keeper's fragment goes the instant THEY approve, and only they can approve it (D6).
+ *   3. The hub waits 24h unless a human has already approved (D7).
+ *   4. Re-splitting kills a collection in flight, because that is the documented way to stop a
+ *      recovery you did not start (R1).
+ *
+ *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-keeper-release.ts
+ */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+import crypto from 'node:crypto';
+import { RECOVERY_THRESHOLD } from '@beanpool/core';
+import { initStateEngine } from './state-engine.js';
+import { db } from './db/db.js';
+import { putShareGeneration, type KeeperShareInput } from './engine/recovery-shares.js';
+import {
+    openCollection, getCollection, collectionState, collectionProgress,
+    releaseMemberFragment, releaseSsoFragment, releaseHubFragment,
+    hubReleaseEligibleAt, cancelCollection, openCollectionsFor, listReleases,
+    isReleasableType, HUB_DELAY_MS, COLLECTION_TTL_MS,
+    RecoveryReleaseError,
+} from './engine/recovery-release.js';
+
+initStateEngine();
+
+let run = 0, passed = 0;
+function assert(cond: boolean, msg: string): void {
+    run++;
+    if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
+}
+function rejects(fn: () => unknown, msg: string): void {
+    run++;
+    try { fn(); console.error(`✗ ${msg} — it RETURNED, which means the check is not there`); }
+    catch (e) {
+        if (e instanceof RecoveryReleaseError) { passed++; console.log(`✓ ${msg}`); }
+        else console.error(`✗ ${msg} — wrong error type: ${(e as Error).message}`);
+    }
+}
+
+let seq = 0;
+function member(): string {
+    const { publicKey } = crypto.generateKeyPairSync('ed25519');
+    const pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`)
+      .run(pk, `rel${++seq}-${pk.slice(0, 6)}`);
+    return pk;
+}
+
+const frag = (i: number) => ({
+    shareIndex: i,
+    encryptedShare: Buffer.from(`ciphertext-${i}`).toString('base64'),
+    shareIv: Buffer.from(`iv-${i}`).toString('base64'),
+    shareTag: Buffer.from(`tag-${i}`).toString('base64'),
+});
+
+const EPH = 'cmVxdWVzdGVyLWVwaGVtZXJhbA';
+
+/** What a keeper hands back once they have decrypted their own copy and re-wrapped it. */
+const rewrap = (label: string) => ({
+    payload: Buffer.from(`rewrapped-${label}`).toString('base64'),
+    payloadIv: Buffer.from(`riv-${label}`).toString('base64'),
+    payloadTag: Buffer.from(`rtag-${label}`).toString('base64'),
+    ephemeralPubkey: Buffer.from(`reph-${label}`).toString('base64'),
+});
+
+/** device + hub + one human + sign-in. Four keepers against a threshold of 3. */
+function split(owner: string, buddy: string, ssoHash: string): number {
+    const shares: KeeperShareInput[] = [
+        { holderType: 'device', holderRef: 'self', ...frag(1) },
+        { holderType: 'hub', holderRef: 'node', ...frag(2) },
+        { holderType: 'member', holderRef: buddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
+        { holderType: 'sso', holderRef: 'google', ssoLookupHash: ssoHash, ssoLookupSalt: 'c2FsdA', ...frag(4) },
+    ];
+    return putShareGeneration(owner, shares);
+}
+
+/** Wind a collection's clock back, so D7's 24h is testable without waiting for it. */
+function ageCollection(id: string, ms: number): void {
+    const created = new Date(Date.now() - ms).toISOString();
+    db.prepare('UPDATE recovery_collections SET created_at = ? WHERE id = ?').run(created, id);
+}
+
+function main(): void {
+    console.log('\nRecovery collection and release\n');
+
+    // ── opening a session ─────────────────────────────────────────────────────────────────────
+    console.log('── opening ──────────────────────────────────────────────');
+
+    const owner = member();
+    const buddy = member();
+    const ssoHash = crypto.randomBytes(32).toString('base64url');
+    assert(split(owner, buddy, ssoHash) === 1, 'a member is split across four keepers');
+
+    const c = openCollection(owner, EPH);
+    assert(!!c.id && c.id.length >= 40, 'a collection id is long enough to be unguessable');
+    assert(c.generation === 1, 'and pins the generation it is collecting');
+    assert(c.status === 'open' && Date.parse(c.expiresAt) > Date.now(), 'and opens live, with an expiry');
+    assert(openCollection(owner, EPH).id !== c.id, 'every session gets its own id');
+
+    rejects(() => openCollection(owner, ''),
+        'a session without the recovering device\'s ephemeral key is refused — keepers would have nowhere to send a fragment');
+    rejects(() => openCollection(member(), EPH), 'and one for a member who was never split is refused');
+    assert(getCollection('not-a-session') === null, 'an unknown id resolves to nothing');
+    assert(collectionState('not-a-session') === null, '...and has no state to report');
+
+    // ── 1. the device fragment is never served ────────────────────────────────────────────────
+    console.log('\n── K1 is not the node\'s to give ─────────────────────────');
+
+    assert(!isReleasableType('device'), 'THE RULE: a device fragment is not a releasable type');
+    assert(isReleasableType('hub') && isReleasableType('member') && isReleasableType('sso'),
+        '...while hub, member and sign-in are');
+    // There is deliberately no releaseDeviceFragment to call. The absence IS the control, so the
+    // test asserts the shape of what exists rather than the behaviour of what does not: a future
+    // release path added for 'device' would have to add it to RELEASABLE and fail here first.
+    const deviceRow = db.prepare(`SELECT id FROM recovery_shares
+        WHERE owner_pubkey = ? AND holder_type = 'device'`).get(owner) as { id: number };
+    assert(!!deviceRow, 'the device fragment IS stored (the count must be honest)...');
+    assert(!listReleases(c.id).some(r => r.shareId === deviceRow.id),
+        '...but nothing can put it into a collection');
+
+    // ── 2. D6: a human keeper, instantly ──────────────────────────────────────────────────────
+    console.log('\n── D6: human release ────────────────────────────────────');
+
+    const stranger = member();
+    rejects(() => releaseMemberFragment(c.id, stranger, rewrap('stranger')),
+        'someone who is not a keeper on this account cannot release anything');
+    rejects(() => releaseMemberFragment(c.id, owner, rewrap('self')),
+        'and the account being recovered cannot approve its own recovery');
+    rejects(() => releaseMemberFragment(c.id, buddy, { ...rewrap('b'), ephemeralPubkey: '' }),
+        'a fragment that was not re-wrapped to the recovering device is refused');
+    rejects(() => releaseMemberFragment(c.id, '', rewrap('b')), 'an unsigned approval is refused');
+    assert(listReleases(c.id).length === 0, 'and none of those refusals released anything');
+
+    const buddyRelease = releaseMemberFragment(c.id, buddy, rewrap('buddy'));
+    assert(buddyRelease.holderType === 'member' && buddyRelease.releasedBy === buddy,
+        'the keeper taps Approve and their fragment releases instantly (D6)');
+    assert(buddyRelease.payload === rewrap('buddy').payload,
+        '...carrying the keeper\'s re-wrap, not the stored ciphertext — the node never saw the piece');
+    assert(buddyRelease.ephemeralPubkey === rewrap('buddy').ephemeralPubkey,
+        '...with the keeper\'s fresh ephemeral key for the recovering device to unwrap with');
+
+    const again = releaseMemberFragment(c.id, buddy, rewrap('SECOND-ATTEMPT'));
+    assert(listReleases(c.id).length === 1, 'approving twice does not count as two of the three pieces');
+    assert(again.payload === rewrap('buddy').payload,
+        '...and the first release stands — a second approval cannot replace the piece afterwards');
+
+    // ── 3. D7: the hub waits, unless a human went first ───────────────────────────────────────
+    console.log('\n── D7: the hub ──────────────────────────────────────────');
+
+    // This session already has a human release, so the hub is free immediately.
+    const hubNow = releaseHubFragment(c.id);
+    assert(hubNow.holderType === 'hub',
+        'with a human already approved, the hub releases immediately (D7)');
+    assert(hubNow.payload === frag(2).encryptedShare,
+        '...as the stored ciphertext, which only recovery.hubShareKey opens');
+
+    // A fresh session with NO human approval: the hub must wait.
+    const cold = openCollection(owner, EPH);
+    const eligibility = hubReleaseEligibleAt(cold.id);
+    assert(eligibility.reason === 'delay', 'a session with no human approval puts the hub on the delay path');
+    assert(Math.abs(eligibility.eligibleAt - (Date.parse(cold.createdAt) + HUB_DELAY_MS)) < 2000,
+        '...of 24 hours from when the session opened');
+    rejects(() => releaseHubFragment(cold.id),
+        'and the hub refuses until then — the automated trio cannot take an account quietly');
+    assert(listReleases(cold.id).length === 0, '...having released nothing');
+
+    // The escape hatch that makes D7 cost a real user nothing: any human approval frees it at once.
+    releaseMemberFragment(cold.id, buddy, rewrap('cold-buddy'));
+    const freed = hubReleaseEligibleAt(cold.id);
+    assert(freed.reason === 'human-approved', 'one human approval moves the hub off the delay path...');
+    assert(freed.eligibleAt <= Date.now(), '...to eligible right now');
+    assert(releaseHubFragment(cold.id).holderType === 'hub', '...and it releases');
+
+    // And the delay really is a delay, not a refusal: wind the clock back 24h and it opens.
+    const patient = openCollection(owner, EPH);
+    rejects(() => releaseHubFragment(patient.id), 'a brand-new session cannot have the hub yet');
+    ageCollection(patient.id, HUB_DELAY_MS + 60_000);
+    assert(hubReleaseEligibleAt(patient.id).reason === 'delay', 'after 24h the reason is still the delay...');
+    assert(releaseHubFragment(patient.id).holderType === 'hub',
+        '...but the hub now releases with no human involved at all');
+
+    // A sign-in release must NOT satisfy D7 — it is a machine piece, which is the whole point.
+    const machine = openCollection(owner, EPH);
+    releaseSsoFragment(machine.id, ssoHash);
+    assert(hubReleaseEligibleAt(machine.id).reason === 'delay',
+        'a SIGN-IN release does not count as the human D7 is waiting for');
+    rejects(() => releaseHubFragment(machine.id),
+        '...so hub + sign-in still cannot assemble a quiet takeover');
+
+    // ── 4. K4, scoped to this account and generation ──────────────────────────────────────────
+    console.log('\n── K4: sign-in release ──────────────────────────────────');
+
+    const sso = releaseSsoFragment(c.id, ssoHash);
+    assert(sso.holderType === 'sso' && sso.releasedBy === null,
+        'a verified sign-in releases the K4 fragment, with no human named');
+    assert(sso.payload === frag(4).encryptedShare,
+        '...as stored ciphertext the device opens with HKDF(sub, salt) — the node never holds that key');
+
+    const other = member();
+    const otherBuddy = member();
+    const otherHash = crypto.randomBytes(32).toString('base64url');
+    split(other, otherBuddy, otherHash);
+    const mine = openCollection(owner, EPH);
+    rejects(() => releaseSsoFragment(mine.id, otherHash),
+        "somebody else's sign-in keeper cannot release into this account's session");
+    rejects(() => releaseSsoFragment(mine.id, 'no-such-hash'), 'and an unknown lookup hash releases nothing');
+    rejects(() => releaseSsoFragment(mine.id, ''), 'as does an empty one');
+
+    // ── the threshold ─────────────────────────────────────────────────────────────────────────
+    console.log('\n── progress ─────────────────────────────────────────────');
+
+    const p = collectionProgress(c.id)!;
+    assert(p.collected === 3 && p.threshold === RECOVERY_THRESHOLD && p.enough === true,
+        'three released fragments is enough to rebuild the phrase');
+    assert(JSON.stringify(p).indexOf(rewrap('buddy').payload) === -1,
+        'and progress never contains the fragments themselves — polling is not a way to collect');
+    assert(p.releasedTypes.includes('member') && p.releasedTypes.includes('hub') && p.releasedTypes.includes('sso'),
+        '...only which kinds of keeper have answered');
+    assert(collectionProgress(mine.id)!.enough === false, 'a session with nothing collected is not enough');
+    assert(collectionProgress('not-a-session') === null, 'and an unknown session has no progress');
+
+    // ── 5. re-splitting is the stop button ────────────────────────────────────────────────────
+    console.log('\n── stopping a recovery ──────────────────────────────────');
+
+    const inFlight = openCollection(owner, EPH);
+    assert(collectionState(inFlight.id)!.live === true, 'a fresh session is live');
+    split(owner, buddy, crypto.randomBytes(32).toString('base64url'));   // generation 2
+    const stale = collectionState(inFlight.id)!;
+    assert(stale.live === false && stale.reason === 'stale-generation',
+        'RE-SPLIT: the owner re-splitting kills a collection in flight (R1)');
+    rejects(() => releaseMemberFragment(inFlight.id, buddy, rewrap('too-late')),
+        '...and nothing more can be released into it');
+    rejects(() => releaseHubFragment(inFlight.id), '...including the hub');
+    assert(collectionProgress(inFlight.id)!.live === false, '...and it reports itself dead rather than silently stalling');
+
+    // A re-split must survive having released fragments already, because `recovery_releases` keeps
+    // a share_id whose row the re-split DELETES. That works today only because `foreign_keys` is
+    // OFF process-wide — so this runs the same re-split with enforcement ON, which is the state a
+    // future hardening pass would put the node in. A declared reference here would take out
+    // re-splitting for every member who had ever started a recovery, and re-splitting is the stop
+    // button (R1): losing it means losing the remedy at exactly the moment it is needed.
+    const fkOwner = member();
+    const fkBuddy = member();
+    split(fkOwner, fkBuddy, crypto.randomBytes(32).toString('base64url'));
+    const fkSession = openCollection(fkOwner, EPH);
+    const heldShareId = releaseMemberFragment(fkSession.id, fkBuddy, rewrap('fk')).shareId;
+    assert(!!heldShareId, 'a fragment is released, so a release row now points at a share row');
+
+    const priorFk = db.pragma('foreign_keys', { simple: true });
+    db.pragma('foreign_keys = ON');
+    let resplitSurvived = true;
+    try {
+        split(fkOwner, fkBuddy, crypto.randomBytes(32).toString('base64url'));
+    } catch {
+        resplitSurvived = false;
+    } finally {
+        db.pragma(`foreign_keys = ${priorFk ? 'ON' : 'OFF'}`);
+    }
+    assert(resplitSurvived,
+        'FK: re-splitting still works with foreign_keys ON, even though a release references the deleted share');
+    assert(listReleases(fkSession.id).length === 1,
+        '...and the release record survives as the history it is');
+
+    // Cancellation, which is the cheap stop — re-splitting costs every keeper a new fragment.
+    const toCancel = openCollection(owner, EPH);
+    rejects(() => cancelCollection(toCancel.id, buddy),
+        'a keeper cannot cancel somebody else\'s recovery');
+    rejects(() => cancelCollection('not-a-session', owner), 'and an unknown session cannot be cancelled');
+    assert(cancelCollection(toCancel.id, owner) === true, 'the account owner can cancel a recovery they did not start');
+    assert(collectionState(toCancel.id)!.reason === 'cancelled', '...and it reads as cancelled');
+    assert(cancelCollection(toCancel.id, owner) === false, '...and cancelling twice is a no-op, not an error');
+    rejects(() => releaseMemberFragment(toCancel.id, buddy, rewrap('cancelled')),
+        '...with nothing more released into it');
+
+    // The owner has to be able to SEE one to cancel it.
+    const visible = openCollection(owner, EPH);
+    const openOnes = openCollectionsFor(owner);
+    assert(openOnes.some(x => x.id === visible.id),
+        'the owner can see live recoveries against their account — which is what makes cancelling possible');
+    assert(!openOnes.some(x => x.id === toCancel.id), '...and cancelled ones are not among them');
+    assert(openCollectionsFor(other).every(x => x.ownerPubkey === other),
+        "...and never anybody else's");
+
+    // ── expiry ────────────────────────────────────────────────────────────────────────────────
+    const old = openCollection(owner, EPH);
+    db.prepare('UPDATE recovery_collections SET expires_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 1000).toISOString(), old.id);
+    assert(collectionState(old.id)!.reason === 'expired', 'a session past its expiry is dead...');
+    rejects(() => releaseMemberFragment(old.id, buddy, rewrap('expired')), '...and releases nothing');
+    assert(COLLECTION_TTL_MS > HUB_DELAY_MS,
+        'and the TTL outlasts the hub delay, so D7 never expires the session it is holding');
+
+    console.log(`\n${passed}/${run} checks passed.`);
+    if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
+    console.log('⭐️ Recovery release checks PASSED.');
+}
+
+try { main(); process.exit(0); } catch (e) { console.error(e); process.exit(1); }

@@ -46,6 +46,7 @@ import crypto from 'node:crypto';
 import { RECOVERY_THRESHOLD } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getCurrentGeneration, type KeeperType } from './recovery-shares.js';
+import { ssoLookupHash, type SsoProvider } from '../sso.js';
 
 /** How long a collection stays open. Long enough to text a friend and wait for the hub's 24h. */
 export const COLLECTION_TTL_MS = 72 * 60 * 60 * 1000;
@@ -454,6 +455,51 @@ export function releaseMemberFragment(
  * provider account, so it can derive HKDF(sub, salt) itself — which means the node never needs the
  * key and never has it at rest.
  */
+/**
+ * K4, from a verified identity rather than a pre-computed hash.
+ *
+ * The salt is per-share and stored, so turning a verified `sub` into the lookup hash requires
+ * reading the row first. That derivation lives here rather than in the route for the same reason
+ * the hash is derived node-side at deposit (#220): it is the step that decides whose fragment this
+ * is, and a route that computed it itself could be given a hash instead of a subject by the next
+ * person to touch it.
+ *
+ * @param sub  the subject claim from a token this node has ALREADY verified
+ */
+export async function releaseSsoFragmentForIdentity(
+    collectionId: string,
+    provider: SsoProvider,
+    sub: string,
+): Promise<ReleasedFragment> {
+    const collection = requireLive(collectionId);
+    if (!sub) throw new RecoveryReleaseError('That sign-in did not identify an account.');
+
+    const row = db.prepare(`
+        SELECT sso_lookup_hash, sso_lookup_salt FROM recovery_shares
+        WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso'
+    `).get(collection.ownerPubkey, collection.generation) as
+        { sso_lookup_hash: string | null; sso_lookup_salt: string | null } | undefined;
+
+    if (!row?.sso_lookup_hash || !row.sso_lookup_salt) {
+        throw new RecoveryReleaseError(
+            'This account has no sign-in keeper in the generation being collected.',
+        );
+    }
+
+    const derived = await ssoLookupHash(provider, sub, row.sso_lookup_salt);
+    // Constant-time, because a timing difference here leaks which accounts a given provider
+    // identity is a keeper for — on an endpoint anyone can reach with their own valid token.
+    const a = Buffer.from(derived, 'utf-8');
+    const b = Buffer.from(row.sso_lookup_hash, 'utf-8');
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        throw new RecoveryReleaseError(
+            'That sign-in account is not the keeper for this recovery.',
+        );
+    }
+
+    return releaseSsoFragment(collectionId, row.sso_lookup_hash);
+}
+
 export function releaseSsoFragment(collectionId: string, ssoLookupHash: string): ReleasedFragment {
     const collection = requireLive(collectionId);
     if (!ssoLookupHash) throw new RecoveryReleaseError('No sign-in fragment was identified.');

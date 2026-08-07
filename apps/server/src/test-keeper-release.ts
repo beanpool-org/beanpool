@@ -291,6 +291,121 @@ function main(): void {
     assert(openCollectionsFor(other).every(x => x.ownerPubkey === other),
         "...and never anybody else's");
 
+    // ── canonical refs for the machine keepers (CR) ───────────────────────────────────────────
+    console.log('\n── the hub is found by type, not by name ────────────────');
+
+    // The constraint is on the COUNT, not the name. `holder_ref` is decorative for a machine
+    // keeper — the schema's vocabulary is "member pubkey | provider name | 'self'" and #214's own
+    // fixtures use 'self' for BOTH device and hub — so pinning a magic string would have broken
+    // existing data to enforce a convention nobody agreed. Two hub fragments is the real error.
+    const misfiled = member();
+    const misfiledBuddy = member();
+    assert(putShareGeneration(misfiled, [
+        { holderType: 'device', holderRef: 'self', ...frag(1) },
+        { holderType: 'hub', holderRef: 'whatever-the-client-calls-it', ...frag(2) },
+        { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
+    ]) === 1, 'a hub fragment may be filed under any ref — the name carries no meaning');
+
+    for (const dup of ['hub', 'device'] as const) {
+        let refused = false;
+        try {
+            putShareGeneration(misfiled, [
+                { holderType: 'device', holderRef: 'self', ...frag(1) },
+                { holderType: 'hub', holderRef: 'node', ...frag(2) },
+                { holderType: dup, holderRef: 'a-second-one', ...frag(3) },
+                { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(4) },
+            ]);
+        } catch { refused = true; }
+        assert(refused,
+            `SINGLETON: two ${dup} fragments in one split are refused — "which is THE ${dup}" has no answer`);
+    }
+
+    // A row that predates that check — written straight to the table, as a legacy node would have.
+    // The release path must still find it, because it looks up by holder_type.
+    const legacy = member();
+    const legacyBuddy = member();
+    split(legacy, legacyBuddy, crypto.randomBytes(32).toString('base64url'));
+    db.prepare(`UPDATE recovery_shares SET holder_ref = 'legacy-hub-name'
+                WHERE owner_pubkey = ? AND holder_type = 'hub'`).run(legacy);
+    const legacySession = openCollection(legacy, EPH);
+    releaseMemberFragment(legacySession.id, legacyBuddy, rewrap('legacy'));
+    assert(releaseHubFragment(legacySession.id).holderType === 'hub',
+        'LEGACY: a hub fragment stored under an old name is still releasable — the lookup is by type');
+
+    // Two hub rows in one generation is permitted by UNIQUE(owner, generation, type, ref) but
+    // cannot be resolved. Refusing beats picking: releasing one of two would hand over a piece
+    // whose twin stays behind, and the device would collect fragments that do not fit together.
+    const twin = member();
+    const twinBuddy = member();
+    split(twin, twinBuddy, crypto.randomBytes(32).toString('base64url'));
+    const twinGen = db.prepare(`SELECT MAX(generation) g FROM recovery_shares WHERE owner_pubkey = ?`)
+        .get(twin) as { g: number };
+    db.prepare(`INSERT INTO recovery_shares
+        (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)
+        VALUES (?, 'hub', 'second-hub', 9, 'x', 'y', 'z', ?)`).run(twin, twinGen.g);
+    const twinSession = openCollection(twin, EPH);
+    releaseMemberFragment(twinSession.id, twinBuddy, rewrap('twin'));
+    rejects(() => releaseHubFragment(twinSession.id),
+        'two hub fragments in one generation is refused rather than resolved arbitrarily');
+
+    // ── a dead session must not show a countdown (CR) ─────────────────────────────────────────
+    console.log('\n── status honesty ───────────────────────────────────────');
+
+    const doomed = openCollection(owner, EPH);
+    assert(collectionProgress(doomed.id)!.hubEligibleAt !== null,
+        'a live session reports when the hub becomes available...');
+    cancelCollection(doomed.id, owner);
+    const doomedProgress = collectionProgress(doomed.id)!;
+    assert(doomedProgress.hubEligibleAt === null && doomedProgress.hubReason === null,
+        '...and a cancelled one reports NO countdown — a user waits on a clock instead of starting over');
+    assert(doomedProgress.live === false && doomedProgress.reason === 'cancelled',
+        '...it says why instead');
+
+    // ── retention (CR) ────────────────────────────────────────────────────────────────────────
+    console.log('\n── retention ────────────────────────────────────────────');
+
+    const tidy = member();
+    const tidyBuddy = member();
+    split(tidy, tidyBuddy, crypto.randomBytes(32).toString('base64url'));
+
+    // An empty, dead session is noise: somebody opened a screen. It goes.
+    const noise = openCollection(tidy, EPH);
+    db.prepare('UPDATE recovery_collections SET expires_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 1000).toISOString(), noise.id);
+
+    // A session that released something is EVIDENCE, whatever its state. It stays, because it is
+    // what tells an owner an attempt happened.
+    const evidence = openCollection(tidy, EPH);
+    releaseMemberFragment(evidence.id, tidyBuddy, rewrap('evidence'));
+    db.prepare('UPDATE recovery_collections SET expires_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 1000).toISOString(), evidence.id);
+
+    openCollection(tidy, EPH);   // triggers the opportunistic prune
+    assert(getCollection(noise.id) === null, 'a dead session that released nothing is pruned away');
+    assert(getCollection(evidence.id) !== null,
+        '...while one that released a fragment is KEPT as evidence an attempt happened');
+    assert(listReleases(evidence.id).length === 1, '...with its release record intact');
+
+    // The cap. Opening a session is unauthenticated by necessity, so a hard refusal would let
+    // anyone lock a member out of their own recovery — the oldest is evicted instead.
+    const flooded = member();
+    const floodedBuddy = member();
+    split(flooded, floodedBuddy, crypto.randomBytes(32).toString('base64url'));
+    const opened: string[] = [];
+    for (let i = 0; i < 14; i++) opened.push(openCollection(flooded, EPH).id);
+
+    const stillLive = openCollectionsFor(flooded);
+    assert(stillLive.length <= 10, `a flood is capped at 10 live sessions (got ${stillLive.length})`);
+    const newest = opened[opened.length - 1];
+    assert(stillLive.some(x => x.id === newest),
+        'and the NEWEST survives — the person actually recovering opens one and uses it immediately');
+    assert(!stillLive.some(x => x.id === opened[0]),
+        '...while the oldest was evicted, so a flood pushes out its own earlier attempts');
+    // The point of evicting rather than refusing: the member can always still start a recovery.
+    const afterFlood = openCollection(flooded, EPH);
+    assert(collectionState(afterFlood.id)!.live === true,
+        'CRITICAL: a flood never locks the real member out — they can always open a fresh session');
+
     // ── expiry ────────────────────────────────────────────────────────────────────────────────
     const old = openCollection(owner, EPH);
     db.prepare('UPDATE recovery_collections SET expires_at = ? WHERE id = ?')

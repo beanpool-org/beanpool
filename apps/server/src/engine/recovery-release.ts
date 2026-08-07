@@ -56,6 +56,68 @@ export const HUB_DELAY_MS = 24 * 60 * 60 * 1000;
 /** Keeper types the node will ever hand over. `device` is absent on purpose — see the header. */
 const RELEASABLE: readonly KeeperType[] = ['hub', 'member', 'sso'];
 
+/**
+ * Most live sessions one account may have at once.
+ *
+ * A cap that REFUSED the new session would be worse than the problem it solves: opening one is
+ * deliberately unauthenticated (it has to be — see the header), so anyone could park the maximum
+ * against a member and lock them out of their own recovery. Evicting the OLDEST instead means a
+ * flood pushes out its own earlier attempts, and the person actually driving a recovery — who
+ * opens a session and immediately uses it — always has the newest.
+ */
+const MAX_LIVE_COLLECTIONS_PER_OWNER = 10;
+
+/**
+ * Retention, decided rather than defaulted (CR).
+ *
+ * The two tables are not the same kind of thing, and the difference is the policy:
+ *
+ *   recovery_releases    a fragment actually left the node. Permanent, like `transactions` — this
+ *                        is the log R1 leans on when a takeover is discovered after the fact.
+ *   recovery_collections mostly nothing happened. A session with no releases is somebody opening a
+ *                        screen; keeping it forever would be keeping a nonce forever, and this is
+ *                        an UNAUTHENTICATED insert, so "forever" means "as many as anyone likes".
+ *
+ * So: a session that is dead AND released nothing is deleted. A session that released anything is
+ * kept whatever its state, because that one is evidence — the owner needs to be able to see that
+ * an attempt happened, which is the whole point of being able to cancel and re-split.
+ *
+ * Run opportunistically when a session opens, scoped to that owner. No timer (this codebase keeps
+ * having to remove those) and no hourly sweep to forget about: rows appear only here, so this is
+ * the only moment growth can happen, and the work is bounded by one member's own sessions.
+ */
+export function pruneCollectionsFor(ownerPubkey: string): { deleted: number; evicted: number } {
+    const now = nowIso();
+
+    // Oldest live sessions beyond the cap stop being live. Done BEFORE the delete so an evicted
+    // empty session is cleaned up in the same pass rather than lingering until the next open.
+    const evicted = db.prepare(`
+        UPDATE recovery_collections SET status = 'expired',
+               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE id IN (
+            SELECT id FROM recovery_collections
+            WHERE owner_pubkey = ? AND status = 'open' AND expires_at > ?
+            -- rowid breaks the tie, and it is not optional. created_at is millisecond precision,
+            -- so a burst of sessions opened in the same millisecond compares EQUAL and SQLite is
+            -- free to order them however it likes — which made "evict the oldest" evict an
+            -- arbitrary one, occasionally keeping the very first and dropping the newest. rowid is
+            -- insertion-ordered by construction, so newest-survives becomes true rather than
+            -- usually-true.
+            ORDER BY created_at DESC, rowid DESC
+            LIMIT -1 OFFSET ?
+        )
+    `).run(ownerPubkey, now, MAX_LIVE_COLLECTIONS_PER_OWNER).changes;
+
+    const deleted = db.prepare(`
+        DELETE FROM recovery_collections
+        WHERE owner_pubkey = ?
+          AND (status != 'open' OR expires_at <= ?)
+          AND id NOT IN (SELECT collection_id FROM recovery_releases)
+    `).run(ownerPubkey, now).changes;
+
+    return { deleted, evicted };
+}
+
 export class RecoveryReleaseError extends Error {
     constructor(message: string) {
         super(message);
@@ -140,7 +202,19 @@ export function openCollection(ownerPubkey: string, requesterEphemeralPubkey: st
         VALUES (?, ?, ?, ?, 'open', ?, ?)
     `).run(id, ownerPubkey, generation, requesterEphemeralPubkey, nowIso(), expiresAt);
 
-    return getCollection(id)!;
+    // AFTER the insert, so the cap is enforced on the state that actually results. Pruning first
+    // trimmed the previous set to the limit and then added one more, leaving MAX+1 every time —
+    // a cap that is always off by one is a cap nobody can reason about. The new row is the newest
+    // by rowid, so it is never the one evicted.
+    pruneCollectionsFor(ownerPubkey);
+
+    const opened = getCollection(id);
+    if (!opened) {
+        // Unreachable while eviction is oldest-first, and checked anyway: silently returning a
+        // session that is not in the table would hand the caller an id that answers nothing.
+        throw new RecoveryReleaseError('The recovery session could not be opened.');
+    }
+    return opened;
 }
 
 export function getCollection(id: string): Collection | null {
@@ -250,6 +324,34 @@ function shareForRelease(
         );
     }
     return row;
+}
+
+/**
+ * The hub's fragment for this session's generation, found by type rather than by name.
+ *
+ * Refuses rather than picks if a legacy row set somehow contains two. Choosing one arbitrarily
+ * would release a fragment while leaving its twin behind, and the recovering device would collect
+ * a piece that does not fit the polynomial the others came from — the silent failure this whole
+ * design is arranged to avoid.
+ */
+function hubShareFor(collection: Collection): Record<string, unknown> {
+    const rows = db.prepare(`
+        SELECT * FROM recovery_shares
+        WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'hub'
+    `).all(collection.ownerPubkey, collection.generation) as Record<string, unknown>[];
+
+    if (rows.length === 0) {
+        throw new RecoveryReleaseError(
+            'No hub fragment for this account in the generation this session is collecting.',
+        );
+    }
+    if (rows.length > 1) {
+        throw new RecoveryReleaseError(
+            'This account has more than one hub fragment in one generation, which should be '
+            + 'impossible. Re-split from the owner\'s device before recovering.',
+        );
+    }
+    return rows[0];
 }
 
 function recordRelease(args: {
@@ -379,9 +481,13 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
  */
 export function releaseHubFragment(collectionId: string): ReleasedFragment {
     const collection = requireLive(collectionId);
-    const share = shareForRelease(collection, 'hub', 'node');
+    // By holder_type, not by the literal 'node' (CR). putShareGeneration now pins the ref, but a
+    // row written before that check existed would be invisible to a lookup keyed on the string —
+    // and the failure would be a permanently unreleasable hub keeper for that one member, which
+    // nothing would ever report. Looking it up by type finds it whatever it is called.
+    const share = hubShareFor(collection);
 
-    const { eligibleAt, reason } = hubReleaseEligibleAt(collectionId);
+    const { eligibleAt } = hubReleaseEligibleAt(collectionId);
     if (Date.now() < eligibleAt) {
         const waitMs = eligibleAt - Date.now();
         const hours = Math.ceil(waitMs / 3_600_000);
@@ -390,7 +496,6 @@ export function releaseHubFragment(collectionId: string): ReleasedFragment {
             + 'Ask any of your keepers to approve and it releases immediately.',
         );
     }
-    void reason;
 
     return recordRelease({
         collectionId,
@@ -433,7 +538,12 @@ export function collectionProgress(collectionId: string): {
 
     let hubEligibleAt: string | null = null;
     let hubReason: 'human-approved' | 'delay' | null = null;
-    if (hasHub && !releases.some(r => r.holderType === 'hub')) {
+    // Only for a LIVE session (CR). A dead one — expired, cancelled, or killed by a re-split —
+    // would otherwise report "the hub releases in 6h" about a session that will never release
+    // anything, and a countdown is exactly the sort of thing a user waits on instead of starting
+    // over. releaseHubFragment re-checks liveness independently, so this was never a way in; it
+    // was a way to be misled.
+    if (state.live && hasHub && !releases.some(r => r.holderType === 'hub')) {
         const e = hubReleaseEligibleAt(collectionId);
         hubEligibleAt = new Date(e.eligibleAt).toISOString();
         hubReason = e.reason;

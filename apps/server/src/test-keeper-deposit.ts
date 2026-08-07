@@ -119,6 +119,26 @@ async function main(): Promise<void> {
     assert(findShareBySsoLookup(victimHash)?.ownerPubkey === owner,
         'and the victim\'s lookup still resolves to the victim');
 
+    // The same smuggling attempt, but hidden on a NON-sso fragment (CR finding). The original check
+    // only inspected the sso share, so a hash on a 'device' or 'hub' fragment was persisted verbatim
+    // — and findShareBySsoLookup matches on the column alone, with no holder_type filter, so the
+    // planted row would answer the lookup.
+    prime();
+    const smuggler = memberKey();
+    nonce = issueNonce(smuggler);
+    for (const holderType of ['device', 'hub'] as const) {
+        const shares = generation();
+        const target = shares.find(x => x.holderType === holderType)!;
+        target.ssoLookupHash = victimHash;
+        target.ssoLookupSalt = ssoRow.ssoLookupSalt;
+        await rejects(() => depositGoogleKeeperGeneration({
+            ownerPubkey: smuggler, shares, googleIdToken: mint('999-attacker', nonce), nonce,
+        }), `SMUGGLING: a lookup hash hidden on a '${holderType}' fragment is refused too`);
+    }
+    assert(getCurrentShares(smuggler).length === 0, 'and nothing was written by those attempts');
+    assert(findShareBySsoLookup(victimHash)?.ownerPubkey === owner,
+        'the victim\'s lookup is still the victim\'s after every smuggling attempt');
+
     // ── the nonce binding ─────────────────────────────────────────────────────────────────────
     prime();
     const memberA = memberKey();
@@ -167,6 +187,20 @@ async function main(): Promise<void> {
         googleIdToken: mint(sub, nonce), nonce,
     }), 'a deposit with two sso fragments is refused');
 
+    // Distinct messages, because the two cases need different actions from the caller (CR).
+    const msgs: string[] = [];
+    for (const shares of [generation().filter(x => x.holderType !== 'sso'),
+                          [...generation(), { holderType: 'sso' as const, holderRef: 'x', shareIndex: 4,
+                           encryptedShare: 'e', shareIv: 'i', shareTag: 't' }]]) {
+        prime();
+        const n = issueNonce(shaped);
+        try {
+            await depositGoogleKeeperGeneration({ ownerPubkey: shaped, shares, googleIdToken: mint(sub, n), nonce: n });
+        } catch (e) { msgs.push((e as Error).message); }
+    }
+    assert(msgs.length === 2 && msgs[0] !== msgs[1],
+        'and the no-sso and too-many-sso cases report DIFFERENT messages');
+
     prime();
     nonce = issueNonce(shaped);
     await rejects(() => depositGoogleKeeperGeneration({
@@ -187,6 +221,9 @@ async function main(): Promise<void> {
     assert(maskEmail('martin@cytec.com.au') === 'm•••@cytec.com.au', 'emails are masked for display');
     assert(maskEmail(undefined) === undefined, 'a missing email masks to nothing rather than throwing');
     assert(maskEmail('nonsense') === undefined, 'and so does a value with no @');
+    assert(maskEmail('  martin@cytec.com.au  ') === 'm•••@cytec.com.au',
+        'and surrounding whitespace does not become the initial (CR)');
+    assert(maskEmail('@nolocalpart.com') === undefined, 'an address with no local part masks to nothing');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

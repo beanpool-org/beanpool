@@ -61,9 +61,12 @@ export interface GoogleKeeperResult {
 /** Mask an email for the keeper list. `martin@cytec.com.au` → `m•••@cytec.com.au`. */
 export function maskEmail(email: string | undefined): string | undefined {
     if (!email) return undefined;
-    const at = email.indexOf('@');
+    // Trimmed first (CR): a stray leading space otherwise becomes the "initial", rendering as
+    // ' •••@domain' in the keeper list.
+    const trimmed = email.trim();
+    const at = trimmed.indexOf('@');
     if (at <= 0) return undefined;
-    return `${email[0]}•••${email.slice(at)}`;
+    return `${trimmed[0]}•••${trimmed.slice(at)}`;
 }
 
 export async function depositGoogleKeeperGeneration(
@@ -77,18 +80,30 @@ export async function depositGoogleKeeperGeneration(
     }
 
     const ssoShares = shares.filter(s => s.holderType === 'sso');
-    if (ssoShares.length !== 1) {
-        // More than one would mean two providers in a single generation, which the caller has to
-        // deposit as separate verified provider flows; zero means this is not a Google deposit and
-        // the caller should be using the plain share writer.
+    // Split rather than one message (CR): the two cases need different actions from the caller, and
+    // "got 0" versus "got 2" reads as the same mistake when it is not.
+    if (ssoShares.length === 0) {
         throw new KeeperDepositError(
-            `A Google deposit must contain exactly one 'sso' fragment, got ${ssoShares.length}.`,
+            "This deposit has no 'sso' fragment. Use putShareGeneration directly for a split that "
+            + 'does not include a sign-in keeper.',
+        );
+    }
+    if (ssoShares.length > 1) {
+        throw new KeeperDepositError(
+            `Only one sign-in keeper can be deposited at a time, got ${ssoShares.length}. Deposit `
+            + 'each provider through its own verified flow.',
         );
     }
     const ssoShare = ssoShares[0];
 
-    // Refused, not ignored. See the header note.
-    if (ssoShare.ssoLookupHash || ssoShare.ssoLookupSalt) {
+    // Refused, not ignored, and checked across EVERY fragment rather than just the sso one (CR).
+    // Only inspecting `ssoShare` left the invariant enforced on one row out of three: a hash set on
+    // a 'device' or 'hub' fragment sailed through and was persisted verbatim. That matters because
+    // findShareBySsoLookup matches on `sso_lookup_hash` alone with NO holder_type filter, so a
+    // planted row is returned as the match — the column, not the keeper type, is what a restore
+    // resolves. Whether that is reachable today depends on a restore flow which does not exist yet,
+    // which is exactly why it should not be left for that flow to be written around.
+    if (shares.some(s => s.ssoLookupHash || s.ssoLookupSalt)) {
         throw new KeeperDepositError(
             'The lookup hash for a sign-in keeper is derived by the node, not supplied by the client.',
         );

@@ -40,3 +40,6 @@ Flow's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native`
 ## Journal — Critical Learnings Only
 
 Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the manager dashboard]\n**Action:** [How to apply next time]`
+## 2024-08-06 - Add empty state for Invites Module
+**Learning:** Added a missing empty state in InvitesModule.tsx to guide users when no passes are generated, improving user experience.
+**Action:** Always check for empty state logic before rendering arrays or lists to improve UX in the manager dashboard.

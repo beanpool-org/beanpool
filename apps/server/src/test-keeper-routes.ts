@@ -395,6 +395,59 @@ async function main(): Promise<void> {
     assert((await call('GET', '/api/recovery/keepers/:callsign', { params: { callsign: '  ' } })).status === 400,
         'a blank callsign is a bad request');
 
+    // PRUNE-THEN-REUSE — the realistic ambiguity, and the one that was broken (CR).
+    //
+    // idx_members_callsign_unique is `WHERE status NOT IN ('migrated', 'pruned')`, and pruning
+    // never clears the callsign, so a callsign IS legitimately reusable once its owner is pruned.
+    // The route originally filtered on `status != 'migrated'`, matched the tombstone as well as
+    // the live member, and returned a 409 for a completely unambiguous account — on the one screen
+    // that exists for somebody who has just lost their phone.
+    //
+    // The index-drop test below did NOT catch this: it manufactures ambiguity artificially, so it
+    // never exercised the path a real node produces. This one needs no index surgery at all, which
+    // is exactly why it is the more valuable of the two.
+    const ghost = member();
+    db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(ghost.pubkey);
+    const reused = member();
+    db.prepare('UPDATE members SET callsign = ? WHERE public_key = ?').run(ghost.callsign, reused.pubkey);
+    await call('POST', '/api/recovery/shares', { actor: reused.pubkey, body: { shares: generation() } });
+
+    const reusedLookup = await call('GET', '/api/recovery/keepers/:callsign', {
+        params: { callsign: ghost.callsign },
+    });
+    assert(reusedLookup.status === 200,
+        'PRUNE-REUSE: a callsign inherited from a pruned member is NOT ambiguous');
+    assert(reusedLookup.body.total === 3,
+        "...and resolves to the live member's keepers, not to the tombstone");
+
+    // The same fix is what lets the query use the partial index instead of scanning the table on
+    // every hit of a public, unauthenticated endpoint.
+    const plan = db.prepare(`EXPLAIN QUERY PLAN
+        SELECT public_key FROM members
+        WHERE LOWER(callsign) = ? AND status NOT IN ('migrated', 'pruned')`)
+        .all('anything') as { detail: string }[];
+    assert(plan.some(p => p.detail.includes('idx_members_callsign_unique')),
+        '...and the predicate matches the index, so the public lookup is a SEARCH rather than a SCAN');
+
+    // A pruned account cannot deposit at all — its callsign now belongs to somebody else, so
+    // fragments filed against it would sit under a stranger's name.
+    assert((await call('POST', '/api/recovery/shares', {
+        actor: ghost.pubkey, body: { shares: generation() },
+    })).status === 401, 'a pruned member cannot deposit fragments — the account is a tombstone');
+
+    // ...but a SUSPENDED one can, and that divergence from assertMemberActive is deliberate (CR).
+    // Blocking it would turn a temporary sanction into a permanent loss the first time that member
+    // lost their phone: moderation becoming confiscation, which Principle 8 exists to prevent.
+    for (const status of ['disabled', 'suspended'] as const) {
+        const sanctioned = member();
+        db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, sanctioned.pubkey);
+        const res = await call('POST', '/api/recovery/shares', {
+            actor: sanctioned.pubkey, body: { shares: generation() },
+        });
+        assert(res.status === 200,
+            `a '${status}' member CAN still maintain their keepers — recovery is not a sanction`);
+    }
+
     // Callsigns are unique per node (#83), and the index enforces it — creating a duplicate the
     // ordinary way fails at the database, which is the correct behaviour and the reason the 409
     // branch would otherwise be untestable. The branch exists for nodes whose data predates that

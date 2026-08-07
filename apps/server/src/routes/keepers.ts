@@ -148,17 +148,42 @@ function parseShares(raw: unknown): KeeperShareInput[] {
 }
 
 /**
- * The signer, if they are an active member of this node.
+ * Statuses that cannot hold recovery fragments.
+ *
+ * DELIBERATELY NARROWER than `assertMemberActive`, which also blocks 'disabled' and 'suspended'
+ * (CR asked whether the divergence was intentional — it is, and here is the reason it was not
+ * written down before).
+ *
+ * Every other write path in this codebase moves value or reaches other members, so a sanctioned
+ * account is stopped. Nothing here does either: each endpoint touches only the caller's OWN
+ * fragments, and the fragments are opaque to the node. A suspended member re-splitting their
+ * keepers harms nobody.
+ *
+ * What blocking them WOULD do is make a temporary sanction permanent by accident. A suspended
+ * member who cannot add a keeper, and then loses their phone, has lost the account outright —
+ * moderation turning into confiscation, which Principle 8 exists to prevent ("loss degrades the
+ * system; it does not cost anyone an account"). Recovery is the last thing that should switch off
+ * when someone is in trouble.
+ *
+ * 'migrated' and 'pruned' are different in kind: both are tombstones, not sanctions. The account
+ * is gone, and a pruned member's callsign is explicitly reusable — `idx_members_callsign_unique`
+ * excludes those rows — so fragments filed against one would sit under a name that now belongs to
+ * somebody else.
+ */
+const CANNOT_HOLD_FRAGMENTS = new Set(['migrated', 'pruned']);
+
+/**
+ * The signer, if they are a member of this node whose account still exists.
  *
  * A valid signature only proves possession of *some* keypair (SRV-2/SRV-4). `owner_pubkey` is a
  * foreign key into `members`, so an anonymous key would fail at the database with a constraint
- * error rather than a sentence — and a member mid-migration should not be re-splitting.
+ * error rather than a sentence.
  */
 function activeSigner(ctx: any): string | null {
     const actor = ctx.state?.actor as string | undefined;
     if (!actor) return null;
     const member = getMember(actor);
-    if (!member || member.status === 'migrated') return null;
+    if (!member || CANNOT_HOLD_FRAGMENTS.has(String(member.status))) return null;
     return actor;
 }
 
@@ -321,9 +346,23 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         const callsign = (ctx.params.callsign || '').trim().toLowerCase();
         if (!callsign) { ctx.status = 400; ctx.body = { error: 'Missing callsign' }; return; }
 
+        // The predicate MUST match idx_members_callsign_unique's exactly — it is
+        // `WHERE status NOT IN ('migrated', 'pruned')` (db.ts). Two things go wrong otherwise, and
+        // this route had both (CR):
+        //
+        //   1. A FALSE 409 blocking a real recovery. Pruning never clears the callsign and the
+        //      index excludes pruned rows on purpose, so a callsign IS reusable once its owner is
+        //      pruned. `status != 'migrated'` matches the tombstone as well as the live member,
+        //      sees two rows, and calls an unambiguous member ambiguous — on the one screen that
+        //      exists for somebody who has just lost their phone.
+        //   2. A full table SCAN on a public, unauthenticated endpoint. A predicate that does not
+        //      match the partial index cannot use it; matching it turns the plan into
+        //      SEARCH members USING INDEX idx_members_callsign_unique.
+        //
+        // Verified both with EXPLAIN QUERY PLAN against the real index DDL.
         const matches = db.prepare(`
             SELECT public_key FROM members
-            WHERE LOWER(callsign) = ? AND status != 'migrated'
+            WHERE LOWER(callsign) = ? AND status NOT IN ('migrated', 'pruned')
         `).all(callsign) as { public_key: string }[];
 
         // Callsigns are unique per node (#83), so this is one row or none. Refusing rather than

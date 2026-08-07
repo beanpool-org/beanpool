@@ -39,3 +39,7 @@ Shield's domain is `apps/native/` ONLY. Do NOT touch `apps/server` (that's Senti
 
 Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learning:** [Why it existed]\n**Prevention:** [How to avoid next time]`
 ## 2025-08-05 - [Remove over-broad audio and microphone permissions]\n**Vulnerability:** Over-broad permissions `android.permission.RECORD_AUDIO` and `microphonePermission` in `app.json`.\n**Learning:** The app does not require audio recording capabilities, thus requesting these permissions unnecessarily increases the attack surface and violates the principle of least privilege.\n**Prevention:** Regularly review app manifest permissions and remove any that are not actively required by the application's core functionality.
+## 2025-08-05 - [Fix push token exposure in logs and storage]
+**Vulnerability:** Expo push token logged in plaintext to the console and stored insecurely in `AsyncStorage` within `push-notifications.ts`.
+**Learning:** Sensitive tokens like push tokens shouldn't be printed in logs, as they can be extracted from device logs by other apps or physically. They must also be stored encrypted using `SecureStore` rather than plaintext `AsyncStorage` to prevent extraction from backup tools or rooted devices.
+**Prevention:** Avoid logging tokens during registration, and enforce `SecureStore` for any session or authentication-related tokens in the native app.

@@ -12,7 +12,7 @@ import {
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
     vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer,
-    updateProfile, getProfile, getAllProfiles, isCallsignAvailable,
+    updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
     getCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
@@ -1216,22 +1216,11 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
     const callsign = ctx.params.callsign.trim().toLowerCase();
     if (!callsign) { ctx.status = 400; ctx.body = { error: 'Missing callsign' }; return; }
 
-    // ⚡ Push the "≥3 guardians" filter into SQL instead of calling getGuardiansOf()
-    // once per matched row (N+1 queries on a public, rate-limited lookup endpoint).
-    const eligible = db.prepare(`
-        SELECT public_key, callsign, joined_at, avatar_url
-        FROM members
-        WHERE LOWER(callsign) = ? AND status != 'migrated'
-          AND (SELECT COUNT(*) FROM friends WHERE owner_pubkey = members.public_key AND is_guardian = 1) >= 3
-    `).all(callsign) as any[];
-    
+    // The query lives in engine/members.ts, beside isCallsignAvailable, so the two callsign
+    // predicates cannot drift apart — see the note there for why that matters on a public
+    // endpoint. It already returns public-safe fields only.
     ctx.status = 200;
-    ctx.body = eligible.map(r => ({
-        publicKey: r.public_key,
-        callsign: r.callsign,
-        joinedAt: r.joined_at,
-        avatarUrl: r.avatar_url
-    }));
+    ctx.body = findRecoveryCandidates(callsign);
 });
 
 // Callsign availability — powers the wizard's live "✓ available / ✗ taken" hint and

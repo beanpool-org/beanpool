@@ -213,6 +213,19 @@ async function main(): Promise<void> {
 
     assert(issueNonce() !== issueNonce(), 'nonces are unique per issue');
 
+    // A failed attempt must NOT burn the pending nonce. Review proposed consuming unconditionally
+    // "regardless of match result"; declined, because that turns anyone able to submit a bad token
+    // into a denial of service against the person legitimately signing in. Locked in with a test so
+    // it reads as a decision rather than an oversight — the next person to spot the short-circuit
+    // will otherwise "fix" it.
+    primeJwks(); _clearNoncesForTests();
+    nonce = issueNonce();
+    await rejects(() => verifyGoogleIdToken(mint({ nonce: 'wrong' }), [AUD], nonce),
+        'a bad token is refused...');
+    const survivor = await verifyGoogleIdToken(mint({ nonce }), [AUD], nonce);
+    assert(survivor.sub.length > 0,
+        '...and the legitimate sign-in still succeeds afterwards — a failure does not burn the nonce');
+
     // ── malformed input ───────────────────────────────────────────────────────────────────────
     primeJwks(); _clearNoncesForTests();
     nonce = issueNonce();
@@ -234,13 +247,17 @@ async function main(): Promise<void> {
     const salt1 = newSsoLookupSalt();
     const salt2 = newSsoLookupSalt();
     const sub = '110169484474386276334';
-    assert(ssoLookupHash('google', sub, salt1) === ssoLookupHash('google', sub, salt1),
+    const h1 = await ssoLookupHash('google', sub, salt1);
+    const h1again = await ssoLookupHash('google', sub, salt1);
+    const h2 = await ssoLookupHash('google', sub, salt2);
+    const hApple = await ssoLookupHash('apple', sub, salt1);
+    assert(h1 === h1again,
         'the lookup hash is deterministic for the same sub and salt');
-    assert(ssoLookupHash('google', sub, salt1) !== ssoLookupHash('google', sub, salt2),
+    assert(h1 !== h2,
         'and differs across salts, so two nodes holding the same person cannot be correlated');
-    assert(ssoLookupHash('google', sub, salt1) !== ssoLookupHash('apple', sub, salt1),
+    assert(h1 !== hApple,
         'and differs across providers, so a Google sub cannot masquerade as an Apple one');
-    assert(!ssoLookupHash('google', sub, salt1).includes(sub),
+    assert(!h1.includes(sub),
         'and never contains the raw subject');
     assert(salt1 !== salt2, 'salts are random per share');
 

@@ -128,11 +128,17 @@ async function fetchJwks(): Promise<Jwk[]> {
 }
 
 async function getSigningKey(kid: string): Promise<Jwk> {
+    // `refetched` is what makes "refetch once" true (CR finding). Without it an expired cache
+    // fetched here, missed on the kid, and then fetched AGAIN immediately — two round trips for
+    // identical data, and exactly the Google-hammering the comment below claims to prevent. A
+    // garbage kid arriving against a cold cache was the cheapest way to trigger it.
+    let refetched = false;
     if (!jwksCache || jwksCache.expiresAt <= Date.now()) {
         await fetchJwks();
+        refetched = true;
     }
     let key = jwksCache?.keys.find(k => k.kid === kid);
-    if (!key) {
+    if (!key && !refetched) {
         // Unknown kid against a cache we believe is fresh means Google rotated early. Refetch once
         // rather than fail — but only once, so a token with a garbage kid cannot be used to make
         // this node hammer Google.
@@ -156,13 +162,23 @@ export function _resetJwksCacheForTests(seed?: { keys: Jwk[]; expiresAt: number 
 // short-lived anti-replay token in the backup set for no gain.
 
 const issuedNonces = new Map<string, number>();
+let lastNonceSweep = 0;
+
+/** At most one sweep a minute. See the note in issueNonce. */
+const NONCE_SWEEP_INTERVAL_MS = 60_000;
 
 export function issueNonce(): string {
-    // Opportunistic sweep. The map only ever holds nonces from the last 10 minutes of sign-ins,
-    // so this stays small without a timer keeping the event loop alive (see test-all's process.exit
-    // history — background timers in this codebase have a track record).
+    // Opportunistic sweep, throttled. The map only ever holds nonces from the last 10 minutes of
+    // sign-ins, so this stays small without a timer keeping the event loop alive (see test-all's
+    // process.exit history — background timers in this codebase have a track record).
+    //
+    // The throttle is the CR finding: size > 1000 alone meant that once a busy node crossed the
+    // threshold it swept the whole map on EVERY issue, and since entries live 10 minutes it would
+    // stay above the threshold and stay O(n) — the guard meant to bound the work was the thing
+    // guaranteeing it. Time-bounding it makes the amortised cost constant.
     const now = Date.now();
-    if (issuedNonces.size > 1000) {
+    if (issuedNonces.size > 1000 && now - lastNonceSweep > NONCE_SWEEP_INTERVAL_MS) {
+        lastNonceSweep = now;
         for (const [n, exp] of issuedNonces) if (exp <= now) issuedNonces.delete(n);
     }
     const nonce = crypto.randomBytes(32).toString('base64url');
@@ -257,6 +273,21 @@ export async function verifyGoogleIdToken(
 
     // Compared in constant time, then consumed. The comparison guards the value; the consume makes
     // it single-use.
+    //
+    // DELIBERATE: the nonce is consumed only when it MATCHED. Review suggested consuming
+    // unconditionally so single-use holds "regardless of match result" — declined, because a
+    // mismatch means this token was not issued for this request, and burning the pending nonce on
+    // someone else's bad token turns a failed attempt into a denial of service against the person
+    // legitimately signing in.
+    //
+    // Nothing is gained by consuming early. Replay requires a token that is validly signed by
+    // Google AND carries this exact nonce; that path consumes, and is covered by a test. An
+    // attacker cannot mint a token bearing a nonce they do not know, so unlimited failed attempts
+    // within the TTL buy them nothing. Unconsumed nonces are bounded by NONCE_TTL_MS and the sweep.
+    //
+    // This does assume the caller binds `expectedNonce` to the requesting session rather than
+    // taking it from the request body — otherwise an attacker could aim failures at someone else's
+    // pending nonce. That is a constraint on the route, and it is why this is written down here.
     const presented = Buffer.from(String(claims.nonce ?? ''), 'utf-8');
     const expected = Buffer.from(expectedNonce, 'utf-8');
     const nonceMatches = presented.length === expected.length
@@ -289,8 +320,23 @@ export async function verifyGoogleIdToken(
  * scrypt rather than a bare SHA-256 because a `sub` is a 21-digit number — a plain hash of that is
  * brute-forceable in the small space, salt or no salt.
  */
-export function ssoLookupHash(provider: 'google' | 'apple', sub: string, salt: string): string {
-    const key = crypto.scryptSync(`${provider}:${sub}`, salt, 32, { N: 16384, r: 8, p: 1 });
+export async function ssoLookupHash(
+    provider: 'google' | 'apple',
+    sub: string,
+    salt: string,
+): Promise<string> {
+    // Async, not scryptSync (CR finding). N=16384 costs ~10-20ms of pure CPU, and scryptSync blocks
+    // the event loop for all of it — on the 1-CPU VMs these nodes run on that stalls every other
+    // request, including unrelated ones. Recovery is exactly when a node is least able to afford
+    // being unresponsive. The callback form runs on the threadpool instead.
+    //
+    // Changed now while the function has no callers; once routes exist, the same change would mean
+    // touching every call site.
+    const key = await new Promise<Buffer>((resolve, reject) => {
+        crypto.scrypt(`${provider}:${sub}`, salt, 32, { N: 16384, r: 8, p: 1 }, (err, derived) => {
+            if (err) reject(err); else resolve(derived);
+        });
+    });
     return key.toString('base64url');
 }
 

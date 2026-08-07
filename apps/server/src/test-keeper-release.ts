@@ -63,6 +63,9 @@ const frag = (i: number) => ({
     shareTag: Buffer.from(`tag-${i}`).toString('base64'),
 });
 
+/** K1 is RECORDED, not uploaded — the node stores that the keeper exists and none of its bytes. */
+const deviceFrag = (i: number) => ({ shareIndex: i, encryptedShare: '', shareIv: '', shareTag: '' });
+
 const EPH = 'cmVxdWVzdGVyLWVwaGVtZXJhbA';
 
 /** What a keeper hands back once they have decrypted their own copy and re-wrapped it. */
@@ -76,7 +79,7 @@ const rewrap = (label: string) => ({
 /** device + hub + one human + sign-in. Four keepers against a threshold of 3. */
 function split(owner: string, buddy: string, ssoHash: string): number {
     const shares: KeeperShareInput[] = [
-        { holderType: 'device', holderRef: 'self', ...frag(1) },
+        { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
         { holderType: 'hub', holderRef: 'node', ...frag(2) },
         { holderType: 'member', holderRef: buddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
         { holderType: 'sso', holderRef: 'google', ssoLookupHash: ssoHash, ssoLookupSalt: 'c2FsdA', ...frag(4) },
@@ -301,7 +304,7 @@ function main(): void {
     const misfiled = member();
     const misfiledBuddy = member();
     assert(putShareGeneration(misfiled, [
-        { holderType: 'device', holderRef: 'self', ...frag(1) },
+        { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
         { holderType: 'hub', holderRef: 'whatever-the-client-calls-it', ...frag(2) },
         { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
     ]) === 1, 'a hub fragment may be filed under any ref — the name carries no meaning');
@@ -310,7 +313,7 @@ function main(): void {
         let refused = false;
         try {
             putShareGeneration(misfiled, [
-                { holderType: 'device', holderRef: 'self', ...frag(1) },
+                { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: dup, holderRef: 'a-second-one', ...frag(3) },
                 { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(4) },

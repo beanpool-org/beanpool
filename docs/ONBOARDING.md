@@ -65,7 +65,13 @@ This inverts the security problem. We no longer need each keyholder to be trustw
 
 ### The four keyholders
 
-Every new member gets these, automatically, at signup:
+**Three are automatic at signup; the fourth is optional.** K1, K2 and K3 exist for every new
+member the moment the account is made — the phone has a backup directory, the hub is the node they
+joined, and `members.invited_by` guarantees an inviter. K4 requires the member to *have* a Google
+or Apple account and to connect it, and plenty of the people this project is built for have
+neither. That is why Part 7 says `N = 3 at signup, 4 with sign-in`, and why no screen may promise
+four keepers before counting them. An earlier revision of this heading said all four arrive
+automatically, which was never true.
 
 | # | Keyholder | Piece unlocked by | Why it's independent |
 |---|---|---|---|
@@ -297,7 +303,26 @@ Welcome Screen
 
 ### K1 — This phone's own backup
 
-**Piece stored**: as an ordinary file in the app's backed-up directory.
+**Piece stored**: as an ordinary file in the app's backed-up directory — **and nowhere else. The node never receives this piece.**
+
+> That prohibition is explicit because the code got it wrong once. `recovery_shares` accepted
+> ciphertext for all four keeper types, so clients would have uploaded K1's bytes along with the
+> rest and the node would have become a second holder of it (fixed 2026-08-08).
+>
+> It matters more here than for any other keeper, because K1 carries **no user secret and no
+> hardware key by design** — it has to survive the phone dying, so nothing device-bound can lock
+> it, which is exactly what broke Revisions 1 and 2. A copy of K1 on the node is therefore a
+> *usable* piece to anyone who reads the database, not ciphertext.
+>
+> Count what a fully compromised node — database **and** environment — could then assemble: K1
+> outright, plus K2, which it wraps with its own env key. Two of the three needed, from one
+> break-in, with no human involved. Holding nothing of K1 keeps that at one.
+>
+> The node still records that a device keeper **exists**, with its Shamir x-coordinate, so
+> "4 of 3 — you can afford to lose 1" stays honest and the restore screen can name which piece is
+> missing. A coordinate without its value is nothing. **And the node never *releases* a device
+> fragment either** — there is no code path for it; K1 comes back when the platform restores the
+> phone, which is the only mechanism that was ever specified.
 **Restored by**: iCloud Backup (iOS) or Google Auto Backup (Android) onto a new device on the same account.
 
 > Revisions 1–2 tried to sync a *secret* through platform backup, and both proposed mechanisms were broken. iCloud Keychain sync needs `kSecAttrSynchronizable`, which `expo-secure-store@55.0.15` does not expose (`keychainAccessible` controls *when* an item is readable, not whether it syncs). On Android, SecureStore encrypts with a **non-exportable Keystore key**, so Auto Backup captures a blob whose key never leaves the old device.
@@ -866,6 +891,8 @@ The threshold of 3 absorbs one dead keeper, but absorption is not detection: re-
 ---
 
 ## Revision History
+
+**Revision 3.6 (2026-08-08)** — **K1 never leaves the phone, and the protection status stops flattering people.** `recovery_shares` accepted ciphertext for all four keeper types, so clients would have uploaded K1's bytes and the node would have become a second holder of the one piece that carries no user secret and no hardware key by design. A fully compromised node could then assemble two of the three needed — K1 outright plus K2 under its own env key — from a single break-in with no human involved. Device fragments are now recorded (keeper exists, x-coordinate, so "4 of 3" stays honest) and never uploaded; a client sending ciphertext for one is refused rather than having it silently dropped. Also corrects the "four keyholders, every new member gets these at signup" heading, which contradicted `N = 3 at signup, 4 with sign-in` and K4's own "Optional" — three are automatic, the fourth needs a Google or Apple account the member may not have. And adds the honest numbers to the owner's status: `unattendedPieces` (how many pieces are reachable without another person agreeing) and `dependsOnPeople`, because "you can afford to lose 0" is accurate and far too gentle for a member whose third keeper is someone they met once. Twelve words remain the floor; keepers are convenience on top.
 
 **Revision 3.5 (2026-08-07)** — **Apple's sign-in verification built, and the client-secret warning withdrawn.** `sso-google.ts` generalised into `sso.ts` with Google and Apple as entries in a provider table; Apple verified against `https://appleid.apple.com/auth/keys`, audience = the bundle ID `org.beanpool.pillar` (native) or the Services ID `org.beanpool.web` (web). Revisions 3.4 and earlier said Apple needed a client-secret JWT rotated every 6 months or "recovery dies silently"; that belongs to the authorization-code exchange, which this design never performs — see the correction under the provider table. Three Apple-specific behaviours are now handled rather than discovered later: `email_verified` arriving as the string `"true"`, the email being absent on every authorization after the first, and the native flow echoing `SHA-256(nonce)` instead of the nonce. The `sub` parity trap is unchanged and still owed a real cross-platform round trip (#213).
 

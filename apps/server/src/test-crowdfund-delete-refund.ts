@@ -22,6 +22,7 @@ db.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, ?)`).run(backe
 const nowEpoch = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
 db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`).run(creator, INITIAL_BALANCE, nowEpoch);
 db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`).run(backer, INITIAL_BALANCE, nowEpoch);
+db.prepare(`UPDATE node_config SET value = '1000' WHERE key = 'ledger_audit_baseline'`).run();
 reconcileLedgerFromDb();
 
 // 2. Create crowdfund project

@@ -455,6 +455,27 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
 
         const keepers = listKeeperTypes(owner);
         const total = countCurrentShares(owner);
+        const countOf = (t: KeeperType) => keepers.find(k => k.holderType === t)?.count ?? 0;
+
+        // How many pieces the member can get WITHOUT another person choosing to help.
+        //
+        // This is the number that tells the truth, and `canAffordToLose` does not. A member with
+        // phone + hub + inviter has "3 of 3, you can afford to lose 0" — which is accurate and far
+        // too gentle, because it does not say that the one they cannot lose is a person they may
+        // have met once. Their real position is two unattended pieces and a conversation.
+        //
+        //   device  yes — if the backup actually exists, which the node cannot see (R6)
+        //   sso     yes
+        //   hub     yes, after 24h unattended, or instantly once a human approves (D7)
+        //   member  NO — a specific person has to choose to
+        //
+        // Deliberately optimistic about `device`: the node has never held that piece and cannot
+        // tell whether the phone's backup survived. The client knows, and must correct this
+        // downwards rather than repeat it — which is why the field is named for what it counts
+        // rather than presented as a verdict.
+        const unattendedPieces = countOf('device') + countOf('sso') + countOf('hub');
+        const humanKeepers = countOf('member');
+
         ctx.status = 200;
         ctx.body = {
             generation: getCurrentGeneration(owner),
@@ -464,6 +485,13 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             canAffordToLose: Math.max(0, total - RECOVERY_THRESHOLD),
             canRemoveKeeper: canRemoveKeeper(owner),
             recoverable: total >= RECOVERY_THRESHOLD,
+            unattendedPieces,
+            humanKeepers,
+            // True when getting back in REQUIRES a particular person to agree. Not a warning about
+            // those people — it is a fact about the shape of the split, and the screen should say
+            // so plainly and tell the member to write their twelve words down. The words are the
+            // floor under all of this; keepers are convenience on top, never a replacement.
+            dependsOnPeople: unattendedPieces < RECOVERY_THRESHOLD,
         };
     });
 

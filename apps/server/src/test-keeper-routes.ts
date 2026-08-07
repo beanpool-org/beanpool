@@ -491,6 +491,64 @@ async function main(): Promise<void> {
     assert((await call('POST', '/api/recovery/shares/status', {})).status === 401,
         'and an unsigned status read is refused');
 
+    // ── telling the truth about how protected somebody actually is ────────────────────────────
+    //
+    // "You can afford to lose 0" is accurate and far too gentle for a member whose third keeper is
+    // a person they met once. `unattendedPieces` is the number that says so.
+    const hubOnly = member();
+    await call('POST', '/api/recovery/shares', {
+        actor: hubOnly.pubkey,
+        body: {
+            shares: [
+                { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
+                { holderType: 'hub', holderRef: 'node', ...frag(2) },
+                { holderType: 'member', holderRef: 'i'.repeat(64), ephemeralPubkey: 'ZQ==', ...frag(3) },
+            ],
+        },
+    });
+    const lonely = (await call('POST', '/api/recovery/shares/status', { actor: hubOnly.pubkey })).body;
+    assert(lonely.canAffordToLose === 0 && lonely.recoverable === true,
+        'phone + hub + inviter reads as recoverable with nothing to spare...');
+    assert(lonely.unattendedPieces === 2 && lonely.humanKeepers === 1,
+        '...but only TWO pieces are reachable without another person agreeing');
+    assert(lonely.dependsOnPeople === true,
+        '...so getting back in DEPENDS on one specific human, and the screen must say so');
+
+    // The same member once they connect a sign-in keeper: now self-sufficient.
+    const withSso = member();
+    await call('POST', '/api/recovery/shares', {
+        actor: withSso.pubkey,
+        body: {
+            shares: [
+                { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
+                { holderType: 'hub', holderRef: 'node', ...frag(2) },
+                { holderType: 'member', holderRef: 'j'.repeat(64), ephemeralPubkey: 'ZQ==', ...frag(3) },
+                { holderType: 'sso', holderRef: 'unset', ...frag(4) },
+            ],
+        },
+    });
+    // The sso fragment cannot go through the general route, so that deposit was refused — which is
+    // itself the guarantee this file opens with. Build the same shape through the verified path.
+    primeGoogle();
+    const ssoNonce = (await call('POST', '/api/recovery/sso-nonce', { actor: withSso.pubkey })).body.nonce;
+    await call('POST', '/api/recovery/shares/sso', {
+        actor: withSso.pubkey,
+        body: {
+            provider: 'google', idToken: googleToken(ssoNonce, '777-self-sufficient'), nonce: ssoNonce,
+            shares: [
+                { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
+                { holderType: 'hub', holderRef: 'node', ...frag(2) },
+                { holderType: 'member', holderRef: 'j'.repeat(64), ephemeralPubkey: 'ZQ==', ...frag(3) },
+                { holderType: 'sso', holderRef: 'unset', ...frag(4) },
+            ],
+        },
+    });
+    const sufficient = (await call('POST', '/api/recovery/shares/status', { actor: withSso.pubkey })).body;
+    assert(sufficient.unattendedPieces === 3 && sufficient.dependsOnPeople === false,
+        'adding a sign-in keeper is what makes a member able to recover WITHOUT asking anyone');
+    assert(sufficient.humanKeepers === 1,
+        '...while still counting the human they have — the buddy is spare capacity, not the plan');
+
     const noConfirm = await call('DELETE', '/api/recovery/shares', { actor: v.pubkey, body: {} });
     assert(noConfirm.status === 400 && noConfirm.body.currentShareCount === 4,
         'deleting every fragment needs an explicit confirmation, and says what is at stake');

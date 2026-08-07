@@ -95,6 +95,12 @@ run_check "test"          pnpm turbo run test
 # reload. This is a separate task from 'build' precisely so it does not imply an artifact.
 run_check "typecheck"     pnpm turbo run typecheck
 
+# Every apps/server/src/test-*.ts must be reachable from a run below. The suites are script-style,
+# so `turbo run test` cannot see them and only the hand-maintained lists in this file run them —
+# which is how 21 suites came to exist that CI had never once executed. Cheap, and it is the only
+# check here that fails for something NOT being tested.
+run_check "suite_registration" bash scripts/check-suite-registration.sh
+
 # Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
 # so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
 # invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the
@@ -146,7 +152,7 @@ run_federation_suites() {
     # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
     # cycle only revealed the next problem. Statuses are collected and all failures reported together.
     FAILED=""
-    for t in test-schema-upgrade test-callsign-predicates test-recovery-shares test-sso test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-keeper-http test-commons-conservation test-treasury-keepership test-treasury-eggs test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-moderation-admin test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement; do
+    for t in test-schema-upgrade test-callsign-predicates test-recovery-shares test-sso test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-keeper-http test-commons-conservation test-treasury-keepership test-treasury-eggs test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-moderation-admin test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement test-admin-auth test-backend-monitors test-backup-hardening test-backup-topology test-cash-also-needed test-crowdfund-ledger-sync test-detached-pwa test-dos-caps test-economic-hardening test-federation-api test-hardening test-logger-sanitization test-manager-build test-onboarding-funnel test-request-auth test-sync-signature test-trust-value-curve test-voting-round-grant test-vouch-covenant test-wash-sybil-defense; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
@@ -186,6 +192,17 @@ run_federation_suites() {
       $SUITE_TIMEOUT pnpm exec tsx src/test-keeper-http.ts
     RC=$?
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-keeper-http(readauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-keeper-http(readauth)"; fi
+    rm -rf "$TMP_DIR"
+
+    # Messaging IDOR (A2-2/A2-3/A2-15) — asserts one member cannot read another members conversations.
+    # Needs ENFORCE_READ_AUTH for the same const-at-import reason, and refuses to run without it rather
+    # than passing vacuously, which is why it sat unregistered.
+    echo "━━━ test-messaging-idor (read auth ON) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-messaging-idor.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-idor(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-idor"; fi
     rm -rf "$TMP_DIR"
 
     # The recovery WebSocket suite, which asserts the ws path REFUSES an unauthenticated subscriber.

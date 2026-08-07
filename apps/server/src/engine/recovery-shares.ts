@@ -31,8 +31,21 @@ export interface KeeperShareInput {
     holderType: KeeperType;
     /** member pubkey | provider name | 'self' */
     holderRef: string;
-    /** The fragment's Shamir x-coordinate, needed to recombine. */
+    /**
+     * The fragment's Shamir x-coordinate, needed to recombine.
+     *
+     * Recorded even for `device`, whose bytes the node never sees: the x-coordinate is not secret
+     * (a coordinate without its value is nothing) and having it lets the restore screen say which
+     * piece is still missing rather than only how many.
+     */
     shareIndex: number;
+    /**
+     * The wrapped fragment.
+     *
+     * EMPTY for `device` keepers, and required to be — K1's bytes live in the phone's own backup
+     * and nowhere else. See the K1 note in putShareGeneration for why the node holding a copy
+     * would matter.
+     */
     encryptedShare: string;
     shareIv: string;
     shareTag: string;
@@ -155,6 +168,26 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
                 );
             }
             singletons.set(s.holderType, s.holderRef);
+        }
+
+        // K1 NEVER LEAVES THE PHONE. The node records that a device keeper EXISTS — so "4 of 3,
+        // you can afford to lose 1" stays honest — and stores none of its bytes.
+        //
+        // ONBOARDING has always said so: K1's "piece stored" is "an ordinary file in the app's
+        // backed-up directory", where K2's is "on the node". Accepting ciphertext for every keeper
+        // type let the node quietly become a second holder of K1, and that is not a small
+        // difference. The K1 file carries no user secret and no hardware key by design — it has to
+        // survive the phone dying, so nothing device-bound can lock it — which means the node's
+        // copy would be a piece anyone reading the database could simply use.
+        //
+        // Count what a fully compromised node (database AND environment) could then assemble:
+        // K1 outright, plus K2 which it wraps with its own env key. Two of the three needed, from
+        // one break-in, with no human involved. Holding nothing of K1 puts it back to one.
+        if (s.holderType === 'device' && (s.encryptedShare || s.shareIv || s.shareTag)) {
+            throw new RecoveryShareError(
+                'A device fragment is recorded, never uploaded — its bytes live in the phone\'s own '
+                + 'backup and nowhere else. Send the keeper with empty ciphertext fields.',
+            );
         }
 
         if (s.holderType === 'sso' && !s.ssoLookupHash) {

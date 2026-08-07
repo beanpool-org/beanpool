@@ -130,15 +130,28 @@ function parseShares(raw: unknown): KeeperShareInput[] {
             throw new BadRequest(`Fragment ${i} has a non-integer share index.`);
         }
 
+        // A device keeper is RECORDED, not uploaded: K1's bytes live in the phone's own backup and
+        // nowhere else. Demanding ciphertext here was what let the node become a second holder of
+        // it. Refused rather than silently dropped, for the same reason a client-supplied lookup
+        // hash is refused — a client sending it has misunderstood where that piece lives, and
+        // quietly discarding the field would leave it believing the node kept a copy.
+        const isDevice = holderType === 'device';
+        if (isDevice && (s.encryptedShare || s.shareIv || s.shareTag)) {
+            throw new BadRequest(
+                `Fragment ${i} is a device keeper, so its bytes stay on the phone. Send it with `
+                + 'empty ciphertext fields — the node records that the keeper exists, nothing more.',
+            );
+        }
+
         return {
             holderType: holderType as KeeperType,
             holderRef: requireString(s.holderRef, `shares[${i}].holderRef`, MAX_HOLDER_REF_CHARS),
             // Range (1-255) and uniqueness are the engine's to enforce — it is the layer that knows
             // why, and duplicating the rule here would let the two drift.
             shareIndex: shareIndex as number,
-            encryptedShare: requireString(s.encryptedShare, `shares[${i}].encryptedShare`, MAX_FIELD_CHARS),
-            shareIv: requireString(s.shareIv, `shares[${i}].shareIv`, MAX_FIELD_CHARS),
-            shareTag: requireString(s.shareTag, `shares[${i}].shareTag`, MAX_FIELD_CHARS),
+            encryptedShare: isDevice ? '' : requireString(s.encryptedShare, `shares[${i}].encryptedShare`, MAX_FIELD_CHARS),
+            shareIv: isDevice ? '' : requireString(s.shareIv, `shares[${i}].shareIv`, MAX_FIELD_CHARS),
+            shareTag: isDevice ? '' : requireString(s.shareTag, `shares[${i}].shareTag`, MAX_FIELD_CHARS),
             ephemeralPubkey: optionalString(s.ephemeralPubkey, `shares[${i}].ephemeralPubkey`, MAX_FIELD_CHARS),
             ssoLookupHash: optionalString(s.ssoLookupHash, `shares[${i}].ssoLookupHash`, MAX_FIELD_CHARS),
             ssoLookupSalt: optionalString(s.ssoLookupSalt, `shares[${i}].ssoLookupSalt`, MAX_FIELD_CHARS),

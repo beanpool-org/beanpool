@@ -97,10 +97,13 @@ const frag = (i: number) => ({
     shareTag: Buffer.from(`tag-${i}`).toString('base64'),
 });
 
+/** K1 is RECORDED, not uploaded — the node stores that the keeper exists and none of its bytes. */
+const deviceFrag = (i: number) => ({ shareIndex: i, encryptedShare: '', shareIv: '', shareTag: '' });
+
 /** Phone + hub + a human buddy. Threshold is 3, so this is the minimum viable split. */
 function generation(overrides: Record<string, unknown>[] = []): Record<string, unknown>[] {
     const base = [
-        { holderType: 'device', holderRef: 'self', ...frag(1) },
+        { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
         { holderType: 'hub', holderRef: 'node', ...frag(2) },
         { holderType: 'member', holderRef: 'b'.repeat(64), ephemeralPubkey: 'ZXBoZW1lcmFs', ...frag(3) },
     ];
@@ -148,7 +151,7 @@ async function main(): Promise<void> {
         body: {
             provider: 'google', idToken: googleToken(victimNonce), nonce: victimNonce,
             shares: [
-                { holderType: 'device', holderRef: 'self', ...frag(1) },
+                { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: 'sso', holderRef: 'unset', ...frag(3) },
             ],
@@ -166,7 +169,7 @@ async function main(): Promise<void> {
         actor: thief.pubkey,
         body: {
             shares: [
-                { holderType: 'device', holderRef: 'self', ...frag(1) },
+                { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: 'sso', holderRef: 'google', ssoLookupHash: victimHash,
                   ssoLookupSalt: 'whatever', ...frag(3) },
@@ -313,7 +316,7 @@ async function main(): Promise<void> {
         'but not to an unsigned caller — a nonce nobody owns protects nobody');
 
     const ssoShares = [
-        { holderType: 'device', holderRef: 'self', ...frag(1) },
+        { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
         { holderType: 'hub', holderRef: 'node', ...frag(2) },
         { holderType: 'sso', holderRef: 'unset', ...frag(3) },
     ];

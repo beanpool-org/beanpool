@@ -80,8 +80,11 @@ const frag = (i: number) => ({
     shareTag: Buffer.from(`tag-${i}`).toString('base64'),
 });
 
+/** K1 is RECORDED, not uploaded — the node stores that the keeper exists and none of its bytes. */
+const deviceFrag = (i: number) => ({ shareIndex: i, encryptedShare: '', shareIv: '', shareTag: '' });
+
 const GENERATION = [
-    { holderType: 'device', holderRef: 'self', ...frag(1) },
+    { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
     { holderType: 'hub', holderRef: 'node', ...frag(2) },
     { holderType: 'member', holderRef: 'b'.repeat(64), ephemeralPubkey: 'ZXBoZW1lcmFs', ...frag(3) },
 ];

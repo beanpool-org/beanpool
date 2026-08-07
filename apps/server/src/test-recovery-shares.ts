@@ -58,9 +58,10 @@ function seedMember(pk: string) {
 /** A fragment with sane defaults, so each test only states what it actually cares about. */
 function share(over: Partial<KeeperShareInput> & Pick<KeeperShareInput, 'holderType' | 'holderRef' | 'shareIndex'>): KeeperShareInput {
     return {
-        encryptedShare: `ct-${over.holderType}-${over.holderRef}`,
-        shareIv: 'iv',
-        shareTag: 'tag',
+        // K1 is recorded, never uploaded — the phone keeps its own bytes (see putShareGeneration).
+        encryptedShare: over.holderType === 'device' ? '' : `ct-${over.holderType}-${over.holderRef}`,
+        shareIv: over.holderType === 'device' ? '' : 'iv',
+        shareTag: over.holderType === 'device' ? '' : 'tag',
         ephemeralPubkey: over.holderType === 'member' ? 'eph-x25519' : null,
         ssoLookupHash: over.holderType === 'sso' ? `hash-${over.holderRef}` : null,
         ssoLookupSalt: over.holderType === 'sso' ? 'salt' : null,

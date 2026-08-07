@@ -2,13 +2,14 @@
   "name": "@beanpool/native",
   "main": "expo-router/entry",
   "version": "1.1.91",
-  "description": "BeanPool Pillar Toggle — Background Mesh State Mirror",
+  "description": "BeanPool Pillar Toggle \u2014 Background Mesh State Mirror",
   "private": true,
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "lint": "eslint app components constants services utils --no-error-on-unmatched-pattern"
+    "lint": "eslint app components constants services utils --no-error-on-unmatched-pattern",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",

@@ -2643,18 +2643,26 @@ export function getCommunityHealth(): CommunityHealth {
     } catch (e) { console.error('Health flag check (sybil funnel) failed:', e); }
 
     // 4. Aggregate Credit Spike (Do Day-over-Day Growth check)
+    //
+    // Every read below orders by `timestamp DESC, id DESC`, never timestamp alone. system_metrics
+    // timestamps are millisecond-precision strftime defaults, so two writes in the same millisecond
+    // tie — and SQLite then returns an ARBITRARY one of them for `LIMIT 1`. "The latest metric"
+    // silently becomes "one of the latest metrics", which is how an alert fails to fire on exactly
+    // the busy node that most needs it. The table has an AUTOINCREMENT id; insertion order is the
+    // tiebreak. (Found via a 15%-flaky test-backend-monitors: audit.ts records the same metric key,
+    // and when its write landed in the same millisecond as the test's the spike went undetected.)
     try {
         const currentMetricRow = db.prepare(`
             SELECT metric_value FROM system_metrics 
             WHERE metric_key = 'total_negative_balance' 
-            ORDER BY timestamp DESC LIMIT 1
+            ORDER BY timestamp DESC, id DESC LIMIT 1
         `).get() as any;
 
         const previousMetricRow = db.prepare(`
             SELECT metric_value FROM system_metrics 
             WHERE metric_key = 'total_negative_balance' 
               AND datetime(timestamp) < datetime('now', '-23 hours')
-            ORDER BY timestamp DESC LIMIT 1
+            ORDER BY timestamp DESC, id DESC LIMIT 1
         `).get() as any;
 
         if (currentMetricRow && previousMetricRow) {
@@ -2680,7 +2688,7 @@ export function getCommunityHealth(): CommunityHealth {
         const cohortAnomalyRow = db.prepare(`
             SELECT metric_value FROM system_metrics 
             WHERE metric_key = 'cohort_anomalies' 
-            ORDER BY timestamp DESC LIMIT 1
+            ORDER BY timestamp DESC, id DESC LIMIT 1
         `).get() as any;
         if (cohortAnomalyRow && cohortAnomalyRow.metric_value > 0) {
             flags.push({
@@ -2697,7 +2705,7 @@ export function getCommunityHealth(): CommunityHealth {
         const delinquentRow = db.prepare(`
             SELECT metric_value FROM system_metrics 
             WHERE metric_key = 'delinquent_accounts' 
-            ORDER BY timestamp DESC LIMIT 1
+            ORDER BY timestamp DESC, id DESC LIMIT 1
         `).get() as any;
         if (delinquentRow && delinquentRow.metric_value > 0) {
             flags.push({

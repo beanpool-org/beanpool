@@ -86,6 +86,15 @@ run_check "build"         pnpm turbo run build
 run_check "lint"          pnpm turbo run lint
 run_check "test"          pnpm turbo run test
 
+# Typecheck. `build` is what typechecks most of this repo — server, pwa, core and engine all run
+# `tsc` as their build — but apps/native has NO build script (an Expo app is built by EAS, not by
+# turbo), so nothing in CI has ever typechecked it. Its 'lint' is eslint, which does not read types.
+#
+# That is the package where an unchecked type error is most expensive: native changes are verified
+# on a standalone build, not a dev client, so the feedback loop is a full rebuild rather than a
+# reload. This is a separate task from 'build' precisely so it does not imply an artifact.
+run_check "typecheck"     pnpm turbo run typecheck
+
 # Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
 # so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
 # invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the
@@ -137,7 +146,7 @@ run_federation_suites() {
     # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
     # cycle only revealed the next problem. Statuses are collected and all failures reported together.
     FAILED=""
-    for t in test-schema-upgrade test-callsign-predicates test-recovery-shares test-sso test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-keeper-http test-commons-conservation test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-moderation-admin test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement; do
+    for t in test-schema-upgrade test-callsign-predicates test-recovery-shares test-sso test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-keeper-http test-commons-conservation test-treasury-keepership test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-moderation-admin test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
@@ -177,6 +186,18 @@ run_federation_suites() {
       $SUITE_TIMEOUT pnpm exec tsx src/test-keeper-http.ts
     RC=$?
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-keeper-http(readauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-keeper-http(readauth)"; fi
+    rm -rf "$TMP_DIR"
+
+    # The recovery WebSocket suite, which asserts the ws path REFUSES an unauthenticated subscriber.
+    # Both flags are mandatory — the suite itself exits nonzero without them rather than passing
+    # vacuously, which is why it can only ever have been run by hand. Same const-at-import reason as
+    # the two blocks above.
+    echo "━━━ test-recovery-ws (read + ws auth ON) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_READ_AUTH=true ENFORCE_WS_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-recovery-ws.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-recovery-ws(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-recovery-ws"; fi
     rm -rf "$TMP_DIR"
 
     if [ -n "$FAILED" ]; then

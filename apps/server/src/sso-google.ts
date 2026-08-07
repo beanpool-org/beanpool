@@ -161,13 +161,26 @@ export function _resetJwksCacheForTests(seed?: { keys: Jwk[]; expiresAt: number 
 // nothing (the client would have to still be mid-sign-in), and persisting it would put a
 // short-lived anti-replay token in the backup set for no gain.
 
-const issuedNonces = new Map<string, number>();
+const issuedNonces = new Map<string, { expiresAt: number; subject: string }>();
 let lastNonceSweep = 0;
 
 /** At most one sweep a minute. See the note in issueNonce. */
 const NONCE_SWEEP_INTERVAL_MS = 60_000;
 
-export function issueNonce(): string {
+/**
+ * Issue a sign-in nonce BOUND to the member requesting it.
+ *
+ * The binding is the point. #218 declined a review suggestion to consume the nonce on a failed
+ * match, on the grounds that burning a pending nonce over someone else's bad token is a denial of
+ * service against whoever is legitimately signing in — and noted that the argument only holds if
+ * the caller cannot aim failures at another member's nonce. Taking the subject here rather than
+ * trusting the route to remember is what makes that true: a nonce issued to A is unusable by B
+ * even if B learns the value.
+ *
+ * @param subject the authenticated caller (`ctx.state.actor` — their Ed25519 identity pubkey)
+ */
+export function issueNonce(subject: string): string {
+    if (!subject) throw new SsoVerificationError('A sign-in nonce must be bound to a member.');
     // Opportunistic sweep, throttled. The map only ever holds nonces from the last 10 minutes of
     // sign-ins, so this stays small without a timer keeping the event loop alive (see test-all's
     // process.exit history — background timers in this codebase have a track record).
@@ -179,19 +192,25 @@ export function issueNonce(): string {
     const now = Date.now();
     if (issuedNonces.size > 1000 && now - lastNonceSweep > NONCE_SWEEP_INTERVAL_MS) {
         lastNonceSweep = now;
-        for (const [n, exp] of issuedNonces) if (exp <= now) issuedNonces.delete(n);
+        for (const [n, rec] of issuedNonces) if (rec.expiresAt <= now) issuedNonces.delete(n);
     }
     const nonce = crypto.randomBytes(32).toString('base64url');
-    issuedNonces.set(nonce, now + NONCE_TTL_MS);
+    issuedNonces.set(nonce, { expiresAt: now + NONCE_TTL_MS, subject });
     return nonce;
 }
 
-/** Consumes the nonce: a second call with the same value fails. That is what makes it single-use. */
-function consumeNonce(nonce: string): boolean {
-    const expiry = issuedNonces.get(nonce);
-    if (expiry === undefined) return false;
+/**
+ * Consume the nonce, but only for the member it was issued to. A second call with the same value
+ * fails (single-use), and so does a call from anyone else (bound).
+ */
+function consumeNonce(nonce: string, subject: string): boolean {
+    const record = issuedNonces.get(nonce);
+    if (record === undefined) return false;
+    // Wrong member: do NOT delete. Deleting here would hand exactly the denial of service the
+    // binding exists to prevent to anyone who learns another member's nonce.
+    if (record.subject !== subject) return false;
     issuedNonces.delete(nonce);
-    return expiry > Date.now();
+    return record.expiresAt > Date.now();
 }
 
 export function _clearNoncesForTests(): void {
@@ -217,12 +236,18 @@ function decodeSegment(segment: string): any {
  *                           accepting a token it cannot bind to itself.
  * @param expectedNonce      the nonce this node issued for this sign-in. Required — see the
  *                           replay note at the top of the file.
+ * @param subject            the authenticated caller. The nonce must have been issued to
+ *                           THEM; a nonce issued to someone else is refused even if valid.
  */
 export async function verifyGoogleIdToken(
     idToken: string,
     allowedAudiences: string[],
     expectedNonce: string,
+    subject: string,
 ): Promise<GoogleIdentity> {
+    if (!subject) {
+        throw new SsoVerificationError('A Google sign-in must be verified against a known member.');
+    }
     if (!allowedAudiences?.length) {
         throw new SsoVerificationError(
             'This node has no Google client ID configured, so it cannot verify a Google sign-in.',
@@ -292,7 +317,7 @@ export async function verifyGoogleIdToken(
     const expected = Buffer.from(expectedNonce, 'utf-8');
     const nonceMatches = presented.length === expected.length
         && crypto.timingSafeEqual(presented, expected);
-    if (!nonceMatches || !consumeNonce(expectedNonce)) {
+    if (!nonceMatches || !consumeNonce(expectedNonce, subject)) {
         throw new SsoVerificationError('Google sign-in could not be matched to this request.');
     }
 

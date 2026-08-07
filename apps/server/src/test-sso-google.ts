@@ -39,6 +39,8 @@ async function rejects(fn: () => Promise<unknown>, msg: string): Promise<void> {
     }
 }
 
+/** Every nonce is bound to a member; these tests act as one. */
+const SUBJECT = 'a'.repeat(64);
 const KID = 'test-key-1';
 const AUD = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 const OTHER_AUD = '999999999999-someoneelsesapp.apps.googleusercontent.com';
@@ -76,37 +78,37 @@ async function main(): Promise<void> {
 
     // ── the happy path ────────────────────────────────────────────────────────────────────────
     primeJwks(); _clearNoncesForTests();
-    let nonce = issueNonce();
-    const identity = await verifyGoogleIdToken(mint({ nonce }), [AUD], nonce);
+    let nonce = issueNonce(SUBJECT);
+    const identity = await verifyGoogleIdToken(mint({ nonce }), [AUD], nonce, SUBJECT);
     assert(identity.sub === '110169484474386276334', 'a genuine token verifies and returns its sub');
     assert(identity.email === 'someone@gmail.com', 'and carries the email through for display');
     assert(identity.audience === AUD, 'and reports which of our client IDs it was issued to');
 
     // ── the substitution attack aud exists to stop ─────────────────────────────────────────────
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     await rejects(
-        () => verifyGoogleIdToken(mint({ nonce, aud: OTHER_AUD }), [AUD], nonce),
+        () => verifyGoogleIdToken(mint({ nonce, aud: OTHER_AUD }), [AUD], nonce, SUBJECT),
         'a token minted for a DIFFERENT application is refused (token substitution)',
     );
 
     // Same token, but the node is configured to accept that audience. Proves the check is reading
     // config rather than a hardcoded constant — the multi-client-ID requirement depends on this.
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
-    const multi = await verifyGoogleIdToken(mint({ nonce, aud: OTHER_AUD }), [AUD, OTHER_AUD], nonce);
+    nonce = issueNonce(SUBJECT);
+    const multi = await verifyGoogleIdToken(mint({ nonce, aud: OTHER_AUD }), [AUD, OTHER_AUD], nonce, SUBJECT);
     assert(multi.audience === OTHER_AUD, 'but a node configured for several client IDs accepts each');
 
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     await rejects(
-        () => verifyGoogleIdToken(mint({ nonce }), [], nonce),
+        () => verifyGoogleIdToken(mint({ nonce }), [], nonce, SUBJECT),
         'a node with NO client ID configured refuses rather than accepting anything',
     );
 
     // ── signature ─────────────────────────────────────────────────────────────────────────────
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     const tampered = (() => {
         const t = mint({ nonce });
         const [h, , s] = t.split('.');
@@ -117,11 +119,11 @@ async function main(): Promise<void> {
         });
         return `${h}.${p}.${s}`;
     })();
-    await rejects(() => verifyGoogleIdToken(tampered, [AUD], nonce),
+    await rejects(() => verifyGoogleIdToken(tampered, [AUD], nonce, SUBJECT),
         'a token whose claims were edited after signing is refused');
 
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     const foreign = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
     const selfSigned = (() => {
         const now = Math.floor(Date.now() / 1000);
@@ -129,23 +131,23 @@ async function main(): Promise<void> {
         const p = b64({ iss: 'https://accounts.google.com', aud: AUD, sub: 'attacker', iat: now, exp: now + 3600, nonce });
         return `${h}.${p}.${crypto.sign('RSA-SHA256', Buffer.from(`${h}.${p}`, 'utf-8'), foreign.privateKey).toString('base64url')}`;
     })();
-    await rejects(() => verifyGoogleIdToken(selfSigned, [AUD], nonce),
+    await rejects(() => verifyGoogleIdToken(selfSigned, [AUD], nonce, SUBJECT),
         'a perfectly-formed token signed by the WRONG key is refused');
 
     // ── algorithm confusion ───────────────────────────────────────────────────────────────────
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     const algNone = (() => {
         const now = Math.floor(Date.now() / 1000);
         const h = b64({ alg: 'none', kid: KID, typ: 'JWT' });
         const p = b64({ iss: 'https://accounts.google.com', aud: AUD, sub: 'attacker', iat: now, exp: now + 3600, nonce });
         return `${h}.${p}.`;
     })();
-    await rejects(() => verifyGoogleIdToken(algNone, [AUD], nonce),
+    await rejects(() => verifyGoogleIdToken(algNone, [AUD], nonce, SUBJECT),
         'alg:none is refused (the oldest JWT break there is)');
 
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     const hs256 = (() => {
         const now = Math.floor(Date.now() / 1000);
         const h = b64({ alg: 'HS256', kid: KID, typ: 'JWT' });
@@ -154,64 +156,74 @@ async function main(): Promise<void> {
         const mac = crypto.createHmac('sha256', pem).update(`${h}.${p}`).digest('base64url');
         return `${h}.${p}.${mac}`;
     })();
-    await rejects(() => verifyGoogleIdToken(hs256, [AUD], nonce),
+    await rejects(() => verifyGoogleIdToken(hs256, [AUD], nonce, SUBJECT),
         'HS256 signed with the PUBLIC key as the HMAC secret is refused (alg confusion)');
 
     // ── issuer / expiry ───────────────────────────────────────────────────────────────────────
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
-    await rejects(() => verifyGoogleIdToken(mint({ nonce, iss: 'https://evil.example.com' }), [AUD], nonce),
+    nonce = issueNonce(SUBJECT);
+    await rejects(() => verifyGoogleIdToken(mint({ nonce, iss: 'https://evil.example.com' }), [AUD], nonce, SUBJECT),
         'a wrong issuer is refused');
 
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
-    const bare = await verifyGoogleIdToken(mint({ nonce, iss: 'accounts.google.com' }), [AUD], nonce);
+    nonce = issueNonce(SUBJECT);
+    const bare = await verifyGoogleIdToken(mint({ nonce, iss: 'accounts.google.com' }), [AUD], nonce, SUBJECT);
     assert(bare.sub.length > 0, 'both of Google\'s issuer spellings are accepted');
 
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     const then = Math.floor(Date.now() / 1000) - 7200;
-    await rejects(() => verifyGoogleIdToken(mint({ nonce, iat: then, exp: then + 3600 }), [AUD], nonce),
+    await rejects(() => verifyGoogleIdToken(mint({ nonce, iat: then, exp: then + 3600 }), [AUD], nonce, SUBJECT),
         'an expired token is refused');
 
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     const soon = Math.floor(Date.now() / 1000) + 7200;
-    await rejects(() => verifyGoogleIdToken(mint({ nonce, iat: soon, exp: soon + 3600 }), [AUD], nonce),
+    await rejects(() => verifyGoogleIdToken(mint({ nonce, iat: soon, exp: soon + 3600 }), [AUD], nonce, SUBJECT),
         'a token dated in the future is refused');
 
     // Clock skew is a real allowance, not an accident: nodes on cheap VMs drift.
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     const justExpired = Math.floor(Date.now() / 1000) - 30;
-    const skewed = await verifyGoogleIdToken(mint({ nonce, exp: justExpired }), [AUD], nonce);
+    const skewed = await verifyGoogleIdToken(mint({ nonce, exp: justExpired }), [AUD], nonce, SUBJECT);
     assert(skewed.sub.length > 0, 'but one that expired 30s ago still passes, for clock drift');
 
     // ── nonce / replay ────────────────────────────────────────────────────────────────────────
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
-    await rejects(() => verifyGoogleIdToken(mint({ nonce: 'not-the-one-we-issued' }), [AUD], nonce),
+    nonce = issueNonce(SUBJECT);
+    await rejects(() => verifyGoogleIdToken(mint({ nonce: 'not-the-one-we-issued' }), [AUD], nonce, SUBJECT),
         'a token carrying someone else\'s nonce is refused');
 
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
-    await rejects(() => verifyGoogleIdToken(mint({}), [AUD], nonce),
+    nonce = issueNonce(SUBJECT);
+    await rejects(() => verifyGoogleIdToken(mint({}), [AUD], nonce, SUBJECT),
         'a token with NO nonce is refused');
 
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     const token = mint({ nonce });
-    await verifyGoogleIdToken(token, [AUD], nonce);
-    await rejects(() => verifyGoogleIdToken(token, [AUD], nonce),
+    await verifyGoogleIdToken(token, [AUD], nonce, SUBJECT);
+    await rejects(() => verifyGoogleIdToken(token, [AUD], nonce, SUBJECT),
         'REPLAY: the same valid token cannot be used twice — the nonce is consumed');
 
     primeJwks(); _clearNoncesForTests();
-    const nonceA = issueNonce();
-    const nonceB = issueNonce();
-    await rejects(() => verifyGoogleIdToken(mint({ nonce: nonceA }), [AUD], nonceB),
+    const nonceA = issueNonce(SUBJECT);
+    const nonceB = issueNonce(SUBJECT);
+    await rejects(() => verifyGoogleIdToken(mint({ nonce: nonceA }), [AUD], nonceB, SUBJECT),
         'a token for one sign-in cannot be presented against another node\'s nonce');
 
-    assert(issueNonce() !== issueNonce(), 'nonces are unique per issue');
+    assert(issueNonce(SUBJECT) !== issueNonce(SUBJECT), 'nonces are unique per issue');
+
+    // The binding #218 promised the routes would provide, now enforced here instead of trusted.
+    primeJwks(); _clearNoncesForTests();
+    const OTHER_SUBJECT = 'b'.repeat(64);
+    nonce = issueNonce(SUBJECT);
+    await rejects(() => verifyGoogleIdToken(mint({ nonce }), [AUD], nonce, OTHER_SUBJECT),
+        'a nonce issued to one member cannot be used by another');
+    const ownerStillWorks = await verifyGoogleIdToken(mint({ nonce }), [AUD], nonce, SUBJECT);
+    assert(ownerStillWorks.sub.length > 0,
+        '...and the member it WAS issued to can still use it — the wrong-member attempt did not burn it');
 
     // A failed attempt must NOT burn the pending nonce. Review proposed consuming unconditionally
     // "regardless of match result"; declined, because that turns anyone able to submit a bad token
@@ -219,19 +231,19 @@ async function main(): Promise<void> {
     // it reads as a decision rather than an oversight — the next person to spot the short-circuit
     // will otherwise "fix" it.
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
-    await rejects(() => verifyGoogleIdToken(mint({ nonce: 'wrong' }), [AUD], nonce),
+    nonce = issueNonce(SUBJECT);
+    await rejects(() => verifyGoogleIdToken(mint({ nonce: 'wrong' }), [AUD], nonce, SUBJECT),
         'a bad token is refused...');
-    const survivor = await verifyGoogleIdToken(mint({ nonce }), [AUD], nonce);
+    const survivor = await verifyGoogleIdToken(mint({ nonce }), [AUD], nonce, SUBJECT);
     assert(survivor.sub.length > 0,
         '...and the legitimate sign-in still succeeds afterwards — a failure does not burn the nonce');
 
     // ── malformed input ───────────────────────────────────────────────────────────────────────
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
+    nonce = issueNonce(SUBJECT);
     for (const [bad, what] of [['', 'empty'], ['a.b', 'two segments'], ['a.b.c.d', 'four segments'],
                                ['not-a-jwt', 'no dots'], ['!!.??.$$', 'unparseable base64']] as const) {
-        await rejects(() => verifyGoogleIdToken(bad, [AUD], nonce), `malformed input is refused (${what})`);
+        await rejects(() => verifyGoogleIdToken(bad, [AUD], nonce, SUBJECT), `malformed input is refused (${what})`);
     }
 
     // ── unknown kid ───────────────────────────────────────────────────────────────────────────
@@ -239,8 +251,8 @@ async function main(): Promise<void> {
     // rather than trusting a key it does not have — here the refetch fails (no network in tests),
     // which is exactly the "Google unreachable" case, and it must fail closed.
     primeJwks(); _clearNoncesForTests();
-    nonce = issueNonce();
-    await rejects(() => verifyGoogleIdToken(mint({ nonce }, { kid: 'rotated-away' }), [AUD], nonce),
+    nonce = issueNonce(SUBJECT);
+    await rejects(() => verifyGoogleIdToken(mint({ nonce }, { kid: 'rotated-away' }), [AUD], nonce, SUBJECT),
         'a token signed by an unknown key id fails CLOSED');
 
     // ── lookup hash ───────────────────────────────────────────────────────────────────────────

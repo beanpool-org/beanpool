@@ -137,7 +137,7 @@ run_federation_suites() {
     # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
     # cycle only revealed the next problem. Statuses are collected and all failures reported together.
     FAILED=""
-    for t in test-schema-upgrade test-callsign-predicates test-recovery-shares test-sso test-keeper-deposit test-commons-conservation test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-moderation-admin test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement; do
+    for t in test-schema-upgrade test-callsign-predicates test-recovery-shares test-sso test-keeper-deposit test-keeper-routes test-keeper-http test-commons-conservation test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-moderation-admin test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
@@ -165,6 +165,20 @@ run_federation_suites() {
       if [ $RC -eq 124 ]; then FAILED="$FAILED $t(on,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED $t(on)"; fi
       rm -rf "$TMP_DIR"
     done
+
+    # The keeper HTTP reachability suite again with read enforcement ON. Same const-at-import problem as
+    # above: ENFORCE_READ_AUTH is read once per process, and an import cannot be preceded by an assignment
+    # because imports hoist. The pass that matters is this one — with the flag off every GET is reachable
+    # regardless, so a missing public-read allowlist entry would go unnoticed until a node turned enforcement
+    # on, and the person it broke would be someone who had just lost their phone.
+    echo "━━━ test-keeper-http (read auth ON) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-keeper-http.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-keeper-http(readauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-keeper-http(readauth)"; fi
+    rm -rf "$TMP_DIR"
+
     if [ -n "$FAILED" ]; then
       echo ""
       echo "❌ Federation suites failed:$FAILED"

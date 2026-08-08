@@ -24,7 +24,7 @@ import {
     registerPushToken, removePushToken,
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
-    getGuardiansOf, createRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery,
+    getGuardiansOf, createRecoveryRequest, getRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery,
     getNodeRole, exportSyncState,
     createTreasury,
 } from '../state-engine.js';
@@ -48,6 +48,7 @@ import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
+import { pendingKeeperActionsFor } from '../engine/recovery-release.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -1308,7 +1309,35 @@ router.post('/api/recovery/approve', async (ctx) => {
 
     try {
         approveRecovery(body.requestId, guardianPubkey);
-        ctx.status = 200; ctx.body = { success: true };
+
+        // ONBOARDING Part 5: "the approve endpoint gains a side effect: releasing that approver's
+        // piece." It cannot, quite — a member fragment is released only when it has been re-wrapped
+        // to the recovering device's ephemeral key, and that needs the keeper's PRIVATE key. The
+        // node has no plaintext and must not pretend otherwise.
+        //
+        // What it can do is refuse to let the approval read as finished when it is not. The old
+        // guardian vote and the keyholder split are two mechanisms wearing the same word on the
+        // same button: a guardian who is also a keeper taps Approve, is told it worked, and stops —
+        // while the fragment recovery actually needs has not moved. The owner then sees an approval
+        // and no piece, with nothing to explain the gap.
+        //
+        // So the response carries the outstanding obligation and the client finishes it against
+        // /api/recovery/approve-keeper, which stays the single path that releases anything.
+        const req = getRecoveryRequest(body.requestId);
+        const pending = req ? pendingKeeperActionsFor(guardianPubkey, req.oldPubkey) : [];
+
+        ctx.status = 200;
+        ctx.body = {
+            success: true,
+            // Absent rather than empty when there is nothing to do, so a client that ignores this
+            // field behaves exactly as before.
+            ...(pending.length ? {
+                keeperActionRequired: pending.map(p => ({
+                    collectionId: p.collectionId,
+                    expiresAt: p.expiresAt,
+                })),
+            } : {}),
+        };
     } catch (e: any) {
         ctx.status = 400; ctx.body = { error: e.message };
     }

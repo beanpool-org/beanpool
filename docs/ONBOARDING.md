@@ -561,7 +561,21 @@ Compared with Revision 2 this is a large deletion: no broker service, no OAuth c
 | `POST` | `/api/recovery/sso-verify` | Public + fresh OAuth token | Verify a provider login and release the K4 piece |
 | `DELETE` | `/api/recovery/shares/:holderId` | Signed | Remove a keeper (triggers re-split) |
 
-The existing `/api/recovery/request`, `/approve`, `/status`, `/lookup` and `/pending` routes stay as they are — they still serve the migrate-to-new-key flow, and the approve endpoint gains a side effect: releasing that approver's piece.
+The existing `/api/recovery/request`, `/approve`, `/status`, `/lookup` and `/pending` routes stay as
+they are — they still serve the migrate-to-new-key flow.
+
+Earlier revisions said the approve endpoint would "gain a side effect: releasing that approver's
+piece". It cannot, and the distinction matters: a member fragment is released only once it has been
+re-wrapped to the recovering device's ephemeral key, which needs the keeper's PRIVATE key. The node
+holds no plaintext and must not pretend to.
+
+What `/approve` does instead is refuse to read as finished when it is not. The old guardian vote and
+the keyholder split are two mechanisms wearing the same word on the same button, so a guardian who
+is also a keeper taps Approve, is told it worked, and stops — while the fragment recovery actually
+needs has not moved, and the owner sees an approval with no piece behind it. The approve response
+therefore carries `keeperActionRequired` when the approver still holds an unreleased fragment on a
+live collection, and the client finishes the job against `/api/recovery/approve-keeper`, which
+remains the only path that releases anything.
 
 ### New DB table
 

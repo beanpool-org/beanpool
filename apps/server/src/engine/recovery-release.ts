@@ -661,3 +661,55 @@ export function openCollectionsFor(ownerPubkey: string): Collection[] {
 export function isReleasableType(holderType: string): boolean {
     return (RELEASABLE as readonly string[]).includes(holderType);
 }
+
+/** A keeper obligation the approver has not discharged yet. */
+export interface PendingKeeperAction {
+    collectionId: string;
+    ownerPubkey: string;
+    expiresAt: string;
+}
+
+/**
+ * Live collections where `keeperPubkey` still holds an unreleased fragment for `ownerPubkey`.
+ *
+ * This exists because of a seam between two systems that look like one to the person using them.
+ * The old guardian vote (`/api/recovery/request` → `/approve`) and the keyholder split are
+ * different mechanisms with the same word on the button. A guardian who is ALSO a keeper taps
+ * "Approve", is told it worked, and reasonably stops there — while their fragment, the thing
+ * recovery actually needs, has not moved. The owner sees an approval and no piece, and nothing
+ * says why.
+ *
+ * The node cannot discharge the obligation on their behalf: releasing a member fragment needs it
+ * re-wrapped to the recovering device's ephemeral key, which requires the keeper's private key.
+ * That is the whole point of the design and is not a limitation to engineer around. What the node
+ * CAN do is stop the approval reading as complete when it is not, which is what this backs.
+ *
+ * Returns only collections that are open, unexpired, on the current generation, and where this
+ * keeper's fragment has not already been released — so a keeper who has done both jobs is not
+ * nagged, and a stale session is not resurrected.
+ */
+export function pendingKeeperActionsFor(keeperPubkey: string, ownerPubkey: string): PendingKeeperAction[] {
+    const rows = db.prepare(`
+        SELECT c.id, c.owner_pubkey, c.expires_at
+        FROM recovery_collections c
+        JOIN recovery_shares s
+          ON s.owner_pubkey = c.owner_pubkey
+         AND s.generation   = c.generation
+         AND s.holder_type  = 'member'
+         AND s.holder_ref   = ?
+        WHERE c.owner_pubkey = ?
+          AND c.status = 'open'
+          AND c.expires_at > ?
+          AND NOT EXISTS (
+              SELECT 1 FROM recovery_releases r
+              WHERE r.collection_id = c.id AND r.share_id = s.id
+          )
+        ORDER BY c.created_at DESC
+    `).all(keeperPubkey, ownerPubkey, nowIso()) as Record<string, unknown>[];
+
+    return rows.map(r => ({
+        collectionId: r.id as string,
+        ownerPubkey: r.owner_pubkey as string,
+        expiresAt: r.expires_at as string,
+    }));
+}

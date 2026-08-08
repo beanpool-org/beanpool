@@ -7,3 +7,15 @@ node_modules/
 .expo/
 dist/
 !google-services.json
+
+# Signing keys and certificate bundles. Mirrors .gitignore — EAS uses THIS file
+# INSTEAD of .gitignore, so a rule added only there does nothing for what gets
+# uploaded in a build archive. `eas build --local` archives the working tree, so
+# an untracked key sitting in the workspace would ship without ever being
+# committed. p12/pfx are the export format for certificates WITH their private
+# key, which is why they belong here next to prod.keystore.
+*.p8
+*.pem
+*.key
+*.p12
+*.pfx

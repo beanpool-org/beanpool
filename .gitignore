@@ -49,6 +49,17 @@ pc-api-key.json
 apps/native/ios/
 apps/native/android/
 apps/native/prod.keystore
+
+# Signing keys. *.p8 is an Apple Sign In private key — unencrypted, downloadable
+# exactly once, and able to mint client secrets for the whole developer team until
+# revoked. It has been sitting outside this repo since 2026-08-06 and was flagged
+# twice without being fixed; one `git add -A` is all that stands between a stray
+# copy and a committed credential. The others are the same class of mistake.
+*.p8
+*.pem
+*.key
+*.p12
+*.pfx
 *.aab
 *.ipa
 google-services.json

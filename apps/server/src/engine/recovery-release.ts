@@ -534,9 +534,15 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
 /**
  * K2 — the hub's own fragment, under D7.
  *
- * Returns the stored ciphertext. Decrypting it needs `recovery.hubShareKey`, which lives in the
- * environment and is never written to the database, so this is not the node handing over a
- * plaintext piece — it is the node handing over the one piece it is the keeper of.
+ * Returns the fragment exactly as the client deposited it. There is no node-side wrapping key —
+ * an env-held `recovery.hubShareKey` was specified through Revision 3.6 and withdrawn on
+ * 2026-08-08, because a lost or rotated variable would have made every member's K2 permanently
+ * undecryptable, for a gain of one piece against a DB-snapshot attacker who is still under the
+ * threshold either way. See ONBOARDING.md § Hub keeper (K2).
+ *
+ * So this IS the node handing over a piece it can read. That is safe only because it is one piece
+ * of three, and the D7 delay plus the owner notification are what actually defend it — not the
+ * secrecy of this row.
  */
 export function releaseHubFragment(collectionId: string): ReleasedFragment {
     const collection = requireLive(collectionId);

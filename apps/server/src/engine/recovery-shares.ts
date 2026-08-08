@@ -2,10 +2,10 @@
 //
 // The node holds every member's encrypted fragments and hands them back one at a time to
 // whoever proves they are entitled to one. It never holds the phrase, and it cannot assemble
-// one: member fragments are ECDH-wrapped to their keeper's account key, and the hub's own is
-// wrapped with `recovery.hubShareKey`, which comes from the environment and is deliberately
-// never written to the database. What a stolen database yields is the hub fragment it cannot
-// unwrap and the sign-in fragment it might — two, against a threshold of three.
+// one: member fragments are ECDH-wrapped to their keeper's account key, which the node does not
+// have. The two it CAN read are its own hub fragment and the sign-in fragment — two, against a
+// threshold of three. The gap is one human keeper, deliberately, and it is why K1 is recorded
+// here but never uploaded.
 //
 // ## Generations are the whole design
 //

@@ -982,6 +982,42 @@ export interface ViewerTrustProfile {
  * only mutual connections (people the viewer already knows) are named.
  * See docs/trust-profile-and-trade-safety.md §2.
  */
+/**
+ * "Vouched in by" — who brought this member in.
+ *
+ * A peer inviter is returned by name, so invitations carry accountability: bringing someone in
+ * puts your name on their profile and makes you a reachable reference if a trade goes wrong. When
+ * the inviter is the system admin or a founder there is no peer to reach out to, so the kind says
+ * so and `publicKey` is null — the UI shows a clear, non-actionable label rather than a dead link.
+ *
+ * Shared with the keyholder system (K3), where those null cases are not cosmetic: a member with no
+ * human inviter has NOBODY to hold their inviter fragment, and lands at signup with two pieces
+ * rather than three. Both callers must agree on who counts as an inviter, so there is one
+ * implementation rather than two that drift.
+ */
+export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vouchedInBy'] {
+    const member = getMember(targetPubkey);
+    const inviterKey = member?.invitedBy;
+    if (!inviterKey || inviterKey === targetPubkey) return null;
+
+    const adminKey = getAdminPubkey();
+    if (inviterKey === 'genesis') {
+        return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
+    }
+    if (inviterKey === 'SYSTEM' || inviterKey === adminKey) {
+        return { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
+    }
+    const inviter = getMember(inviterKey);
+    if (!inviter) return null;
+    return {
+        kind: 'member',
+        publicKey: inviterKey,
+        callsign: inviter.callsign,
+        avatarUrl: inviter.avatarUrl || null,
+        tier: getMemberTrustProfile(inviterKey).tier.name,
+    };
+}
+
 export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: string): ViewerTrustProfile | null {
     const member = getMember(targetPubkey);
     if (!member) return null;
@@ -1046,27 +1082,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     // reference if a trade goes wrong. When the inviter is the system admin or a
     // founder there's no peer to reach out to — show a clear, non-actionable
     // label instead (and never a dead-end tappable link).
-    let vouchedInBy: ViewerTrustProfile['vouchedInBy'] = null;
-    const inviterKey = member.invitedBy;
-    if (inviterKey && inviterKey !== targetPubkey) {
-        const adminKey = getAdminPubkey();
-        if (inviterKey === 'genesis') {
-            vouchedInBy = { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
-        } else if (inviterKey === 'SYSTEM' || inviterKey === adminKey) {
-            vouchedInBy = { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
-        } else {
-            const inviter = getMember(inviterKey);
-            if (inviter) {
-                vouchedInBy = {
-                    kind: 'member',
-                    publicKey: inviterKey,
-                    callsign: inviter.callsign,
-                    avatarUrl: inviter.avatarUrl || null,
-                    tier: getMemberTrustProfile(inviterKey).tier.name,
-                };
-            }
-        }
-    }
+    const vouchedInBy = resolveVouchedInBy(targetPubkey);
 
     const risk = assessTradeRisk({
         tier,

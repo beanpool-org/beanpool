@@ -380,12 +380,16 @@ CREATE INDEX IF NOT EXISTS idx_recovery_approvals_created_at ON recovery_approva
 -- fragments, so the member keeps the key they had. Both exist, and the approve endpoint feeds
 -- both — approving a request also releases that approver's fragment.
 --
--- Nothing here is a secret on its own. Every row is ciphertext under a key this table does not
--- hold: member fragments are ECDH-wrapped to the keeper's account key, the hub's own fragment is
--- wrapped with `recovery.hubShareKey` which comes from the environment and is deliberately never
--- written to the database, and the sign-in fragment is derived from a provider subject claim the
--- node may well be able to guess. That last one is fine, and is exactly why the threshold is 3
--- rather than 2: a stolen database yields at most two fragments, and two are nothing.
+-- Nothing here is a secret on its own, and that is load-bearing rather than incidental. Member
+-- fragments are ECDH-wrapped to the keeper's account key, so this table cannot read them. The
+-- hub's own fragment and the sign-in fragment it effectively can: the hub piece carries no
+-- node-side wrapping key (see ONBOARDING.md § Hub keeper — an env-held key was specified and
+-- withdrawn, because losing it would silently kill every member's K2), and the sign-in piece is
+-- derived from a provider subject claim the node may well be able to guess.
+--
+-- That is fine, and it is exactly why the threshold is 3 rather than 2: a stolen database yields
+-- at most two fragments, and two are nothing. It is also why K1 must never be stored here — a
+-- third readable piece would turn this table into a complete key. The margin is one human keeper.
 CREATE TABLE IF NOT EXISTS recovery_shares (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     owner_pubkey TEXT NOT NULL REFERENCES members(public_key),

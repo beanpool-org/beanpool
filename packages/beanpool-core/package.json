@@ -31,6 +31,9 @@
   "dependencies": {
     "@libp2p/crypto": "^5.1.13",
     "@libp2p/peer-id": "^6.0.4",
+    "@noble/ciphers": "^2.1.1",
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
     "buffer": "^6.0.3",
     "crypto-js": "^4.2.0",
     "shamir-secret-sharing": "^0.0.4",

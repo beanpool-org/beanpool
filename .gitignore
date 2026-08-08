@@ -58,6 +58,8 @@ apps/native/prod.keystore
 *.p8
 *.pem
 *.key
+*.p12
+*.pfx
 *.aab
 *.ipa
 google-services.json

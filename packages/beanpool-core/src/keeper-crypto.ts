@@ -130,8 +130,20 @@ function unb64(value: string, field: string): Uint8Array {
     return new Uint8Array(Buffer.from(value, 'base64'));
 }
 
+/**
+ * Key material as bytes, from either the hex the apps store or a byte array.
+ *
+ * The width check rather than a bare `instanceof Uint8Array` (CR): a typed array that crossed a
+ * realm boundary — a worker, a `vm` context, a test harness — fails `instanceof` against this
+ * realm's constructor and would fall through to the hex branch and throw. Deliberately NOT the
+ * broader `ArrayBuffer.isView`, which the review suggested: that also admits `Float32Array` and
+ * `DataView`, so a caller passing eight floats would have them reinterpreted as thirty-two bytes
+ * of key material and encrypt happily under nonsense. A loud error beats a silent wrong key.
+ */
 function asBytes(key: string | Uint8Array, field: string): Uint8Array {
-    if (key instanceof Uint8Array) return key;
+    if (ArrayBuffer.isView(key) && (key as Uint8Array).BYTES_PER_ELEMENT === 1) {
+        return new Uint8Array(key.buffer, key.byteOffset, key.byteLength);
+    }
     if (typeof key !== 'string' || !/^[0-9a-fA-F]+$/.test(key) || key.length % 2 !== 0) {
         throw new KeeperCryptoError(`${field} must be hex or raw bytes.`);
     }
@@ -205,6 +217,52 @@ function parseAlg(kdfParams: string | undefined, expected: string): Record<strin
     return obj;
 }
 
+/**
+ * An Ed25519 public key as an X25519 point, or a stated error.
+ *
+ * Both callers take this key from somewhere they do not control — a keeper's key comes from the
+ * node, and a recovering device's key comes off the wire — so "not a point" is an input case,
+ * not an assertion.
+ */
+function toX25519Public(edPublicKey: Uint8Array, what: string): Uint8Array {
+    try {
+        return ed25519.utils.toMontgomery(edPublicKey);
+    } catch (e) {
+        throw new KeeperCryptoError(`${what} is not a usable Ed25519 point: ${(e as Error).message}`);
+    }
+}
+
+/**
+ * ECDH into a 32-byte AEAD key, with every failure stated in this module's vocabulary.
+ *
+ * ## Small-order points
+ *
+ * Review raised that an attacker-supplied public key could be low-order, making the shared secret
+ * predictable — which would matter most at {@link rewrapShareToDevice}, where the key arrives from
+ * an unauthenticated device mid-recovery. Measured against `@noble/curves` v2 rather than reasoned
+ * about: `getSharedSecret` **already refuses all six small-order Ed25519 points**, throwing
+ * "invalid private or public key received" — it checks for the all-zero shared secret required by
+ * RFC 7748 §6.1. The identity point does not even survive `toMontgomery`.
+ *
+ * The guard the review proposed (reject when the *public key* is all zero) would have caught one
+ * of the six: it is true only for the order-2 point, and orders 4 and 8 pass straight through it.
+ * Adding it would have looked like a defence while covering a sixth of the cases.
+ *
+ * So the fix here is not a guard but the reporting: noble throws a bare `Error`, which is a real
+ * defect at this boundary because a caller matching on {@link KeeperCryptoError} would not catch a
+ * hostile key at all. `test-keeper-crypto` pins noble's refusal for all six points, so if a future
+ * version relaxes it we find out from a failing test rather than from the property quietly going
+ * missing — the safety is a dependency's behaviour, and undocumented dependency behaviour is
+ * exactly what a test should hold in place.
+ */
+function agreeKey(mySecret: Uint8Array, theirPublic: Uint8Array, info: Uint8Array, what: string): Uint8Array {
+    try {
+        return hkdf(sha256, x25519.getSharedSecret(mySecret, theirPublic), undefined, info, 32);
+    } catch (e) {
+        throw new KeeperCryptoError(`${what} could not be agreed: ${(e as Error).message}`);
+    }
+}
+
 /** X25519 ephemeral keypair. Raw random bytes — X25519 clamps, so any 32 bytes is a valid secret. */
 function ephemeralKeypair(): { secret: Uint8Array; publicKey: Uint8Array } {
     assertRecoveryCsprngAvailable();
@@ -225,17 +283,9 @@ function ephemeralKeypair(): { secret: Uint8Array; publicKey: Uint8Array } {
  * @param keeperPublicKey  the keeper's Ed25519 account key (hex or raw)
  */
 export function sealShareToMember(share: Uint8Array, keeperPublicKey: string | Uint8Array): SealedShare {
-    const keeperEd = requirePublicKey(keeperPublicKey, 'keeperPublicKey');
-    let keeperX: Uint8Array;
-    try {
-        keeperX = ed25519.utils.toMontgomery(keeperEd);
-    } catch (e) {
-        throw new KeeperCryptoError(
-            `That keeper's public key is not a usable Ed25519 point: ${(e as Error).message}`,
-        );
-    }
+    const keeperX = toX25519Public(requirePublicKey(keeperPublicKey, 'keeperPublicKey'), "That keeper's public key");
     const eph = ephemeralKeypair();
-    const key = hkdf(sha256, x25519.getSharedSecret(eph.secret, keeperX), undefined, HKDF_INFO_MEMBER, 32);
+    const key = agreeKey(eph.secret, keeperX, HKDF_INFO_MEMBER, "A key with that keeper");
     return {
         ...seal(key, share, AAD_MEMBER),
         ephemeralPubkey: b64(eph.publicKey),
@@ -258,7 +308,7 @@ export function openShareAsMember(sealed: SealedShare, privateKey: string | Uint
     const seed = toEd25519Seed(asBytes(privateKey, 'privateKey'));
     const myX = ed25519.utils.toMontgomerySecret(seed);
     const ephX = requirePublicKey(unb64(sealed.ephemeralPubkey, 'ephemeralPubkey'), 'ephemeralPubkey');
-    const key = hkdf(sha256, x25519.getSharedSecret(myX, ephX), undefined, HKDF_INFO_MEMBER, 32);
+    const key = agreeKey(myX, ephX, HKDF_INFO_MEMBER, 'The key that opens this fragment');
     return open(key, sealed, AAD_MEMBER);
 }
 
@@ -299,6 +349,12 @@ export function sealShareToSso(share: Uint8Array, provider: string, sub: string)
 
 /** Re-derive K4's key from a freshly obtained `sub` and open the fragment. */
 export function openShareFromSso(sealed: SealedShare, provider: string, sub: string): Uint8Array {
+    // Checked on the way out as well as the way in (CR): an empty sub would otherwise derive a key
+    // from the string ":" and fail on the tag, reporting a corrupt fragment when what actually
+    // happened is that the sign-in returned nothing.
+    if (!provider || !sub) {
+        throw new KeeperCryptoError('A sign-in fragment needs both a provider and a subject claim.');
+    }
     const params = parseAlg(sealed.kdfParams, KEEPER_ALG_SSO);
     if (typeof params.salt !== 'string') {
         throw new KeeperCryptoError('A sign-in fragment is missing the salt its key derives from.');
@@ -350,17 +406,11 @@ export function readHubShare(sealed: SealedShare): Uint8Array {
  * @param devicePublicKey the recovering device's Ed25519 ephemeral key, from the collect session
  */
 export function rewrapShareToDevice(share: Uint8Array, devicePublicKey: string | Uint8Array): SealedShare {
-    const deviceEd = requirePublicKey(devicePublicKey, 'devicePublicKey');
-    let deviceX: Uint8Array;
-    try {
-        deviceX = ed25519.utils.toMontgomery(deviceEd);
-    } catch (e) {
-        throw new KeeperCryptoError(
-            `The recovering device's key is not a usable Ed25519 point: ${(e as Error).message}`,
-        );
-    }
+    // This key arrives from an unauthenticated device mid-recovery — the least trusted input in
+    // the module, and the reason the ECDH failure path here is not theoretical.
+    const deviceX = toX25519Public(requirePublicKey(devicePublicKey, 'devicePublicKey'), "The recovering device's key");
     const eph = ephemeralKeypair();
-    const key = hkdf(sha256, x25519.getSharedSecret(eph.secret, deviceX), undefined, HKDF_INFO_REWRAP, 32);
+    const key = agreeKey(eph.secret, deviceX, HKDF_INFO_REWRAP, 'A key with the recovering device');
     return {
         ...seal(key, share, AAD_REWRAP),
         ephemeralPubkey: b64(eph.publicKey),
@@ -385,6 +435,6 @@ export function openRewrappedShare(
     const seed = toEd25519Seed(asBytes(ephemeralPrivateKey, 'ephemeralPrivateKey'));
     const myX = ed25519.utils.toMontgomerySecret(seed);
     const senderX = requirePublicKey(unb64(sealed.ephemeralPubkey, 'ephemeralPubkey'), 'ephemeralPubkey');
-    const key = hkdf(sha256, x25519.getSharedSecret(myX, senderX), undefined, HKDF_INFO_REWRAP, 32);
+    const key = agreeKey(myX, senderX, HKDF_INFO_REWRAP, 'The key that opens this released fragment');
     return open(key, { ...sealed, kdfParams: '' }, AAD_REWRAP);
 }

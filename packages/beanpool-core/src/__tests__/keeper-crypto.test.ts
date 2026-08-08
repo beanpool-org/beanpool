@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { runInNewContext } from 'node:vm';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { randomBytes } from '@noble/hashes/utils.js';
 import {
@@ -92,6 +93,80 @@ describe('member keeper (K3, K5+)', () => {
     });
 });
 
+/**
+ * The six small-order Ed25519 points. A hostile key here would make the shared secret
+ * predictable, so the fragment sealed under it would be readable by whoever supplied the key.
+ */
+const SMALL_ORDER_KEYS: [string, string][] = [
+    ['identity (order 1)', '0100000000000000000000000000000000000000000000000000000000000000'],
+    ['order 2',            'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'],
+    ['order 4 (a)',        '0000000000000000000000000000000000000000000000000000000000000000'],
+    ['order 4 (b)',        '0000000000000000000000000000000000000000000000000000000000000080'],
+    ['order 8 (a)',        'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a'],
+    ['order 8 (b)',        '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05'],
+];
+
+describe('hostile public keys', () => {
+    // The protection is @noble/curves' own RFC 7748 §6.1 all-zero check, not code in this module.
+    // That makes it a dependency behaviour holding up a security property, which is precisely the
+    // kind of thing that disappears in a version bump without anyone noticing. These tests are the
+    // tripwire: if a future noble stops refusing these, this fails rather than the property
+    // silently going missing.
+    it.each(SMALL_ORDER_KEYS)('refuses to seal a fragment to a %s point', (_label, hex) => {
+        expect(() => sealShareToMember(randomBytes(64), hex)).toThrow(KeeperCryptoError);
+    });
+
+    it.each(SMALL_ORDER_KEYS)('refuses to re-wrap to a %s device key', (_label, hex) => {
+        // The worse of the two: this key arrives from an unauthenticated device mid-recovery,
+        // so it is genuinely attacker-chosen rather than merely attacker-influenced.
+        expect(() => rewrapShareToDevice(randomBytes(64), hex)).toThrow(KeeperCryptoError);
+    });
+
+    it('reports a hostile key as a KeeperCryptoError, not a raw curve error', () => {
+        // The actual defect the review found. noble throws a bare Error, so a caller matching on
+        // KeeperCryptoError to decide what to tell a frightened member would not catch this at all.
+        let caught: unknown;
+        try { rewrapShareToDevice(randomBytes(64), SMALL_ORDER_KEYS[3][1]); } catch (e) { caught = e; }
+        expect(caught).toBeInstanceOf(KeeperCryptoError);
+        expect((caught as Error).name).toBe('KeeperCryptoError');
+    });
+
+    it('reports a corrupt ephemeral key on the opening side as a KeeperCryptoError too', () => {
+        const device = identity();
+        const released = rewrapShareToDevice(randomBytes(64), device.pub);
+        const hostile = {
+            ...released,
+            ephemeralPubkey: Buffer.from(SMALL_ORDER_KEYS[2][1], 'hex').toString('base64'),
+        };
+        expect(() => openRewrappedShare(hostile, device.priv)).toThrow(KeeperCryptoError);
+    });
+});
+
+describe('key material as bytes', () => {
+    it('accepts a byte array from another realm', () => {
+        // A plain `instanceof Uint8Array` fails across a realm boundary — a worker, a vm context,
+        // a test harness — and would send a perfectly good key down the hex branch to be refused.
+        // A genuine second realm, not a lookalike: `ArrayBuffer.isView` reads an internal slot,
+        // so an object shaped like a typed array does not exercise this at all.
+        const keeper = identity();
+        const foreign = runInNewContext('new Uint8Array(32)') as Uint8Array;
+        foreign.set(Buffer.from(keeper.pub, 'hex'));
+        expect(foreign instanceof Uint8Array).toBe(false);
+        expect(ArrayBuffer.isView(foreign)).toBe(true);
+
+        const sealed = sealShareToMember(randomBytes(64), foreign);
+        expect(openShareAsMember(sealed, keeper.priv)).toBeInstanceOf(Uint8Array);
+    });
+
+    it('refuses a typed array that is not bytes, rather than reinterpreting it', () => {
+        // The wider `ArrayBuffer.isView` check suggested in review would accept this and read
+        // eight floats as thirty-two bytes of key material — encrypting happily under nonsense.
+        const floats = new Float32Array(8);
+        expect(() => sealShareToMember(randomBytes(64), floats as unknown as Uint8Array))
+            .toThrow(/hex or raw bytes/);
+    });
+});
+
 describe('sign-in keeper (K4)', () => {
     it('round-trips against the same provider subject', () => {
         const share = randomBytes(64);
@@ -121,6 +196,15 @@ describe('sign-in keeper (K4)', () => {
     it('refuses to seal without a provider or a sub', () => {
         expect(() => sealShareToSso(randomBytes(32), '', 'sub')).toThrow(KeeperCryptoError);
         expect(() => sealShareToSso(randomBytes(32), 'apple', '')).toThrow(KeeperCryptoError);
+    });
+
+    it('refuses to OPEN without a provider or a sub, rather than blaming the fragment', () => {
+        // Without this the empty case derives a key from ":" and fails on the tag, reporting a
+        // corrupt fragment when what actually happened is that the sign-in returned nothing —
+        // sending whoever is debugging a failed restore after the wrong thing entirely.
+        const sealed = sealShareToSso(randomBytes(64), 'apple', 'sub-1');
+        expect(() => openShareFromSso(sealed, '', 'sub-1')).toThrow(/provider and a subject claim/);
+        expect(() => openShareFromSso(sealed, 'apple', '')).toThrow(/provider and a subject claim/);
     });
 });
 

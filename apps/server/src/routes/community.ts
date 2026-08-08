@@ -1293,8 +1293,28 @@ router.get('/api/recovery/pending/:guardianPubkey', async (ctx) => {
     }
     try {
         const reqs = getPendingRecoveryRequests(guardianPubkey);
+
+        // The approve RESPONSE can only report an obligation that already exists at the moment of
+        // the vote — and the usual ordering is the other way round: the guardian votes first, the
+        // recovering device opens its collection afterwards. A keeper who approved early would
+        // otherwise never be told their fragment is still needed, which is the same silent stall
+        // in a different order (CR #239).
+        //
+        // This list is where a keeper's client already polls, and it keeps returning a request
+        // after that guardian has voted (status IN 'pending','approved'), so the obligation
+        // surfaces on the next poll whenever the collection opens. Attached per request rather
+        // than alongside the array, so the response stays an array and old clients are unaffected.
         ctx.status = 200;
-        ctx.body = reqs;
+        ctx.body = reqs.map((r: any) => {
+            const pending = pendingKeeperActionsFor(guardianPubkey, r.oldPubkey);
+            return pending.length
+                ? { ...r, keeperActionRequired: pending.map(p => ({
+                    collectionId: p.collectionId,
+                    ownerPubkey: p.ownerPubkey,
+                    expiresAt: p.expiresAt,
+                })) }
+                : r;
+        });
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message };
@@ -1334,6 +1354,10 @@ router.post('/api/recovery/approve', async (ctx) => {
             ...(pending.length ? {
                 keeperActionRequired: pending.map(p => ({
                     collectionId: p.collectionId,
+                    // Whose account. Without it the client has a session id and no way to say who
+                    // it belongs to without a second lookup — and "someone needs your help" with
+                    // no name attached is exactly the prompt people dismiss (CR #239).
+                    ownerPubkey: p.ownerPubkey,
                     expiresAt: p.expiresAt,
                 })),
             } : {}),

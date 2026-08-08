@@ -553,13 +553,41 @@ Compared with Revision 2 this is a large deletion: no broker service, no OAuth c
 
 ### New API routes
 
+Corrected against the mounted routes 2026-08-08. The earlier table listed
+`/api/recovery/sso-verify` and `DELETE /api/recovery/shares/:holderId`, neither of which was ever
+built, and described `/api/recovery/collect` as releasing a piece when it opens a session.
+
+**Depositing** — the member's own device, holding the phrase:
+
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| `POST` | `/api/recovery/shares` | Signed | Upload the encrypted pieces after a split or re-split |
-| `GET` | `/api/recovery/keepers/:callsign` | Public, rate-limited | List a member's keeper *types* (not identities) so the restore screen can be drawn |
-| `POST` | `/api/recovery/collect` | Per-piece (see below) | Request release of a specific piece |
-| `POST` | `/api/recovery/sso-verify` | Public + fresh OAuth token | Verify a provider login and release the K4 piece |
-| `DELETE` | `/api/recovery/shares/:holderId` | Signed | Remove a keeper (triggers re-split) |
+| `POST` | `/api/recovery/shares` | Signed | Upload a whole generation. Refuses `sso` fragments |
+| `POST` | `/api/recovery/shares/sso` | Signed + verified `id_token` | The sign-in fragment, whose lookup hash the NODE derives |
+| `POST` | `/api/recovery/sso-nonce` | Signed | Nonce binding an `id_token` to this deposit |
+| `POST` | `/api/recovery/shares/status` | Signed | Keeper counts, and whether recovery depends on a person |
+| `POST` | `/api/recovery/keeper-candidates` | Signed | Who can be enrolled as the inviter keeper (K3) |
+| `DELETE` | `/api/recovery/shares` | Signed + confirmation | Drop every fragment. Removing ONE keeper is a re-split, not a delete |
+| `GET` | `/api/recovery/keepers/:callsign` | Public, rate-limited | Keeper *types* only, so the restore screen can be drawn before sign-in |
+
+**Collecting** — a new device with no identity yet, signing with the ephemeral key it just made:
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/api/recovery/collect` | Ephemeral-signed | **Open** a session. Does not release anything |
+| `POST` | `/api/recovery/collect/status` | Session key | Progress against the threshold |
+| `POST` | `/api/recovery/collect/fragments` | Session key | Collect what keepers have released so far |
+| `POST` | `/api/recovery/collect/hub` | Session key | K2, under D7 |
+| `POST` | `/api/recovery/collect/sso-nonce` | Session key | Nonce for the K4 exchange |
+| `POST` | `/api/recovery/collect/sso` | Session key + verified `id_token` | K4 |
+| `POST` | `/api/recovery/collect/cancel` | Owner-signed | R1's stop — reachable by the OWNER, who lacks the session id |
+| `POST` | `/api/recovery/collect/mine` | Owner-signed | Live sessions against my account |
+
+**Approving** — a keeper, on their own phone:
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/api/recovery/approve-keeper/context` | Keeper-signed | The fragment to unwrap, and the key to re-wrap it to |
+| `POST` | `/api/recovery/approve-keeper` | Keeper-signed | **The only path that releases a member fragment** |
 
 The existing `/api/recovery/request`, `/approve`, `/status`, `/lookup` and `/pending` routes stay as
 they are — they still serve the migrate-to-new-key flow.
@@ -903,7 +931,7 @@ Incremented with an UPSERT. No foreign keys to `members`, deliberately — there
 
 - Register the central OAuth applications (Google, then Apple)
 - `expo-auth-session` flows + PWA redirect parity, PKCE public client — **no client secret on any node**
-- `/api/recovery/sso-verify`: verify the `id_token` against the provider's public JWKS, check `aud` matches our client ID, extract `sub`. Rate-limited
+- Token verification (BUILT, #222): `sso.ts` verifies an `id_token` against the provider's public JWKS, checks `aud` against our client IDs and `iss` against the provider's issuers, and extracts `sub`. Reached via `/api/recovery/shares/sso` when depositing and `/api/recovery/collect/sso` when recovering — there is no standalone `sso-verify` route, and the node derives the lookup hash itself so a client cannot index a fragment under somebody else's account (#220)
 - Automated rotation for Apple's 6-month client-secret JWT
 - Keeper add/remove from Settings
 
@@ -919,7 +947,7 @@ That matters here more than it would in most projects, because cross-platform re
 
 The threshold of 3 absorbs one dead keeper, but absorption is not detection: re-verify keepers periodically and tell the user "your Apple keeper stopped working" while they still have the others.
 
-**The endpoint is a membership oracle.** `sso-verify` answers, to anyone who asks, whether a given provider account belongs to a member of this node. Rate limiting reduces the volume, not the property. Accepted — it is the same class as the node being able to derive this piece at all — but it belongs in the risk register rather than being discovered later.
+**The endpoint is a membership oracle.** `/api/recovery/collect/sso` answers, to anyone who asks, whether a given provider account belongs to a member of this node. Rate limiting reduces the volume, not the property. Accepted — it is the same class as the node being able to derive this piece at all — but it belongs in the risk register rather than being discovered later.
 
 ---
 

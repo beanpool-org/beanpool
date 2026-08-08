@@ -26,6 +26,7 @@ import {
     openCollection, getCollection, collectionState, collectionProgress,
     releaseMemberFragment, releaseSsoFragment, releaseHubFragment,
     hubReleaseEligibleAt, cancelCollection, openCollectionsFor, listReleases,
+    pendingKeeperActionsFor,
     isReleasableType, HUB_DELAY_MS, COLLECTION_TTL_MS,
     RecoveryReleaseError,
 } from './engine/recovery-release.js';
@@ -449,6 +450,58 @@ function main(): void {
     rejects(() => releaseMemberFragment(old.id, buddy, rewrap('expired')), '...and releases nothing');
     assert(COLLECTION_TTL_MS > HUB_DELAY_MS,
         'and the TTL outlasts the hub delay, so D7 never expires the session it is holding');
+
+    // ── the seam: a guardian who is also a keeper ─────────────────────────────────────────────
+    //
+    // Two mechanisms, one word on the button. These pin that the node can TELL a keeper their
+    // fragment is still outstanding — and, just as importantly, that it stays quiet in every case
+    // where there is nothing to do. A prompt that cries wolf gets dismissed, and the one time it
+    // mattered is the time somebody could not get their account back.
+    console.log('\n── keeper obligations after a guardian approval ──────────');
+
+    const so = member();                      // the owner being recovered
+    const sk = member();                      // their buddy: guardian AND keeper
+    const nonKeeper = member();
+    split(so, sk, crypto.randomBytes(32).toString('base64url'));
+
+    assert(pendingKeeperActionsFor(sk, so).length === 0,
+        'with no live session, a keeper is asked to do nothing');
+
+    const sc = openCollection(so, EPH);
+    const outstanding = pendingKeeperActionsFor(sk, so);
+    assert(outstanding.length === 1 && outstanding[0].collectionId === sc.id,
+        'once a session opens, the keeper has an outstanding fragment');
+    assert(outstanding[0].expiresAt === sc.expiresAt,
+        '...with the deadline, so the client can say how long is left');
+
+    assert(pendingKeeperActionsFor(nonKeeper, so).length === 0,
+        'someone who holds no fragment is never asked for one');
+
+    // The whole point: having released, the keeper must stop being nagged.
+    releaseMemberFragment(sc.id, sk, rewrap('seam'));
+    assert(pendingKeeperActionsFor(sk, so).length === 0,
+        'once released, the obligation is discharged and the prompt stops');
+
+    // A cancelled session must not resurrect it — the owner said no.
+    const sc2 = openCollection(so, EPH);
+    assert(pendingKeeperActionsFor(sk, so).length === 1, 'a fresh session raises it again');
+    cancelCollection(sc2.id, so);
+    assert(pendingKeeperActionsFor(sk, so).length === 0,
+        'a cancelled session asks nothing of anybody');
+
+    // An expired one likewise. 72h TTL, wound past.
+    const sc3 = openCollection(so, EPH);
+    db.prepare('UPDATE recovery_collections SET expires_at = ? WHERE id = ?')
+        .run(new Date(Date.now() - 1000).toISOString(), sc3.id);
+    assert(pendingKeeperActionsFor(sk, so).length === 0, 'and an expired session asks nothing either');
+
+    // A re-split moves the generation on; the old session's fragment is not this keeper's problem.
+    const sc4 = openCollection(so, EPH);
+    assert(pendingKeeperActionsFor(sk, so).length === 1, 'a live session on the current generation counts');
+    split(so, sk, crypto.randomBytes(32).toString('base64url'));   // generation 2
+    assert(pendingKeeperActionsFor(sk, so).length === 0,
+        'but a re-split strands the old session, and the keeper is not asked to serve it');
+    void sc4;
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

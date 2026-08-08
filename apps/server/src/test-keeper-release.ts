@@ -165,7 +165,7 @@ function main(): void {
     assert(hubNow.holderType === 'hub',
         'with a human already approved, the hub releases immediately (D7)');
     assert(hubNow.payload === frag(2).encryptedShare,
-        '...as the stored ciphertext, which only recovery.hubShareKey opens');
+        '...handing back exactly what was deposited, unaltered (there is no node-side hub key)');
 
     // A fresh session with NO human approval: the hub must wait.
     const cold = openCollection(owner, EPH);

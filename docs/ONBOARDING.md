@@ -596,7 +596,6 @@ CREATE INDEX IF NOT EXISTS idx_recovery_shares_sso ON recovery_shares(sso_lookup
 ```typescript
 // local-config.ts additions
 recovery?: {
-    hubShareKey: string;   // wraps the hub's own piece; MUST come from env, never the DB
     ssoEnabled: boolean;   // whether this hub offers the sign-in keeper at all
 };
 ```
@@ -687,7 +686,27 @@ The keeper decrypts by converting their own Ed25519 private key to X25519 and re
 
 This is deliberately weak-ish, and that's fine: `sub` is not a secret in general, and the node might derive it. What that yields is one piece. **Security here comes from the threshold, not from this key** — which is the entire architectural point of Revision 3.
 
-**Hub keeper (K2)**: AES-256-GCM under `recovery.hubShareKey`, sourced from the environment and never written to the database, so a stolen DB snapshot doesn't include it.
+**Hub keeper (K2)**: stored as the client deposited it, with no node-side wrapping key. Revisions
+3.0–3.6 specified an env-held `recovery.hubShareKey` here; it was never implemented, and it has
+been **withdrawn** rather than built (decision 2026-08-08).
+
+The reason is the sentence two paragraphs above: security comes from the threshold, not from any
+one piece's key. K1 already has no protection at all and K4's is deliberately weak, so K2 wrapped
+under an operator secret was the odd one out rather than the standard. What the key actually
+bought was narrow — against an attacker holding a DB snapshot *but not* the environment, it
+reduced them from two readable pieces to one, and both are under the threshold of 3, so neither
+is a recovery. It did nothing against the node operator, who has the environment by definition.
+
+Against that, the failure mode was severe and silent: lose or rotate that variable — a node
+rebuild, a redeploy, an operator handover — and **every member's K2 becomes permanently
+undecryptable**, dropping the whole community from 3-of-N to needing one more human, discovered
+only when somebody actually tries to recover. On a fleet where nodes are rebuilt and snapshots
+are pulled between hosts, that is a live operational risk, not a hypothetical one.
+
+Note the resulting margin honestly: a DB or backup snapshot now yields **two** usable pieces (K2,
+and K4 whose key derives from `sub`). That is one short of the threshold, so the model holds — but
+it holds by exactly one human keeper, which is the same invariant that made storing K1 on the node
+a bug. Any future change that lets the node reach a third piece breaks recovery outright.
 
 **Device keeper (K1)**: written as an opaque file in the platform backup set. Secrecy is not load-bearing — a piece alone reveals nothing — so no user secret and no hardware key is involved. This is what makes K1 work at all, where Revisions 1 and 2 failed.
 

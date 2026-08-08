@@ -39,12 +39,13 @@
 import Router from '@koa/router';
 import { RECOVERY_THRESHOLD } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { getMember } from '../state-engine.js';
+import { getMember, resolveVouchedInBy } from '../state-engine.js';
 import {
     putShareGeneration,
     listKeeperTypes,
     countCurrentShares,
     getCurrentGeneration,
+    getShareForHolder,
     canRemoveKeeper,
     deleteAllShares,
     RecoveryShareError,
@@ -492,6 +493,62 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             // so plainly and tell the member to write their twelve words down. The words are the
             // floor under all of this; keepers are convenience on top, never a replacement.
             dependsOnPeople: unattendedPieces < RECOVERY_THRESHOLD,
+        };
+    });
+
+    /**
+     * K3 — who this member can enrol as their inviter keeper.
+     *
+     * The client splits and wraps; the node's only job here is to answer "who is your inviter,
+     * and can they hold a piece?" honestly. It returns the keeper's ACCOUNT public key, which is
+     * what a member fragment is ECDH-wrapped to (`holder_ref` on the row, and the whole of the
+     * authorization check at release time).
+     *
+     * The three outcomes are not decoration. `invited_by` is populated for every real join, but
+     * it is not always a PERSON:
+     *
+     *   member    a peer — enrolable, the ordinary case
+     *   founder   invited_by = 'genesis'; nobody to ask
+     *   admin     invited_by = SYSTEM or the admin key; nobody to ask
+     *
+     * Founding and admin-invited members therefore have no K3 at all, and land at signup with two
+     * pieces rather than three. That is exactly the state `dependsOnPeople` reports, and the
+     * client must not paper over it by pretending the admin is a keeper — an account nobody can
+     * recover is worse than one that says so on day one.
+     *
+     * Signed POST, not GET, for the same reason as /shares/status: ctx.state.actor is only
+     * populated for GETs when ENFORCE_READ_AUTH is on, which is off by default.
+     */
+    router.post('/api/recovery/keeper-candidates', async (ctx) => {
+        const owner = activeSigner(ctx);
+        if (!owner) return unauthenticated(ctx);
+
+        const vouchedInBy = resolveVouchedInBy(owner);
+
+        // Already a keeper on the CURRENT generation? Then this is a re-split, not enrolment, and
+        // offering them again would be a duplicate the engine refuses anyway (one keeper, one
+        // fragment per generation). Answering it here turns a 400 into a UI that just doesn't ask.
+        const alreadyEnrolled = vouchedInBy?.publicKey
+            ? getShareForHolder(owner, 'member', vouchedInBy.publicKey) !== null
+            : false;
+
+        const inviter = !vouchedInBy
+            ? { eligible: false as const, reason: 'none' as const }
+            : vouchedInBy.kind !== 'member' || !vouchedInBy.publicKey
+                ? { eligible: false as const, reason: vouchedInBy.kind }
+                : {
+                    eligible: !alreadyEnrolled,
+                    reason: alreadyEnrolled ? ('already_enrolled' as const) : undefined,
+                    publicKey: vouchedInBy.publicKey,
+                    callsign: vouchedInBy.callsign,
+                    avatarUrl: vouchedInBy.avatarUrl,
+                };
+
+        ctx.status = 200;
+        ctx.body = {
+            inviter,
+            generation: getCurrentGeneration(owner),
+            threshold: RECOVERY_THRESHOLD,
         };
     });
 

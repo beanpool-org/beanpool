@@ -84,6 +84,21 @@ function member(status = 'active'): { pubkey: string; callsign: string } {
     return { pubkey, callsign };
 }
 
+/**
+ * A member brought in by a specific inviter. `member()` above seeds invited_by='genesis', which
+ * makes every one of its members a FOUNDER for K3 purposes — correct for the other tests, and
+ * exactly the case that must not be mistaken for an enrolable inviter.
+ */
+function memberInvitedBy(inviterPubkey: string): { pubkey: string; callsign: string } {
+    const { publicKey } = crypto.generateKeyPairSync('ed25519');
+    const pubkey = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+    const callsign = `kr${++callsignSeq}-${pubkey.slice(0, 6)}`;
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'code')`)
+      .run(pubkey, callsign, inviterPubkey);
+    return { pubkey, callsign };
+}
+
 /** A stranger who signs but is not a member of this node — a minted keypair, which anyone can do. */
 function outsider(): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
@@ -572,6 +587,57 @@ async function main(): Promise<void> {
         'and the member is back to the 12 words alone');
     assert(getCurrentShares(victim.pubkey).length > 0,
         "...without touching anybody else's");
+
+    // ── K3: who can be enrolled as the inviter keeper ─────────────────────────────────────────
+    //
+    // The eligible case is the easy one. What these pin is the two cases where there is NO human
+    // inviter — a founding member and an admin-invited member — because that is the state the
+    // client is most likely to paper over, and papering over it produces an account that says it
+    // has three keepers and cannot actually be recovered.
+    console.log('\n── K3: inviter keeper candidates ─────────────────────────');
+
+    assert((await call('POST', '/api/recovery/keeper-candidates')).status === 401,
+        'an unsigned candidate lookup is refused');
+
+    const inviter = member();
+    const invitee = memberInvitedBy(inviter.pubkey);
+    const cand = await call('POST', '/api/recovery/keeper-candidates', { actor: invitee.pubkey });
+    assert(cand.status === 200 && cand.body.inviter.eligible === true,
+        'a peer-invited member can enrol their inviter');
+    assert(cand.body.inviter.publicKey === inviter.pubkey,
+        '...and gets the ACCOUNT key a member fragment is wrapped to');
+    assert(cand.body.inviter.callsign === inviter.callsign,
+        '...with the name to show them, so the client need not ask twice');
+    assert(cand.body.threshold === 3, '...alongside the threshold it has to reach');
+
+    // member() seeds invited_by='genesis' — a founding member.
+    const founder = member();
+    const fCand = await call('POST', '/api/recovery/keeper-candidates', { actor: founder.pubkey });
+    assert(fCand.body.inviter.eligible === false && fCand.body.inviter.reason === 'founder',
+        'a FOUNDING member has no inviter to hold a piece, and is told so');
+    assert(fCand.body.inviter.publicKey === undefined,
+        '...and is handed no key to wrap to, so the client cannot invent a keeper');
+
+    const adminInvited = memberInvitedBy('SYSTEM');
+    const aCand = await call('POST', '/api/recovery/keeper-candidates', { actor: adminInvited.pubkey });
+    assert(aCand.body.inviter.eligible === false && aCand.body.inviter.reason === 'admin',
+        'an ADMIN-invited member likewise has no human inviter');
+
+    // Enrol the inviter, then ask again: this is now a re-split, not an enrolment.
+    await call('POST', '/api/recovery/shares', {
+        actor: invitee.pubkey,
+        body: { shares: [
+            { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
+            { holderType: 'hub', holderRef: 'node', ...frag(2) },
+            { holderType: 'member', holderRef: inviter.pubkey, ephemeralPubkey: 'eph', ...frag(3) },
+        ] },
+    });
+    const again = await call('POST', '/api/recovery/keeper-candidates', { actor: invitee.pubkey });
+    assert(again.body.inviter.eligible === false && again.body.inviter.reason === 'already_enrolled',
+        'an inviter already holding a fragment is not offered again');
+    assert(again.body.inviter.publicKey === inviter.pubkey,
+        '...but is still named, so the UI can show who holds it');
+    assert(again.body.generation === 1, '...and the generation reflects the split that happened');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

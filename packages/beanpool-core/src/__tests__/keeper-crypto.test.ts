@@ -37,7 +37,7 @@ function corrupt(value: string): string {
     return bytes.toString('base64');
 }
 
-describe('member keeper (K3, K5+)', () => {
+describe('member keeper (K4, K5+)', () => {
     it('round-trips a fragment to the keeper who holds it', () => {
         const keeper = identity();
         const share = randomBytes(64);
@@ -167,7 +167,7 @@ describe('key material as bytes', () => {
     });
 });
 
-describe('sign-in keeper (K4)', () => {
+describe('sign-in keeper (K3)', () => {
     it('round-trips against the same provider subject', () => {
         const share = randomBytes(64);
         const sealed = sealShareToSso(share, 'apple', '001234.abcdef.5678');

@@ -21,15 +21,15 @@
 //               the node can assemble on its own behalf, and the threshold would be protecting
 //               nobody from the one party holding everything. This is the conservative reading of
 //               a spec that does not say it outright, and it is the reading that fails safe.
-//   K3/K5 human Released the instant that person approves (D6). No cooldown, no cancellable
+//   K4/K5 human Released the instant that person approves (D6). No cooldown, no cancellable
 //               window — chosen for recovery UX, with the residual risk accepted as R1.
-//   K4 sign-in  Released on a verified fresh provider login. Not subject to D7: it is the
+//   K3 sign-in  Released on a verified fresh provider login. Not subject to D7: it is the
 //               member's own account proving itself, not a machine acting unattended.
 //   K2 hub      Instant IF at least one human has already released. Otherwise 24h (D7).
 //
 // ## Why D7 is the load-bearing one
 //
-// K1, K2 and K4 are all machine-released. Without D7 that trio is a silent, fully automated path
+// K1, K2 and K3 are all machine-released. Without D7 that trio is a silent, fully automated path
 // into any account — and a user who signs in with Google on an Android phone backed up to the same
 // Google account has one company holding two of the three. The delay plus notification is what
 // gives the owner and their keepers a chance to notice. Since this file also refuses K1 outright,
@@ -304,7 +304,7 @@ export function listReleases(collectionId: string): ReleasedFragment[] {
  *
  * "≥1 human piece already released" means a `member` release — a person who tapped Approve. A
  * sign-in release does not count, and neither does another machine piece: the entire purpose is
- * that a human is in the loop, and K4 is the member's own account proving itself unattended.
+ * that a human is in the loop, and K3 is the member's own account proving itself unattended.
  */
 export function hubReleaseEligibleAt(collectionId: string): { eligibleAt: number; reason: 'human-approved' | 'delay' } {
     const collection = getCollection(collectionId);
@@ -445,7 +445,7 @@ export function releaseMemberFragment(
 }
 
 /**
- * K4 — released on a verified fresh sign-in.
+ * K3 — released on a verified fresh sign-in.
  *
  * The caller is responsible for having verified the provider token and derived the lookup hash;
  * this takes the resolved share row's identifiers, not a token, so the verification cannot be
@@ -456,7 +456,7 @@ export function releaseMemberFragment(
  * key and never has it at rest.
  */
 /**
- * K4, from a verified identity rather than a pre-computed hash.
+ * K3, from a verified identity rather than a pre-computed hash.
  *
  * The salt is per-share and stored, so turning a verified `sub` into the lookup hash requires
  * reading the row first. That derivation lives here rather than in the route for the same reason

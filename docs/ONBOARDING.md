@@ -65,9 +65,9 @@ This inverts the security problem. We no longer need each keyholder to be trustw
 
 ### The four keyholders
 
-**Three are automatic at signup; the fourth is optional.** K1, K2 and K3 exist for every new
+**Three are automatic at signup; the fourth is optional.** K1, K2 and K4 exist for every new
 member the moment the account is made — the phone has a backup directory, the hub is the node they
-joined, and `members.invited_by` guarantees an inviter. K4 requires the member to *have* a Google
+joined, and `members.invited_by` guarantees an inviter. K3 requires the member to *have* a Google
 or Apple account and to connect it, and plenty of the people this project is built for have
 neither. That is why Part 7 says `N = 3 at signup, 4 with sign-in`, and why no screen may promise
 four keepers before counting them. An earlier revision of this heading said all four arrive
@@ -77,20 +77,63 @@ automatically, which was never true.
 |---|---|---|---|
 | **K1** | **This phone's own backup** (iCloud / Google Auto Backup) | Restoring the phone | Lives in the user's own device ecosystem; no BeanPool involvement |
 | **K2** | **Your community hub** | The hub releasing it (see [release rules](#release-rules)) | Run by your community, not by us |
-| **K3** | **Whoever invited you** | That person tapping Approve | A real human you already trust — guaranteed to exist, since `members.invited_by` is recorded |
-| **K4** | **Your sign-in account** (Google / Apple — D11) | Logging in with that account | Optional. A different corporation again |
+| **K3** | **Your sign-in account** (Google / Apple — D11) | Logging in with that account | Optional. A different corporation again |
+| **K4** | **Whoever invited you** | That person tapping Approve | A real human you already trust — guaranteed to exist, since `members.invited_by` is recorded |
 
 And then, over time:
 
-| **K5+** | **Backup buddies** | Each one tapping Approve | Real people, added as the user meets them. **Capped: K3 and K5+ together may be at most 2 (D13)**, so a member has one buddy if they have an inviter, two if they don't |
+| # | Keyholder | Piece unlocked by | Why it's independent |
+|---|---|---|---|
+| **K5+** | **Backup buddies** | Each one tapping Approve | Real people, added as the user meets them. **Capped: K4 and K5+ together may be at most 2 (D13)**, so a member has one buddy if they have an inviter, two if they don't |
 
 Any 3 rebuild the account.
 
+**K1–K3 are things. K4+ are people.** The numbering carries that on purpose (renumbered
+2026-08-10; K3 and K4 were previously the other way round, so anything written before that date —
+commits, PR descriptions, old revisions of this file — uses K3 for the inviter and K4 for
+sign-in). The split falls on the number so the safety rule can be stated without a lookup:
+**at least one of a member's three confirmations must come from K1–K3.**
+
+### What a "piece" actually is
+
+Worth stating plainly, because the obvious reading is wrong and the whole model depends on it
+being wrong.
+
+A piece is **not** a share of the phrase. The twelve words are not cut into four groups of three
+and handed out. If they were, one keeper would hold three real words — narrowing a brute-force
+search enormously — and two colluding keepers would hold half the phrase.
+
+The split is [Shamir's Secret Sharing](https://en.wikipedia.org/wiki/Shamir%27s_secret_sharing).
+Each piece is a **point on a curve**, and the phrase is the value where that curve crosses the
+**y-axis** — the point at x = 0, which is the one point nobody is given. Three points fix the
+curve exactly. Two points do not narrow it down: infinitely many curves pass through any two
+points, one for every possible phrase, all equally likely.
+
+(The picture is a fair one but not literal — the arithmetic happens in a finite field, so the
+"curve" wraps rather than sweeping smoothly, and a piece is a pair of bytes rather than a
+coordinate you could plot. Nothing about the argument above changes.)
+
+So "two keepers learn nothing" is not a figure of speech and not a claim about how hard the
+maths is to reverse. Below the threshold there is **no information at all** about the phrase.
+That is the property that lets K2 sit on the node in the clear, lets K3's key be derived from a
+subject claim that is not really a secret, and lets K1 be an unencrypted file in a backup —
+none of them is a partial answer, because there is no such thing as a partial answer here.
+
+It also means a piece cannot be checked. A keeper cannot tell whether the fragment they hold is
+genuine, and neither can the node — which is why [the envelope carries a
+checksum](../packages/beanpool-core/src/recovery-split.ts) verified only after recombination,
+and why too-few-fragments raises an error instead of returning a plausible wrong phrase.
+
+**Encryption is a second, separate layer on top.** Each piece is sealed to whoever holds it —
+ECDH to a keeper's account key, or a key derived from a sign-in — so the node stores fragments
+it cannot read. The split decides *how many* are needed; the encryption decides *who* can use
+the one they were given.
+
 ### Why the threshold stays at 3
 
-Three is load-bearing and shouldn't be lowered to two, for a reason that isn't obvious: **the keyholders are not perfectly independent.** The hub physically stores several of the encrypted pieces, including K4's, and for the PWA the hub also serves the app code to the browser — so a dishonest operator has more ways to reach a second piece than the diagram suggests.
+Three is load-bearing and shouldn't be lowered to two, for a reason that isn't obvious: **the keyholders are not perfectly independent.** The hub physically stores several of the encrypted pieces, including K3's, and for the PWA the hub also serves the app code to the browser — so a dishonest operator has more ways to reach a second piece than the diagram suggests.
 
-At a threshold of 3, that's absorbed: hub's own piece + a captured K4 piece = 2, one short, nothing happens. At a threshold of 2, a single hub operator could take any account on their node — which is exactly the Revision 1 flaw, re-entering through the front door.
+At a threshold of 3, that's absorbed: hub's own piece + a captured K3 piece = 2, one short, nothing happens. At a threshold of 2, a single hub operator could take any account on their node — which is exactly the Revision 1 flaw, re-entering through the front door.
 
 **Redundancy comes from the number of pieces, not from lowering the bar.** Four keyholders at 3-of-4 survives losing one. Adding buddies makes it 3-of-6, 3-of-8. Lowering to 2-of-3 would survive one loss too — and halve the security to get there.
 
@@ -109,7 +152,7 @@ At a threshold of 3, that's absorbed: hub's own piece + a captured K4 piece = 2,
 | **D7** | **The hub's piece releases instantly *once at least one human has approved*, otherwise after 24h with notification.** | Prevents an all-automated trio (hub + sign-in + phone backup) from silently taking an account. Costs a real user nothing when any human is available. **This is the one call made without an explicit ruling — see [Open Questions](#part-10-open-questions).** |
 | **D8** | **Recovery starts with the community hub**, not the provider. | The pieces live on one specific node; the recovering device has to know which. Registrar (`<name>.beanpool.org`) assists |
 | **D9** | **SSO confers no membership.** `autoEnrollment` and `/api/sso/enroll` are deleted. | Social accounts are free and bulk-creatable; coupling them to enrolment would gut the vouch gate and worsen the Sybil residual in `docs/security-floor-exploit-handover.md` |
-| **D13** | **At most 2 human keepers per split** (2026-08-09). At least one piece is always held by the phone, the node, or a sign-in account. | This is what closes [R1](#part-9-risk-register). Three people cannot collude to reach a threshold of three if a member can never have three human keepers — the rule that was unreachable at *release* time is trivial at *deposit* time, which is where 3.0–3.7 failed to look. Two is already the number the model aims at (the day-3 nudge fires at `<2 human keepers`), so this makes the target a ceiling rather than inventing a new figure. **Cost:** a member cannot hand pieces to four friends. What it forbids is the all-human split, which is also the arrangement where getting back in depends entirely on other people answering their phones. **Does not close:** the node holds K2 in the clear and can derive K4's key from a subject claim it may know, so a dishonest node plus one human is still three pieces — unchanged by this rule, and the reason the margin is still "exactly one human keeper". Enforced in `putShareGeneration` |
+| **D13** | **At most 2 human keepers per split** (2026-08-09). At least one piece is always held by the phone, the node, or a sign-in account. | This is what closes [R1](#part-9-risk-register). Three people cannot collude to reach a threshold of three if a member can never have three human keepers — the rule that was unreachable at *release* time is trivial at *deposit* time, which is where 3.0–3.7 failed to look. Two is already the number the model aims at (the day-3 nudge fires at `<2 human keepers`), so this makes the target a ceiling rather than inventing a new figure. **Cost:** a member cannot hand pieces to four friends. What it forbids is the all-human split, which is also the arrangement where getting back in depends entirely on other people answering their phones. **Does not close:** the node holds K2 in the clear and can derive K3's key from a subject claim it may know, so a dishonest node plus one human is still three pieces — unchanged by this rule, and the reason the margin is still "exactly one human keeper". Enforced in `putShareGeneration` |
 
 ---
 
@@ -146,12 +189,13 @@ Step 1 (Your Name):   Invite code + node URL + callsign
 Step 2 (Your Photo):  Avatar selection (camera, gallery, or bundled)
 ```
 
-Step 1 still generates the Ed25519 keypair and redeems the invite. **New**: immediately after redemption the client splits the words and distributes K1–K3. This happens silently, before step 3 is drawn.
+Step 1 still generates the Ed25519 keypair and redeems the invite. **New**: immediately after redemption the client splits the words and distributes K1, K2 and K4 — not
+K3, which is the optional sign-in keeper and needs a deliberate tap in step 3. This happens silently, before step 3 is drawn.
 
 ### Step 3: Protection (replaces the seed phrase screen)
 
 ```
-This is **one screen with three states**, chosen by counting the keepers the user actually ended up with. That count is not assumed — K1 is absent for every PWA user and for anyone whose phone has no cloud backup, and K3 is absent on bulk/admin invites.
+This is **one screen with three states**, chosen by counting the keepers the user actually ended up with. That count is not assumed — K1 is absent for every PWA user and for anyone whose phone has no cloud backup, and K4 is absent on bulk/admin invites.
 
 **State A — 3 keepers (the common case).** Sign-in is a spare.
 
@@ -279,13 +323,13 @@ Welcome Screen
     │   Step 1: Invite Code + Node URL + Callsign             │
     │   (keypair generated, invite redeemed)                   │
     │        │                                                 │
-    │        └─► words split into pieces, K1–K3 distributed    │
+    │        └─► words split, K1+K2+K4 distributed (not K3)   │
     │            silently: phone backup / hub / inviter        │
     │                                                          │
     │   Step 2: Choose Avatar                                  │
     │        │                                                 │
     │   Step 3: 🛡️ "You're covered"                           │
-    │        ├── Add Google/Apple ─────────────────► K4, 1 tap│
+    │        ├── Add Google/Apple ─────────────────► K3, 1 tap│
     │        ├── "Rather write down 12 words?" ──► sovereign   │
     │        └── "Not now" ──► still covered by 3              │
     │                                                          │
@@ -342,18 +386,7 @@ That detail matters: node snapshots are pulled to the fleet manager by design, s
 
 **Released**: per the [release rules](#release-rules) — instantly once a human keyholder has approved, otherwise after 24h with notification (D7).
 
-### K3 — Whoever invited you
-
-**Piece stored**: on the node, encrypted to the inviter's public key (Ed25519 → X25519 → ECDH → AES-256-GCM). Their app caches its own piece locally on next sync, so the piece survives the node losing data.
-
-`members.invited_by` already records this relationship, so no new user action is required. Both sides are told:
-
-- To the new member: *"Kim is one of your keepers."*
-- To the inviter: *"You're now one of Sam's keepers. If Sam loses their phone, you can help them back in."*
-
-The inviter can decline, which deletes their piece and drops the user to two keepers (surfaced honestly, with a prompt to add another).
-
-### K4 — Your sign-in account (optional)
+### K3 — Your sign-in account (optional)
 
 **Piece stored**: on the node as `AES-256-GCM(piece, HKDF-SHA256(sub, salt))`, indexed by `SHA-256(sub ‖ lookup_salt)`.
 **Released**: by the node on proof of a fresh provider login, rate-limited.
@@ -373,11 +406,22 @@ Central OAuth applications (D5). If they disappear, users lose one keeper and re
 
 **Correction: Apple needs no client secret, and nothing here expires.** Earlier revisions of this table said Apple required a client-secret JWT rotated every 6 months, and warned that missing the rotation would kill Apple recovery silently. That is true of the **authorization-code exchange** (`POST /auth/token`) and of `/auth/revoke`, and it is the flow most Sign in with Apple tutorials describe — but it is not the flow this design uses. Both surfaces hand us the `id_token` directly: the native `ASAuthorization` credential carries `identityToken`, and Apple's web `form_post` puts `id_token` in the callback body. `apps/server/src/sso.ts` verifies it against `https://appleid.apple.com/auth/keys` and never calls Apple back. So the `.p8` key and its Team-ID-signed JWT are not on the critical path, there is no rotation to automate, and there is no expiry to miss. The same is true of Google — which is the actual content of D5, now confirmed against both implementations rather than assumed. **If a future feature needs `/auth/revoke` (for example, honouring "stop using my Apple ID" by deleting the fragment), the secret and its rotation come back with it.**
 
-**What D11 costs, recorded so it is not rediscovered as a surprise.** D10's reach argument was correct and is the price being paid: dropping Facebook removes the provider most likely to be a developing-market user's *only* account, and what remains is iOS owners plus Google users whose Google account already overlaps K1. K4 therefore stops being the broad safety net this document first imagined and becomes a useful extra for part of the userbase. **The consequence is that K5+ backup buddies carry more weight**, being the only keeper type that works for every user, on every platform, in every country — worth reflecting in how hard step 3 pushes for a buddy.
+**What D11 costs, recorded so it is not rediscovered as a surprise.** D10's reach argument was correct and is the price being paid: dropping Facebook removes the provider most likely to be a developing-market user's *only* account, and what remains is iOS owners plus Google users whose Google account already overlaps K1. K3 therefore stops being the broad safety net this document first imagined and becomes a useful extra for part of the userbase. **The consequence is that K5+ backup buddies carry more weight**, being the only keeper type that works for every user, on every platform, in every country — worth reflecting in how hard step 3 pushes for a buddy.
+
+### K4 — Whoever invited you
+
+**Piece stored**: on the node, encrypted to the inviter's public key (Ed25519 → X25519 → ECDH → AES-256-GCM). Their app caches its own piece locally on next sync, so the piece survives the node losing data.
+
+`members.invited_by` already records this relationship, so no new user action is required. Both sides are told:
+
+- To the new member: *"Kim is one of your keepers."*
+- To the inviter: *"You're now one of Sam's keepers. If Sam loses their phone, you can help them back in."*
+
+The inviter can decline, which deletes their piece and drops the user to two keepers (surfaced honestly, with a prompt to add another).
 
 ### K5+ — Backup buddies
 
-**Piece stored**: on the node, encrypted to each buddy's public key, exactly as K3. Each buddy's app caches its own piece locally.
+**Piece stored**: on the node, encrypted to each buddy's public key, exactly as K4. Each buddy's app caches its own piece locally.
 **Released**: instantly when the buddy taps Approve (D6).
 
 Uses the existing guardian selection UI, `friends.is_guardian`, the existing approve flow, and the existing anti-spam knowledge check.
@@ -426,11 +470,11 @@ Replace any binary "backed up ✅" with a keeper count, because that's the truth
 | Piece | Released when | Instant? |
 |---|---|---|
 | K1 phone backup | Platform restore puts the file back | Yes, automatic |
-| K3 / K5+ humans | That person taps Approve | Yes (D6) |
-| K4 sign-in | Fresh provider login verified, rate-limited | Yes |
 | K2 hub | ≥1 human piece already released → instant. Otherwise 24h + notification to every remaining device and every human keeper | Conditional (D7) |
+| K3 sign-in | Fresh provider login verified, rate-limited | Yes |
+| K4 / K5+ humans | That person taps Approve | Yes (D6) |
 
-D7 exists because K1, K2 and K4 are all machine-released. Without it, that trio is a silent, fully-automated path into any account — and if a user signs in with Google on an Android phone backed up to the same Google account, one company effectively controls two of the three. The 24h delay plus notification means the account owner and their keepers find out and can stop it. When any human is in the loop, the delay serves no purpose and doesn't apply.
+D7 exists because K1, K2 and K3 are all machine-released. Without it, that trio is a silent, fully-automated path into any account — and if a user signs in with Google on an Android phone backed up to the same Google account, one company effectively controls two of the three. The 24h delay plus notification means the account owner and their keepers find out and can stop it. When any human is in the loop, the delay serves no purpose and doesn't apply.
 
 ### Flow
 
@@ -451,11 +495,11 @@ The existing **migrate-to-new-key** guardian recovery stays in place alongside t
 
 ### Scenarios
 
-**New phone, same Apple ID.** K1 restores itself. Sarah taps her Google sign-in (K4). That's 2. The hub's piece needs 24h — or she texts Kim, who taps Approve, and she's in immediately. *Effort: one tap, plus one text if she's impatient.*
+**New phone, same Apple ID.** K1 restores itself. Sarah taps her Google sign-in (K3). That's 2. The hub's piece needs 24h — or she texts Kim, who taps Approve, and she's in immediately. *Effort: one tap, plus one text if she's impatient.*
 
-**Switched iPhone → Android.** No K1. Google (K4) + Kim (K3) = 2, hub joins instantly because a human approved = 3. *Effort: one tap and one text.*
+**Switched iPhone → Android.** No K1. Google (K3) + Kim (K4) = 2, hub joins instantly because a human approved = 3. *Effort: one tap and one text.*
 
-**No sign-in account, phone in the ocean, switched platforms.** Kim (K3) + one buddy (K5) = 2, and the hub joins instantly because a human approved (D7) = 3. *Effort: two texts.*
+**No sign-in account, phone in the ocean, switched platforms.** Kim (K4) + one buddy (K5) = 2, and the hub joins instantly because a human approved (D7) = 3. *Effort: two texts.*
 
 > Revisions 3.0–3.7 wrote this scenario as "Kim + two buddies = 3", which **D13 now forbids** — that is three human keepers, and the whole point of the cap is that three people can never be enough on their own. The scenario still recovers, and with one text fewer, because the hub was always going to release the moment a human approved. Worth noting what the cap actually took away here: not this user's recovery, but the version of it where no machine is involved at all.
 
@@ -568,7 +612,7 @@ built, and described `/api/recovery/collect` as releasing a piece when it opens 
 | `POST` | `/api/recovery/shares/sso` | Signed + verified `id_token` | The sign-in fragment, whose lookup hash the NODE derives |
 | `POST` | `/api/recovery/sso-nonce` | Signed | Nonce binding an `id_token` to this deposit |
 | `POST` | `/api/recovery/shares/status` | Signed | Keeper counts, and whether recovery depends on a person |
-| `POST` | `/api/recovery/keeper-candidates` | Signed | Who can be enrolled as the inviter keeper (K3) |
+| `POST` | `/api/recovery/keeper-candidates` | Signed | Who can be enrolled as the inviter keeper (K4) |
 | `DELETE` | `/api/recovery/shares` | Signed + confirmation | Drop every fragment. Removing ONE keeper is a re-split, not a delete |
 | `GET` | `/api/recovery/keepers/:callsign` | Public, rate-limited | Keeper *types* only, so the restore screen can be drawn before sign-in |
 
@@ -580,8 +624,8 @@ built, and described `/api/recovery/collect` as releasing a piece when it opens 
 | `POST` | `/api/recovery/collect/status` | Session key | Progress against the threshold |
 | `POST` | `/api/recovery/collect/fragments` | Session key | Collect what keepers have released so far |
 | `POST` | `/api/recovery/collect/hub` | Session key | K2, under D7 |
-| `POST` | `/api/recovery/collect/sso-nonce` | Session key | Nonce for the K4 exchange |
-| `POST` | `/api/recovery/collect/sso` | Session key + verified `id_token` | K4 |
+| `POST` | `/api/recovery/collect/sso-nonce` | Session key | Nonce for the K3 exchange |
+| `POST` | `/api/recovery/collect/sso` | Session key + verified `id_token` | K3 |
 | `POST` | `/api/recovery/collect/cancel` | Owner-signed | R1's stop — reachable by the OWNER, who lacks the session id |
 | `POST` | `/api/recovery/collect/mine` | Owner-signed | Live sessions against my account |
 
@@ -655,7 +699,7 @@ No OAuth client secrets on nodes (D5 — the apps are central and the client tal
 
 | Package | Purpose |
 |---|---|
-| `expo-auth-session` | OAuth for the K4 keeper |
+| `expo-auth-session` | OAuth for the K3 keeper |
 | `expo-apple-authentication` | Native Apple Sign-In (App Store builds only) |
 | `expo-web-browser` | OAuth redirect handling |
 | `shamir-secret-sharing` | Split/combine — TypeScript, maintained, Uint8Array API |
@@ -718,7 +762,7 @@ hardware-accelerated under Hermes, so AES's usual speed argument does not apply;
 bound a re-split loop could walk into. Nothing in the model depends on the choice — the wire
 fields fit either, and the node treats all of them as opaque.
 
-**Human keepers (K3, K5+)** — ECDH to their existing account key:
+**Human keepers (K4, K5+)** — ECDH to their existing account key:
 
 ```
 1. Ephemeral X25519 keypair on the splitting device
@@ -735,7 +779,7 @@ native stores the 32-byte seed, and the wrapped form silently derives a *differe
 so a keeper who enrolled on one platform and approves on the other would fail the tag with nothing
 to suggest why.
 
-**Sign-in keeper (K4)**:
+**Sign-in keeper (K3)**:
 
 ```
 1. sub = provider subject claim (Google/Apple OIDC `sub`)
@@ -763,7 +807,7 @@ This is deliberately weak-ish, and that's fine: `sub` is not a secret in general
 been **withdrawn** rather than built (decision 2026-08-08).
 
 The reason is the sentence two paragraphs above: security comes from the threshold, not from any
-one piece's key. K1 already has no protection at all and K4's is deliberately weak, so K2 wrapped
+one piece's key. K1 already has no protection at all and K3's is deliberately weak, so K2 wrapped
 under an operator secret was the odd one out rather than the standard. What the key actually
 bought was narrow — against an attacker holding a DB snapshot *but not* the environment, it
 reduced them from two readable pieces to one, and both are under the threshold of 3, so neither
@@ -776,7 +820,7 @@ only when somebody actually tries to recover. On a fleet where nodes are rebuilt
 are pulled between hosts, that is a live operational risk, not a hypothetical one.
 
 Note the resulting margin honestly: a DB or backup snapshot now yields **two** usable pieces (K2,
-and K4 whose key derives from `sub`). That is one short of the threshold, so the model holds — but
+and K3 whose key derives from `sub`). That is one short of the threshold, so the model holds — but
 it holds by exactly one human keeper, which is the same invariant that made storing K1 on the node
 a bug. Any future change that lets the node reach a third piece breaks recovery outright.
 
@@ -823,10 +867,10 @@ An existing user whose inviter has left the community, or who joined before `inv
 | # | Risk | Severity | Status |
 |---|---|---|---|
 | **R1** | **3 colluding human keepers take an account.** Instant release (D6) means no notification window and no cancel; because the original key is rebuilt rather than rotated, there's no revocation afterwards. | High | **Closed** (2026-08-09) — a split may hold **at most 2 human keepers** (D13), so three of them cannot exist to collude. Revisions 3.0–3.7 accepted this risk on the reasoning that no rule could reach it at *release* time, which was correct and beside the point: the rule belongs at *deposit* time. The no-UX-cost mitigations stay in place regardless — knowledge check, release logging, and after-the-fact notification to every surviving device — and the migrate-to-new-key flow remains the remedy for a takeover by any other route. |
-| **R2** | **Hub holds more than one envelope.** It stores K4's ciphertext and (for PWA users) serves the app code, so a dishonest operator can plausibly reach 2 pieces. | Medium | Contained by the threshold of 3 (D2). This is the specific reason the threshold cannot be lowered. |
-| **R3** | **One vendor controlling two keepers** — e.g. Google sign-in (K4) on an Android phone backed up to the same Google account (K1). | Medium | Contained by D7: the third piece is the hub's, which won't release automatically without a 24h delay and a notification. |
+| **R2** | **Hub holds more than one envelope.** It stores K3's ciphertext and (for PWA users) serves the app code, so a dishonest operator can plausibly reach 2 pieces. | Medium | Contained by the threshold of 3 (D2). This is the specific reason the threshold cannot be lowered. |
+| **R3** | **One vendor controlling two keepers** — e.g. Google sign-in (K3) on an Android phone backed up to the same Google account (K1). | Medium | Contained by D7: the third piece is the hub's, which won't release automatically without a 24h delay and a notification. |
 | **R4** | **Central OAuth apps disappear** (policy change, account suspension, us going away). | Low | Every user loses one keeper out of 4+ and recovers via the rest. Degrades; doesn't destroy. This is what makes D5 compatible with Principle 8. |
-| **R5** | **Node data loss** takes the hub's piece and the stored copies of human pieces. | Low | Human keepers cache their own piece locally, so K3/K5+ survive. K1 is on the user's phone. Only the hub's own piece is lost. |
+| **R5** | **Node data loss** takes the hub's piece and the stored copies of human pieces. | Low | Human keepers cache their own piece locally, so K4/K5+ survive. K1 is on the user's phone. Only the hub's own piece is lost. |
 | **R6** | **User has no cloud backup** (cheap Android, no Google account) → K1 is a phantom keeper. | Medium | Detected and shown honestly in the keeper list, never counted as present. Facebook (D10) covers many of these users, who often have one even without a Google account. Falls back to State B/C of step 3. |
 | **R7** | **Inviter declines or leaves** → 2 keepers. | Medium | Detected, surfaced, nudged. Not silent. |
 | **R8** | **Bulk/admin invites have no personal inviter** → user starts with 2 keepers. | Low | Step 3 State B asks for a third. |
@@ -937,7 +981,7 @@ Incremented with an UPSERT. No foreign keys to `members`, deliberately — there
 
 - Shamir split/combine, round-trip tested on Hermes and on an API 26 device
 - `recovery_shares` table, `generation` handling, re-split on keeper change
-- K2 (hub) and K3 (inviter) keepers; keeper-side local caching
+- K2 (hub) and K4 (inviter) keepers; keeper-side local caching
 - Release wired into the existing approve flow, with D6 instant release and D7 for the hub
 - Keeper status UI ("4 of 3 — you can afford to lose 1")
 - Restore flow: hub first, then collect pieces
@@ -957,7 +1001,7 @@ Incremented with an UPSERT. No foreign keys to `members`, deliberately — there
 - Detection and honest reporting when no cloud backup exists (R6)
 - Requires a standalone rebuild to test
 
-### Phase E: K4 sign-in keeper (est. 1 week) — **Google + Apple only (D11)**
+### Phase E: K3 sign-in keeper (est. 1 week) — **Google + Apple only (D11)**
 
 - Register the central OAuth applications (Google, then Apple)
 - `expo-auth-session` flows + PWA redirect parity, PKCE public client — **no client secret on any node**
@@ -983,7 +1027,7 @@ The threshold of 3 absorbs one dead keeper, but absorption is not detection: re-
 
 ## Revision History
 
-**Revision 3.6 (2026-08-08)** — **K1 never leaves the phone, and the protection status stops flattering people.** `recovery_shares` accepted ciphertext for all four keeper types, so clients would have uploaded K1's bytes and the node would have become a second holder of the one piece that carries no user secret and no hardware key by design. A fully compromised node could then assemble two of the three needed — K1 outright plus K2 under its own env key — from a single break-in with no human involved. Device fragments are now recorded (keeper exists, x-coordinate, so "4 of 3" stays honest) and never uploaded; a client sending ciphertext for one is refused rather than having it silently dropped. Also corrects the "four keyholders, every new member gets these at signup" heading, which contradicted `N = 3 at signup, 4 with sign-in` and K4's own "Optional" — three are automatic, the fourth needs a Google or Apple account the member may not have. And adds the honest numbers to the owner's status: `unattendedPieces` (how many pieces are reachable without another person agreeing) and `dependsOnPeople`, because "you can afford to lose 0" is accurate and far too gentle for a member whose third keeper is someone they met once. Twelve words remain the floor; keepers are convenience on top.
+**Revision 3.6 (2026-08-08)** — **K1 never leaves the phone, and the protection status stops flattering people.** `recovery_shares` accepted ciphertext for all four keeper types, so clients would have uploaded K1's bytes and the node would have become a second holder of the one piece that carries no user secret and no hardware key by design. A fully compromised node could then assemble two of the three needed — K1 outright plus K2 under its own env key — from a single break-in with no human involved. Device fragments are now recorded (keeper exists, x-coordinate, so "4 of 3" stays honest) and never uploaded; a client sending ciphertext for one is refused rather than having it silently dropped. Also corrects the "four keyholders, every new member gets these at signup" heading, which contradicted `N = 3 at signup, 4 with sign-in` and K3's own "Optional" — three are automatic, the fourth needs a Google or Apple account the member may not have. And adds the honest numbers to the owner's status: `unattendedPieces` (how many pieces are reachable without another person agreeing) and `dependsOnPeople`, because "you can afford to lose 0" is accurate and far too gentle for a member whose third keeper is someone they met once. Twelve words remain the floor; keepers are convenience on top.
 
 **Revision 3.5 (2026-08-07)** — **Apple's sign-in verification built, and the client-secret warning withdrawn.** `sso-google.ts` generalised into `sso.ts` with Google and Apple as entries in a provider table; Apple verified against `https://appleid.apple.com/auth/keys`, audience = the bundle ID `org.beanpool.pillar` (native) or the Services ID `org.beanpool.web` (web). Revisions 3.4 and earlier said Apple needed a client-secret JWT rotated every 6 months or "recovery dies silently"; that belongs to the authorization-code exchange, which this design never performs — see the correction under the provider table. Three Apple-specific behaviours are now handled rather than discovered later: `email_verified` arriving as the string `"true"`, the email being absent on every authorization after the first, and the native flow echoing `SHA-256(nonce)` instead of the nonce. The `sub` parity trap is unchanged and still owed a real cross-platform round trip (#213).
 

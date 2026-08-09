@@ -154,7 +154,7 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
      * depends entirely on other people answering their phones.
      *
      * What it does NOT close, stated plainly so nobody reads more into it than it does: the node
-     * holds K2 in the clear and can derive K4's key from a subject claim it may well know, so a
+     * holds K2 in the clear and can derive K3's key from a subject claim it may well know, so a
      * dishonest node plus ONE human keeper is still three pieces. That residual predates this
      * rule and is unchanged by it. The margin is one human keeper either way — this rule stops
      * the humans alone from being enough.

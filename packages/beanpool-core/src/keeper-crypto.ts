@@ -12,8 +12,8 @@
  * |---|---|---|
  * | K1 device | nobody — the bytes never leave the phone | not sealed here at all |
  * | K2 hub | **the node**, handing it to a device that holds no key | plaintext, stated |
- * | K3/K5+ member | the keeper's own app, with their identity key | X25519 ECDH → XChaCha20-Poly1305 |
- * | K4 sign-in | any device that can re-obtain the provider `sub` | HKDF(sub) → XChaCha20-Poly1305 |
+ * | K4/K5+ member | the keeper's own app, with their identity key | X25519 ECDH → XChaCha20-Poly1305 |
+ * | K3 sign-in | any device that can re-obtain the provider `sub` | HKDF(sub) → XChaCha20-Poly1305 |
  *
  * ## Why XChaCha20-Poly1305 and not AES-256-GCM
  *
@@ -34,7 +34,7 @@
  *
  * The associated data is a fixed per-scheme label, NOT the owner's public key — which would be
  * the stronger binding and was the first design. It is not available where it would be needed:
- * a device recovering via K4 has a callsign and a session, and `/api/recovery/collect` never
+ * a device recovering via K3 has a callsign and a session, and `/api/recovery/collect` never
  * returns an owner pubkey (it deliberately returns as little as possible to an unauthenticated
  * device). Binding to a value one reader cannot obtain buys nothing and costs an unopenable
  * fragment.
@@ -271,7 +271,7 @@ function ephemeralKeypair(): { secret: Uint8Array; publicKey: Uint8Array } {
 }
 
 /**
- * Seal a fragment to a human keeper's account key (K3, K5+).
+ * Seal a fragment to a human keeper's account key (K4, K5+).
  *
  * Ephemeral-to-static rather than static-to-static — the DM path in `e2e-crypto.ts` uses both
  * identity keys because both parties must derive the same key repeatedly. Here only the keeper
@@ -313,7 +313,7 @@ export function openShareAsMember(sealed: SealedShare, privateKey: string | Uint
 }
 
 /**
- * Seal the sign-in fragment (K4) under a key derived from the provider's subject claim.
+ * Seal the sign-in fragment (K3) under a key derived from the provider's subject claim.
  *
  * ## The salt here is NOT the lookup salt
  *
@@ -332,7 +332,7 @@ export function openShareAsMember(sealed: SealedShare, privateKey: string | Uint
  * `sub` is not a secret: the provider knows it, and this node may well be able to derive it.
  * What that yields an attacker is ONE fragment, and the threshold is three. Security here comes
  * from the threshold, not from this key — which is the architectural point of Revision 3, and
- * the reason this is acceptable where it would not be if K4 stood alone.
+ * the reason this is acceptable where it would not be if K3 stood alone.
  */
 export function sealShareToSso(share: Uint8Array, provider: string, sub: string): SealedShare {
     if (!provider || !sub) {
@@ -347,7 +347,7 @@ export function sealShareToSso(share: Uint8Array, provider: string, sub: string)
     };
 }
 
-/** Re-derive K4's key from a freshly obtained `sub` and open the fragment. */
+/** Re-derive K3's key from a freshly obtained `sub` and open the fragment. */
 export function openShareFromSso(sealed: SealedShare, provider: string, sub: string): Uint8Array {
     // Checked on the way out as well as the way in (CR): an empty sub would otherwise derive a key
     // from the string ":" and fail on the tag, reporting a corrupt fragment when what actually
@@ -374,7 +374,7 @@ export function openShareFromSso(sealed: SealedShare, provider: string, sub: str
  * permanently undecryptable, discovered only when somebody tried to recover.
  *
  * The honest statement of the margin: a database snapshot yields two readable pieces, K2 and
- * K4 (whose key derives from `sub`). The threshold is three, so the model holds — by exactly
+ * K3 (whose key derives from `sub`). The threshold is three, so the model holds — by exactly
  * one human keeper. **Anything that lets the node reach a third piece breaks recovery outright.**
  *
  * The IV and tag are stated sentinels rather than random filler, so that a reader of the table

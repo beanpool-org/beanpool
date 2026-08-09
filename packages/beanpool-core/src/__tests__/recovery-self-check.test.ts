@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { checkRecoveryWorksHere } from '../recovery-self-check.js';
+import { checkRecoveryWorksHere, rebuildSet } from '../recovery-self-check.js';
 import * as split from '../recovery-split.js';
+import { RECOVERY_THRESHOLD } from '../recovery-split.js';
 import * as keeperCrypto from '../keeper-crypto.js';
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -60,6 +61,57 @@ describe('recovery self-check', () => {
         // itself the thing that breaks enrolment — the opposite of its job.
         vi.spyOn(keeperCrypto, 'sealShareToMember').mockImplementation(() => { throw new Error('boom'); });
         await expect(checkRecoveryWorksHere()).resolves.toMatchObject({ ok: false, failedAt: 'seal' });
+    });
+
+    it('blames the CSPRNG rather than the cipher when the seal stage reports entropy trouble', async () => {
+        // Generating the throwaway keypair now sits inside the seal try/catch, because it reads
+        // crypto.getRandomValues like every other step and the contract here is "never throws".
+        // That enclosure cannot be tested directly — noble defines `ed25519.getPublicKey` as
+        // non-configurable, so it cannot be made to throw — but the classification it feeds can
+        // be, and that is the part with a decision in it.
+        vi.spyOn(keeperCrypto, 'sealShareToMember').mockImplementation(() => {
+            throw new Error('crypto.getRandomValues is not a function');
+        });
+        await expect(checkRecoveryWorksHere()).resolves.toMatchObject({ ok: false, failedAt: 'csprng' });
+    });
+
+    it('rebuilds from exactly the threshold, leaving a fragment spare', async () => {
+        const combine = vi.spyOn(split, 'combineRecoveryPhrase');
+        const splitSpy = vi.spyOn(split, 'splitRecoveryPhrase');
+        expect(await checkRecoveryWorksHere()).toEqual({ ok: true });
+
+        const [, keeperCount] = splitSpy.mock.calls[0];
+        expect(combine.mock.calls[0][0]).toHaveLength(RECOVERY_THRESHOLD);
+        // Strictly more keepers than the threshold is what makes this "any three of them"
+        // rather than "all of them" — the promise the model actually makes to a member.
+        expect(keeperCount).toBeGreaterThan(RECOVERY_THRESHOLD);
+    });
+
+    // The selection is tested apart from the check because inside it the property is invisible:
+    // at a threshold of 3, "take the first two plus the reopened one" and a hard-coded
+    // `[0], [1], opened` produce identical results. Mutation-checking proved the point — the
+    // hard-coded version failed no test. These run it at thresholds the constant never takes.
+    describe('rebuildSet', () => {
+        it.each([3, 4, 5, 8])('returns exactly %i fragments at that threshold', (threshold) => {
+            const fragments = Array.from({ length: threshold + 1 }, (_, i) => i);
+            const set = rebuildSet(fragments, 99, threshold);
+            expect(set).toHaveLength(threshold);
+            expect(set[set.length - 1]).toBe(99);
+        });
+
+        it.each([3, 4, 5, 8])('never reuses the fragment that was sealed, at threshold %i', (threshold) => {
+            // CHECK_KEEPERS is threshold + 1 and the sealed fragment is the last, so the front
+            // slice must stop short of it. Reusing it would mean the rebuild secretly depends on
+            // the same fragment twice, which raw Shamir rejects — turning a real device failure
+            // into a confusing one.
+            const fragments = Array.from({ length: threshold + 1 }, (_, i) => i);
+            const sealed = fragments[fragments.length - 1];
+            expect(rebuildSet(fragments, 99, threshold)).not.toContain(sealed);
+        });
+
+        it('takes from the front, so the spare is always the untouched one', () => {
+            expect(rebuildSet(['a', 'b', 'c', 'd'], 'opened', 3)).toEqual(['a', 'b', 'opened']);
+        });
     });
 
     it('never puts a real recovery phrase through the check', async () => {

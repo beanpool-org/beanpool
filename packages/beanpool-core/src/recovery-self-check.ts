@@ -38,7 +38,6 @@
  * all. Those three are what this exercises that nothing else does.
  */
 
-import { Buffer } from 'buffer';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { randomBytes } from '@noble/hashes/utils.js';
 import {
@@ -63,7 +62,13 @@ export interface RecoverySelfCheckResult {
     ok: boolean;
     /** Absent when `ok`. */
     failedAt?: RecoverySelfCheckStage;
-    /** For logs and bug reports. Never for a member — see the note in {@link RecoveryCombineError}. */
+    /**
+     * For logs and bug reports, never for a member.
+     *
+     * Same split the trust model already uses: this string talks about polynomials and byte
+     * comparisons, cannot be translated and cannot carry an action button. The client owns the
+     * sentence a member sees, matched on {@link failedAt}.
+     */
     detail?: string;
 }
 
@@ -77,8 +82,33 @@ export interface RecoverySelfCheckResult {
 const THROWAWAY_PHRASE =
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
-/** Keepers to split across — four, so the check also proves "any three of them" and not just "all". */
-const CHECK_KEEPERS = 4;
+/**
+ * One more keeper than the threshold, so the check proves "ANY three of them" rather than "all
+ * of them" — the promise the model actually makes.
+ *
+ * Derived from {@link RECOVERY_THRESHOLD} rather than written as 4 (CR). The first draft
+ * hard-coded three fragments into the rebuild and asserted afterwards that the threshold was
+ * still three. Review pointed out that assertion could never fire: raise the threshold to four
+ * and `combineRecoveryPhrase` rejects three fragments first, returning a generic combine failure
+ * and never reaching the specific message. Adapting removes the failure instead of reporting it.
+ */
+const CHECK_KEEPERS = RECOVERY_THRESHOLD + 1;
+
+/**
+ * The fragments a rebuild should use: `threshold - 1` taken from the front, plus the one that
+ * went through the encryption round trip.
+ *
+ * Extracted so it can be tested at thresholds other than the current one. Inline, the property
+ * "adapts to RECOVERY_THRESHOLD" was untestable — with a threshold of 3, taking the first two
+ * plus the reopened fragment is indistinguishable from hard-coding `[0], [1], opened`, and a
+ * test asserting the length reads as meaningful while proving nothing. Mutation-checking caught
+ * that: re-introducing the hard-coded version failed no test at all.
+ *
+ * Generic because the property is about selection, not about bytes.
+ */
+export function rebuildSet<T>(fragments: readonly T[], reopened: T, threshold: number): T[] {
+    return [...fragments.slice(0, threshold - 1), reopened];
+}
 
 /**
  * Run the whole recovery path once and report whether it survived.
@@ -109,24 +139,37 @@ export async function checkRecoveryWorksHere(): Promise<RecoverySelfCheckResult>
         };
     }
 
-    const keeperSeed = randomBytes(32);
-    const keeperPublicKey = ed25519.getPublicKey(keeperSeed);
+    // The LAST fragment, so it never overlaps the first RECOVERY_THRESHOLD - 1 used in the rebuild.
+    const sealedIndex = fragments.length - 1;
 
+    // Inside the try as well (CR): the stated contract is that this never throws, and generating
+    // the throwaway keypair reads `crypto.getRandomValues` like everything else here. The
+    // missing-polyfill case is already caught above — `splitRecoveryPhrase` asserts it on the way
+    // in — but "the most likely trigger is covered elsewhere" is not the same as "cannot throw",
+    // and this function breaking enrolment would be the exact opposite of its job.
     let sealed;
     try {
-        sealed = sealShareToMember(fragments[2], keeperPublicKey);
+        const keeperSeed = randomBytes(32);
+        const keeperPublicKey = ed25519.getPublicKey(keeperSeed);
+        sealed = { share: sealShareToMember(fragments[sealedIndex], keeperPublicKey), keeperSeed };
     } catch (e) {
-        return { ok: false, failedAt: 'seal', detail: e instanceof Error ? e.message : String(e) };
+        const detail = e instanceof Error ? e.message : String(e);
+        return { ok: false, failedAt: detail.includes('getRandomValues') ? 'csprng' : 'seal', detail };
     }
 
     let opened: Uint8Array;
     try {
-        opened = openShareAsMember(sealed, keeperSeed);
+        opened = openShareAsMember(sealed.share, sealed.keeperSeed);
     } catch (e) {
         return { ok: false, failedAt: 'open', detail: e instanceof Error ? e.message : String(e) };
     }
 
-    if (Buffer.compare(Buffer.from(opened), Buffer.from(fragments[2])) !== 0) {
+    // Compared by hand rather than through `Buffer.compare` (CR). Nothing here needs a Buffer, and
+    // `buffer` is one of the three packages this whole function exists to be uncertain about — no
+    // reason to route the check itself through a dependency it is meant to be testing.
+    const original = fragments[sealedIndex];
+    const identical = opened.length === original.length && opened.every((b, i) => b === original[i]);
+    if (!identical) {
         // The quiet failure this whole function exists for: the cipher ran, the tag verified, and
         // the bytes are still wrong. Checked explicitly rather than trusted, because every layer
         // above here would carry on as though nothing had happened.
@@ -139,8 +182,12 @@ export async function checkRecoveryWorksHere(): Promise<RecoverySelfCheckResult>
 
     try {
         // The sealed-and-reopened fragment is deliberately one of the three, so the rebuild
-        // depends on the encryption round trip rather than running alongside it.
-        const rebuilt = await combineRecoveryPhrase([fragments[0], fragments[1], opened]);
+        // depends on the encryption round trip rather than running alongside it. The others are
+        // taken from the front, leaving one fragment unused — which is what makes this "any
+        // three" rather than "all of them".
+        const rebuilt = await combineRecoveryPhrase(
+            rebuildSet(fragments, opened, RECOVERY_THRESHOLD),
+        );
         if (rebuilt !== THROWAWAY_PHRASE) {
             return {
                 ok: false,
@@ -150,16 +197,6 @@ export async function checkRecoveryWorksHere(): Promise<RecoverySelfCheckResult>
         }
     } catch (e) {
         return { ok: false, failedAt: 'combine', detail: e instanceof Error ? e.message : String(e) };
-    }
-
-    if (RECOVERY_THRESHOLD !== 3) {
-        // Not a device problem — a code problem, surfaced here because this function's claim is
-        // "three fragments rebuilt the phrase" and it hard-codes three above to make that literal.
-        return {
-            ok: false,
-            failedAt: 'combine',
-            detail: `This check rebuilds from 3 fragments but the threshold is ${RECOVERY_THRESHOLD}.`,
-        };
     }
 
     return { ok: true };

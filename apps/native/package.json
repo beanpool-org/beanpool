@@ -9,7 +9,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "lint": "eslint app components constants services utils --no-error-on-unmatched-pattern",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",
@@ -70,6 +71,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.14",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^3.0.5"
   }
 }

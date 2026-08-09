@@ -82,7 +82,7 @@ automatically, which was never true.
 
 And then, over time:
 
-| **K5+** | **Backup buddies** | Each one tapping Approve | Real people, added as the user meets them |
+| **K5+** | **Backup buddies** | Each one tapping Approve | Real people, added as the user meets them. **Capped: K3 and K5+ together may be at most 2 (D13)**, so a member has one buddy if they have an inviter, two if they don't |
 
 Any 3 rebuild the account.
 
@@ -109,6 +109,7 @@ At a threshold of 3, that's absorbed: hub's own piece + a captured K4 piece = 2,
 | **D7** | **The hub's piece releases instantly *once at least one human has approved*, otherwise after 24h with notification.** | Prevents an all-automated trio (hub + sign-in + phone backup) from silently taking an account. Costs a real user nothing when any human is available. **This is the one call made without an explicit ruling — see [Open Questions](#part-10-open-questions).** |
 | **D8** | **Recovery starts with the community hub**, not the provider. | The pieces live on one specific node; the recovering device has to know which. Registrar (`<name>.beanpool.org`) assists |
 | **D9** | **SSO confers no membership.** `autoEnrollment` and `/api/sso/enroll` are deleted. | Social accounts are free and bulk-creatable; coupling them to enrolment would gut the vouch gate and worsen the Sybil residual in `docs/security-floor-exploit-handover.md` |
+| **D13** | **At most 2 human keepers per split** (2026-08-09). At least one piece is always held by the phone, the node, or a sign-in account. | This is what closes [R1](#part-9-risk-register). Three people cannot collude to reach a threshold of three if a member can never have three human keepers — the rule that was unreachable at *release* time is trivial at *deposit* time, which is where 3.0–3.7 failed to look. Two is already the number the model aims at (the day-3 nudge fires at `<2 human keepers`), so this makes the target a ceiling rather than inventing a new figure. **Cost:** a member cannot hand pieces to four friends. What it forbids is the all-human split, which is also the arrangement where getting back in depends entirely on other people answering their phones. **Does not close:** the node holds K2 in the clear and can derive K4's key from a subject claim it may know, so a dishonest node plus one human is still three pieces — unchanged by this rule, and the reason the margin is still "exactly one human keeper". Enforced in `putShareGeneration` |
 
 ---
 
@@ -454,7 +455,9 @@ The existing **migrate-to-new-key** guardian recovery stays in place alongside t
 
 **Switched iPhone → Android.** No K1. Google (K4) + Kim (K3) = 2, hub joins instantly because a human approved = 3. *Effort: one tap and one text.*
 
-**No sign-in account, phone in the ocean, switched platforms.** Kim (K3) + two buddies (K5, K6) = 3. *Effort: three texts.*
+**No sign-in account, phone in the ocean, switched platforms.** Kim (K3) + one buddy (K5) = 2, and the hub joins instantly because a human approved (D7) = 3. *Effort: two texts.*
+
+> Revisions 3.0–3.7 wrote this scenario as "Kim + two buddies = 3", which **D13 now forbids** — that is three human keepers, and the whole point of the cap is that three people can never be enough on their own. The scenario still recovers, and with one text fewer, because the hub was always going to release the moment a human approved. Worth noting what the cap actually took away here: not this user's recovery, but the version of it where no machine is involved at all.
 
 **Wrote the words down.** Type them. Works forever, needs nobody.
 
@@ -819,7 +822,7 @@ An existing user whose inviter has left the community, or who joined before `inv
 
 | # | Risk | Severity | Status |
 |---|---|---|---|
-| **R1** | **3 colluding human keepers take an account.** Instant release (D6) means no notification window and no cancel; because the original key is rebuilt rather than rotated, there's no revocation afterwards. | High | **Accepted** — chosen for recovery UX. Mitigations that cost no UX: keep the existing knowledge check, log every release, and notify the owner on every surviving device *after* the fact. The migrate-to-new-key flow remains the remedy once a takeover is discovered. |
+| **R1** | **3 colluding human keepers take an account.** Instant release (D6) means no notification window and no cancel; because the original key is rebuilt rather than rotated, there's no revocation afterwards. | High | **Closed** (2026-08-09) — a split may hold **at most 2 human keepers** (D13), so three of them cannot exist to collude. Revisions 3.0–3.7 accepted this risk on the reasoning that no rule could reach it at *release* time, which was correct and beside the point: the rule belongs at *deposit* time. The no-UX-cost mitigations stay in place regardless — knowledge check, release logging, and after-the-fact notification to every surviving device — and the migrate-to-new-key flow remains the remedy for a takeover by any other route. |
 | **R2** | **Hub holds more than one envelope.** It stores K4's ciphertext and (for PWA users) serves the app code, so a dishonest operator can plausibly reach 2 pieces. | Medium | Contained by the threshold of 3 (D2). This is the specific reason the threshold cannot be lowered. |
 | **R3** | **One vendor controlling two keepers** — e.g. Google sign-in (K4) on an Android phone backed up to the same Google account (K1). | Medium | Contained by D7: the third piece is the hub's, which won't release automatically without a 24h delay and a notification. |
 | **R4** | **Central OAuth apps disappear** (policy change, account suspension, us going away). | Low | Every user loses one keeper out of 4+ and recovers via the rest. Degrades; doesn't destroy. This is what makes D5 compatible with Principle 8. |

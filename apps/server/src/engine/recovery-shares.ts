@@ -116,13 +116,61 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         );
     }
 
+    /**
+     * Every keeper type that exists. This is an ERROR-QUALITY guard, not a security one.
+     *
+     * Review raised that `'Member'` or a stray type could slip past the human-keeper count and
+     * reopen R1. It cannot, and it could not before this existed: the route rejects anything
+     * outside this list, and `recovery_shares` carries
+     * `CHECK (holder_type IN ('device','hub','member','sso'))`, so the database refuses it too.
+     * What this adds is a sentence instead of `SQLITE_CONSTRAINT_CHECK`, raised before the
+     * transaction opens rather than inside it.
+     *
+     * What was NOT taken from the review is normalising with `.toLowerCase().trim()`. The release
+     * path, the singleton rule and every query compare `holder_type` exactly, so normalising here
+     * alone would let `'Member'` count as a human keeper while matching nothing anywhere else —
+     * a predicate that means one thing in one place and another elsewhere, which this codebase
+     * has already been bitten by once.
+     */
+    const KNOWN_TYPES = new Set<KeeperType>(['device', 'hub', 'member', 'sso']);
+
     /** Keeper types there can only be one of. A member has many buddies but one phone and one hub. */
     const SINGLETON_TYPES = new Set<KeeperType>(['hub', 'device']);
+
+    /**
+     * At most two keepers may be people. This is what closes R1.
+     *
+     * R1 — "three colluding human keepers take an account" — was in the risk register as High and
+     * **Accepted**, on the grounds that no server rule could reach it: keepers must decrypt to
+     * approve, so the node cannot tell a genuine release from a conspiracy. That reasoning is
+     * still correct, and it is also beside the point. Three people cannot collude to reach the
+     * threshold if a member can never have three human keepers in the first place. The rule that
+     * was unreachable at release time is trivial at deposit time.
+     *
+     * The cost is real and worth stating: a member cannot hand pieces to four friends. Two is
+     * already what the model aims at — the doc's own nudge fires at "<2 human keepers" — so this
+     * makes the target a ceiling rather than introducing a new number. What it forbids is the
+     * arrangement where every piece is a person, which is also the arrangement where recovery
+     * depends entirely on other people answering their phones.
+     *
+     * What it does NOT close, stated plainly so nobody reads more into it than it does: the node
+     * holds K2 in the clear and can derive K4's key from a subject claim it may well know, so a
+     * dishonest node plus ONE human keeper is still three pieces. That residual predates this
+     * rule and is unchanged by it. The margin is one human keeper either way — this rule stops
+     * the humans alone from being enough.
+     */
+    const MAX_HUMAN_KEEPERS = 2;
 
     const holders = new Set<string>();
     const indices = new Set<number>();
     const singletons = new Map<KeeperType, string>();
     for (const s of shares) {
+        if (!KNOWN_TYPES.has(s.holderType)) {
+            throw new RecoveryShareError(
+                `Unknown keeper type '${String(s.holderType)}'. Expected one of: `
+                + `${[...KNOWN_TYPES].join(', ')}.`,
+            );
+        }
         const holderKey = `${s.holderType}:${s.holderRef}`;
         if (holders.has(holderKey)) {
             throw new RecoveryShareError(`Duplicate keeper in one generation: ${holderKey}.`);
@@ -198,6 +246,19 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
                 `Fragment for member ${s.holderRef} has no ephemeral public key; its keeper could never unwrap it.`
             );
         }
+    }
+
+    // Checked after the loop rather than inside it, so the message can report the real number a
+    // client tried to store instead of whichever fragment happened to tip it over.
+    const humanKeepers = shares.filter(s => s.holderType === 'member').length;
+    if (humanKeepers > MAX_HUMAN_KEEPERS) {
+        throw new RecoveryShareError(
+            `A split may have at most ${MAX_HUMAN_KEEPERS} human keepers, and this one has `
+            + `${humanKeepers}. Three people who each hold a piece are three people who could `
+            + `agree to take the account, and nothing at release time can tell that apart from a `
+            + `genuine recovery. At least one piece must be held by this phone, this node, or a `
+            + `sign-in account.`,
+        );
     }
 
     const insert = db.prepare(`

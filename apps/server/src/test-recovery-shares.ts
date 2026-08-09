@@ -207,6 +207,78 @@ function main() {
     );
     assert(getCurrentGeneration('rejectPK') === 0, 'no rejected batch left a partial write behind');
 
+    // ── 7a. At most two human keepers — this is what closes R1 ──
+    //
+    // R1 sat in the risk register as High and Accepted, on the reasoning that no server rule can
+    // reach it: keepers must decrypt to approve, so nothing at release time distinguishes a
+    // conspiracy from a genuine recovery. Still true, and beside the point — three people cannot
+    // collude to reach a threshold of three if a member can never have three human keepers.
+    seedMember('thirdHumanPK');
+    seedMember('fourthHumanPK');
+    throws(
+        () => putShareGeneration('rejectPK', [
+            share({ holderType: 'device', holderRef: 'self', shareIndex: 1 }),
+            share({ holderType: 'member', holderRef: 'inviterPK', shareIndex: 2 }),
+            share({ holderType: 'member', holderRef: 'buddyPK', shareIndex: 3 }),
+            share({ holderType: 'member', holderRef: 'thirdHumanPK', shareIndex: 4 }),
+        ]),
+        'at most 2 human keepers',
+        'refuses a split where three people could agree to take the account',
+    );
+    throws(
+        () => putShareGeneration('rejectPK', [
+            share({ holderType: 'member', holderRef: 'inviterPK', shareIndex: 1 }),
+            share({ holderType: 'member', holderRef: 'buddyPK', shareIndex: 2 }),
+            share({ holderType: 'member', holderRef: 'thirdHumanPK', shareIndex: 3 }),
+            share({ holderType: 'member', holderRef: 'fourthHumanPK', shareIndex: 4 }),
+        ]),
+        'at most 2 human keepers',
+        '...and refuses an all-human split however many keepers it has',
+    );
+    assert(getCurrentGeneration('rejectPK') === 0, 'a refused human-keeper split wrote nothing');
+
+    // A capitalised or unknown type is REFUSED, not silently counted (CR on #245). Review asked
+    // for `holderType.toLowerCase()` before the human count; that would have made 'Member' human
+    // here while matching nothing in the release path, the singleton check, or any query — all of
+    // which compare the exact value. Rejecting keeps one spelling of the truth.
+    throws(
+        () => putShareGeneration('rejectPK', [
+            share({ holderType: 'device', holderRef: 'self', shareIndex: 1 }),
+            share({ holderType: 'hub', holderRef: 'self', shareIndex: 2 }),
+            share({ holderType: 'Member' as 'member', holderRef: 'inviterPK', shareIndex: 3 }),
+        ]),
+        'Unknown keeper type',
+        'refuses a capitalised keeper type rather than normalising it into a different rule',
+    );
+    throws(
+        () => putShareGeneration('rejectPK', [
+            share({ holderType: 'device', holderRef: 'self', shareIndex: 1 }),
+            share({ holderType: 'hub', holderRef: 'self', shareIndex: 2 }),
+            share({ holderType: 'guardian' as 'member', holderRef: 'inviterPK', shareIndex: 3 }),
+        ]),
+        'Unknown keeper type',
+        '...and refuses a keeper type nobody has decided the rules for yet',
+    );
+
+    // Two humans is the ceiling, not one below it — the doc's own nudge fires at "<2 human
+    // keepers", so a member being pushed TO two must not then be refused for reaching it.
+    seedMember('twoHumansPK');
+    const atTheCap = putShareGeneration('twoHumansPK', [
+        share({ holderType: 'device', holderRef: 'self', shareIndex: 1 }),
+        share({ holderType: 'member', holderRef: 'inviterPK', shareIndex: 2 }),
+        share({ holderType: 'member', holderRef: 'buddyPK', shareIndex: 3 }),
+    ]);
+    assert(atTheCap === 1, 'exactly two human keepers is allowed — the cap is a ceiling, not a limit below it');
+
+    // The arrangement the cap is designed to leave open: nobody has to answer their phone.
+    seedMember('noHumansPK');
+    const machinesOnly = putShareGeneration('noHumansPK', [
+        share({ holderType: 'device', holderRef: 'self', shareIndex: 1 }),
+        share({ holderType: 'hub', holderRef: 'self', shareIndex: 2 }),
+        share({ holderType: 'sso', holderRef: 'apple', shareIndex: 3, ssoLookupHash: 'hash-no-humans' }),
+    ]);
+    assert(machinesOnly === 1, 'a split needing no human at all is still allowed');
+
     // ── 7b. Two owners cannot share a sign-in lookup hash ──
     // The hash is SHA-256(sub ‖ per-split random salt), so a collision means the salt is not doing
     // its job. Failing here is the point: the alternative is findShareBySsoLookup quietly serving

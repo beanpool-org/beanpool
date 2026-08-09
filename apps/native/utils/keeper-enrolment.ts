@@ -24,11 +24,25 @@
  *
  * ## Ordering
  *
- * The device fragment is written to disk BEFORE the generation is uploaded. K1's bytes live on
- * the phone and nowhere else — the node records only that the keeper exists — so a phone that
- * failed to write the file while the node recorded the keeper would leave a member counted as
- * 3-of-N while actually holding 2. The reverse ordering costs nothing: a written file with no
- * matching generation is an orphan the next enrolment overwrites.
+ * Three steps, in this order, and the middle one is the point:
+ *
+ * 1. **Probe** that the phone can write to its document directory at all.
+ * 2. **Upload** the generation.
+ * 3. **Write** the real fragment, tagged with the generation the node just accepted.
+ *
+ * The first draft wrote the fragment before uploading, and justified it by saying a written file
+ * with no matching generation was "an orphan the next enrolment overwrites". That was wrong, and
+ * review caught it. Consider a member who already has a generation and re-splits: the new
+ * fragment lands on disk, the upload then fails, and the node is still serving generation N while
+ * the phone holds generation N+1. At recovery those get combined — fragments from two different
+ * polynomials — and `combineRecoveryPhrase` rejects the result. A member who appears to have
+ * three keepers cannot get back in, and nothing before the attempt says so.
+ *
+ * Writing last fixes that, and the probe keeps what the original ordering was protecting: the
+ * node must never record a device keeper on a phone that cannot store one. If the final write
+ * fails anyway, the count is reported WITHOUT the device keeper — understating what the member
+ * has, never overstating it, which is the direction the node's own status endpoint says the
+ * client is responsible for correcting.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -82,7 +96,11 @@ async function signedPost(
     const headers = await buildSignedHeaders(
         'POST', path, bodyString, identity.privateKey, identity.publicKey,
     );
-    return fetch(`${url}${path}`, { method: 'POST', headers, body: bodyString });
+    // Trailing slash stripped (CR), and this is a signature bug rather than a cosmetic one: the
+    // headers sign `path`, but a stored anchor of "https://node/" would send the request to
+    // "https://node//api/..." — the server verifies over `ctx.path`, sees the doubled slash, and
+    // every recovery call 401s with nothing to suggest a URL was the cause.
+    return fetch(`${url.replace(/\/+$/, '')}${path}`, { method: 'POST', headers, body: bodyString });
 }
 
 /**
@@ -116,13 +134,60 @@ async function inviterKeeper(
  * reveals nothing, so there is nothing here for a key to protect. Secrecy is not load-bearing;
  * the threshold is.
  */
-async function writeDeviceFragment(fragment: Uint8Array): Promise<string | null> {
+export function deviceFragmentPath(): string | null {
+    const dir = FileSystem.documentDirectory;
+    if (!dir) return null;
+    // Joined in ONE place, used by the write here and by the restore flow that will read it (CR).
+    // Expo documents `documentDirectory` as ending in a slash, but the two sides of this must
+    // agree more than they must be brief: a fragment written to `...Documentsbeanpool-...bin`
+    // while restore looks in `...Documents/beanpool-...bin` is a K1 that silently does not exist.
+    return `${dir.endsWith('/') ? dir : `${dir}/`}${DEVICE_FRAGMENT_FILE}`;
+}
+
+/**
+ * Can this phone store a fragment at all?
+ *
+ * Runs before the generation is uploaded. The node cannot see whether a phone's backup exists —
+ * its own status endpoint says so and leaves the correction to the client — so recording a device
+ * keeper against a phone that cannot write one would put a member at "3 of 3" with two real
+ * pieces. Writing and deleting a probe answers that without touching the previous fragment,
+ * which a real write would destroy before we know the upload will even succeed.
+ */
+async function probeDeviceStorage(): Promise<string | null> {
+    const path = deviceFragmentPath();
+    if (!path) return 'no document directory on this platform';
     try {
-        const dir = FileSystem.documentDirectory;
-        if (!dir) return 'no document directory on this platform';
+        const probe = `${path}.probe`;
+        await FileSystem.writeAsStringAsync(probe, 'probe', { encoding: FileSystem.EncodingType.UTF8 });
+        await FileSystem.deleteAsync(probe, { idempotent: true });
+        return null;
+    } catch (e) {
+        return (e as Error).message;
+    }
+}
+
+/**
+ * Write K1 to a plain file in the app's document directory.
+ *
+ * Deliberately unencrypted and behind no hardware key. Revisions 1 and 2 of this model tried to
+ * sync a *secret* through platform backup and both mechanisms were broken — iCloud Keychain
+ * sync needs an attribute `expo-secure-store` does not expose, and Android SecureStore encrypts
+ * with a non-exportable Keystore key, so Auto Backup captures a blob whose key never leaves the
+ * old device. Storing a fragment in the clear is what makes K1 work at all: a single piece
+ * reveals nothing, so there is nothing here for a key to protect. Secrecy is not load-bearing;
+ * the threshold is.
+ *
+ * The generation is stored alongside it so restore can tell whether this fragment belongs to the
+ * split the node is currently serving. Fragments from two generations describe two different
+ * polynomials, and combining them yields noise — better recognised than combined.
+ */
+async function writeDeviceFragment(fragment: Uint8Array, generation: number | null): Promise<string | null> {
+    const path = deviceFragmentPath();
+    if (!path) return 'no document directory on this platform';
+    try {
         await FileSystem.writeAsStringAsync(
-            `${dir}${DEVICE_FRAGMENT_FILE}`,
-            encodeBase64(fragment),
+            path,
+            JSON.stringify({ generation, fragment: encodeBase64(fragment) }),
             { encoding: FileSystem.EncodingType.UTF8 },
         );
         return null;
@@ -159,13 +224,28 @@ export async function enrolKeepers(identity: BeanPoolIdentity): Promise<KeeperEn
     }
 
     const inviter = await inviterKeeper(url, identity);
-    if (!inviter.eligible) skipped.push({ keeper: 'member', reason: inviter.reason ?? 'none' });
+
+    // `eligible` alone is not enough to seal to somebody (CR). The first draft checked eligibility
+    // when deciding what to RECORD as skipped and eligibility-plus-key when deciding what to
+    // ENROL, so an eligible inviter arriving without a usable key fell through both: not a
+    // keeper, and no reason given for why not. Step 3 would then show two keepers and offer
+    // nothing to explain the third.
+    const inviterProblem =
+        !inviter.eligible ? (inviter.reason ?? 'none')
+        : !inviter.publicKey ? 'the node named an inviter but sent no key'
+        : !/^[0-9a-fA-F]{64}$/.test(inviter.publicKey) ? 'the inviter key is not a public key'
+        // Sealing a fragment to yourself is a fragment nobody else holds: three keepers on paper,
+        // two in reality. The server resolves this case away already; costing nothing to refuse
+        // it here means a server bug cannot quietly become a member's silent loss.
+        : inviter.publicKey.toLowerCase() === identity.publicKey.toLowerCase() ? 'the inviter is this member'
+        : null;
+    if (inviterProblem) skipped.push({ keeper: 'member', reason: inviterProblem });
 
     // The hub and the phone are always available on native; the inviter may not be. Counted
     // rather than assumed, because the split has to be sized to the keepers that exist — asking
     // for more fragments than there are holders leaves pieces nobody keeps.
     const holders: EnrolledKeeper[] = ['device', 'hub'];
-    if (inviter.eligible && inviter.publicKey) holders.push('member');
+    if (!inviterProblem) holders.push('member');
 
     if (holders.length < RECOVERY_THRESHOLD) {
         // Two keepers cannot rebuild a 3-of-N split, so there is no point writing one. The
@@ -183,11 +263,10 @@ export async function enrolKeepers(identity: BeanPoolIdentity): Promise<KeeperEn
         return nothing(`could not split the phrase: ${(e as Error).message}`);
     }
 
-    // Device first, and its failure is fatal to the whole enrolment rather than a skip: the
-    // count this returns decides what the member is TOLD, and a phone that silently holds no
-    // piece while the node thinks it does is the one arrangement nobody can detect later.
-    const deviceError = await writeDeviceFragment(fragments[0]);
-    if (deviceError) return nothing(`could not store this phone's piece: ${deviceError}`);
+    // Prove the phone can store a fragment before the node records that it holds one. The write
+    // itself happens after the upload — see the ordering note at the top of the file.
+    const probeError = await probeDeviceStorage();
+    if (probeError) return nothing(`this phone cannot store its piece: ${probeError}`);
 
     const shares: (SealedShare & { holderType: string; holderRef: string; shareIndex: number })[] = [];
     try {
@@ -220,7 +299,24 @@ export async function enrolKeepers(identity: BeanPoolIdentity): Promise<KeeperEn
             return nothing(`node refused the fragments (${res.status}): ${detail.slice(0, 200)}`);
         }
         const body = await res.json() as { generation?: number };
-        return { enrolled: holders, generation: body.generation ?? null, skipped };
+        const generation = body.generation ?? null;
+
+        // Written only now the node has accepted the generation, and tagged with it. Anything
+        // already on disk from a previous split stays valid until this succeeds.
+        const writeError = await writeDeviceFragment(fragments[0], generation);
+        if (writeError) {
+            // The node now records a device keeper this phone does not hold. Nothing can undo the
+            // upload, so the count is reported WITHOUT it — the member is told they have fewer
+            // keepers than the node believes, which is the safe direction. A retry only needs to
+            // write the file; the fragments are already deposited.
+            return {
+                enrolled: holders.filter(h => h !== 'device'),
+                generation,
+                skipped: [...skipped, { keeper: 'device', reason: writeError }],
+                error: `the pieces are deposited, but this phone could not store its own: ${writeError}`,
+            };
+        }
+        return { enrolled: holders, generation, skipped };
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);
     }

@@ -16,9 +16,10 @@ vi.mock('expo-file-system/legacy', () => ({
     documentDirectory: 'file:///docs/',
     EncodingType: { UTF8: 'utf8' },
     writeAsStringAsync: vi.fn(async (path: string, contents: string) => {
-        calls.push('write-device-fragment');
-        writes.push({ path, contents });
+        calls.push(path.endsWith('.probe') ? 'probe-device-storage' : 'write-device-fragment');
+        if (!path.endsWith('.probe')) writes.push({ path, contents });
     }),
+    deleteAsync: vi.fn(async () => {}),
 }));
 
 vi.mock('../crypto', () => ({
@@ -28,7 +29,7 @@ vi.mock('../crypto', () => ({
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
-import { enrolKeepers, DEVICE_FRAGMENT_FILE } from '../keeper-enrolment';
+import { enrolKeepers, deviceFragmentPath, DEVICE_FRAGMENT_FILE } from '../keeper-enrolment';
 
 const IDENTITY = {
     publicKey: 'aa'.repeat(32),
@@ -79,22 +80,60 @@ describe('enrolling keepers', () => {
         expect(result.generation).toBe(1);
     });
 
-    it('writes the phone\'s piece BEFORE telling the node the keeper exists', async () => {
-        // The ordering that matters. K1's bytes live on the phone and nowhere else, so a failed
-        // local write alongside a successful upload leaves a member counted as 3-of-N while
-        // actually holding 2 — the one arrangement nobody can detect afterwards.
+    it('probes storage, uploads, and only THEN writes the real fragment', async () => {
+        // The ordering review corrected. Writing before the upload meant a re-split whose upload
+        // failed left generation N+1 on the phone while the node still served N — combined at
+        // recovery, rejected by the checksum, and nothing before the attempt says so.
         stubNode({ candidates: ELIGIBLE_INVITER, shares: { body: { generation: 1 } } });
         await enrolKeepers(IDENTITY);
-        expect(calls).toEqual(['keeper-candidates', 'write-device-fragment', 'deposit-shares']);
+        expect(calls).toEqual([
+            'keeper-candidates', 'probe-device-storage', 'deposit-shares', 'write-device-fragment',
+        ]);
     });
 
-    it('uploads nothing at all when the phone cannot store its piece', async () => {
+    it('uploads nothing at all when the phone cannot store a piece', async () => {
+        // The probe is what the old ordering was really protecting: the node must never record a
+        // device keeper against a phone that cannot hold one.
         stubNode({ candidates: ELIGIBLE_INVITER, shares: { body: { generation: 1 } } });
         vi.mocked(FileSystem.writeAsStringAsync).mockRejectedValueOnce(new Error('disk full'));
         const result = await enrolKeepers(IDENTITY);
         expect(result.enrolled).toEqual([]);
-        expect(result.error).toMatch(/could not store this phone's piece/);
+        expect(result.error).toMatch(/cannot store its piece/);
         expect(calls).not.toContain('deposit-shares');
+    });
+
+    it('leaves any previous fragment untouched when the upload fails', async () => {
+        // The reason for probing rather than writing: a real write would have destroyed the
+        // fragment from the member's PREVIOUS split before knowing the new one would land.
+        stubNode({ candidates: ELIGIBLE_INVITER, shares: { status: 500 } });
+        const result = await enrolKeepers(IDENTITY);
+        expect(result.enrolled).toEqual([]);
+        expect(writes).toHaveLength(0);
+    });
+
+    it('understates the count when the fragment cannot be written after upload', async () => {
+        // Nothing can undo the upload, so the node now records a device keeper this phone does
+        // not hold. Reported WITHOUT it — the member is told they have fewer keepers than the
+        // node believes, never more.
+        stubNode({ candidates: ELIGIBLE_INVITER, shares: { body: { generation: 1 } } });
+        vi.mocked(FileSystem.writeAsStringAsync)
+            .mockImplementationOnce(async () => { calls.push('probe-device-storage'); })
+            .mockRejectedValueOnce(new Error('disk full'));
+        const result = await enrolKeepers(IDENTITY);
+        expect(result.enrolled).toEqual(['hub', 'member']);
+        expect(result.enrolled).not.toContain('device');
+        expect(result.generation).toBe(1);
+        expect(result.skipped).toContainEqual({ keeper: 'device', reason: 'disk full' });
+    });
+
+    it('tags the stored fragment with the generation it belongs to', async () => {
+        // Fragments from two generations describe two different polynomials. Restore has to be
+        // able to tell, or it combines them and gets noise.
+        stubNode({ candidates: ELIGIBLE_INVITER, shares: { body: { generation: 7 } } });
+        await enrolKeepers(IDENTITY);
+        const stored = JSON.parse(writes[0].contents);
+        expect(stored.generation).toBe(7);
+        expect(typeof stored.fragment).toBe('string');
     });
 
     it('sends the device fragment with empty ciphertext, which is what the node accepts', async () => {
@@ -160,6 +199,22 @@ describe('declining to enrol', () => {
         expect(result.skipped).toContainEqual({ keeper: 'member', reason: 'admin' });
     });
 
+    it.each([
+        ['no key at all', { eligible: true }, /sent no key/],
+        ['a key that is not one', { eligible: true, publicKey: 'not-a-key' }, /not a public key/],
+        ['the member themselves', { eligible: true, publicKey: IDENTITY.publicKey }, /is this member/],
+    ])('records a reason when the node offers an inviter with %s', async (_label, inviter, reason) => {
+        // Eligibility alone was never enough to seal to somebody. The first draft checked
+        // eligibility when deciding what to record as SKIPPED and eligibility-plus-key when
+        // deciding what to ENROL, so these cases fell through both — no keeper, and no reason
+        // for its absence. Step 3 would show two keepers and nothing to say about the third.
+        stubNode({ candidates: { body: { inviter } } });
+        const result = await enrolKeepers(IDENTITY);
+        expect(result.skipped[0].keeper).toBe('member');
+        expect(result.skipped[0].reason).toMatch(reason);
+        expect(result.enrolled).toEqual([]);
+    });
+
     it('enrols nobody on an identity with no words to split', async () => {
         stubNode({ candidates: ELIGIBLE_INVITER });
         const result = await enrolKeepers({ ...IDENTITY, mnemonic: [] });
@@ -173,6 +228,28 @@ describe('declining to enrol', () => {
         const result = await enrolKeepers(IDENTITY);
         expect(result.error).toMatch(/no node configured/);
         expect(writes).toHaveLength(0);
+    });
+});
+
+describe('building the request URL', () => {
+    it('does not double the slash when the stored node URL ends in one', async () => {
+        // A signature bug, not a cosmetic one: the headers sign `path`, but the request would go
+        // to "https://node//api/..." — the server verifies over ctx.path, sees the doubled slash,
+        // and every recovery call 401s with nothing pointing at a URL as the cause.
+        vi.mocked(AsyncStorage.getItem).mockResolvedValue('https://test.beanpool.org/');
+        const seen: string[] = [];
+        global.fetch = vi.fn(async (url: string) => {
+            seen.push(String(url));
+            return {
+                ok: true, status: 200,
+                json: async () => (String(url).includes('candidates') ? ELIGIBLE_INVITER.body : { generation: 1 }),
+                text: async () => '',
+            };
+        }) as any;
+
+        await enrolKeepers(IDENTITY);
+        expect(seen).toHaveLength(2);
+        for (const url of seen) expect(url).not.toMatch(/[^:]\/\//);
     });
 });
 
@@ -206,6 +283,7 @@ describe('when things go wrong', () => {
     it('writes the fragment where the restore flow will look for it', async () => {
         stubNode({ candidates: ELIGIBLE_INVITER, shares: { body: { generation: 1 } } });
         await enrolKeepers(IDENTITY);
+        expect(writes[0].path).toBe(deviceFragmentPath());
         expect(writes[0].path).toBe(`file:///docs/${DEVICE_FRAGMENT_FILE}`);
         expect(writes[0].contents.length).toBeGreaterThan(0);
     });

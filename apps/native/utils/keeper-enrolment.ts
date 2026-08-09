@@ -74,6 +74,15 @@ export interface KeeperEnrolmentResult {
     generation: number | null;
     /** Why a keeper was not enrolled — for logs and for deciding what step 3 offers next. */
     skipped: { keeper: string; reason: string }[];
+    /**
+     * How many keepers were AVAILABLE, which is not the same as how many were enrolled.
+     *
+     * Below the threshold nothing is enrolled at all — two holders cannot hold a 3-of-N split —
+     * so `enrolled` is empty and says nothing about how close the member came. Step 3 needs the
+     * difference: two available is "one more starts it off", one available is "your words are
+     * the way back", and those are different screens.
+     */
+    available: number;
     /** Set when enrolment did not happen at all. For logs, never for a member. */
     error?: string;
 }
@@ -204,8 +213,9 @@ async function writeDeviceFragment(fragment: Uint8Array, generation: number | nu
  */
 export async function enrolKeepers(identity: BeanPoolIdentity): Promise<KeeperEnrolmentResult> {
     const skipped: { keeper: string; reason: string }[] = [];
+    let available = 0;
     const nothing = (error: string): KeeperEnrolmentResult =>
-        ({ enrolled: [], generation: null, skipped, error });
+        ({ enrolled: [], generation: null, skipped, available, error });
 
     const words = identity.mnemonic;
     if (!words || words.length === 0) {
@@ -246,6 +256,7 @@ export async function enrolKeepers(identity: BeanPoolIdentity): Promise<KeeperEn
     // for more fragments than there are holders leaves pieces nobody keeps.
     const holders: EnrolledKeeper[] = ['device', 'hub'];
     if (!inviterProblem) holders.push('member');
+    available = holders.length;
 
     if (holders.length < RECOVERY_THRESHOLD) {
         // Two keepers cannot rebuild a 3-of-N split, so there is no point writing one. The
@@ -313,10 +324,11 @@ export async function enrolKeepers(identity: BeanPoolIdentity): Promise<KeeperEn
                 enrolled: holders.filter(h => h !== 'device'),
                 generation,
                 skipped: [...skipped, { keeper: 'device', reason: writeError }],
+                available,
                 error: `the pieces are deposited, but this phone could not store its own: ${writeError}`,
             };
         }
-        return { enrolled: holders, generation, skipped };
+        return { enrolled: holders, generation, skipped, available };
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);
     }

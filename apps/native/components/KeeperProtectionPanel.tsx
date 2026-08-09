@@ -11,14 +11,14 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, palette } from '../constants/colors';
+import { colors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
 
 export function KeeperProtectionPanel({ protection }: { protection: Protection }): React.JSX.Element {
     if (protection.state === 'covered') {
         return (
             <View style={[styles.panel, styles.covered]}>
-                <Text style={styles.heading}>🛡️ You're covered</Text>
+                <Text style={styles.heading} accessibilityRole="header">🛡️ You're covered</Text>
                 {/*
                   "Any three of them" is true and useless when there are exactly three — any three
                   IS all three, and a member reading it believes they have slack they do not have.
@@ -51,7 +51,7 @@ export function KeeperProtectionPanel({ protection }: { protection: Protection }
     if (protection.state === 'almost') {
         return (
             <View style={[styles.panel, styles.almost]}>
-                <Text style={styles.heading}>🔑 Your words are the way back</Text>
+                <Text style={styles.heading} accessibilityRole="header">🔑 Your words are the way back</Text>
                 {/*
                   NOT "almost covered, 2 of 3 ✅". Below three keepers nothing has been split, so
                   nobody is holding anything, and ticking two of them would claim a protection
@@ -72,7 +72,7 @@ export function KeeperProtectionPanel({ protection }: { protection: Protection }
 
     return (
         <View style={[styles.panel, styles.wordsOnly]}>
-            <Text style={styles.heading}>🔑 Write these down</Text>
+            <Text style={styles.heading} accessibilityRole="header">🔑 Write these down</Text>
             <Text style={styles.body}>
                 Right now these 12 words are the only way back into your account. No email, no
                 password reset — nobody, including your hub, can restore it for you.
@@ -83,9 +83,12 @@ export function KeeperProtectionPanel({ protection }: { protection: Protection }
 
 const styles = StyleSheet.create({
     panel: { borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1 },
-    covered: { backgroundColor: palette.green50, borderColor: palette.green600 },
-    almost: { backgroundColor: palette.amber50, borderColor: palette.amber600 },
-    wordsOnly: { backgroundColor: palette.blue50, borderColor: palette.blue600 },
+    // Semantic tokens rather than raw palette steps (CR) — `colors.feedback` is the layer that
+    // survives a theme change, and reaching past it into palette.green50 is how a panel ends up
+    // the only thing on screen still light when everything around it is not.
+    covered: { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border },
+    almost: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
+    wordsOnly: { backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border },
     heading: { fontSize: 18, fontWeight: '700', color: colors.text.heading, marginBottom: 8 },
     body: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginBottom: 8 },
     row: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },

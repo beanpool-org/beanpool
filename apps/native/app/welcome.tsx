@@ -142,6 +142,16 @@ export default function WelcomeScreen() {
                 // enrolKeepers is documented never to throw. Caught anyway, because the cost of
                 // being wrong is an unhandled rejection in the middle of somebody joining.
                 console.warn('[keepers] enrolment threw, which it should not:', e);
+                // Recorded as a failed result rather than left null (CR). Null is the "still
+                // working" state, so leaving it there means `protection_shown` never fires and
+                // this member is missing from the funnel entirely — the screen itself was always
+                // correct, since no result reads as the words screen either way.
+                if (!cancelled) {
+                    setEnrolment({
+                        enrolled: [], generation: null, skipped: [], available: 0,
+                        error: e instanceof Error ? e.message : String(e),
+                    });
+                }
             });
         return () => { cancelled = true; };
     }, [mode, pendingIdentity, enrolment]);
@@ -711,6 +721,14 @@ export default function WelcomeScreen() {
                     setPendingAvatar(null);
                     setSeedConfirmed(false);
                     setSeedCopied(false);
+                    // Keeper state belongs to the identity being discarded (CR). Left behind, a
+                    // member who backs out and starts again is shown the PREVIOUS identity's
+                    // keepers — and the effect's `|| enrolment` guard means the new identity
+                    // never enrols at all, so the screen would be describing an account that no
+                    // longer exists.
+                    setEnrolment(null);
+                    setRevealWords(false);
+                    protectionShownRef.current = false;
                     // Going back discards the identity, so what was redeemed no longer
                     // describes what is about to be submitted. Cleared in the persisted
                     // record too, or a kill-and-resume would restore the stale answer.
@@ -963,8 +981,6 @@ export default function WelcomeScreen() {
                                 {seedCopied ? '✅ Copied!' : '📋 Copy All Words'}
                             </Text>
                         </Pressable>
-                        </>
-                        )}
 
                         {/*
                           The tick is now a claim the user makes, not a toll they pay.
@@ -993,6 +1009,8 @@ export default function WelcomeScreen() {
                                 {seedConfirmed ? '✅ ' : '⬜ '} I've saved these words
                             </Text>
                         </Pressable>
+                        </>
+                        )}
 
                         {error && <Text style={styles.error}>{error}</Text>}
 

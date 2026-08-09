@@ -82,6 +82,8 @@ automatically, which was never true.
 
 And then, over time:
 
+| # | Keyholder | Piece unlocked by | Why it's independent |
+|---|---|---|---|
 | **K5+** | **Backup buddies** | Each one tapping Approve | Real people, added as the user meets them. **Capped: K4 and K5+ together may be at most 2 (D13)**, so a member has one buddy if they have an inviter, two if they don't |
 
 Any 3 rebuild the account.
@@ -102,9 +104,14 @@ and handed out. If they were, one keeper would hold three real words — narrowi
 search enormously — and two colluding keepers would hold half the phrase.
 
 The split is [Shamir's Secret Sharing](https://en.wikipedia.org/wiki/Shamir%27s_secret_sharing).
-Each piece is a **point on a curve**, and the phrase is where that curve crosses the axis. Three
-points fix the curve exactly. Two points do not narrow it down — infinitely many curves pass
-through any two points, one for every possible phrase, all equally likely.
+Each piece is a **point on a curve**, and the phrase is the value where that curve crosses the
+**y-axis** — the point at x = 0, which is the one point nobody is given. Three points fix the
+curve exactly. Two points do not narrow it down: infinitely many curves pass through any two
+points, one for every possible phrase, all equally likely.
+
+(The picture is a fair one but not literal — the arithmetic happens in a finite field, so the
+"curve" wraps rather than sweeping smoothly, and a piece is a pair of bytes rather than a
+coordinate you could plot. Nothing about the argument above changes.)
 
 So "two keepers learn nothing" is not a figure of speech and not a claim about how hard the
 maths is to reverse. Below the threshold there is **no information at all** about the phrase.
@@ -182,7 +189,8 @@ Step 1 (Your Name):   Invite code + node URL + callsign
 Step 2 (Your Photo):  Avatar selection (camera, gallery, or bundled)
 ```
 
-Step 1 still generates the Ed25519 keypair and redeems the invite. **New**: immediately after redemption the client splits the words and distributes K1–K4. This happens silently, before step 3 is drawn.
+Step 1 still generates the Ed25519 keypair and redeems the invite. **New**: immediately after redemption the client splits the words and distributes K1, K2 and K4 — not
+K3, which is the optional sign-in keeper and needs a deliberate tap in step 3. This happens silently, before step 3 is drawn.
 
 ### Step 3: Protection (replaces the seed phrase screen)
 
@@ -315,7 +323,7 @@ Welcome Screen
     │   Step 1: Invite Code + Node URL + Callsign             │
     │   (keypair generated, invite redeemed)                   │
     │        │                                                 │
-    │        └─► words split into pieces, K1–K4 distributed    │
+    │        └─► words split, K1+K2+K4 distributed (not K3)   │
     │            silently: phone backup / hub / inviter        │
     │                                                          │
     │   Step 2: Choose Avatar                                  │
@@ -462,9 +470,9 @@ Replace any binary "backed up ✅" with a keeper count, because that's the truth
 | Piece | Released when | Instant? |
 |---|---|---|
 | K1 phone backup | Platform restore puts the file back | Yes, automatic |
-| K4 / K5+ humans | That person taps Approve | Yes (D6) |
-| K3 sign-in | Fresh provider login verified, rate-limited | Yes |
 | K2 hub | ≥1 human piece already released → instant. Otherwise 24h + notification to every remaining device and every human keeper | Conditional (D7) |
+| K3 sign-in | Fresh provider login verified, rate-limited | Yes |
+| K4 / K5+ humans | That person taps Approve | Yes (D6) |
 
 D7 exists because K1, K2 and K3 are all machine-released. Without it, that trio is a silent, fully-automated path into any account — and if a user signs in with Google on an Android phone backed up to the same Google account, one company effectively controls two of the three. The 24h delay plus notification means the account owner and their keepers find out and can stop it. When any human is in the loop, the delay serves no purpose and doesn't apply.
 

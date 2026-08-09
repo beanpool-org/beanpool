@@ -236,7 +236,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         ctx.body = { nonce: issueNonce(collection.requesterEphemeralPubkey), expiresInSeconds: 600 };
     });
 
-    /** K4 — released on a verified fresh sign-in with the provider account that is the keeper. */
+    /** K3 — released on a verified fresh sign-in with the provider account that is the keeper. */
     router.post('/api/recovery/collect/sso', async (ctx) => {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);

@@ -8,7 +8,7 @@
  * ## Which keepers a member actually gets
  *
  * Never assumed, always counted. The doc's three states exist because the count genuinely
- * varies: K1 is absent for PWA users and anyone whose phone has no cloud backup, and K3 is
+ * varies: K1 is absent for PWA users and anyone whose phone has no cloud backup, and K4 is
  * absent on bulk and admin invites where nobody human did the inviting. A screen that claimed
  * three keepers to a member who has two would be lying to exactly the people who most need the
  * truth, which is what {@link KeeperEnrolmentResult.enrolled} exists to prevent — it reports
@@ -64,7 +64,7 @@ import type { BeanPoolIdentity } from './identity';
 /** Where K1 lives. A plain file, deliberately — see {@link writeDeviceFragment}. */
 export const DEVICE_FRAGMENT_FILE = 'beanpool-recovery-piece.bin';
 
-/** The keeper kinds this function can enrol. K4 is a separate, user-initiated flow. */
+/** The keeper kinds this function can enrol. K3 is a separate, user-initiated flow. */
 export type EnrolledKeeper = 'device' | 'hub' | 'member';
 
 export interface KeeperEnrolmentResult {
@@ -104,7 +104,7 @@ async function signedPost(
 }
 
 /**
- * Ask the node whether this member has an inviter who can hold a piece (K3).
+ * Ask the node whether this member has an inviter who can hold a piece (K4).
  *
  * The node answers rather than the client guessing, because "who invited you" resolves through
  * cases the client cannot see — a founder, an admin, or a bulk invite all leave a member with

@@ -497,7 +497,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
     });
 
     /**
-     * K3 — who this member can enrol as their inviter keeper.
+     * K4 — who this member can enrol as their inviter keeper.
      *
      * The client splits and wraps; the node's only job here is to answer "who is your inviter,
      * and can they hold a piece?" honestly. It returns the keeper's ACCOUNT public key, which is
@@ -511,7 +511,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
      *   founder   invited_by = 'genesis'; nobody to ask
      *   admin     invited_by = SYSTEM or the admin key; nobody to ask
      *
-     * Founding and admin-invited members therefore have no K3 at all, and land at signup with two
+     * Founding and admin-invited members therefore have no K4 at all, and land at signup with two
      * pieces rather than three. That is exactly the state `dependsOnPeople` reports, and the
      * client must not paper over it by pretending the admin is a keeper — an account nobody can
      * recover is worse than one that says so on day one.

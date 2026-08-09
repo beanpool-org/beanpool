@@ -3,7 +3,7 @@
  *
  * ## What it answers
  *
- * The keyholder model's sign-in keeper (docs/ONBOARDING.md K4) unwraps its fragment with a key
+ * The keyholder model's sign-in keeper (docs/ONBOARDING.md K3) unwraps its fragment with a key
  * derived from the provider's subject claim. That only works if `sub` is the same value
  * everywhere. Apple's `sub` is stable per user *per developer team*, but the native App ID and
  * the web **Services ID** must be grouped under the same primary App ID — and if they are not,

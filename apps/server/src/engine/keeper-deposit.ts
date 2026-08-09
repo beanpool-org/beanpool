@@ -15,7 +15,7 @@ import {
 } from './recovery-shares.js';
 
 /**
- * Depositing a keeper generation that includes a sign-in (K4) fragment — Google or Apple.
+ * Depositing a keeper generation that includes a sign-in (K3) fragment — Google or Apple.
  *
  * THE ONE PROPERTY THIS FILE EXISTS FOR
  * ------------------------------------

@@ -17,6 +17,9 @@ import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
+import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
+import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
+import { protectionFrom } from '../utils/protection-state';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
@@ -113,11 +116,46 @@ export default function WelcomeScreen() {
     // left blank, so the day states A and B become reachable the dashboard already has the
     // shape to compare them against, instead of a cliff where the old rows have no variant.
     const protectionShownRef = useRef(false);
+    const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
+    /** Whether a covered member has asked to see the words anyway. Never hides them once shown. */
+    const [revealWords, setRevealWords] = useState(false);
+    const protection = protectionFrom(enrolment);
+
+    /**
+     * Split the words and hand out the pieces, on the way into step 3.
+     *
+     * The design has this happening silently right after redemption so the screen can REPORT a
+     * result rather than ask for one. It runs here, on entering the step, rather than inside
+     * handleCompleteProfile: a member who quits mid-wizard and resumes lands straight on this
+     * screen without passing through that handler, and enrolling on arrival covers both routes.
+     *
+     * Nothing waits for it. `protectionFrom(null)` is the words screen, which is true whatever
+     * happens next — so a hung request or a dead node leaves a member reading their twelve
+     * words, not staring at a spinner to find out whether they are safe.
+     */
     useEffect(() => {
-        if (mode !== 'seedBackup' || protectionShownRef.current) return;
+        if (mode !== 'seedBackup' || !pendingIdentity || enrolment) return;
+        let cancelled = false;
+        enrolKeepers(pendingIdentity)
+            .then(r => { if (!cancelled) setEnrolment(r); })
+            .catch(e => {
+                // enrolKeepers is documented never to throw. Caught anyway, because the cost of
+                // being wrong is an unhandled rejection in the middle of somebody joining.
+                console.warn('[keepers] enrolment threw, which it should not:', e);
+            });
+        return () => { cancelled = true; };
+    }, [mode, pendingIdentity, enrolment]);
+
+    // Count step 3 being drawn — once per join, not once per render, and only once the state it
+    // reports is settled. Reporting before enrolment answers would record every member as 'C'.
+    useEffect(() => {
+        if (mode !== 'seedBackup' || protectionShownRef.current || !enrolment) return;
         protectionShownRef.current = true;
-        recordOnboardingEvent('protection_shown', 'C');
-    }, [mode]);
+        recordOnboardingEvent(
+            'protection_shown',
+            protection.state === 'covered' ? 'A' : protection.state === 'almost' ? 'B' : 'C',
+        );
+    }, [mode, enrolment, protection.state]);
 
     // The web trampoline copies the invite link to the clipboard before sending
     // people to the app store, but nothing can read it for them automatically —
@@ -853,10 +891,28 @@ export default function WelcomeScreen() {
                 <ScrollView contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={3} />
                     <View style={styles.card}>
-                        <Text style={styles.title}>🛡️ Your Safety Backup</Text>
-                        <Text style={styles.subtitle}>
-                            These 12 words are your personal recovery key. If you ever lose your phone, these words will bring your account back.
-                        </Text>
+                        <KeeperProtectionPanel protection={protection} />
+
+                        {/*
+                          The words follow the panel rather than opening the screen.
+                          
+                          A covered member gets them offered, not pushed: keepers are convenience
+                          layered on top and the words remain the floor under all of it, but
+                          meeting somebody who is genuinely protected with a wall of twelve words
+                          to copy down teaches them the panel above was noise. Everyone else sees
+                          them expanded, because for them the words are the actual answer.
+                        */}
+                        {!protection.showWords && !revealWords ? (
+                            <Pressable
+                                style={[styles.secondaryBtn, { marginBottom: 4 }]}
+                                onPress={() => setRevealWords(true)}
+                                accessibilityRole="button"
+                                accessibilityHint="Shows the twelve words that can restore your account"
+                            >
+                                <Text style={styles.secondaryBtnText}>Rather write down 12 words?</Text>
+                            </Pressable>
+                        ) : (
+                        <>
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
                             💡 Take a screenshot or write them down somewhere safe.
                         </Text>
@@ -907,6 +963,8 @@ export default function WelcomeScreen() {
                                 {seedCopied ? '✅ Copied!' : '📋 Copy All Words'}
                             </Text>
                         </Pressable>
+                        </>
+                        )}
 
                         {/*
                           The tick is now a claim the user makes, not a toll they pay.

@@ -237,6 +237,29 @@ function main() {
     );
     assert(getCurrentGeneration('rejectPK') === 0, 'a refused human-keeper split wrote nothing');
 
+    // A capitalised or unknown type is REFUSED, not silently counted (CR on #245). Review asked
+    // for `holderType.toLowerCase()` before the human count; that would have made 'Member' human
+    // here while matching nothing in the release path, the singleton check, or any query — all of
+    // which compare the exact value. Rejecting keeps one spelling of the truth.
+    throws(
+        () => putShareGeneration('rejectPK', [
+            share({ holderType: 'device', holderRef: 'self', shareIndex: 1 }),
+            share({ holderType: 'hub', holderRef: 'self', shareIndex: 2 }),
+            share({ holderType: 'Member' as 'member', holderRef: 'inviterPK', shareIndex: 3 }),
+        ]),
+        'Unknown keeper type',
+        'refuses a capitalised keeper type rather than normalising it into a different rule',
+    );
+    throws(
+        () => putShareGeneration('rejectPK', [
+            share({ holderType: 'device', holderRef: 'self', shareIndex: 1 }),
+            share({ holderType: 'hub', holderRef: 'self', shareIndex: 2 }),
+            share({ holderType: 'guardian' as 'member', holderRef: 'inviterPK', shareIndex: 3 }),
+        ]),
+        'Unknown keeper type',
+        '...and refuses a keeper type nobody has decided the rules for yet',
+    );
+
     // Two humans is the ceiling, not one below it — the doc's own nudge fires at "<2 human
     // keepers", so a member being pushed TO two must not then be refused for reaching it.
     seedMember('twoHumansPK');

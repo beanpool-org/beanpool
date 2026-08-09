@@ -116,6 +116,24 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         );
     }
 
+    /**
+     * Every keeper type that exists. This is an ERROR-QUALITY guard, not a security one.
+     *
+     * Review raised that `'Member'` or a stray type could slip past the human-keeper count and
+     * reopen R1. It cannot, and it could not before this existed: the route rejects anything
+     * outside this list, and `recovery_shares` carries
+     * `CHECK (holder_type IN ('device','hub','member','sso'))`, so the database refuses it too.
+     * What this adds is a sentence instead of `SQLITE_CONSTRAINT_CHECK`, raised before the
+     * transaction opens rather than inside it.
+     *
+     * What was NOT taken from the review is normalising with `.toLowerCase().trim()`. The release
+     * path, the singleton rule and every query compare `holder_type` exactly, so normalising here
+     * alone would let `'Member'` count as a human keeper while matching nothing anywhere else —
+     * a predicate that means one thing in one place and another elsewhere, which this codebase
+     * has already been bitten by once.
+     */
+    const KNOWN_TYPES = new Set<KeeperType>(['device', 'hub', 'member', 'sso']);
+
     /** Keeper types there can only be one of. A member has many buddies but one phone and one hub. */
     const SINGLETON_TYPES = new Set<KeeperType>(['hub', 'device']);
 
@@ -147,6 +165,12 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
     const indices = new Set<number>();
     const singletons = new Map<KeeperType, string>();
     for (const s of shares) {
+        if (!KNOWN_TYPES.has(s.holderType)) {
+            throw new RecoveryShareError(
+                `Unknown keeper type '${String(s.holderType)}'. Expected one of: `
+                + `${[...KNOWN_TYPES].join(', ')}.`,
+            );
+        }
         const holderKey = `${s.holderType}:${s.holderRef}`;
         if (holders.has(holderKey)) {
             throw new RecoveryShareError(`Duplicate keeper in one generation: ${holderKey}.`);

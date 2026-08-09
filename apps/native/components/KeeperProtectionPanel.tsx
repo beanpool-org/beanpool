@@ -19,12 +19,19 @@ export function KeeperProtectionPanel({ protection }: { protection: Protection }
         return (
             <View style={[styles.panel, styles.covered]}>
                 <Text style={styles.heading}>🛡️ You're covered</Text>
+                {/*
+                  "Any three of them" is true and useless when there are exactly three — any three
+                  IS all three, and a member reading it believes they have slack they do not have.
+                  Everyone has exactly three at signup, and anyone without a Google or Apple
+                  account stays there.
+                */}
                 <Text style={styles.body}>
-                    Your account has been split into pieces, and these are holding one each. Any
-                    three of them can bring you back if you lose this phone.
+                    {protection.spare > 0
+                        ? 'Your account has been split into pieces, and these are holding one each. Any three of them can bring you back if you lose this phone.'
+                        : 'Your account has been split into three pieces, and these are holding one each. It takes all three to bring you back — so keep your 12 words below, in case one of them ever goes missing.'}
                 </Text>
-                {protection.holding.map(label => (
-                    <View key={label} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
+                {protection.holding.map((label, i) => (
+                    <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
                         <Text style={styles.tick}>✅</Text>
                         <Text style={styles.rowLabel}>{label}</Text>
                     </View>

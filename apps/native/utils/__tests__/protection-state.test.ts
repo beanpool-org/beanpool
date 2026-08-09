@@ -17,14 +17,29 @@ describe('a member who is covered', () => {
         ]);
     });
 
-    it('offers the words behind a tap rather than filling the screen with them', () => {
-        // The words stay the floor under all of this, but a member who is genuinely covered
-        // should not be met with twelve words to copy down.
-        expect(protectionFrom(result({ enrolled: ['device', 'hub', 'member'], available: 3 })).showWords).toBe(false);
+    it('STILL shows the words when there is no spare, which is everyone at signup', () => {
+        // The doc's State A hides them and offers "want a spare?" instead. That offer does not
+        // exist: the sign-in keeper needs a flow nobody has built and neither does add-a-friend,
+        // so a member at exactly three is stuck there. Hiding the words would offer them nothing
+        // and take away the only thing that helps. Worst for the people this project is built
+        // for — the automatic fourth keeper is sign-in, and many of them have no such account.
+        const p = protectionFrom(result({ enrolled: ['device', 'hub', 'member'], available: 3 }));
+        expect(p.state).toBe('covered');
+        expect(p.spare).toBe(0);
+        expect(p.showWords).toBe(true);
+    });
+
+    it('tucks the words behind a tap once a keeper could actually go missing', () => {
+        // With slack, "one of these could fail" stops being the member's problem to solve today.
+        // Four keepers means the inviter plus one friend — NOT sign-in, which `enrolKeepers`
+        // has no way to produce, so this state is unreachable until the add-a-friend flow lands.
+        const p = protectionFrom(result({ enrolled: ['device', 'hub', 'member', 'member'], available: 4 }));
+        expect(p.spare).toBe(1);
+        expect(p.showWords).toBe(false);
     });
 
     it('never says "K2" or "device" to a person', () => {
-        const p = protectionFrom(result({ enrolled: ['device', 'hub', 'member'], available: 3 }));
+        const p = protectionFrom(result({ enrolled: ['device', 'hub', 'member', 'member'], available: 4 }));
         for (const label of p.holding) {
             expect(label).not.toMatch(/^(device|hub|member|sso)$/);
             expect(label).not.toMatch(/K[1-5]/);
@@ -91,5 +106,6 @@ describe('the rule that outranks the others', () => {
         expect(p.state).not.toBe('covered');
         expect(p.holding.length).toBeLessThan(RECOVERY_THRESHOLD);
         expect(p.showWords).toBe(true);
+        expect(p.spare).toBe(0);
     });
 });

@@ -39,6 +39,15 @@ export interface Protection {
     holding: string[];
     /** How many more keepers are needed before a split can happen at all. */
     stillNeeded: number;
+    /**
+     * How many keepers this member could lose and still get back in.
+     *
+     * ZERO for everyone at signup, and for anyone without a Google or Apple account it stays
+     * zero — the sign-in keeper is the only automatic fourth, and plenty of the people this is
+     * built for have neither account. Three keepers against a threshold of three is covered and
+     * has no slack at all: one keeper failing puts them under.
+     */
+    spare: number;
     /** True when the twelve words should be shown expanded rather than offered behind a tap. */
     showWords: boolean;
 }
@@ -67,9 +76,9 @@ export function protectionFrom(result: KeeperEnrolmentResult | null): Protection
         // One short, and only one short. Two short is not "almost" in any sense a member would
         // recognise, and calling it that would be the same overclaiming in a smaller voice.
         if (available > 0 && stillNeeded === 1) {
-            return { state: 'almost', holding: [], stillNeeded, showWords: true };
+            return { state: 'almost', holding: [], stillNeeded, spare: 0, showWords: true };
         }
-        return { state: 'words-only', holding: [], stillNeeded, showWords: true };
+        return { state: 'words-only', holding: [], stillNeeded, spare: 0, showWords: true };
     }
 
     if (result.enrolled.length < RECOVERY_THRESHOLD) {
@@ -80,17 +89,34 @@ export function protectionFrom(result: KeeperEnrolmentResult | null): Protection
             state: 'words-only',
             holding: result.enrolled.map(k => KEEPER_LABELS[k] ?? k),
             stillNeeded: RECOVERY_THRESHOLD - result.enrolled.length,
+            spare: 0,
             showWords: true,
         };
     }
 
+    const spare = result.enrolled.length - RECOVERY_THRESHOLD;
     return {
         state: 'covered',
         holding: result.enrolled.map(k => KEEPER_LABELS[k] ?? k),
         stillNeeded: 0,
-        // Offered behind a tap rather than hidden. The words remain the floor under all of this
-        // — keepers are convenience on top and never a replacement — but a member who is
-        // genuinely covered should not be met with a wall of twelve words to copy down.
-        showWords: false,
+        spare,
+        /*
+         * Covered with NO spare still shows the words. Covered with slack tucks them behind a tap.
+         *
+         * The doc's State A hides them either way and offers "want a spare, in case one goes
+         * missing?" instead. That works in the doc because the spare is one tap away. It is not:
+         * the sign-in keeper needs a flow that does not exist, and the add-a-friend keeper needs
+         * one that does not exist either — so a member at exactly three is stuck there, and
+         * hiding the words offers them nothing while taking away the only thing that would help.
+         *
+         * It hits hardest exactly where the project cares most. The automatic fourth keeper is
+         * sign-in, and plenty of the people this is built for have no Google or Apple account at
+         * all, so "no spare" is not a transient state for them — it is the permanent one.
+         *
+         * When a member can actually add a fourth keeper from this screen, this should flip back
+         * to offering that instead. Until then the honest answer to "one of these could go
+         * missing" is the twelve words.
+         */
+        showWords: spare === 0,
     };
 }

@@ -45,7 +45,6 @@
  * client is responsible for correcting.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic documentDirectory +
 // writeAsStringAsync surface lives behind /legacy, which is what the rest of this app uses
 // (db.ts, settings.tsx, ledger.tsx). Matching them rather than being the one file on the new API.
@@ -58,7 +57,8 @@ import {
     splitRecoveryPhrase,
     type SealedShare,
 } from '@beanpool/core';
-import { buildSignedHeaders, encodeBase64 } from './crypto';
+import { encodeBase64 } from './crypto';
+import { anchorUrl, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 
 /** Where K1 lives. A plain file, deliberately — see {@link writeDeviceFragment}. */
@@ -92,24 +92,6 @@ interface InviterCandidate {
     reason?: string;
     publicKey?: string;
     callsign?: string;
-}
-
-async function anchorUrl(): Promise<string | null> {
-    return AsyncStorage.getItem('beanpool_anchor_url');
-}
-
-async function signedPost(
-    url: string, path: string, body: unknown, identity: BeanPoolIdentity,
-): Promise<Response> {
-    const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders(
-        'POST', path, bodyString, identity.privateKey, identity.publicKey,
-    );
-    // Trailing slash stripped (CR), and this is a signature bug rather than a cosmetic one: the
-    // headers sign `path`, but a stored anchor of "https://node/" would send the request to
-    // "https://node//api/..." — the server verifies over `ctx.path`, sees the doubled slash, and
-    // every recovery call 401s with nothing to suggest a URL was the cause.
-    return fetch(`${url.replace(/\/+$/, '')}${path}`, { method: 'POST', headers, body: bodyString });
 }
 
 /**

@@ -168,43 +168,74 @@ describe('key material as bytes', () => {
 });
 
 describe('sign-in keeper (K3)', () => {
-    it('round-trips against the same provider subject', () => {
+    it('round-trips against the same provider subject', async () => {
         const share = randomBytes(64);
-        const sealed = sealShareToSso(share, 'apple', '001234.abcdef.5678');
-        expect(openShareFromSso(sealed, 'apple', '001234.abcdef.5678')).toEqual(share);
+        const sealed = await sealShareToSso(share, 'apple', '001234.abcdef.5678');
+        expect(await openShareFromSso(sealed, 'apple', '001234.abcdef.5678')).toEqual(share);
     });
 
-    it('will not open with a different sub, or the same sub at a different provider', () => {
-        const sealed = sealShareToSso(randomBytes(64), 'apple', '001234.abcdef.5678');
-        expect(() => openShareFromSso(sealed, 'apple', '009999.abcdef.5678')).toThrow(KeeperCryptoError);
+    it('will not open with a different sub, or the same sub at a different provider', async () => {
+        const sealed = await sealShareToSso(randomBytes(64), 'apple', '001234.abcdef.5678');
+        await expect(openShareFromSso(sealed, 'apple', '009999.abcdef.5678')).rejects.toThrow(KeeperCryptoError);
         // Provider is mixed into the key material because `sub` is only unique WITHIN a provider —
         // two providers could in principle issue the same string to different people.
-        expect(() => openShareFromSso(sealed, 'google', '001234.abcdef.5678')).toThrow(KeeperCryptoError);
+        await expect(openShareFromSso(sealed, 'google', '001234.abcdef.5678')).rejects.toThrow(KeeperCryptoError);
     });
 
-    it('carries its own salt, distinct per seal', () => {
+    it('carries its own salt, distinct per seal', async () => {
         // The salt cannot be the node's lookup salt: the node generates that after verifying the
         // id_token, by which time the client has already encrypted. If this ever regresses to
         // reusing a fixed salt, two members with the same sub would share a key.
-        const a = JSON.parse(sealShareToSso(randomBytes(32), 'apple', 'sub-1').kdfParams);
-        const b = JSON.parse(sealShareToSso(randomBytes(32), 'apple', 'sub-1').kdfParams);
+        const a = JSON.parse((await sealShareToSso(randomBytes(32), 'apple', 'sub-1')).kdfParams);
+        const b = JSON.parse((await sealShareToSso(randomBytes(32), 'apple', 'sub-1')).kdfParams);
         expect(a.alg).toBe(KEEPER_ALG_SSO);
         expect(typeof a.salt).toBe('string');
         expect(a.salt).not.toBe(b.salt);
     });
 
-    it('refuses to seal without a provider or a sub', () => {
-        expect(() => sealShareToSso(randomBytes(32), '', 'sub')).toThrow(KeeperCryptoError);
-        expect(() => sealShareToSso(randomBytes(32), 'apple', '')).toThrow(KeeperCryptoError);
+    it('records the scrypt cost it used, so raising it later does not strand fragments', async () => {
+        const params = JSON.parse((await sealShareToSso(randomBytes(32), 'apple', 'sub-1')).kdfParams);
+        expect(params.N).toBe(16384);
+        expect(params.r).toBe(8);
+        expect(params.p).toBe(1);
     });
 
-    it('refuses to OPEN without a provider or a sub, rather than blaming the fragment', () => {
+    it('refuses a fragment claiming a cheaper cost than anything we ever wrote', async () => {
+        // The downgrade this guards is not exotic: N travels in kdfParams so the cost can be
+        // raised later, and nothing else in the pipeline inspects it. A fragment rewritten to N:2
+        // would fail on the tag anyway — but as "the fragment has been altered", which sends the
+        // reader after the ciphertext instead of the number that was actually changed.
+        const sealed = await sealShareToSso(randomBytes(32), 'apple', 'sub-1');
+        const weakened = {
+            ...sealed,
+            kdfParams: JSON.stringify({ ...JSON.parse(sealed.kdfParams), N: 2 }),
+        };
+        await expect(openShareFromSso(weakened, 'apple', 'sub-1'))
+            .rejects.toThrow(/below the minimum/);
+    });
+
+    it('refuses a fragment with no cost recorded at all', async () => {
+        // The pre-2026-08-10 HKDF fragments have no N. None were ever deposited — no client could
+        // produce one — but an opener that treated a missing cost as "use the default" is exactly
+        // how a weak fragment gets accepted years later by code that has forgotten why.
+        const sealed = await sealShareToSso(randomBytes(32), 'apple', 'sub-1');
+        const { N, ...withoutN } = JSON.parse(sealed.kdfParams);
+        await expect(openShareFromSso({ ...sealed, kdfParams: JSON.stringify(withoutN) }, 'apple', 'sub-1'))
+            .rejects.toThrow(/below the minimum/);
+    });
+
+    it('refuses to seal without a provider or a sub', async () => {
+        await expect(sealShareToSso(randomBytes(32), '', 'sub')).rejects.toThrow(KeeperCryptoError);
+        await expect(sealShareToSso(randomBytes(32), 'apple', '')).rejects.toThrow(KeeperCryptoError);
+    });
+
+    it('refuses to OPEN without a provider or a sub, rather than blaming the fragment', async () => {
         // Without this the empty case derives a key from ":" and fails on the tag, reporting a
         // corrupt fragment when what actually happened is that the sign-in returned nothing —
         // sending whoever is debugging a failed restore after the wrong thing entirely.
-        const sealed = sealShareToSso(randomBytes(64), 'apple', 'sub-1');
-        expect(() => openShareFromSso(sealed, '', 'sub-1')).toThrow(/provider and a subject claim/);
-        expect(() => openShareFromSso(sealed, 'apple', '')).toThrow(/provider and a subject claim/);
+        const sealed = await sealShareToSso(randomBytes(64), 'apple', 'sub-1');
+        await expect(openShareFromSso(sealed, '', 'sub-1')).rejects.toThrow(/provider and a subject claim/);
+        await expect(openShareFromSso(sealed, 'apple', '')).rejects.toThrow(/provider and a subject claim/);
     });
 });
 
@@ -298,7 +329,7 @@ describe('the whole path a real recovery takes', () => {
             device: k1,                                          // K1 never leaves the phone
             hub: recordShareForHub(k2),
             member: sealShareToMember(k3, inviter.pub),
-            sso: sealShareToSso(k4, 'apple', sub),
+            sso: await sealShareToSso(k4, 'apple', sub),
         };
 
         // The inviter approves: opens their own fragment, re-wraps it to the new device.
@@ -309,7 +340,7 @@ describe('the whole path a real recovery takes', () => {
         const recovered = [
             readHubShare(stored.hub),
             openRewrappedShare(releasedToDevice, device.priv),
-            openShareFromSso(stored.sso, 'apple', sub),
+            await openShareFromSso(stored.sso, 'apple', sub),
         ];
         expect(recovered).toHaveLength(RECOVERY_THRESHOLD);
         expect(await combineRecoveryPhrase(recovered)).toBe(PHRASE);

@@ -34,7 +34,7 @@ Two layers. This is the core of the design and everything else follows from it.
 ```
 seed  =  A  ⊕  B
 
-  A  →  the hub. Plaintext in the node's database. Released on PIN.
+  A  →  the hub. Plaintext in the node's database. Released under D7.
   B  →  the members' half. Never readable by the node.
 ```
 
@@ -83,6 +83,14 @@ Sealing `B` to the `sub` still earns its place — it locks out anyone holding o
 *data* (stolen database, backup tarball, decommissioned disk, an operator who never
 bothers). It does not lock out an operator who decides to, because the `sub` arrives in
 every id_token and the operator's own code receives it.
+
+That seal has to be **expensive**, and through 2026-08-09 it was not. `sealShareToSso` used
+a single HKDF pass, justified in its own comment by the model this document replaces —
+*"what that yields an attacker is ONE fragment, and the threshold is three."* Under `A ⊕ B`
+it yields half of two, next to the other half, and a data-only attacker could test guesses
+against the Poly1305 tag in microseconds. PR #248 moves it to scrypt at the same cost
+`ssoLookupHash` already used for the same value. The raw `sub` itself is never stored — the
+node keeps only a scrypt hash with a per-share random salt.
 
 A Google `sub` is the same value handed to every OAuth client that user has ever signed
 into — an identifier, not a secret. Apple's is scoped per developer team and genuinely
@@ -195,34 +203,62 @@ messaging depends on how many members are actually on the PWA, which is still un
 
 ## Recovery flows
 
-Both tiers need the PIN — it releases `A`, and nothing works without it.
-
-### Non-SSO
-
-```
-1  enter callsign + PIN          ← nothing opens without the PIN
-2  friend list is revealed        ← gated behind the PIN, see below
-3  ring two of the five and ask them to approve in settings
-4  they approve; their pieces rebuild B
-5  A ⊕ B → in
-```
-
 ### SSO
 
 ```
-1  enter callsign + PIN
+1  enter callsign
 2  sign in with Google or Apple
 3  A ⊕ B → in
 ```
 
-### Why the friend list sits behind the PIN
+No PIN. No delay. **The sign-in is the authentication**, and this is the tier that traded
+sovereignty for exactly this. A second factor here would guard against a strictly weaker
+attacker than the node operator, who by the tier's own definition can already read the
+account — and Google's own 2FA is better security than six digits anyway.
+
+### Non-SSO
+
+```
+1  enter callsign
+2  enter PIN (if set) → the friend list is revealed
+3  ring two of the five and ask them to approve in settings
+4  they approve; their pieces rebuild B, and the hub releases A instantly (D7)
+5  A ⊕ B → in
+```
+
+### D7 assumed every split had a human in it
+
+The rule as built: *the hub releases instantly if at least one human keeper has already
+released, otherwise after 24 hours.*
+
+That is exactly right for the non-SSO tier — a genuine recovery always has two friends
+approving, so the hub is instant, and a request that nobody vouched for waits a day with
+the owner alerted. The delay bites only when something odd is happening.
+
+**In the SSO tier there are no humans, ever.** The condition that lifts the delay can never
+be met, so the 24 hours would fire on *every legitimate recovery, permanently* — a fixed
+tax on the one population that chose this tier to avoid friction.
+
+Its protective value is also inverted there. The delay protects by giving the owner time to
+see the alarm, which requires them to still have their phone. Someone genuinely recovering
+does not.
+
+So: **D7 unchanged for non-SSO, and not applied to the SSO tier at all.**
+
+### The friend list, and what the PIN is actually for
 
 Opening a recovery session is unauthenticated by design — anybody can mint a keypair, so
-anybody can type a callsign. If the list of names were visible before the PIN, a stranger
+anybody can type a callsign. If the friend list were visible to whoever asks, a stranger
 could harvest any member's five closest people by pretending to recover them.
 
-The PIN is required anyway, so gating the reveal behind it is free. The rate limit then
-protects the social graph as well as the fragment.
+That is the PIN's job, and its only job: **it reveals the keeper list.** It does not gate
+the hub fragment — D7 already governs that, and correctly.
+
+Which means **forgetting the PIN is not a lockout.** It costs the member the convenience of
+being shown who to ring; they recover perfectly well by remembering. That is the whole
+reason to put the PIN here rather than in front of `A`: a secret set once at signup and
+first needed years later, on the day someone loses their phone, is a secret many people
+will not have.
 
 Return the **same error** for a wrong PIN and a callsign that does not exist, or the
 endpoint becomes a way to enumerate the node's membership.
@@ -231,7 +267,8 @@ endpoint becomes a way to enumerate the node's membership.
 
 ## The PIN
 
-Six digits. Checked by the node, which is what makes six digits sufficient.
+**Non-SSO only, optional, off by default.** Six digits, checked by the node — which is what
+makes six digits sufficient.
 
 ```
 2 free attempts, then one attempt per 15 minutes. Flat.
@@ -250,13 +287,13 @@ operator can block an IP. Not a product feature.
 
 ### When it is set
 
-At **split time**, not signup. The PIN guards `A`, and `A` does not exist until a split
-happens.
+Offered when the split becomes possible — the moment the second friend is added, alongside
+the *"turn on recovery?"* consent question. Skippable, and changeable later from settings.
 
-- **Non-SSO:** when the second friend is added and the split becomes possible. Same moment
-  as the consent question — *"turn on recovery?"*
-- **SSO:** at signup, because their split happens immediately. The frictionless tier gains
-  one screen, unavoidably: without the PIN, a Google account takeover is the whole account.
+An earlier revision made it mandatory in both tiers and set it at signup for SSO members.
+That was dropped on 2026-08-10 for two reasons: it asked people to price a risk they cannot
+evaluate, and a mandatory PIN in front of `A` would have locked out more members through
+forgetting than it ever protected from a stolen Google account.
 
 ---
 
@@ -312,7 +349,7 @@ silence costs someone their account.
 | Node operator, passively | nothing | `A` only | nothing |
 | **Node operator, deliberately** | **the account** | `A` only | nothing |
 | All the member's friends | — | `B` only, which is noise | — |
-| Hijacked Google account | `B` only — PIN still required | — | — |
+| Hijacked Google account | **the account** — the sign-in is the authentication | — | — |
 
 ---
 
@@ -340,17 +377,31 @@ break re-splitting — the only revocation mechanism there is.
 **D13's two-human cap — retired.** The two-layer shape enforces what the count was
 approximating.
 
+**A mandatory PIN in front of `A` — rejected.** It would have locked out more members
+through forgetting — a secret set once at signup and first needed years later, on the day
+they lose their phone — than it ever protected from a stolen Google account. The PIN
+survives as an optional, non-SSO reveal of the keeper list, where forgetting it costs
+convenience rather than the account.
+
 ---
 
 ## What exists today
 
 **Merged and unaffected by this design:** fragment sealing (`keeper-crypto.ts`), the
 on-device recovery self-check, the server deposit/summary/delete routes, collection and
-release, D6/D7, generations and the re-split invalidation, the push infrastructure.
+release, generations and the re-split invalidation, the push infrastructure.
+
+**Merged and correct as-is:** D6/D7. It needs no change — only a note that it is not
+applied to the SSO tier, where no human keeper can ever satisfy its instant-release
+condition.
 
 **Merged and changing:** native keeper enrolment (drop the device path, drop the inviter,
 add the XOR layer), `recovery-shares.ts` (drop the human cap, drop `'device'` from the
 holder types), the protection panel copy, `schema.sql`.
+
+**Changed by this design and already done:** PR #248 moves the sign-in fragment's key
+derivation from one HKDF pass to scrypt, because `A ⊕ B` made the old justification false.
+Both `sealShareToSso` and `openShareFromSso` are now async.
 
 **Not built at all:**
 

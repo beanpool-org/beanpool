@@ -249,6 +249,17 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                 </div>
             </div>
 
+            {/* Empty State */}
+            {generatedTokens.length === 0 && (
+                <div className="bg-nature-950/50 border-2 border-dashed border-nature-800/80 rounded-2xl p-12 flex flex-col items-center justify-center text-center space-y-3 animate-fade-in">
+                    <span className="text-4xl opacity-50 grayscale">🎟️</span>
+                    <h4 className="text-sm font-bold text-nature-300 m-0">No Passes Generated Yet</h4>
+                    <p className="text-xs text-nature-500 m-0 max-w-sm">
+                        Select a membership tier and quantity above, then click Generate to create single-use onboarding passes.
+                    </p>
+                </div>
+            )}
+
             {/* Generated Passes Output */}
             {generatedTokens.length > 0 && (
                 <div className="bg-nature-900/90 border border-nature-800 rounded-2xl p-6 space-y-4 shadow-xl animate-fade-in">

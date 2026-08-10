@@ -25,7 +25,32 @@ import React, { useEffect, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Clipboard from 'expo-clipboard';
+import * as Crypto from 'expo-crypto';
 import { Stack } from 'expo-router';
+import { useIdentity } from './IdentityContext';
+import { anchorUrl } from '../utils/node-post';
+import { SsoSignInError, fetchSsoNonce } from '../utils/sso-signin';
+
+/**
+ * Which form of the nonce Apple echoed — and this is a measurement, not a check.
+ *
+ * `apps/server/src/sso.ts` accepts either the nonce verbatim or its SHA-256 for Apple, on the
+ * grounds that which one arrives "varies by platform and SDK". That tolerance was written from
+ * the documentation. Nobody has ever seen which one this platform actually sends, because no
+ * token has ever been produced. This is where that gets answered.
+ *
+ * Apple's own convention is a lowercase hex digest, so that is what the comparison uses.
+ */
+async function describeNonceEcho(sent: string, echoed: string): Promise<string> {
+    if (echoed === sent) return 'VERBATIM — Apple echoed the nonce unchanged. The node accepts this.';
+    const hashed = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, sent);
+    if (echoed.toLowerCase() === hashed.toLowerCase()) {
+        return 'HASHED — Apple echoed SHA-256(nonce). The node accepts this too (nonceMayBeHashed).';
+    }
+    // The one outcome that is a real problem: neither form matches, so the node will read this as
+    // replay. Worth seeing here rather than as a 400 with no explanation.
+    return `MISMATCH — echoed neither the nonce nor its SHA-256. Got: ${echoed.slice(0, 32)}…`;
+}
 
 /** Decode a JWT payload without verifying it — correct for a probe, wrong for anything else. */
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -40,6 +65,17 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
     }
 }
 
+/**
+ * How the node half went. Held as one value rather than four booleans so the screen cannot show
+ * a nonce and an error at once, which is exactly the ambiguity a diagnostic must not have.
+ */
+type NodeChain =
+    | { stage: 'loading' }
+    | { stage: 'no-identity' }
+    | { stage: 'no-node' }
+    | { stage: 'ready'; url: string; nonce: string; providers: string[] }
+    | { stage: 'failed'; reason: string; detail: string };
+
 export default function AppleProbeScreen() {
     const [available, setAvailable] = useState<boolean | null>(null);
     const [credentialUser, setCredentialUser] = useState<string | null>(null);
@@ -47,10 +83,46 @@ export default function AppleProbeScreen() {
     const [audience, setAudience] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
+    const { identity, isLoading } = useIdentity();
+    const [chain, setChain] = useState<NodeChain>({ stage: 'loading' });
+    /** What came back inside the token's `nonce` claim, checked against what the node issued. */
+    const [nonceEcho, setNonceEcho] = useState<string | null>(null);
+
     useEffect(() => {
         if (!__DEV__) return;
         AppleAuthentication.isAvailableAsync().then(setAvailable).catch(() => setAvailable(false));
     }, []);
+
+    /**
+     * Fetch the nonce on mount rather than behind the button.
+     *
+     * The node half is the half that can be checked WITHOUT a human: signing a request, reaching
+     * the node, and getting a nonce back needs no Apple ID and no tap, so opening this screen is
+     * itself the test. Only the sheet needs a finger. Putting the fetch behind the button would
+     * have made both halves untestable together.
+     */
+    useEffect(() => {
+        if (!__DEV__ || isLoading) return;
+        if (!identity) { setChain({ stage: 'no-identity' }); return; }
+        let live = true;
+        (async () => {
+            const url = await anchorUrl();
+            if (!live) return;
+            if (!url) { setChain({ stage: 'no-node' }); return; }
+            try {
+                const { nonce, providers } = await fetchSsoNonce(url, identity);
+                if (live) setChain({ stage: 'ready', url, nonce, providers });
+            } catch (e) {
+                if (!live) return;
+                setChain({
+                    stage: 'failed',
+                    reason: e instanceof SsoSignInError ? e.reason : 'unknown',
+                    detail: (e as Error).message,
+                });
+            }
+        })();
+        return () => { live = false; };
+    }, [identity, isLoading]);
 
     if (!__DEV__) {
         return (
@@ -63,12 +135,18 @@ export default function AppleProbeScreen() {
 
     const signIn = async () => {
         setError(null);
+        setNonceEcho(null);
+        // The node's nonce when there is one. Without it the sheet still works and the sub-parity
+        // half of this probe is unaffected — that measurement predates the nonce and does not need
+        // it — but the chain is not being tested, and the screen says which of the two happened.
+        const nonce = chain.stage === 'ready' ? chain.nonce : undefined;
         try {
             const credential = await AppleAuthentication.signInAsync({
                 requestedScopes: [
                     AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
                     AppleAuthentication.AppleAuthenticationScope.EMAIL,
                 ],
+                ...(nonce ? { nonce } : {}),
             });
 
             // `credential.user` is Apple's stable per-team identifier. The identity token's `sub`
@@ -79,6 +157,12 @@ export default function AppleProbeScreen() {
             const claims = credential.identityToken ? decodeJwtPayload(credential.identityToken) : null;
             setTokenSub(claims?.sub ? String(claims.sub) : null);
             setAudience(claims?.aud ? String(claims.aud) : null);
+
+            if (nonce && claims?.nonce) {
+                setNonceEcho(await describeNonceEcho(nonce, String(claims.nonce)));
+            } else if (nonce) {
+                setNonceEcho('Apple returned no nonce claim at all — the node would reject this token.');
+            }
         } catch (e: any) {
             if (e?.code === 'ERR_REQUEST_CANCELED') return;
             setError(String(e?.message || e));
@@ -96,6 +180,47 @@ export default function AppleProbeScreen() {
                 </Text>
             </View>
 
+            {/*
+              The node half, rendered before the button because it runs before the button. It is
+              also the only part observable without a finger — a screenshot of this section is a
+              complete test of "can this app get a nonce from its node", which is half the chain
+              and the half that has never run.
+            */}
+            <Text style={styles.label}>1 · Node chain</Text>
+            {chain.stage === 'loading' && <Text style={styles.muted}>Asking the node for a nonce…</Text>}
+            {chain.stage === 'no-identity' && (
+                <Text style={styles.error} accessibilityRole="alert">
+                    No identity on this device. Finish signup first — the nonce request has to be signed.
+                </Text>
+            )}
+            {chain.stage === 'no-node' && (
+                <Text style={styles.error} accessibilityRole="alert">
+                    No node configured. Join one first; there is nobody to ask for a nonce.
+                </Text>
+            )}
+            {chain.stage === 'failed' && (
+                <>
+                    <Text style={styles.error} accessibilityRole="alert">FAILED ({chain.reason})</Text>
+                    <Text style={styles.mono}>{chain.detail}</Text>
+                </>
+            )}
+            {chain.stage === 'ready' && (
+                <>
+                    <Text style={styles.ok}>✓ nonce issued</Text>
+                    <Text style={styles.mono}>{chain.nonce}</Text>
+                    <Text style={styles.muted}>
+                        from {chain.url}
+                        {chain.providers.length > 0 && ` · accepts: ${chain.providers.join(', ')}`}
+                    </Text>
+                </>
+            )}
+
+            <Text style={styles.label}>2 · Apple sheet</Text>
+            {chain.stage !== 'ready' && (
+                <Text style={styles.muted}>
+                    No node nonce, so signing in still measures the sub but does NOT test the chain.
+                </Text>
+            )}
             {Platform.OS !== 'ios' ? (
                 <Text style={styles.muted}>Sign in with Apple is iOS only — run this on an iPhone.</Text>
             ) : available === false ? (
@@ -114,6 +239,19 @@ export default function AppleProbeScreen() {
             )}
 
             {error && <Text style={styles.error} accessibilityRole="alert">{error}</Text>}
+
+            {nonceEcho && (
+                <>
+                    <Text style={styles.label}>3 · Nonce binding — the answer nobody has had</Text>
+                    <Text style={nonceEcho.startsWith('MISMATCH') ? styles.error : styles.ok}>
+                        {nonceEcho}
+                    </Text>
+                    <Text style={styles.muted}>
+                        The server tolerates both forms on documentation alone. This is the first
+                        time anything has measured which one arrives.
+                    </Text>
+                </>
+            )}
 
             {tokenSub && (
                 <>
@@ -181,4 +319,5 @@ const styles = StyleSheet.create({
     },
     muted: { fontSize: 12, color: '#66625a', marginTop: 6 },
     error: { color: '#a8442f', marginTop: 14, fontSize: 13 },
+    ok: { color: '#2f6b46', marginTop: 8, fontSize: 13, fontWeight: '600' },
 });

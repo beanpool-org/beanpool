@@ -54,3 +54,7 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 
 Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to this codebase]\n**Action:** [How to apply next time]`
 ## 2026-08-05 - Add accessibilityRole to Image Viewer Overlay\n**Learning:** Image viewer overlay Pressable lacked accessibility affordances, appearing generic to screen readers.\n**Action:** Ensure all interactive elements, even background overlays, have appropriate accessibility roles and labels (e.g., `accessibilityRole="button"` and `accessibilityLabel="Dismiss full-size photo"`).
+
+## 2026-08-07 - Added missing accessibilityRole to color scheme settings
+**Learning:** The color palette choice elements used `<Pressable>` but lacked `accessibilityRole="button"` and explicit labels, causing accessibility issues for screen readers.
+**Action:** Update the `<Pressable>` elements with `accessibilityRole="button"`, `accessibilityLabel`, and `accessibilityState` in the apps/native/app/(tabs)/settings.tsx file.

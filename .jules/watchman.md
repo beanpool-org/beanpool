@@ -34,3 +34,9 @@ Watchman's domain is `apps/server/` ONLY. Watchman runs the existing test suite,
 ## Journal — Critical Learnings Only
 
 Format: `## YYYY-MM-DD - [Title]\n**Failure:** [Which test, what error]\n**Root Cause:** [Why it was failing]\n**Fix:** [What changed]\n**Learning:** [What to watch for next time]`
+
+## 2024-03-22 - [test-listing-reach]
+**Failure:** `test-listing-reach.ts` failed at checks 9c and 11.
+**Root Cause:** The tests expect `/api/marketplace/posts` and `/api/federation/reachable-peers` to be accessible unauthenticated (as they are compose-time / discovery reads), but `ENFORCE_READ_AUTH=true` was causing them to return 401 Unauthorized because they weren't in `PUBLIC_READ_EXACT` in `apps/server/src/https-server.ts`.
+**Fix:** Added `/api/marketplace/posts` and `/api/federation/reachable-peers` to `PUBLIC_READ_EXACT` in `apps/server/src/https-server.ts`.
+**Learning:** Public GET endpoints that aren't authenticated need to be added to `PUBLIC_READ_EXACT` or `PUBLIC_READ_PATTERNS` so that `ENFORCE_READ_AUTH=true` doesn't gate them.

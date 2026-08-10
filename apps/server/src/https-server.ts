@@ -231,6 +231,8 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/treasuries',               // community transparency: list of treasuries
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
+    '/api/marketplace/posts',        // marketplace board (reach is a discovery filter, not access control)
+    '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't

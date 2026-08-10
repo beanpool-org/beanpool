@@ -113,6 +113,19 @@ This is the **default** for a non-SSO member at signup, and it requires no work 
 implement: with only the hub available there is nothing to split. It stays that way until
 the member has picked friends.
 
+### The 12 words, for everyone else
+
+Decided 2026-08-10: **available in settings, never shown at signup** — for SSO members and
+non-SSO members alike.
+
+Showing them during onboarding reintroduces the exact friction this project exists to
+remove, and most people tick the box without saving them anyway. Withholding them entirely
+would make members captive to one node, and the words are the only thing that lets someone
+leave — which makes them load-bearing for federation, not a power-user extra.
+
+So: quiet, always reachable, and surfaced at the moment a member adds their first keeper —
+when the difference between *this node* and *any node* is something they have context for.
+
 ---
 
 ## The upgrade path
@@ -153,14 +166,30 @@ Consequences worth stating plainly:
 - Making the hub mandatory therefore costs nothing that was not already lost.
 - The 12 words are the only node-independent thing in the system.
 
-### The PWA caveat
+### The PWA is excluded from the keeper system entirely
 
 The "operator cannot recover a keepered account" guarantee holds because the native app is
 served by the App Store and Play Store, not by the node.
 
-**The PWA is served by the node.** A hostile operator can ship JavaScript that lifts a
-keeper's private key or approves on their behalf. For PWA users the guarantee does not
-hold, and the copy must not claim it does.
+**The PWA is served by the node.** A hostile operator can ship JavaScript that does
+whatever they like. That breaks all three roles, not just one:
+
+| Role on the PWA | What a hostile operator gets |
+|---|---|
+| Enrolling keepers | the seed, at the moment it is split |
+| Approving as a keeper | the keeper's private key, or a forged approval |
+| Recovering | the reconstructed seed, at the moment it is rebuilt |
+
+So the rule is broader than "no keeper enrolment on the PWA" (decided 2026-08-10): **the
+PWA does not enrol keepers, does not approve as a keeper, and does not run a recovery.**
+Recovery is set up and used in the app, and the PWA says so.
+
+**PWA members are the sovereign tier**, always. 12 words, nothing stored, no exceptions —
+including no SSO tier, since an SSO recovery in the browser hands the operator the seed
+just as readily.
+
+A guarantee that cannot be kept is worse than an absent feature. How loudly this needs
+messaging depends on how many members are actually on the PWA, which is still unmeasured.
 
 ---
 
@@ -341,14 +370,23 @@ value drops from 3 to 2.
 1. **Does the node persist the raw `sub`?** If it does, the SSO tier's cold-database
    protection evaporates. This gates the SSO row of every table above and has not been
    checked.
-2. **Hub-mandatory versus cross-node rescue.** Making `A` mandatory means a dead node is
-   unrecoverable even with every friend willing. The alternative — fragments held on
-   keepers' devices, so friends can restore someone onto a *different* node — is a real
-   feature for a federated network and is incompatible with hub-mandatory. Parked, not
-   settled.
-3. **PWA exposure.** How many members are on the PWA rather than the native app? The
-   keeper guarantee does not hold for them.
-4. **Re-keying.** Re-splitting produces a new curve for the same seed, so an old backup
+2. **How many members are on the PWA?** The decision above excludes them from recovery
+   entirely. Unmeasured, and it determines how loudly that needs saying.
+3. **Re-keying.** Re-splitting produces a new curve for the same seed, so an old backup
    still reconstructs. Only migrating to a new keypair truly revokes. Deferred by decision.
-5. **Node backup durability.** Every fragment for every member lives on one disk. This is
+4. **Node backup durability.** Every fragment for every member lives on one disk. This is
    the whole availability story and it is not a keeper problem — it is an operations one.
+
+### Settled 2026-08-10
+
+**Hub-mandatory, and cross-node rescue is parked.** Making `A` mandatory means a dead node
+is unrecoverable even with every friend willing. The alternative — fragments held on
+keepers' devices so friends can restore someone onto a *different* node — is a real feature
+for a federated network, and it is incompatible with hub-mandatory. Chosen anyway, because
+today it costs nothing: every fragment already dies with the node, so hub-mandatory removes
+no capability that exists. Worth revisiting if a real community ever folds.
+
+**Build order.** The sign-in button first. `#220` and `#222` verify Google and Apple tokens
+and no token has ever arrived, because nothing in any client can produce one. Every claim
+about the SSO tier stays theoretical until that exists, and nothing decided here changes
+it.

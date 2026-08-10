@@ -121,7 +121,7 @@ function MemberAvatarBase({
             </Pressable>
             {viewerOpen && (
                 <Modal visible transparent animationType="fade" onRequestClose={() => setViewerOpen(false)}>
-                    <Pressable style={styles.viewerBackdrop} onPress={() => setViewerOpen(false)} accessibilityLabel="Close photo">
+                    <Pressable style={styles.viewerBackdrop} onPress={() => setViewerOpen(false)} accessibilityRole="button" accessibilityLabel="Close photo">
                         {imageSource ? (
                             <Image
                                 source={imageSource}

@@ -4,6 +4,11 @@
 > **Revision**: 3 (2026-08-05) — the keyholder model. See [Revision History](#revision-history).
 > **Goal**: Reduce onboarding friction for non-technical users while preserving full sovereignty, with no central point of failure anywhere in the system.
 
+> ⚠️ **The keeper sections of this document are superseded by
+> [`recovery-model.md`](recovery-model.md) (2026-08-10).** The K1–K5 numbering is gone,
+> replaced by three tiers and a two-layer split. Where the two disagree, `recovery-model.md`
+> wins. The onboarding-flow material here still stands.
+
 ---
 
 ## Problem Statement

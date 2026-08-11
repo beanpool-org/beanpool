@@ -157,6 +157,31 @@ export interface SyncSettlement {
     updatedAt: string;
 }
 
+/**
+ * Replicated recovery key share (hub fragment, member fragment, or SSO fragment).
+ *
+ * Hub fragment A is XOR-mandatory — losing it means ALL keeper-based recovery breaks
+ * for every member who has enrolled keepers. Replicating these rows to backup nodes
+ * ensures a promoted secondary can still serve recovery without falling back to the
+ * file-based VACUUM INTO snapshots (which may be stale by up to 24 hours).
+ */
+export interface SyncRecoveryShare {
+    ownerPubkey: string;
+    holderType: string;       // 'hub' | 'member' | 'sso'
+    holderRef: string;
+    shareIndex: number;
+    encryptedShare: string;
+    shareIv: string;
+    shareTag: string;
+    ephemeralPubkey: string | null;
+    ssoLookupHash: string | null;
+    ssoLookupSalt: string | null;
+    kdfParams: string | null;
+    generation: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -176,6 +201,7 @@ export interface SyncPayload {
     abuseReports?: SyncAbuseReport[];
     recoveryRequests?: SyncRecoveryRequest[];
     recoveryApprovals?: SyncRecoveryApproval[];
+    recoveryShares?: SyncRecoveryShare[];
     settlements?: SyncSettlement[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     nodeId: string;
@@ -378,6 +404,24 @@ export function exportSyncState(
         createdAt: row.created_at,
     }));
 
+    const recoveryShareRows = sel('recovery_shares', 'updated_at');
+    const recoveryShares: SyncRecoveryShare[] = recoveryShareRows.map((row: any) => ({
+        ownerPubkey: row.owner_pubkey,
+        holderType: row.holder_type,
+        holderRef: row.holder_ref,
+        shareIndex: row.share_index,
+        encryptedShare: row.encrypted_share,
+        shareIv: row.share_iv,
+        shareTag: row.share_tag,
+        ephemeralPubkey: row.ephemeral_pubkey ?? null,
+        ssoLookupHash: row.sso_lookup_hash ?? null,
+        ssoLookupSalt: row.sso_lookup_salt ?? null,
+        kdfParams: row.kdf_params ?? null,
+        generation: row.generation,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at || row.created_at,
+    }));
+
     // Settlements. Uses the same `sel` cursor helper as every other table, so delta sync picks up a row
     // whose state has moved without re-sending the whole outbox.
     const settlementRows = sel('settlements', 'updated_at');
@@ -428,6 +472,7 @@ export function exportSyncState(
         abuseReports,
         recoveryRequests,
         recoveryApprovals,
+        recoveryShares,
         settlements,
         tombstones,
     };

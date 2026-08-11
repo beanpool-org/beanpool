@@ -873,7 +873,8 @@ CREATE TABLE IF NOT EXISTS sync_audit_log (
     marketplace_txns INTEGER NOT NULL DEFAULT 0,
     new_messages     INTEGER NOT NULL DEFAULT 0,
     tombstones_applied INTEGER NOT NULL DEFAULT 0,
-    conflicts_skipped  INTEGER NOT NULL DEFAULT 0
+    conflicts_skipped  INTEGER NOT NULL DEFAULT 0,
+    recovery_shares_imported INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_peer ON sync_audit_log(origin_peer_id, synced_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_time ON sync_audit_log(synced_at DESC);

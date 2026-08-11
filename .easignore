@@ -3,7 +3,8 @@ node_modules/
 .pnpm-store/
 
 # Build output
-dist/
+!packages/*/dist/
+!dist/
 out/
 .next/
 .turbo/

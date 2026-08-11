@@ -47,6 +47,7 @@ export interface SyncAuditEntry {
     newMessages: number;
     tombstonesApplied: number;
     conflictsSkipped: number;
+    recoverySharesImported: number;
 }
 
 export function writeSyncAuditLog(entry: SyncAuditEntry): void {
@@ -56,15 +57,16 @@ export function writeSyncAuditLog(entry: SyncAuditEntry): void {
                 (origin_peer_id, origin_node_id,
                  new_members, updated_members, new_posts, updated_posts,
                  new_transactions, account_changes, marketplace_txns,
-                 new_messages, tombstones_applied, conflicts_skipped)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                 new_messages, tombstones_applied, conflicts_skipped, recovery_shares_imported)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
             entry.originPeerId, entry.originNodeId,
             entry.newMembers, entry.updatedMembers,
             entry.newPosts, entry.updatedPosts,
             entry.newTransactions, entry.accountChanges,
             entry.marketplaceTxns, entry.newMessages,
-            entry.tombstonesApplied, entry.conflictsSkipped
+            entry.tombstonesApplied, entry.conflictsSkipped,
+            entry.recoverySharesImported
         );
     } catch (auditErr: any) {
         console.error(`[Sync] ⚠️ Failed to write sync_audit_log row (import itself succeeded):`, auditErr?.message || auditErr);
@@ -109,6 +111,7 @@ export interface ImportResult {
     newMessages: number;
     tombstonesApplied: number;
     conflictsSkipped: number;
+    recoverySharesImported: number;
 }
 
 export interface SyncCallbacks {
@@ -281,7 +284,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'recoveryRequests', 'recoveryApprovals', 'settlements', 'tombstones',
+        'messages', 'abuseReports', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'settlements', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -293,7 +296,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     let newMembers = 0, newPosts = 0;
     let updatedMembers = 0, updatedPosts = 0;
     let newTransactions = 0, accountChanges = 0, marketplaceTxns = 0, newMessages = 0;
-    let tombstonesApplied = 0, conflictsSkipped = 0;
+    let tombstonesApplied = 0, conflictsSkipped = 0, recoverySharesImported = 0;
 
     currentImportOrigin = remote.nodeId;
     db.pragma('foreign_keys = OFF');
@@ -717,6 +720,30 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
+            // Recovery shares — hub fragment A (XOR-mandatory) and keeper fragments.
+            // INSERT OR REPLACE keyed on the UNIQUE(owner_pubkey, generation, holder_type, holder_ref) constraint,
+            // so the latest version from the primary always wins. This is the critical path that closes
+            // the live-replication gap: without it, a promoted backup node has an empty recovery_shares table.
+            if (remote.recoveryShares) {
+                const dropOlder = db.prepare(`DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?`);
+                const insertShare = db.prepare(`INSERT OR REPLACE INTO recovery_shares
+                    (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share,
+                     share_iv, share_tag, ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt,
+                     kdf_params, generation, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                for (const rs of remote.recoveryShares) {
+                    dropOlder.run(rs.ownerPubkey, rs.generation);
+                    const res = insertShare.run(
+                        rs.ownerPubkey, rs.holderType, rs.holderRef, rs.shareIndex,
+                        rs.encryptedShare, rs.shareIv, rs.shareTag,
+                        rs.ephemeralPubkey ?? null, rs.ssoLookupHash ?? null,
+                        rs.ssoLookupSalt ?? null, rs.kdfParams ?? null,
+                        rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt,
+                    );
+                    if (res.changes > 0) recoverySharesImported++;
+                }
+            }
+
             if (remote.tombstones) {
                 for (const ts of remote.tombstones) {
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
@@ -745,7 +772,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
         originNodeId: remote.nodeId,
         newMembers, updatedMembers, newPosts, updatedPosts,
         newTransactions, accountChanges, marketplaceTxns,
-        newMessages, tombstonesApplied, conflictsSkipped,
+        newMessages, tombstonesApplied, conflictsSkipped, recoverySharesImported,
     });
 
     return {
@@ -759,5 +786,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
         newMessages,
         tombstonesApplied,
         conflictsSkipped,
+        recoverySharesImported,
     };
 }

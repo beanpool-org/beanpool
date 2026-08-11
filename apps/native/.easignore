@@ -5,7 +5,8 @@ ios/
 **/*.ipa
 node_modules/
 .expo/
-dist/
+!packages/*/dist/
+!dist/
 !google-services.json
 
 # Signing keys and certificate bundles. Mirrors .gitignore — EAS uses THIS file

@@ -269,6 +269,9 @@ export function initSchema() {
         db.prepare(`UPDATE recovery_requests SET updated_at = COALESCE(executed_at, cooldown_until, created_at) WHERE updated_at IS NULL`).run();
     } catch { }
 
+    // Step 7: recovery share replication audit column
+    try { db.prepare(`ALTER TABLE sync_audit_log ADD COLUMN recovery_shares_imported INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
+
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
 

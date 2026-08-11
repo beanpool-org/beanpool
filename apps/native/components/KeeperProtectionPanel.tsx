@@ -39,9 +39,16 @@ export function KeeperProtectionPanel({
                         Neither of them can open your account alone — it takes both.
                     </Text>
                     {onProtectFriends && (
-                        <Text style={styles.offer}>
-                            Want extra protection? Add a trusted friend — then you can recover without Apple too.
-                        </Text>
+                        <TouchableOpacity
+                            onPress={onProtectFriends}
+                            accessibilityRole="button"
+                            accessibilityLabel="Add a trusted friend for extra protection"
+                            style={{ marginTop: 12 }}
+                        >
+                            <Text style={styles.offer}>
+                                Want extra protection? Add a trusted friend — then you can recover without Apple too.
+                            </Text>
+                        </TouchableOpacity>
                     )}
                 </View>
             );
@@ -90,25 +97,23 @@ export function KeeperProtectionPanel({
                 password reset — nobody, including your hub, can restore it for you.
             </Text>
 
-            {Platform.OS === 'ios' && (
-                <View style={styles.buttonContainer}>
-                    {onProtectSso && (
-                        <View style={styles.actionBlock}>
-                            <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectSso} accessibilityRole="button">
-                                <Text style={styles.buttonSecondaryText}>Protect with Apple sign-in</Text>
-                            </TouchableOpacity>
-                            <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
-                        </View>
-                    )}
-                    {onProtectFriends && (
-                        <View style={styles.actionBlock}>
-                            <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectFriends} accessibilityRole="button">
-                                <Text style={styles.buttonSecondaryText}>Protect with trusted friends</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-                </View>
-            )}
+            <View style={styles.buttonContainer}>
+                {Platform.OS === 'ios' && onProtectSso && (
+                    <View style={styles.actionBlock}>
+                        <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectSso} accessibilityRole="button">
+                            <Text style={styles.buttonSecondaryText}>Protect with Apple sign-in</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
+                    </View>
+                )}
+                {onProtectFriends && (
+                    <View style={styles.actionBlock}>
+                        <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectFriends} accessibilityRole="button">
+                            <Text style={styles.buttonSecondaryText}>Protect with trusted friends</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </View>
         </View>
     );
 }
@@ -136,10 +141,12 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
         borderWidth: 1,
         borderColor: colors.text.secondary,
-        paddingVertical: 10,
+        paddingVertical: 12,
+        minHeight: 44,
         paddingHorizontal: 16,
         borderRadius: 8,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     buttonSecondaryText: {
         fontSize: 15,

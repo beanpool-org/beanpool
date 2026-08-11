@@ -31,6 +31,7 @@ export function FriendPickerSheet({
     const [errorMsg, setErrorMsg] = useState('');
     const [enrolmentResult, setEnrolmentResult] = useState<KeeperEnrolmentResult | null>(null);
     const [loadingMembers, setLoadingMembers] = useState(false);
+    const [membersLoaded, setMembersLoaded] = useState(false);
 
     useEffect(() => {
         if (!visible) return;
@@ -38,10 +39,11 @@ export function FriendPickerSheet({
         setSelectedKeys(new Set());
         setErrorMsg('');
         setEnrolmentResult(null);
+        setMembersLoaded(false);
     }, [visible]);
 
     useEffect(() => {
-        if (visible && step === 2 && members.length === 0 && !loadingMembers) {
+        if (visible && step === 2 && !membersLoaded && !loadingMembers) {
             let active = true;
             setLoadingMembers(true);
             const load = async () => {
@@ -53,6 +55,7 @@ export function FriendPickerSheet({
                     const data: Member[] = await res.json();
                     if (active) {
                         setMembers(data.filter(m => m.publicKey !== identity?.publicKey));
+                        setMembersLoaded(true);
                     }
                 } catch (e: any) {
                     if (active) {
@@ -66,7 +69,7 @@ export function FriendPickerSheet({
             load();
             return () => { active = false; };
         }
-    }, [visible, step, members.length, identity, loadingMembers]);
+    }, [visible, step, membersLoaded, identity, loadingMembers]);
 
     const handleConfirmSelection = () => {
         if (selectedKeys.size >= TWO_LAYER_THRESHOLD) {
@@ -139,8 +142,14 @@ export function FriendPickerSheet({
                 ) : (
                     <FlatList
                         data={members}
+                        extraData={selectedKeys}
                         keyExtractor={m => m.publicKey}
                         style={styles.list}
+                        ListEmptyComponent={
+                            <Text style={{ color: colors.text.secondary, textAlign: 'center', marginVertical: 24, fontSize: 15 }}>
+                                No other members found on this hub.
+                            </Text>
+                        }
                         renderItem={({ item }) => {
                             const isSelected = selectedKeys.has(item.publicKey);
                             return (
@@ -248,7 +257,14 @@ export function FriendPickerSheet({
                 <TouchableOpacity style={styles.secondaryButton} onPress={onClose}>
                     <Text style={styles.secondaryButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryButton} onPress={() => setStep(3)}>
+                <TouchableOpacity style={styles.primaryButton} onPress={() => {
+                    if (members.length === 0) {
+                        setMembersLoaded(false);
+                        setStep(2);
+                    } else {
+                        setStep(3);
+                    }
+                }}>
                     <Text style={styles.primaryButtonText}>Try again</Text>
                 </TouchableOpacity>
             </View>

@@ -917,7 +917,7 @@ export default function WelcomeScreen() {
                         <KeeperProtectionPanel
                             protection={protection}
                             onProtectSso={Platform.OS === 'ios' ? () => setShowSsoSheet(true) : undefined}
-                            onProtectFriends={Platform.OS === 'ios' ? () => setShowFriendSheet(true) : undefined}
+                            onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                         />
 
                         {Platform.OS === 'web' && (

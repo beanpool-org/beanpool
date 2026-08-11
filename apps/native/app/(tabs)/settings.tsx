@@ -296,9 +296,11 @@ export default function SettingsScreen() {
             };
             // Convert server status to KeeperEnrolmentResult for protectionFrom()
             const enrolled: ('hub' | 'member' | 'sso')[] = [];
-            for (const k of body.keepers) {
-                for (let i = 0; i < k.count; i++) {
-                    enrolled.push(k.holderType as 'hub' | 'member' | 'sso');
+            if (Array.isArray(body?.keepers)) {
+                for (const k of body.keepers) {
+                    for (let i = 0; i < (k.count || 0); i++) {
+                        enrolled.push(k.holderType as 'hub' | 'member' | 'sso');
+                    }
                 }
             }
             setProtectionResult({
@@ -1383,7 +1385,7 @@ export default function SettingsScreen() {
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
                                 onProtectSso={Platform.OS === 'ios' ? () => setShowSsoSheet(true) : undefined}
-                                onProtectFriends={Platform.OS === 'ios' ? () => setShowFriendSheet(true) : undefined}
+                                onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                             />
 
                             {Platform.OS === 'web' && (

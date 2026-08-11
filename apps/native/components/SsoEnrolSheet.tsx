@@ -6,12 +6,22 @@ import { startSsoSignIn, SsoSignInError } from '../utils/sso-signin';
 import { enrolSsoKeeper, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { useIdentity } from '../app/IdentityContext';
 
+/**
+ * Decode the `sub` claim from a JWT id_token without signature verification.
+ * Follows the same pattern as decodeJwtPayload in apple-probe.tsx.
+ */
 function extractSub(idToken: string): string {
-    const b64 = idToken.split('.')[1];
-    // Handle base64url: replace URL-safe chars and add padding
-    const pad = b64.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice(0, (4 - b64.length % 4) % 4);
+    const parts = idToken?.split('.');
+    if (!parts || parts.length !== 3 || !parts[1]) {
+        throw new Error('Invalid ID token format.');
+    }
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
     const payload = JSON.parse(globalThis.atob(pad)) as Record<string, unknown>;
-    return payload.sub as string;
+    if (typeof payload?.sub !== 'string' || !payload.sub) {
+        throw new Error('ID token missing subject claim (sub).');
+    }
+    return payload.sub;
 }
 
 export function SsoEnrolSheet({

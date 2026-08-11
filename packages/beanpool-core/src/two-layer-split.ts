@@ -87,9 +87,12 @@ export class TwoLayerCombineError extends Error {
 
 /** First {@link SEED_CHECKSUM_LENGTH} bytes of `SHA-256(seed)`. */
 function seedChecksum(seed: Uint8Array): Uint8Array {
-    const hex = CryptoJS.SHA256(
-        CryptoJS.lib.WordArray.create(seed as unknown as number[]),
-    ).toString();
+    // Convert to hex and parse via CryptoJS.enc.Hex so the hash covers the
+    // actual 32 bytes, not a zero-padded WordArray reinterpretation.
+    const hexSeed = Array.from(seed)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    const hex = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hexSeed)).toString();
     const out = new Uint8Array(SEED_CHECKSUM_LENGTH);
     for (let i = 0; i < SEED_CHECKSUM_LENGTH; i++) {
         out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
@@ -99,6 +102,11 @@ function seedChecksum(seed: Uint8Array): Uint8Array {
 
 /** Byte-wise XOR of two equal-length buffers. Returns a new Uint8Array. */
 function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+    if (a.length !== b.length) {
+        throw new Error(
+            `xorBytes: buffers must be of equal length (got ${a.length} and ${b.length}).`,
+        );
+    }
     const out = new Uint8Array(a.length);
     for (let i = 0; i < a.length; i++) {
         out[i] = a[i] ^ b[i];
@@ -216,20 +224,28 @@ export async function combineTwoLayer(
         );
     }
 
+    if (B.length !== SEED_LENGTH) {
+        throw new TwoLayerCombineError(
+            `Reconstructed B has incorrect length: expected ${SEED_LENGTH}, got ${B.length}.`,
+        );
+    }
+
     // --- layer 1: XOR → seed ---
     const seed = xorBytes(hubShare, B);
 
-    // --- integrity check ---
+    // --- integrity check (constant-time comparison) ---
     const actual = seedChecksum(seed);
+    let diff = 0;
     for (let i = 0; i < SEED_CHECKSUM_LENGTH; i++) {
-        if (actual[i] !== checksum[i]) {
-            throw new TwoLayerCombineError(
-                'Reconstructed seed does not match its checksum. This usually means the ' +
-                'hub share and friend shares come from different splits, or there are too ' +
-                'few friend shares. The result was NOT returned — without this check it ' +
-                'would have been a valid but wrong Ed25519 seed.',
-            );
-        }
+        diff |= actual[i] ^ checksum[i];
+    }
+    if (diff !== 0) {
+        throw new TwoLayerCombineError(
+            'Reconstructed seed does not match its checksum. This usually means the ' +
+            'hub share and friend shares come from different splits, or there are too ' +
+            'few friend shares. The result was NOT returned — without this check it ' +
+            'would have been a valid but wrong Ed25519 seed.',
+        );
     }
 
     return seed;

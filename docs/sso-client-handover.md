@@ -119,13 +119,25 @@ On 2026-08-11 a signed Debug build ran on a physical iPhone against the live tes
 | Token audience is `org.beanpool.pillar` | ✅ |
 | Nonce echoed **VERBATIM** (not hashed) | ✅ |
 
-**Not proven — this is the important part:**
+| Node verifies a real token against Apple's live keys | ✅ |
 
-> **The node has never verified a real Apple token.**
+The last one was closed by section 4 of the probe, which sends the token with a **deliberately
+wrong nonce**. `verifyIdToken` checks the nonce *last*, so a rejection there proves the JWKS
+fetch, the RS256 signature, the issuer, the audience and the expiry all held — while storing
+nothing, so no fragment is created for #248 to have to migrate.
 
-`startSsoSignIn` deliberately stops at *obtaining* a token; it does not deposit. So
-`verifyIdToken`, the live JWKS fetch, Apple signature validation, and `ssoLookupHash` have
-only ever seen test fixtures. **This is the single last untested link in the sign-in tier.**
+**Watch for this trap if you extend the probe:** `sso.ts` phrases that rejection as *"Apple
+sign-in could not be matched to this request"* and never uses the word "nonce", deliberately —
+a member-facing sentence should not name an internal mechanism. The first live run therefore
+reported `STOPPED EARLIER` on what was actually a pass.
+
+**Still not proven:**
+
+> `ssoLookupHash` and the storage path have never run against a real token.
+
+They execute only *after* a correct nonce, which the probe deliberately never sends. They are
+covered by unit tests, and they are local code with no external dependency — so this is a much
+smaller gap than the one that just closed, but it is not zero.
 
 ### On the VERBATIM result
 
@@ -199,15 +211,9 @@ measured. The measurement is recorded in the header comment of
 
 ## 6. Next steps, in order
 
-### Step 1 — close the last link (small, do it first)
+### Step 1 — ~~close the last link~~ DONE 2026-08-11
 
-Make the probe POST its token at the node and confirm `verifyIdToken` accepts a real Apple
-token. Until this passes, every claim about the sign-in tier is still theoretical.
-
-There is no verify-only endpoint. Either add a debug one, or deposit against
-`POST /api/recovery/shares/sso` on the **test** node and accept the test row. Watch for:
-JWKS fetch reaching Apple, signature validation, audience match, nonce match, and
-`ssoLookupHash` producing a stable hash for the same `sub`.
+Section 4 of the probe verified a real Apple token against the node. See §3.
 
 ### Step 2 — merge #248 (scrypt), while migration is still free
 

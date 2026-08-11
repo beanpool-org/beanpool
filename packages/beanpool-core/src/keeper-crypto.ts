@@ -13,7 +13,7 @@
  * | K1 device | nobody — the bytes never leave the phone | not sealed here at all |
  * | K2 hub | **the node**, handing it to a device that holds no key | plaintext, stated |
  * | K4/K5+ member | the keeper's own app, with their identity key | X25519 ECDH → XChaCha20-Poly1305 |
- * | K3 sign-in | any device that can re-obtain the provider `sub` | HKDF(sub) → XChaCha20-Poly1305 |
+ * | K3 sign-in | any device that can re-obtain the provider `sub` | scrypt(sub) → XChaCha20-Poly1305 |
  *
  * ## Why XChaCha20-Poly1305 and not AES-256-GCM
  *
@@ -58,6 +58,7 @@ import { Buffer } from 'buffer';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
+import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Seed } from './ed25519-key.js';
@@ -72,7 +73,37 @@ const KEY_LEN = 32;
 
 /** Scheme identifiers, written into `kdfParams` so a future change is detectable, not silent. */
 export const KEEPER_ALG_MEMBER = 'x25519-xc20p-v1';
-export const KEEPER_ALG_SSO = 'hkdf-sha256-xc20p-v1';
+export const KEEPER_ALG_SSO = 'scrypt-xc20p-v1';
+
+/**
+ * scrypt cost for the sign-in fragment. Matches `ssoLookupHash` in `apps/server/src/sso.ts`
+ * deliberately — the two derivations defend against the same guess and there is no reading of
+ * the threat model where one deserves 16MB and the other deserves none.
+ *
+ * ~16MB and 10-20ms on a laptop; nearer a second on the API-26 phones this app supports. That is
+ * paid twice in a member's life, at enrolment and at recovery, and buys the memory-hardness that
+ * blunts a GPU. {@link SSO_SCRYPT_MIN_N} is the floor an opener will accept.
+ */
+const SSO_SCRYPT = { N: 16384, r: 8, p: 1, dkLen: 32 } as const;
+
+/**
+ * Refuse to open a fragment claiming a cheaper cost than anything we ever wrote.
+ *
+ * The parameters travel in `kdfParams` so that raising them later does not strand existing
+ * fragments. That flexibility is also a downgrade surface: nothing else in the pipeline would
+ * notice a fragment rewritten to `N: 2`. The tag would still fail — a wrong key is a wrong key —
+ * but failing on a floor check says what actually happened, and stops a future dual-open path
+ * from quietly accepting it.
+ */
+const SSO_SCRYPT_MIN_N = 16384;
+/**
+ * The most expensive fragment an opener will attempt — four times the cost we write today.
+ *
+ * scrypt's memory is roughly `128 * N * r`, so this caps a single open at about 67 MB on r = 8.
+ * Without it, a fragment claiming N = 2^24 asks the opener for ~17 GB, and the opener is a phone
+ * mid-recovery. Headroom for raising the cost, but not enough to be used as a weapon.
+ */
+const SSO_SCRYPT_MAX_N = 65536;
 /** K2's honest name for "not encrypted". See {@link recordShareForHub}. */
 export const KEEPER_ALG_PLAINTEXT = 'plaintext-v1';
 /** The scheme a keeper re-wraps under when releasing to a recovering device. */
@@ -83,7 +114,6 @@ const AAD_SSO = utf8ToBytes('beanpool-keeper-sso-v1');
 const AAD_REWRAP = utf8ToBytes('beanpool-keeper-rewrap-v1');
 
 const HKDF_INFO_MEMBER = utf8ToBytes('beanpool-keeper-share');
-const HKDF_INFO_SSO = utf8ToBytes('beanpool-keeper-sso-v1');
 const HKDF_INFO_REWRAP = utf8ToBytes('beanpool-keeper-rewrap');
 
 /**
@@ -327,28 +357,50 @@ export function openShareAsMember(sealed: SealedShare, privateKey: string | Uint
  * the ciphertext, so a shared salt would let anyone who guesses `sub` confirm the guess against
  * the hash — the confirmation is free either way, but there is no reason to build the oracle in.
  *
- * ## This key is weak on purpose
+ * ## Why this key is derived expensively
  *
- * `sub` is not a secret: the provider knows it, and this node may well be able to derive it.
- * What that yields an attacker is ONE fragment, and the threshold is three. Security here comes
- * from the threshold, not from this key — which is the architectural point of Revision 3, and
- * the reason this is acceptable where it would not be if K3 stood alone.
+ * Through 2026-08-09 this was a single HKDF pass, and the comment here said the key was weak on
+ * purpose: `sub` is not a secret, so what guessing it yields an attacker is ONE fragment, and the
+ * threshold was three. That reasoning was sound and is no longer true. Under the model agreed on
+ * 2026-08-10 (docs/recovery-model.md) an SSO member's seed is `A ⊕ B`, where `B` is this fragment
+ * and `A` is the hub's — stored in the same table, in plaintext, by design. Guessing `sub` no
+ * longer yields one share of three. It yields half of two, next to the other half.
+ *
+ * The provider still knows `sub`, and a node that modifies its own code still receives it on
+ * every sign-in; neither of those is fixable here and the model does not pretend otherwise. What
+ * this does close is the attacker who has only the *data* — a stolen database, a backup tarball,
+ * a decommissioned disk — and who would otherwise test guesses against the Poly1305 tag at HKDF
+ * speed, which is microseconds.
+ *
+ * scrypt at {@link SSO_SCRYPT} makes each of those guesses cost ~16MB and milliseconds, which is
+ * the same judgement `ssoLookupHash` already reached about the same value: *"a Google `sub` is a
+ * 21-digit number — a plain hash of that is brute-forceable in the small space, salt or no salt."*
+ * The lookup hash was hardened and the key that opens the box was not; this makes them agree.
  */
-export function sealShareToSso(share: Uint8Array, provider: string, sub: string): SealedShare {
+export async function sealShareToSso(
+    share: Uint8Array, provider: string, sub: string,
+): Promise<SealedShare> {
     if (!provider || !sub) {
         throw new KeeperCryptoError('A sign-in fragment needs both a provider and a subject claim.');
     }
     assertRecoveryCsprngAvailable();
     const salt = randomBytes(KEY_LEN);
-    const key = hkdf(sha256, utf8ToBytes(`${provider}:${sub}`), salt, HKDF_INFO_SSO, 32);
+    const key = await deriveSsoKey(provider, sub, salt, SSO_SCRYPT.N);
     return {
         ...seal(key, share, AAD_SSO),
-        kdfParams: JSON.stringify({ alg: KEEPER_ALG_SSO, salt: b64(salt) }),
+        // N/r/p travel with the fragment so raising the cost later does not strand what is already
+        // deposited. The opener checks them against a floor rather than trusting them.
+        kdfParams: JSON.stringify({
+            alg: KEEPER_ALG_SSO, salt: b64(salt),
+            N: SSO_SCRYPT.N, r: SSO_SCRYPT.r, p: SSO_SCRYPT.p,
+        }),
     };
 }
 
-/** Re-derive K3's key from a freshly obtained `sub` and open the fragment. */
-export function openShareFromSso(sealed: SealedShare, provider: string, sub: string): Uint8Array {
+/** Re-derive the sign-in key from a freshly obtained `sub` and open the fragment. */
+export async function openShareFromSso(
+    sealed: SealedShare, provider: string, sub: string,
+): Promise<Uint8Array> {
     // Checked on the way out as well as the way in (CR): an empty sub would otherwise derive a key
     // from the string ":" and fail on the tag, reporting a corrupt fragment when what actually
     // happened is that the sign-in returned nothing.
@@ -359,8 +411,50 @@ export function openShareFromSso(sealed: SealedShare, provider: string, sub: str
     if (typeof params.salt !== 'string') {
         throw new KeeperCryptoError('A sign-in fragment is missing the salt its key derives from.');
     }
-    const key = hkdf(sha256, utf8ToBytes(`${provider}:${sub}`), unb64(params.salt, 'salt'), HKDF_INFO_SSO, 32);
+    const N = params.N;
+    // Bounded at BOTH ends (CR). The floor stops a tampered fragment weakening its own key; the
+    // ceiling stops one weaponising it. scrypt allocates about 128 * N * r bytes, so with r = 8 an
+    // N of 2^24 asks for ~17 GB — and the party who allocates it is the MEMBER'S PHONE, opening a
+    // fragment handed to it by the node, at the exact moment they are recovering an account. A
+    // hostile or compromised node could turn every restore attempt into an out-of-memory crash
+    // that looks like a broken app.
+    //
+    // The ceiling is four times the current cost, so raising N later needs no opener change; going
+    // beyond it is a deliberate migration, which is the right shape for a number this expensive.
+    if (typeof N !== 'number' || !Number.isInteger(N)
+        || N < SSO_SCRYPT_MIN_N || N > SSO_SCRYPT_MAX_N) {
+        throw new KeeperCryptoError(
+            `A sign-in fragment claims a scrypt cost of ${String(N)}, outside the permitted range `
+            + `${SSO_SCRYPT_MIN_N}–${SSO_SCRYPT_MAX_N}.`,
+        );
+    }
+    const key = await deriveSsoKey(provider, sub, unb64(params.salt, 'salt'), N);
     return open(key, sealed, AAD_SSO);
+}
+
+/**
+ * The one place `sub` becomes key material, so seal and open cannot drift apart.
+ *
+ * `r` and `p` are deliberately NOT read from `kdfParams` even though they are written there. They
+ * are recorded for diagnosis and for a future migration to read; taking them from the fragment
+ * today would mean three numbers an opener has to police instead of one, for a parameter neither
+ * has ever varied.
+ */
+async function deriveSsoKey(
+    provider: string, sub: string, salt: Uint8Array, N: number,
+): Promise<Uint8Array> {
+    try {
+        return await scryptAsync(utf8ToBytes(`${provider}:${sub}`), salt, {
+            N, r: SSO_SCRYPT.r, p: SSO_SCRYPT.p, dkLen: SSO_SCRYPT.dkLen,
+        });
+    } catch (e) {
+        // scrypt throws on parameters it cannot honour — an N that is not a power of two, or a
+        // cost this device has not the memory for. Both surface here as "the fragment is broken",
+        // which it is not, so say which it is.
+        throw new KeeperCryptoError(
+            `The sign-in fragment's key could not be derived: ${(e as Error).message}`,
+        );
+    }
 }
 
 /**

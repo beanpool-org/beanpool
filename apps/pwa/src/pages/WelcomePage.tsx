@@ -921,18 +921,19 @@ export function WelcomePage({ onComplete }: Props) {
                                   is meant to remove. It says what is true today, and gets
                                   the keeper wording in Phase B when the keepers are real.
                                 */}
-                                <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-2">
-                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🔑 Getting Back In</h4>
+                                <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 space-y-2">
+                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🔑 Your 12 Words Are Everything</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        Right now your 12 words are the only way back into your account. No email,
+                                        Right now your 12 words are the <strong>only</strong> way back into your account. No email,
                                         no password reset — nobody, including your hub, can restore it for you.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        📝 Find them any time under <strong>Settings → Recovery Phrase</strong>.
+                                        ⚠️ <strong>Browser storage can be wiped without warning.</strong> Safari clears site data after
+                                        7 days of inactivity, and clearing browsing data erases your identity permanently.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        🤝 Soon you'll be able to share the job with your hub and the person who
-                                        invited you, so losing your phone stops being a problem you carry alone.
+                                        📝 Find them any time under <strong>Settings → Recovery Phrase</strong>.
+                                        Write them down on paper — it's the only backup that can't be wiped.
                                     </p>
                                 </div>
 
@@ -996,6 +997,24 @@ export function WelcomePage({ onComplete }: Props) {
                                 This is the <strong>only</strong> way to recover your identity if you lose this device.
                             </p>
 
+                            {/* Browser storage eviction warning — PWA is sovereign-only, no keepers */}
+                            <div style={{
+                                background: 'rgba(251, 191, 36, 0.1)',
+                                border: '1px solid rgba(251, 191, 36, 0.3)',
+                                borderRadius: 10,
+                                padding: '0.75rem',
+                                marginBottom: '1rem',
+                            }}>
+                                <p style={{ color: '#f59e0b', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                                    ⚠️ Browser storage is not permanent
+                                </p>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.5 }}>
+                                    Safari can clear site data after <strong>7 days of inactivity</strong>, and
+                                    clearing your browsing data erases your identity permanently.
+                                    Your 12 words on paper are the only backup that can't be wiped.
+                                </p>
+                            </div>
+
                             <div style={{
                                 display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                                 gap: '0.4rem', marginBottom: '1rem',
@@ -1022,7 +1041,8 @@ export function WelcomePage({ onComplete }: Props) {
                             */}
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                                 No pen handy? Carry on — you can come back to these any time under
-                                Settings → Recovery Phrase.
+                                Settings → Recovery Phrase. But <strong>don't leave it too long</strong> — your browser
+                                could clear this data without asking.
                             </p>
 
                             <label htmlFor="seedConfirmed" style={{

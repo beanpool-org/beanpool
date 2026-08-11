@@ -92,6 +92,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         localStorage.setItem('beanpool-privacy-tier', next);
     };
 
+    // Track whether the member has ever viewed their 12 words in Settings.
+    // This is deliberately stored in localStorage, not on the server — the server
+    // cannot see a PWA member's phrase and should not know whether they've saved it.
+    const [seedViewed, setSeedViewed] = useState(() => {
+        return localStorage.getItem('beanpool_seed_viewed') === 'true';
+    });
+
     // Holiday mode
     const [holidayMode, setHolidayMode] = useState(false);
     const [holidayLoading, setHolidayLoading] = useState(false);
@@ -424,6 +431,25 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 ACCOUNT & IDENTITY
                             </div>
                             <div className="space-y-2.5">
+
+                                {/* Sovereignty banner — shown until the member has viewed their 12 words */}
+                                {!seedViewed && (
+                                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 space-y-2">
+                                        <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                                            ⚠️ You haven't saved your recovery phrase yet
+                                        </p>
+                                        <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                                            Your 12 words are the <strong>only</strong> way to recover your account.
+                                            Browsers can clear site data without warning — Safari does it after 7 days of inactivity.
+                                        </p>
+                                        <button
+                                            onClick={() => setMode('seed')}
+                                            className="mt-1 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white border-none cursor-pointer transition-colors"
+                                        >
+                                            View & Save Recovery Phrase
+                                        </button>
+                                    </div>
+                                )}
                                 {onReRunSetup && (
                                     <button
                                         onClick={onReRunSetup}
@@ -451,7 +477,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 </button>
 
                                 <button
-                                    onClick={() => setMode('seed')}
+                                    onClick={() => {
+                                        setMode('seed');
+                                        // Mark seed as viewed — removes the persistent banner
+                                        if (!seedViewed) {
+                                            localStorage.setItem('beanpool_seed_viewed', 'true');
+                                            setSeedViewed(true);
+                                        }
+                                    }}
                                     className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
                                 >
                                     <span className="text-xl">🔑</span>
@@ -662,9 +695,21 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                 {mode === 'seed' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
                         <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🔑 Recovery Phrase</h3>
-                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
+                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-relaxed">
                             Your 12-word recovery phrase allows you to restore your identity on any device. Anyone with these words can control your account. Keep them secret and offline.
                         </p>
+
+                        {/* Browser eviction warning */}
+                        <div className="bg-amber-50 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800 mb-5">
+                            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                                ⚠️ Browser storage is not permanent
+                            </p>
+                            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                                Safari clears site data after <strong>7 days of inactivity</strong>, and clearing browsing data
+                                erases your identity permanently. Write these words on paper — it's the only backup
+                                that can't be wiped by your browser.
+                            </p>
+                        </div>
 
                         {hasMnemonic(identity) ? (
                             <>

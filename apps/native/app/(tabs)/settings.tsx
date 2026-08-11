@@ -1398,15 +1398,6 @@ export default function SettingsScreen() {
                                     </Text>
                                 </View>
                             )}
-
-                            {__DEV__ && (
-                                <Pressable
-                                    style={{ backgroundColor: '#2f6b46', padding: 12, borderRadius: 8, marginTop: 16, alignItems: 'center' }}
-                                    onPress={() => router.push('/google-probe')}
-                                >
-                                    <Text style={{ color: '#fff', fontWeight: '600' }}>🧪 Open Google SSO Probe</Text>
-                                </Pressable>
-                            )}
                         </>
                     )}
 

@@ -30,6 +30,12 @@
  * and it is the reason not to "helpfully" pre-hash here: a client that hashed and a server that
  * only accepted raw would fail with a nonce mismatch, which reads as an attack rather than a
  * version skew.
+ *
+ * MEASURED 2026-08-11, iPhone XR / iOS 18.7.9 / expo-apple-authentication, via `app/apple-probe`:
+ * Apple echoed the nonce VERBATIM, and the token's audience was `org.beanpool.pillar`. So on this
+ * path the hashed branch is not exercised. Do NOT take that as licence to delete it — the reading
+ * is one platform, one OS version, one SDK, and Google on Android is still unmeasured. Delete it
+ * when there is a measurement for every provider we ship, not before.
  */
 
 import { Platform } from 'react-native';

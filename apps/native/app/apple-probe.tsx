@@ -28,8 +28,9 @@ import * as Clipboard from 'expo-clipboard';
 import * as Crypto from 'expo-crypto';
 import { Stack } from 'expo-router';
 import { useIdentity } from './IdentityContext';
-import { anchorUrl } from '../utils/node-post';
+import { anchorUrl, signedPost } from '../utils/node-post';
 import { SsoSignInError, fetchSsoNonce } from '../utils/sso-signin';
+import type { BeanPoolIdentity } from '../utils/identity';
 
 /**
  * Which form of the nonce Apple echoed — and this is a measurement, not a check.
@@ -66,6 +67,70 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 }
 
 /**
+ * Ask the node to verify a REAL Apple token — the one link in this chain that has never run.
+ *
+ * `verifyIdToken` has only ever seen test fixtures. Apple's live JWKS, a real RS256 signature, the
+ * issuer, and the audience have never been checked against anything Apple actually issued.
+ *
+ * ## Why this deliberately sends the WRONG nonce
+ *
+ * `apps/server/src/sso.ts` verifies in a fixed order: shape, then Apple's JWKS, then the signature
+ * — the code says "everything below this line is only meaningful because the signature held" — and
+ * only then issuer, audience, expiry, and last of all the nonce. So a token rejected *for its
+ * nonce* has already proved every expensive step passed against a live token. The failure IS the
+ * measurement.
+ *
+ * Sending the correct nonce would instead deposit a fragment, and that is worse than it sounds: it
+ * would be sealed with the pre-#248 HKDF key, and the entire argument for merging #248 now is that
+ * no fragment exists yet to migrate. A probe must not manufacture the migration it exists to avoid.
+ *
+ * A 200 here is not a pass — it means the node accepted a nonce it never issued, which is the
+ * replay protection failing open. That is why this reports three outcomes and not two.
+ *
+ * The placeholder ciphertext only exists to satisfy `parseShares`, which runs before verification.
+ * It is never stored, because verification throws first.
+ */
+async function probeNodeVerification(
+    url: string, identity: BeanPoolIdentity, idToken: string, nonce: string,
+): Promise<string> {
+    // Same length, same alphabet, one character different: it has to survive the "is a nonce
+    // present" shape check and fail the "did this node issue it" check. An empty or malformed
+    // value would be rejected early and would prove nothing.
+    const wrongNonce = nonce.slice(0, -1) + (nonce.endsWith('A') ? 'B' : 'A');
+    const body = {
+        provider: 'apple',
+        idToken,
+        nonce: wrongNonce,
+        shares: [{
+            holderType: 'sso', holderRef: 'apple', shareIndex: 1,
+            encryptedShare: 'cHJvYmU=', shareIv: 'cHJvYmU=', shareTag: 'cHJvYmU=',
+        }],
+    };
+
+    let res: Response;
+    try {
+        res = await signedPost(url, '/api/recovery/shares/sso', body, identity);
+    } catch (e) {
+        return `UNREACHABLE — could not reach the node: ${(e as Error).message}`;
+    }
+    const text = await res.text().catch(() => '');
+
+    if (res.status === 200) {
+        return 'FAILED OPEN (200) — the node accepted a nonce it never issued. This is a replay '
+            + 'protection bug, not a passing test. Do not ship until this is understood.';
+    }
+    // Everything the server can say about a nonce, kept broad on purpose: matching the exact
+    // sentence would turn a reworded error message into a false failure.
+    if (/nonce|replay|already been used|not issued/i.test(text)) {
+        return `VERIFIED (${res.status}) — rejected on the nonce, which means Apple's JWKS, the `
+            + `RS256 signature, the issuer, the audience and the expiry ALL passed against a real `
+            + `token. Server said: ${text.slice(0, 200)}`;
+    }
+    return `STOPPED EARLIER (${res.status}) — it failed before reaching the nonce, so one of the `
+        + `steps above it did not hold. Server said: ${text.slice(0, 300)}`;
+}
+
+/**
  * How the node half went. Held as one value rather than four booleans so the screen cannot show
  * a nonce and an error at once, which is exactly the ambiguity a diagnostic must not have.
  */
@@ -87,6 +152,13 @@ export default function AppleProbeScreen() {
     const [chain, setChain] = useState<NodeChain>({ stage: 'loading' });
     /** What came back inside the token's `nonce` claim, checked against what the node issued. */
     const [nonceEcho, setNonceEcho] = useState<string | null>(null);
+    /**
+     * Held so the node can be asked to verify it. Apple's tokens are short-lived, so this is only
+     * good for a minute or two after the sheet closes — sign in again if the node says expired.
+     */
+    const [idToken, setIdToken] = useState<string | null>(null);
+    const [verifyResult, setVerifyResult] = useState<string | null>(null);
+    const [verifying, setVerifying] = useState(false);
 
     useEffect(() => {
         if (!__DEV__) return;
@@ -136,6 +208,8 @@ export default function AppleProbeScreen() {
     const signIn = async () => {
         setError(null);
         setNonceEcho(null);
+        setIdToken(null);
+        setVerifyResult(null);
         // The node's nonce when there is one. Without it the sheet still works and the sub-parity
         // half of this probe is unaffected — that measurement predates the nonce and does not need
         // it — but the chain is not being tested, and the screen says which of the two happened.
@@ -153,6 +227,7 @@ export default function AppleProbeScreen() {
             // should be the same string — shown separately because the web probe can only read
             // the token, so comparing token-to-token is the like-for-like check.
             setCredentialUser(credential.user);
+            setIdToken(credential.identityToken ?? null);
 
             const claims = credential.identityToken ? decodeJwtPayload(credential.identityToken) : null;
             setTokenSub(claims?.sub ? String(claims.sub) : null);
@@ -253,6 +328,46 @@ export default function AppleProbeScreen() {
                 </>
             )}
 
+            {idToken && chain.stage === 'ready' && identity && (
+                <>
+                    <Text style={styles.label}>4 · Does the node accept a real token?</Text>
+                    <Text style={styles.muted}>
+                        Sends this token to the node with a deliberately wrong nonce. Rejection ON
+                        THE NONCE is the pass — it means the signature, issuer and audience all held
+                        against Apple&apos;s live keys. Nothing is stored either way.
+                    </Text>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Ask the node to verify this Apple token"
+                        accessibilityState={{ disabled: verifying }}
+                        disabled={verifying}
+                        style={[styles.verifyButton, verifying && styles.verifyButtonBusy]}
+                        onPress={async () => {
+                            setVerifying(true);
+                            setVerifyResult(null);
+                            try {
+                                setVerifyResult(
+                                    await probeNodeVerification(chain.url, identity, idToken, chain.nonce),
+                                );
+                            } catch (e) {
+                                setVerifyResult(`THREW — ${(e as Error).message}`);
+                            } finally {
+                                setVerifying(false);
+                            }
+                        }}
+                    >
+                        <Text style={styles.verifyButtonText}>
+                            {verifying ? 'Asking the node…' : 'Ask the node to verify'}
+                        </Text>
+                    </TouchableOpacity>
+                    {verifyResult && (
+                        <Text style={verifyResult.startsWith('VERIFIED') ? styles.ok : styles.error}>
+                            {verifyResult}
+                        </Text>
+                    )}
+                </>
+            )}
+
             {tokenSub && (
                 <>
                     <Text style={styles.label}>Token sub — compare this with the web probe</Text>
@@ -317,6 +432,12 @@ const styles = StyleSheet.create({
         fontSize: 13, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3ded3',
         borderRadius: 6, padding: 10,
     },
+    verifyButton: {
+        backgroundColor: '#2f6b46', borderRadius: 8, paddingVertical: 12,
+        alignItems: 'center', marginTop: 12,
+    },
+    verifyButtonBusy: { backgroundColor: '#7d9a89' },
+    verifyButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
     muted: { fontSize: 12, color: '#66625a', marginTop: 6 },
     error: { color: '#a8442f', marginTop: 14, fontSize: 13 },
     ok: { color: '#2f6b46', marginTop: 8, fontSize: 13, fontWeight: '600' },

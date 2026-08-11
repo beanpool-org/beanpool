@@ -160,7 +160,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
                 `A device is trying to recover ${member?.callsign ?? 'an account'}. If this is not you, `
                 + 'open BeanPool and stop it.',
                 { screen: 'settings', collectionId: collection.id, kind: 'recovery_started' },
-                'escrow',
+                'recovery',
             );
         } catch (e) {
             console.error('[recovery] could not notify about a new collection:', (e as Error).message);

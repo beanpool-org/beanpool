@@ -355,7 +355,7 @@ CREATE TABLE IF NOT EXISTS recovery_requests (
     old_pubkey TEXT NOT NULL REFERENCES members(public_key),
     new_pubkey TEXT NOT NULL,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'cancelled', 'expired', 'executed')),
-    quorum_required INTEGER DEFAULT 3,
+    quorum_required INTEGER DEFAULT 2,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     cooldown_until DATETIME,
     executed_at DATETIME,
@@ -878,3 +878,21 @@ CREATE TABLE IF NOT EXISTS sync_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_peer ON sync_audit_log(origin_peer_id, synced_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_time ON sync_audit_log(synced_at DESC);
+
+-- ===================== RECOVERY PIN =====================
+-- Optional 6-digit numeric PIN for non-SSO recovery. When set, a correct PIN entry
+-- reveals the member's keeper list (which friends hold their Shamir fragments) —
+-- it does NOT gate release of fragment A itself.
+--
+-- Rate limited: 2 free attempts, then 1 attempt per 15 minutes. No hard lockout.
+-- The response for "wrong PIN" and "no such callsign" is intentionally identical
+-- to prevent member enumeration.
+CREATE TABLE IF NOT EXISTS recovery_pin (
+    owner_pubkey   TEXT PRIMARY KEY REFERENCES members(public_key),
+    pin_hash       TEXT NOT NULL,
+    pin_salt       TEXT NOT NULL,
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    last_attempt_at DATETIME,
+    created_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);

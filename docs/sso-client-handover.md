@@ -235,7 +235,55 @@ measured. The measurement is recorded in the header comment of
 
 All four PRs merged. Section 4 of the probe verified a real Apple token. See §3.
 
-### Step 4 — the two-layer split and enrolment rewrite (the main build) ← **NEXT**
+### Step 4a — the two-layer primitive (DO THIS FIRST, it is self-contained)
+
+Build **only** this before touching enrolment. It changes no existing behaviour, it is
+exhaustively testable, and everything later sits on it. If work stops after 4a, nothing is
+left broken.
+
+**Where things already are** — read these before writing anything:
+
+| File | What it has |
+|---|---|
+| `packages/beanpool-core/src/recovery-split.ts` | `RECOVERY_THRESHOLD = 3`, `splitRecoveryPhrase(phrase, shareCount)`, `combineRecoveryPhrase(shares)`, `assertRecoveryCsprngAvailable()`, envelope version + 4-byte checksum |
+| `packages/beanpool-core/src/keeper-crypto.ts` | the per-holder sealing: `sealShareToMember` / `openShareAsMember` (x25519), `sealShareToSso` / `openShareFromSso` (scrypt, **async**), `recordShareForHub` / `readHubShare` (plaintext) |
+
+Note the existing Shamir API is **phrase-level**, not bytes-level. Layer two needs to split
+`B`, which is bytes. Add a bytes-level pair beside the phrase-level one reusing the same
+Shamir core and the same envelope/checksum — do not fork a second implementation, and do not
+change the existing phrase-level signatures (the sovereign tier still uses them).
+
+**What to build.** A new module, `packages/beanpool-core/src/two-layer-split.ts`:
+
+```
+splitTwoLayer(phrase, friendCount)  ->  { hubShare, friendShares }
+combineTwoLayer(hubShare, friendShares)  ->  phrase
+```
+
+Construction, and every part of it is load-bearing:
+
+1. `A` = fresh random bytes the same length as the secret payload, from the same CSPRNG the
+   existing code asserts on. **`A` is the hub share.** It is not a Shamir share and is never
+   counted in any threshold.
+2. `B = secret XOR A`. Both halves mandatory: `A` alone is noise, `B` alone is noise.
+3. Shamir-split `B` across `friendCount` shares at **threshold 2**.
+
+**Invariants the tests must actually assert** (not just round-trip):
+
+- `A` alone reconstructs nothing, and `B` alone reconstructs nothing.
+- **All** friend shares together, without `A`, reconstruct nothing. This is the property that
+  makes friend collusion structurally impossible, and it is the one a naive flat-Shamir
+  implementation silently loses.
+- Any 2 friend shares **plus** `A` reconstruct the phrase; 1 friend share plus `A` does not.
+- Round-trip survives the envelope/checksum path unchanged.
+- Two calls on the same phrase produce different `A` and different shares.
+
+**On `RECOVERY_THRESHOLD`.** It becomes the threshold of **layer two only** and drops 3 → 2.
+Do not reuse the existing constant for both layers — the sovereign/phrase path still means the
+old thing. Introduce the layer-two constant explicitly rather than mutating the old one in
+place, and check every existing reader of `RECOVERY_THRESHOLD` before changing its value.
+
+### Step 4b — the enrolment rewrite (only after 4a is merged) ← **NEXT after 4a**
 
 This is the large one, and it is the one everything else waits on. `seed = A ⊕ B`, then Shamir
 on `B`. Touches enrolment, the keeper panel, and `RECOVERY_THRESHOLD` semantics (3 → 2, layer
@@ -336,7 +384,37 @@ and no `sqlite3` binary in the image, which is why this goes through `better-sql
 
 ---
 
-## 8. How Marty works
+## 8. Working rules that have already cost real time
+
+**Every Bash call starts in the session's default directory.** A `cd` applies only inside that
+one command. This produced three wrong PRs on 2026-08-11: `gh pr create` run as its own call
+inferred the head branch from Marty's checkout (`fix/ci-hang`) instead of the branch just
+pushed. They carried the right titles and the wrong content, and squash-merged into **empty
+commits**.
+
+**Always name the head explicitly:**
+
+```bash
+gh pr create -R beanpool-org/beanpool --base main --head <branch> --title ... --body ...
+```
+
+**A green merge is not evidence the content landed.** Verify every time:
+
+```bash
+gh api repos/beanpool-org/beanpool/commits/main --jq '{n:(.files|length),f:[.files[].filename]}'
+# or: git show <merge-sha> --stat   — must list the files you expect
+```
+
+For code, a bad merge eventually shows up as a failing test. For docs nothing ever fails — the
+file the next session is told to trust is exactly the one that can be stale with no red signal.
+Three PRs reported `MERGED`, all checks green, and the content was not there.
+
+**Delete the branch when you merge** (`--delete-branch`), or GitHub keeps offering to open a PR
+for it and the branch list fills with merged work.
+
+---
+
+## 9. How Marty works
 
 - He tests on **standalone builds**, not dev-client + Metro.
 - He wants **macro before micro** — say who is waiting before starting; don't let the GitHub

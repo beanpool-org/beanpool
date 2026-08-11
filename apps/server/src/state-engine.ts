@@ -3661,7 +3661,7 @@ export function dispatchPushNotification(
     title: string,
     body: string,
     data: Record<string, any>,
-    categoryId: 'chat' | 'marketplace' | 'escrow'
+    categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery'
 ): void {
     // Filter out the actor and SYSTEM from targets
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM');

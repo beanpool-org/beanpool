@@ -25,6 +25,7 @@ import { protectionFrom } from '../utils/protection-state';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
+import GoogleProbeScreen from './google-probe';
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
@@ -122,6 +123,7 @@ export default function WelcomeScreen() {
     // Sheet visibility for SSO and friend enrolment flows
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [showFriendSheet, setShowFriendSheet] = useState(false);
+    const [showGoogleProbe, setShowGoogleProbe] = useState(false);
     /** Whether a covered member has asked to see the words anyway. Never hides them once shown. */
     const [revealWords, setRevealWords] = useState(false);
     const protection = protectionFrom(enrolment);
@@ -931,6 +933,15 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
+                        {__DEV__ && (
+                            <Pressable
+                                style={{ backgroundColor: '#2f6b46', padding: 12, borderRadius: 8, marginTop: 16, alignItems: 'center' }}
+                                onPress={() => router.push('/google-probe')}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>🧪 Open Google SSO Probe</Text>
+                            </Pressable>
+                        )}
+
                         <SsoEnrolSheet
                             visible={showSsoSheet}
                             onClose={() => setShowSsoSheet(false)}
@@ -1350,6 +1361,15 @@ export default function WelcomeScreen() {
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Next →</Text>}
                         </Pressable>
 
+                        {__DEV__ && (
+                            <Pressable
+                                style={{ backgroundColor: '#2f6b46', padding: 12, borderRadius: 8, marginTop: 12, alignItems: 'center' }}
+                                onPress={() => router.push('/google-probe')}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>🧪 Open Google SSO Probe</Text>
+                            </Pressable>
+                        )}
+
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back">
                             <Text style={styles.backBtnText}>← Back</Text>
                         </Pressable>
@@ -1605,6 +1625,20 @@ export default function WelcomeScreen() {
         );
     }
 
+    if (showGoogleProbe) {
+        return (
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f5f0' }}>
+                <Pressable
+                    style={{ padding: 16, backgroundColor: '#2f6b46', alignItems: 'center' }}
+                    onPress={() => setShowGoogleProbe(false)}
+                >
+                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>← Back to Welcome</Text>
+                </Pressable>
+                <GoogleProbeScreen />
+            </SafeAreaView>
+        );
+    }
+
     // --- MAIN WELCOME SCREEN (two choices like the PWA) ---
     return (
         <SafeAreaView style={styles.container}>
@@ -1622,6 +1656,15 @@ export default function WelcomeScreen() {
                 <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button">
                     <Text style={styles.memberBtnText}>🎟️ I'm New Here</Text>
                 </Pressable>
+
+                {__DEV__ && (
+                    <Pressable
+                        style={{ backgroundColor: '#2f6b46', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, marginTop: 12, width: '100%', alignItems: 'center' }}
+                        onPress={() => setShowGoogleProbe(true)}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>🧪 Open Google SSO Probe</Text>
+                    </Pressable>
+                )}
 
                 <Text style={styles.inviteOnlyHint}>
                     BeanPool is invite-only — you join with an invite from a member.{'\n'}

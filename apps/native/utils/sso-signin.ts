@@ -172,9 +172,12 @@ export function describeAppleError(e: unknown): SsoFailure {
  * after the JWT rather than after the sheet that returned nothing.
  */
 export function readAppleCredential(
-    credential: { identityToken?: string | null; email?: string | null },
+    credential?: { identityToken?: string | null; email?: string | null } | null,
 ): { idToken: string; email?: string } {
-    if (!credential.identityToken) {
+    // Optional chaining, and the parameter accepts null (CR): a nullish credential would otherwise
+    // throw a TypeError from the property read, which is the one failure this function exists to
+    // convert into a named `no-token` error. Losing that to a crash defeats the point.
+    if (!credential?.identityToken) {
         throw new SsoSignInError('no-token', 'Apple completed the sign-in but returned no token.');
     }
     return { idToken: credential.identityToken, email: credential.email ?? undefined };

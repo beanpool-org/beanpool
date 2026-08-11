@@ -184,10 +184,14 @@ export default function AppleProbeScreen() {
         if (!identity) { setChain({ stage: 'no-identity' }); return; }
         let live = true;
         (async () => {
-            const url = await anchorUrl();
-            if (!live) return;
-            if (!url) { setChain({ stage: 'no-node' }); return; }
+            // anchorUrl() is inside the try, not before it (CR): it reads AsyncStorage, which can
+            // reject, and a rejection out here has no catch — it surfaces as an unhandled promise
+            // rejection with the screen stuck on "Asking the node for a nonce…" forever. A
+            // diagnostic that hangs silently is worse than one that says what broke.
             try {
+                const url = await anchorUrl();
+                if (!live) return;
+                if (!url) { setChain({ stage: 'no-node' }); return; }
                 const { nonce, providers } = await fetchSsoNonce(url, identity);
                 if (live) setChain({ stage: 'ready', url, nonce, providers });
             } catch (e) {
@@ -345,7 +349,7 @@ export default function AppleProbeScreen() {
                     <TouchableOpacity
                         accessibilityRole="button"
                         accessibilityLabel="Ask the node to verify this Apple token"
-                        accessibilityState={{ disabled: verifying }}
+                        accessibilityState={{ disabled: verifying, busy: verifying }}
                         disabled={verifying}
                         style={[styles.verifyButton, verifying && styles.verifyButtonBusy]}
                         onPress={async () => {
@@ -367,7 +371,14 @@ export default function AppleProbeScreen() {
                         </Text>
                     </TouchableOpacity>
                     {verifyResult && (
-                        <Text style={verifyResult.startsWith('VERIFIED') ? styles.ok : styles.error}>
+                        // Announced, not just rendered (CR): the result arrives after a round trip
+                        // to Apple and back, long after the tap. Without a live region a screen
+                        // reader user gets silence and no way to know the answer landed.
+                        <Text
+                            accessibilityRole="alert"
+                            accessibilityLiveRegion="polite"
+                            style={verifyResult.startsWith('VERIFIED') ? styles.ok : styles.error}
+                        >
                             {verifyResult}
                         </Text>
                     )}
@@ -439,10 +450,15 @@ const styles = StyleSheet.create({
         borderRadius: 6, padding: 10,
     },
     verifyButton: {
-        backgroundColor: '#2f6b46', borderRadius: 8, paddingVertical: 12,
-        alignItems: 'center', marginTop: 12,
+        // minHeight 44 (CR): padding alone left it ~42pt, under the iOS HIG and WCAG 2.5.8 floor.
+        // This app targets small screens at 1.3x font, where a short button is the first thing to
+        // become unhittable.
+        backgroundColor: '#2f6b46', borderRadius: 8, paddingVertical: 12, minHeight: 44,
+        alignItems: 'center', justifyContent: 'center', marginTop: 12,
     },
-    verifyButtonBusy: { backgroundColor: '#7d9a89' },
+    // Darkened from #7d9a89 (CR): white on that was ~3.05:1, under the 4.5:1 AA floor. The busy
+    // state is the one a person stares at while waiting, so it is the worst one to make unreadable.
+    verifyButtonBusy: { backgroundColor: '#4a6b56' },
     verifyButtonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
     muted: { fontSize: 12, color: '#66625a', marginTop: 6 },
     error: { color: '#a8442f', marginTop: 14, fontSize: 13 },

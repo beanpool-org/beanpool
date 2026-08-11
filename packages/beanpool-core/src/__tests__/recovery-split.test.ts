@@ -7,8 +7,10 @@ import {
     RECOVERY_THRESHOLD,
     RecoveryCombineError,
     assertRecoveryCsprngAvailable,
+    combineBytes,
     combineRecoveryPhrase,
     normaliseRecoveryPhrase,
+    splitBytes,
     splitRecoveryPhrase,
 } from '../recovery-split.js';
 
@@ -216,5 +218,67 @@ describe('CSPRNG preflight', () => {
         } finally {
             if (original) Object.defineProperty(globalThis, 'crypto', original);
         }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Bytes-level Shamir API (splitBytes / combineBytes)
+// ---------------------------------------------------------------------------
+
+describe('splitBytes / combineBytes', () => {
+    const SECRET = new Uint8Array(32).map((_, i) => (i * 13 + 5) & 0xff);
+
+    it('round-trips at the minimum threshold', async () => {
+        const shares = await splitBytes(SECRET, 3, 2);
+        expect(shares).toHaveLength(3);
+        const restored = await combineBytes(shares.slice(0, 2));
+        expect(restored).toEqual(SECRET);
+    });
+
+    it('any threshold-sized subset reconstructs the secret', async () => {
+        const shares = await splitBytes(SECRET, 4, 3);
+        // C(4,3) = 4 subsets
+        const subsets = [
+            [shares[0], shares[1], shares[2]],
+            [shares[0], shares[1], shares[3]],
+            [shares[0], shares[2], shares[3]],
+            [shares[1], shares[2], shares[3]],
+        ];
+        for (const subset of subsets) {
+            expect(await combineBytes(subset)).toEqual(SECRET);
+        }
+    });
+
+    it('each share is one byte longer than the secret (x-coordinate)', async () => {
+        const shares = await splitBytes(SECRET, 3, 2);
+        for (const share of shares) {
+            expect(share.length).toBe(SECRET.length + 1);
+        }
+    });
+
+    it('rejects an empty secret', async () => {
+        await expect(splitBytes(new Uint8Array(0), 3, 2)).rejects.toThrow(/non-empty/);
+    });
+
+    it('rejects shareCount < threshold', async () => {
+        await expect(splitBytes(SECRET, 1, 2)).rejects.toThrow(/shareCount/);
+    });
+
+    it('rejects threshold < 2', async () => {
+        await expect(splitBytes(SECRET, 3, 1)).rejects.toThrow(/threshold/);
+    });
+
+    it('rejects shareCount > 255', async () => {
+        await expect(splitBytes(SECRET, 256, 2)).rejects.toThrow(/≤ 255/);
+    });
+
+    it('rejects fewer than 2 shares in combineBytes', async () => {
+        const shares = await splitBytes(SECRET, 3, 2);
+        await expect(combineBytes(shares.slice(0, 1))).rejects.toThrow(RecoveryCombineError);
+    });
+
+    it('rejects duplicate shares in combineBytes', async () => {
+        const shares = await splitBytes(SECRET, 3, 2);
+        await expect(combineBytes([shares[0], shares[0]])).rejects.toThrow(RecoveryCombineError);
     });
 });

@@ -108,7 +108,7 @@ function generation(overrides: Partial<KeeperShareInput> = {}): KeeperShareInput
 
 /** K1 is RECORDED, not uploaded — the node stores that the keeper exists and none of its bytes. */
     return [
-        { holderType: 'sso', holderRef: 'self', ...frag(1) },
+        { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ...frag(1) },
         { holderType: 'hub', holderRef: 'node', ...frag(2) },
         { holderType: 'sso', holderRef: 'unset', ...frag(3), ...overrides },
     ];

@@ -155,12 +155,10 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
 
     let hubShare: Uint8Array;
     let otherHalf: Uint8Array;
-    let seedChecksum: Uint8Array;
     try {
         const result = await splitHubAndWhole(seed);
         hubShare = result.hubShare;
         otherHalf = result.otherHalf;
-        seedChecksum = result.seedChecksum;
     } catch (e) {
         return nothing(`could not split the seed: ${(e as Error).message}`);
     }

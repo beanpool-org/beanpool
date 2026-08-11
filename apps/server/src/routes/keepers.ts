@@ -37,6 +37,7 @@
  */
 
 import Router from '@koa/router';
+import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 
 import { db } from '../db/db.js';
 import { getMember, resolveVouchedInBy } from '../state-engine.js';
@@ -59,9 +60,15 @@ import type { RouteDeps } from './types.js';
 /** Mirrors the CHECK constraint on `recovery_shares.holder_type`. */
 const KEEPER_TYPES: readonly KeeperType[] = ['hub', 'member', 'sso'];
 
-// TODO(restore-flow): `threshold: 2` appears in every response body. Under the two-layer
-// model the threshold is per-member (SSO = 2, non-SSO = 3). When the restore client lands,
-// compute this from the member's keeper types rather than hardcoding it.
+/**
+ * The layer two Shamir threshold is TWO_LAYER_THRESHOLD (= 2). The hub is XOR-mandatory and
+ * sits outside layer two. Total fragments needed for recovery:
+ *   SSO tier:     hub + 1 sealed whole  = 2 total (TWO_LAYER_THRESHOLD)
+ *   Non-SSO tier: hub + 2 friend shares = 3 total (TWO_LAYER_THRESHOLD + 1)
+ */
+function memberThreshold(hasSso: boolean): number {
+    return hasSso ? TWO_LAYER_THRESHOLD : TWO_LAYER_THRESHOLD + 1;
+}
 
 /**
  * Upper bound on fragments in one generation.
@@ -268,11 +275,12 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
 
         try {
             const generation = putShareGeneration(owner, shares);
+            const threshold = memberThreshold(shares.some(s => s.holderType === 'sso'));
             ctx.status = 200;
             ctx.body = {
                 generation,
                 shareCount: shares.length,
-                threshold: 2,
+                threshold,
                 keepers: listKeeperTypes(owner),
             };
         } catch (e) {
@@ -323,7 +331,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 // list renders the provider name alone rather than treating it as a failure.
                 email: result.email,
                 shareCount: result.shareCount,
-                threshold: 2,
+                threshold: TWO_LAYER_THRESHOLD,
                 keepers: listKeeperTypes(owner),
             };
         } catch (e) {
@@ -385,17 +393,16 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         const owner = matches[0]?.public_key;
         const keepers = owner ? listKeeperTypes(owner) : [];
         const total = keepers.reduce((n, k) => n + k.count, 0);
+        const threshold = memberThreshold(keepers.some(k => k.holderType === 'sso'));
 
         ctx.status = 200;
         ctx.body = {
             callsign,
             keepers,
             total,
-            threshold: 2,
-            // "4 of 3 — you can afford to lose 1" is the number users actually act on (Part 2),
-            // so it is computed here rather than left to each client to get right.
-            canAffordToLose: Math.max(0, total - 2),
-            recoverable: total >= 2,
+            threshold,
+            canAffordToLose: Math.max(0, total - threshold),
+            recoverable: total >= threshold,
         };
     });
 
@@ -465,23 +472,24 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         // rather than presented as a verdict.
         const unattendedPieces = countOf('sso') + countOf('hub');
         const humanKeepers = countOf('member');
+        const threshold = memberThreshold(keepers.some(k => k.holderType === 'sso'));
 
         ctx.status = 200;
         ctx.body = {
             generation: getCurrentGeneration(owner),
             keepers,
             total,
-            threshold: 2,
-            canAffordToLose: Math.max(0, total - 2),
+            threshold,
+            canAffordToLose: Math.max(0, total - threshold),
             canRemoveKeeper: canRemoveKeeper(owner),
-            recoverable: total >= 2,
+            recoverable: total >= threshold,
             unattendedPieces,
             humanKeepers,
             // True when getting back in REQUIRES a particular person to agree. Not a warning about
             // those people — it is a fact about the shape of the split, and the screen should say
             // so plainly and tell the member to write their twelve words down. The words are the
             // floor under all of this; keepers are convenience on top, never a replacement.
-            dependsOnPeople: unattendedPieces < 2,
+            dependsOnPeople: unattendedPieces < threshold,
         };
     });
 
@@ -533,11 +541,14 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                     avatarUrl: vouchedInBy.avatarUrl,
                 };
 
+        const hasSso = getShareForHolder(owner, 'sso', '') !== null || listKeeperTypes(owner).some(k => k.holderType === 'sso');
+        const threshold = memberThreshold(hasSso);
+
         ctx.status = 200;
         ctx.body = {
             inviter,
             generation: getCurrentGeneration(owner),
-            threshold: 2,
+            threshold,
         };
     });
 

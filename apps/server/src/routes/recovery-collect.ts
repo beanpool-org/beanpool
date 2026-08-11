@@ -166,13 +166,14 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             console.error('[recovery] could not notify about a new collection:', (e as Error).message);
         }
 
+        const progress = collectionProgress(collection.id);
         ctx.status = 200;
         ctx.body = {
             collectionId: collection.id,
             generation: collection.generation,
             expiresAt: collection.expiresAt,
-            threshold: 2,
-            progress: collectionProgress(collection.id),
+            threshold: progress?.threshold ?? 2,
+            progress,
         };
     });
 

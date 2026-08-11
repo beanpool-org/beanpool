@@ -163,7 +163,7 @@ async function main(): Promise<void> {
         body: {
             provider: 'google', idToken: googleToken(victimNonce), nonce: victimNonce,
             shares: [
-                { holderType: 'member', holderRef: 'x', ...frag(1) },
+                { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ...frag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: 'sso', holderRef: 'unset', ...frag(3) },
             ],
@@ -181,7 +181,7 @@ async function main(): Promise<void> {
         actor: thief.pubkey,
         body: {
             shares: [
-                { holderType: 'member', holderRef: 'x', ...frag(1) },
+                { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ...frag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: 'sso', holderRef: 'google', ssoLookupHash: victimHash,
                   ssoLookupSalt: 'whatever', ...frag(3) },
@@ -196,7 +196,7 @@ async function main(): Promise<void> {
     assert(findShareBySsoLookup(victimHash)?.ownerPubkey === victim.pubkey,
         "...and the victim's Google account still resolves to the victim");
 
-    // The same smuggle one level down: no sso fragment, but a lookup hash planted on a device row.
+    // The same smuggle one level down: no sso fragment, but a lookup hash planted on a member row.
     // findShareBySsoLookup matches on the column with no keeper-type filter, so this row would
     // answer the lookup if it were stored.
     const smuggler = member();
@@ -204,13 +204,13 @@ async function main(): Promise<void> {
         actor: smuggler.pubkey,
         body: {
             shares: [
-                { holderType: 'sso', holderRef: 'self', ssoLookupHash: victimHash, ...frag(1) },
+                { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ssoLookupHash: victimHash, ...frag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: 'member', holderRef: 'c'.repeat(64), ephemeralPubkey: 'ZQ==', ...frag(3) },
             ],
         },
     });
-    assert(planted.status === 400, "a lookup hash planted on a 'device' fragment is refused too");
+    assert(planted.status === 400, "a lookup hash planted on a non-sso fragment is refused too");
     assert(countCurrentShares(smuggler.pubkey) === 0, '...and nothing was written');
     assert(findShareBySsoLookup(victimHash)?.ownerPubkey === victim.pubkey,
         "...and the victim's lookup is still the victim's");
@@ -277,7 +277,7 @@ async function main(): Promise<void> {
         const res = await call('POST', '/api/recovery/shares', { actor: v.pubkey, body: { shares } });
         assert(res.status === 400 && typeof res.body?.error === 'string', `refused with a reason: ${what}`);
     };
-    await engineBad(generation().slice(0, 2), 'fewer fragments than the threshold');
+    await engineBad(generation().slice(0, 1), 'fewer fragments than the threshold');
     await engineBad([{ holderType: 'member', holderRef: 'x', ...frag(1) },
                      { holderType: 'hub', holderRef: 'node', ...frag(1) },
                      { holderType: 'member', holderRef: 'd'.repeat(64), ephemeralPubkey: 'ZQ==', ...frag(3) }],
@@ -301,7 +301,7 @@ async function main(): Promise<void> {
 
     const ok = await call('POST', '/api/recovery/shares', { actor: v.pubkey, body: { shares: generation() } });
     assert(ok.status === 200 && ok.body.generation === 1, 'a well-formed split stores as generation 1');
-    assert(ok.body.shareCount === 2 && ok.body.threshold === 2,
+    assert(ok.body.shareCount === 2 && ok.body.threshold === 3,
         'and reports the count and the threshold it was measured against');
     assert(Array.isArray(ok.body.keepers) && ok.body.keepers.length === 2,
         'and echoes back the keeper types now in force');
@@ -328,7 +328,7 @@ async function main(): Promise<void> {
         'but not to an unsigned caller — a nonce nobody owns protects nobody');
 
     const ssoShares = [
-        { holderType: 'member', holderRef: 'x', ...frag(1) },
+        { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ...frag(1) },
         { holderType: 'hub', holderRef: 'node', ...frag(2) },
         { holderType: 'sso', holderRef: 'unset', ...frag(3) },
     ];
@@ -381,8 +381,8 @@ async function main(): Promise<void> {
     console.log('\n── the public keeper summary ────────────────────────────');
 
     const pub = await call('GET', '/api/recovery/keepers/:callsign', { params: { callsign: v.callsign } });
-    assert(pub.status === 200 && pub.body.total === 2, 'the summary reports how many fragments exist');
-    assert(pub.body.canAffordToLose === 1, "and 'you can afford to lose 1' — the number users act on");
+    assert(pub.status === 200 && pub.body.total === 3, 'the summary reports how many fragments exist');
+    assert(pub.body.canAffordToLose === 0, "and 'you can afford to lose 0' — the number users act on");
     assert(pub.body.recoverable === true, 'and whether the threshold is met at all');
 
     const serialised = JSON.stringify(pub.body);
@@ -395,7 +395,7 @@ async function main(): Promise<void> {
     const upper = await call('GET', '/api/recovery/keepers/:callsign', {
         params: { callsign: v.callsign.toUpperCase() },
     });
-    assert(upper.body.total === 2, 'callsign matching is case-insensitive');
+    assert(upper.body.total === 3, 'callsign matching is case-insensitive');
 
     const nobody = await call('GET', '/api/recovery/keepers/:callsign', { params: { callsign: 'no-such-callsign' } });
     assert(nobody.status === 200 && nobody.body.total === 0 && nobody.body.recoverable === false,
@@ -494,7 +494,7 @@ async function main(): Promise<void> {
     console.log('\n── status and deletion ──────────────────────────────────');
 
     const status = await call('POST', '/api/recovery/shares/status', { actor: v.pubkey });
-    assert(status.status === 200 && status.body.generation === 2 && status.body.total === 2,
+    assert(status.status === 200 && status.body.generation === 2 && status.body.total === 3,
         'the owner can read their own generation and count');
     assert(status.body.canRemoveKeeper === true,
         'and whether dropping one would still leave them recoverable');
@@ -512,7 +512,7 @@ async function main(): Promise<void> {
         actor: hubOnly.pubkey,
         body: {
             shares: [
-                { holderType: 'member', holderRef: 'x', ...frag(1) },
+                { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ...frag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: 'member', holderRef: 'i'.repeat(64), ephemeralPubkey: 'ZQ==', ...frag(3) },
             ],
@@ -521,8 +521,8 @@ async function main(): Promise<void> {
     const lonely = (await call('POST', '/api/recovery/shares/status', { actor: hubOnly.pubkey })).body;
     assert(lonely.canAffordToLose === 0 && lonely.recoverable === true,
         'phone + hub + inviter reads as recoverable with nothing to spare...');
-    assert(lonely.unattendedPieces === 1 && lonely.humanKeepers === 1,
-        '...but only TWO pieces are reachable without another person agreeing');
+    assert(lonely.unattendedPieces === 1 && lonely.humanKeepers === 2,
+        '...but only ONE piece is reachable without another person agreeing');
     assert(lonely.dependsOnPeople === true,
         '...so getting back in DEPENDS on one specific human, and the screen must say so');
 
@@ -532,7 +532,7 @@ async function main(): Promise<void> {
         actor: withSso.pubkey,
         body: {
             shares: [
-                { holderType: 'member', holderRef: 'x', ...frag(1) },
+                { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ...frag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: 'member', holderRef: 'j'.repeat(64), ephemeralPubkey: 'ZQ==', ...frag(3) },
                 { holderType: 'sso', holderRef: 'unset', ...frag(4) },
@@ -548,7 +548,7 @@ async function main(): Promise<void> {
         body: {
             provider: 'google', idToken: googleToken(ssoNonce, '777-self-sufficient'), nonce: ssoNonce,
             shares: [
-                { holderType: 'member', holderRef: 'x', ...frag(1) },
+                { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ...frag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: 'member', holderRef: 'j'.repeat(64), ephemeralPubkey: 'ZQ==', ...frag(3) },
                 { holderType: 'sso', holderRef: 'unset', ...frag(4) },
@@ -558,7 +558,7 @@ async function main(): Promise<void> {
     const sufficient = (await call('POST', '/api/recovery/shares/status', { actor: withSso.pubkey })).body;
     assert(sufficient.unattendedPieces === 2 && sufficient.dependsOnPeople === false,
         'adding a sign-in keeper is what makes a member able to recover WITHOUT asking anyone');
-    assert(sufficient.humanKeepers === 1,
+    assert(sufficient.humanKeepers === 2,
         '...while still counting the human they have — the buddy is spare capacity, not the plan');
 
     const noConfirm = await call('DELETE', '/api/recovery/shares', { actor: v.pubkey, body: {} });
@@ -605,7 +605,7 @@ async function main(): Promise<void> {
         '...and gets the ACCOUNT key a member fragment is wrapped to');
     assert(cand.body.inviter.callsign === inviter.callsign,
         '...with the name to show them, so the client need not ask twice');
-    assert(cand.body.threshold === 2, '...alongside the threshold it has to reach');
+    assert(cand.body.threshold === 3, '...alongside the threshold it has to reach');
 
     // member() seeds invited_by='genesis' — a founding member.
     const founder = member();
@@ -624,7 +624,7 @@ async function main(): Promise<void> {
     await call('POST', '/api/recovery/shares', {
         actor: invitee.pubkey,
         body: { shares: [
-            { holderType: 'member', holderRef: 'x', ...frag(1) },
+            { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ...frag(1) },
             { holderType: 'hub', holderRef: 'node', ...frag(2) },
             { holderType: 'member', holderRef: inviter.pubkey, ephemeralPubkey: 'eph', ...frag(3) },
         ] },

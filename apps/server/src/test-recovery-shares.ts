@@ -69,11 +69,11 @@ function share(over: Partial<KeeperShareInput> & Pick<KeeperShareInput, 'holderT
     };
 }
 
-/** The shape at signup: hub, sso. Exactly the minimum threshold of 2. */
+/** The shape for a non-SSO split: hub, member. Exactly the minimum threshold of 2. */
 function basePair(inviter = 'inviterPK'): KeeperShareInput[] {
     return [
-        share({ holderType: 'sso', holderRef: 'self', shareIndex: 11, ssoLookupHash: 'hash-' + Math.random() }),
-        share({ holderType: 'hub', holderRef: 'self', shareIndex: 22 }),
+        share({ holderType: 'hub', holderRef: 'node', shareIndex: 1 }),
+        share({ holderType: 'member', holderRef: inviter, shareIndex: 2, ephemeralPubkey: 'eph' }),
     ];
 }
 
@@ -169,8 +169,8 @@ function main() {
     );
     throws(
         () => putShareGeneration('rejectPK', [
-            share({ holderType: 'sso', holderRef: 'self', shareIndex: 7 }),
-            share({ holderType: 'hub', holderRef: 'self', shareIndex: 7 }),
+            share({ holderType: 'member', holderRef: 'buddyPK', shareIndex: 7 }),
+            share({ holderType: 'hub', holderRef: 'node', shareIndex: 7 }),
             share({ holderType: 'member', holderRef: 'inviterPK', shareIndex: 9 }),
         ]),
         'x-coordinate',
@@ -178,8 +178,8 @@ function main() {
     );
     throws(
         () => putShareGeneration('rejectPK', [
-            share({ holderType: 'sso', holderRef: 'self', shareIndex: 0 }),
-            share({ holderType: 'hub', holderRef: 'self', shareIndex: 2 }),
+            share({ holderType: 'member', holderRef: 'buddyPK', shareIndex: 0 }),
+            share({ holderType: 'hub', holderRef: 'node', shareIndex: 2 }),
             share({ holderType: 'member', holderRef: 'inviterPK', shareIndex: 3 }),
         ]),
         'out-of-range share index',
@@ -187,8 +187,8 @@ function main() {
     );
     throws(
         () => putShareGeneration('rejectPK', [
-            share({ holderType: 'sso', holderRef: 'self', shareIndex: 1 }),
-            share({ holderType: 'hub', holderRef: 'self', shareIndex: 2 }),
+            share({ holderType: 'member', holderRef: 'buddyPK', shareIndex: 1 }),
+            share({ holderType: 'hub', holderRef: 'node', shareIndex: 2 }),
             share({ holderType: 'member', holderRef: 'inviterPK', shareIndex: 3, ephemeralPubkey: null }),
         ]),
         'no ephemeral public key',
@@ -196,8 +196,8 @@ function main() {
     );
     throws(
         () => putShareGeneration('rejectPK', [
-            share({ holderType: 'sso', holderRef: 'self', shareIndex: 1 }),
-            share({ holderType: 'hub', holderRef: 'self', shareIndex: 2 }),
+            share({ holderType: 'member', holderRef: 'buddyPK', shareIndex: 1 }),
+            share({ holderType: 'hub', holderRef: 'node', shareIndex: 2 }),
             share({ holderType: 'sso', holderRef: 'google', shareIndex: 3, ssoLookupHash: null }),
         ]),
         'sso_lookup_hash',
@@ -224,7 +224,7 @@ function main() {
     // ── 8. Keeper summary exposes types, never identities ──
     const summary = listKeeperTypes('ssoOwnerPK');
     const serialised = JSON.stringify(summary);
-    assert(summary.length === 2, 'two keeper types are reported (hub, sso)');
+    assert(summary.length === 3, 'three keeper types are reported (hub, member, sso)');
     assert(
         summary.reduce((n, s) => n + s.count, 0) === 3,
         'the counts add up to the fragments actually held',

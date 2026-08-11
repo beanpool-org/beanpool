@@ -61,7 +61,7 @@ export interface Protection {
  */
 export const KEEPER_LABELS: Record<string, string> = {
     hub: 'Your community hub',
-    member: 'A keeper you chose',
+    member: 'A trusted friend',
     sso: 'Your sign-in account',
 };
 

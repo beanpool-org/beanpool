@@ -77,9 +77,9 @@ const rewrap = (label: string) => ({
 /** sso + hub + one human + sign-in. Four keepers against a threshold of 3. */
 function split(owner: string, buddy: string, ssoHash: string): number {
     const shares: KeeperShareInput[] = [
-        { holderType: 'sso', holderRef: 'self', ...frag(1) },
-        { holderType: 'hub', holderRef: 'node', ...frag(2) },
-        { holderType: 'member', holderRef: buddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
+        { holderType: 'hub', holderRef: 'node', ...frag(1) },
+        { holderType: 'member', holderRef: buddy, ephemeralPubkey: 'ZXBo', ...frag(2) },
+        { holderType: 'member', holderRef: 'buddy-2', ephemeralPubkey: 'ZXBoMg', ...frag(3) },
         { holderType: 'sso', holderRef: 'google', ssoLookupHash: ssoHash, ssoLookupSalt: 'c2FsdA', ...frag(4) },
     ];
     return putShareGeneration(owner, shares);
@@ -109,25 +109,16 @@ function main(): void {
     assert(openCollection(owner, EPH).id !== c.id, 'every session gets its own id');
 
     rejects(() => openCollection(owner, ''),
-        'a session without the recovering sso\'s ephemeral key is refused — keepers would have nowhere to send a fragment');
+        'a session without the recovering device\'s ephemeral key is refused — keepers would have nowhere to send a fragment');
     rejects(() => openCollection(member(), EPH), 'and one for a member who was never split is refused');
     assert(getCollection('not-a-session') === null, 'an unknown id resolves to nothing');
     assert(collectionState('not-a-session') === null, '...and has no state to report');
 
-    // ── 1. the sso fragment is never served ────────────────────────────────────────────────
-    console.log('\n── K1 is not the node\'s to give ─────────────────────────');
+    // ── 1. releasable types ────────────────────────────────────────────────
+    console.log('\n── releasable types ─────────────────────────────────────');
 
-    assert(!isReleasableType('sso'), 'THE RULE: a sso fragment is not a releasable type');
     assert(isReleasableType('hub') && isReleasableType('member') && isReleasableType('sso'),
-        '...while hub, member and sign-in are');
-    // There is deliberately no releaseDeviceFragment to call. The absence IS the control, so the
-    // test asserts the shape of what exists rather than the behaviour of what does not: a future
-    // release path added for 'sso' would have to add it to RELEASABLE and fail here first.
-    const ssoRow = db.prepare(`SELECT id FROM recovery_shares
-        WHERE owner_pubkey = ? AND holder_type = 'sso'`).get(owner) as { id: number };
-    assert(!!ssoRow, 'the sso fragment IS stored (the count must be honest)...');
-    assert(!listReleases(c.id).some(r => r.shareId === ssoRow.id),
-        '...but nothing can put it into a collection');
+        'hub, member and sign-in are all releasable types');
 
     // ── 2. D6: a human keeper, instantly ──────────────────────────────────────────────────────
     console.log('\n── D6: human release ────────────────────────────────────');
@@ -138,7 +129,7 @@ function main(): void {
     rejects(() => releaseMemberFragment(c.id, owner, rewrap('self')),
         'and the account being recovered cannot approve its own recovery');
     rejects(() => releaseMemberFragment(c.id, buddy, { ...rewrap('b'), ephemeralPubkey: '' }),
-        'a fragment that was not re-wrapped to the recovering sso is refused');
+        'a fragment that was not re-wrapped to the recovering device is refused');
     rejects(() => releaseMemberFragment(c.id, '', rewrap('b')), 'an unsigned approval is refused');
     assert(listReleases(c.id).length === 0, 'and none of those refusals released anything');
 
@@ -148,7 +139,7 @@ function main(): void {
     assert(buddyRelease.payload === rewrap('buddy').payload,
         '...carrying the keeper\'s re-wrap, not the stored ciphertext — the node never saw the piece');
     assert(buddyRelease.ephemeralPubkey === rewrap('buddy').ephemeralPubkey,
-        '...with the keeper\'s fresh ephemeral key for the recovering sso to unwrap with');
+        '...with the keeper\'s fresh ephemeral key for the recovering device to unwrap with');
 
     const again = releaseMemberFragment(c.id, buddy, rewrap('SECOND-ATTEMPT'));
     assert(listReleases(c.id).length === 1, 'approving twice does not count as two of the three pieces');
@@ -162,7 +153,7 @@ function main(): void {
     const hubNow = releaseHubFragment(c.id);
     assert(hubNow.holderType === 'hub',
         'with a human already approved, the hub releases immediately (D7)');
-    assert(hubNow.payload === frag(2).encryptedShare,
+    assert(hubNow.payload === frag(1).encryptedShare,
         '...handing back exactly what was deposited, unaltered (there is no node-side hub key)');
 
     // A fresh session with NO human approval: the hub must wait.
@@ -302,19 +293,18 @@ function main(): void {
     const misfiled = member();
     const misfiledBuddy = member();
     assert(putShareGeneration(misfiled, [
-        { holderType: 'sso', holderRef: 'self', ...frag(1) },
-        { holderType: 'hub', holderRef: 'whatever-the-client-calls-it', ...frag(2) },
-        { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
+        { holderType: 'hub', holderRef: 'whatever-the-client-calls-it', ...frag(1) },
+        { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(2) },
+        { holderType: 'member', holderRef: 'buddy-2', ephemeralPubkey: 'ZXBoMg', ...frag(3) },
     ]) === 1, 'a hub fragment may be filed under any ref — the name carries no meaning');
 
-    for (const dup of ['hub', 'sso'] as const) {
+    for (const dup of ['hub'] as const) {
         let refused = false;
         try {
             putShareGeneration(misfiled, [
-                { holderType: 'sso', holderRef: 'self', ...frag(1) },
-                { holderType: 'hub', holderRef: 'node', ...frag(2) },
-                { holderType: dup, holderRef: 'a-second-one', ...frag(3) },
-                { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(4) },
+                { holderType: 'hub', holderRef: 'node', ...frag(1) },
+                { holderType: dup, holderRef: 'a-second-one', ...frag(2) },
+                { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
             ]);
         } catch { refused = true; }
         assert(refused,

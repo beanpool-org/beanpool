@@ -87,3 +87,4 @@ scratch/
 
 # Federation operator harness: holds TEST identity PRIVATE KEYS. Never commit.
 scripts/federation/fed-state.json
+/ios/

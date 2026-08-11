@@ -10,61 +10,80 @@
  */
 
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
+import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 import { colors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
 
-export function KeeperProtectionPanel({ protection }: { protection: Protection }): React.JSX.Element {
+export function KeeperProtectionPanel({ 
+    protection,
+    onProtectSso,
+    onProtectFriends,
+}: { 
+    protection: Protection;
+    onProtectSso?: () => void;
+    onProtectFriends?: () => void;
+}): React.JSX.Element {
     if (protection.state === 'covered') {
-        return (
-            <View style={[styles.panel, styles.covered]}>
-                <Text style={styles.heading} accessibilityRole="header">🛡️ You're covered</Text>
-                {/*
-                  "Any three of them" is true and useless when there are exactly three — any three
-                  IS all three, and a member reading it believes they have slack they do not have.
-                  Everyone has exactly three at signup, and anyone without a Google or Apple
-                  account stays there.
-                */}
-                <Text style={styles.body}>
-                    {protection.spare > 0
-                        ? 'Your account has been split into pieces, and these are holding one each. Any three of them can bring you back if you lose this phone.'
-                        : 'Your account has been split into three pieces, and these are holding one each. It takes all three to bring you back — so keep your 12 words below, in case one of them ever goes missing.'}
-                </Text>
-                {protection.holding.map((label, i) => (
-                    <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
-                        <Text style={styles.tick}>✅</Text>
-                        <Text style={styles.rowLabel}>{label}</Text>
-                    </View>
-                ))}
-                {/*
-                  Principle 7, and it does double duty. A member who taps a sign-in button during
-                  setup WILL tap it on a new phone expecting to be logged in — so this line has to
-                  say what a piece is, not just reassure. Nothing here logs anyone into anything.
-                */}
-                <Text style={styles.footnote}>
-                    None of them can open your account on their own — it takes three.
-                </Text>
-            </View>
-        );
+        if (protection.tier === 'sso') {
+            return (
+                <View style={[styles.panel, styles.covered]}>
+                    <Text style={styles.heading} accessibilityRole="header">🛡️ You're covered</Text>
+                    {protection.holding.map((label, i) => (
+                        <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
+                            <Text style={styles.tick}>✅</Text>
+                            <Text style={styles.rowLabel}>{label}</Text>
+                        </View>
+                    ))}
+                    <Text style={styles.footnote}>
+                        Neither of them can open your account alone — it takes both.
+                    </Text>
+                    {onProtectFriends && (
+                        <TouchableOpacity
+                            onPress={onProtectFriends}
+                            accessibilityRole="button"
+                            accessibilityLabel="Add a trusted friend for extra protection"
+                            style={{ marginTop: 12 }}
+                        >
+                            <Text style={styles.offer}>
+                                Want extra protection? Add a trusted friend — then you can recover without Apple too.
+                            </Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            );
+        }
+
+        if (protection.tier === 'friends') {
+            return (
+                <View style={[styles.panel, styles.covered]}>
+                    <Text style={styles.heading} accessibilityRole="header">🛡️ You're covered</Text>
+                    {protection.holding.map((label, i) => (
+                        <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
+                            <Text style={styles.tick}>✅</Text>
+                            <Text style={styles.rowLabel}>{label}</Text>
+                        </View>
+                    ))}
+                    {/* The hub fragment A is XOR-mandatory and is NEVER counted in a threshold */}
+                    <Text style={styles.footnote}>
+                        No single piece can open your account — it takes the hub plus any {TWO_LAYER_THRESHOLD} friends.
+                    </Text>
+                </View>
+            );
+        }
     }
 
     if (protection.state === 'almost') {
         return (
             <View style={[styles.panel, styles.almost]}>
-                <Text style={styles.heading} accessibilityRole="header">🔑 Your words are the way back</Text>
+                <Text style={styles.heading} accessibilityRole="header">🔑 Almost there</Text>
                 {/*
-                  NOT "almost covered, 2 of 3 ✅". Below three keepers nothing has been split, so
-                  nobody is holding anything, and ticking two of them would claim a protection
-                  that does not exist. What is true is that the pieces are ready to be handed out
-                  and one keeper short of being worth handing.
+                  NOT "almost covered, 2 of 3 ✅". Below threshold nothing has been split, so
+                  nobody is holding anything, and ticking keepers would claim a protection
+                  that does not exist.
                 */}
                 <Text style={styles.body}>
-                    You're one keeper short of splitting your account into pieces, so for now
-                    these 12 words are how you get back in. Keep them somewhere safe.
-                </Text>
-                <Text style={styles.footnote}>
-                    Once you add one more keeper, the pieces get handed out and you won't need to
-                    rely on the words.
+                    You need one more keeper before your account can be split. Until then, these 12 words are how you get back in.
                 </Text>
             </View>
         );
@@ -72,11 +91,29 @@ export function KeeperProtectionPanel({ protection }: { protection: Protection }
 
     return (
         <View style={[styles.panel, styles.wordsOnly]}>
-            <Text style={styles.heading} accessibilityRole="header">🔑 Write these down</Text>
+            <Text style={styles.heading} accessibilityRole="header">🔑 Your 12 words are the only way back</Text>
             <Text style={styles.body}>
                 Right now these 12 words are the only way back into your account. No email, no
                 password reset — nobody, including your hub, can restore it for you.
             </Text>
+
+            <View style={styles.buttonContainer}>
+                {Platform.OS === 'ios' && onProtectSso && (
+                    <View style={styles.actionBlock}>
+                        <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectSso} accessibilityRole="button">
+                            <Text style={styles.buttonSecondaryText}>Protect with Apple sign-in</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
+                    </View>
+                )}
+                {onProtectFriends && (
+                    <View style={styles.actionBlock}>
+                        <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectFriends} accessibilityRole="button">
+                            <Text style={styles.buttonSecondaryText}>Protect with trusted friends</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </View>
         </View>
     );
 }
@@ -97,4 +134,30 @@ const styles = StyleSheet.create({
     // font must still be readable rather than trailing off into an ellipsis.
     rowLabel: { flex: 1, fontSize: 14, color: colors.text.body, flexWrap: 'wrap' },
     footnote: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 10 },
+    offer: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginTop: 12 },
+    buttonContainer: { marginTop: 16 },
+    actionBlock: { marginBottom: 12 },
+    buttonSecondary: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: colors.text.secondary,
+        paddingVertical: 12,
+        minHeight: 44,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    buttonSecondaryText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: colors.text.heading,
+    },
+    actionNote: {
+        fontSize: 13,
+        lineHeight: 18,
+        color: colors.text.secondary,
+        marginTop: 6,
+        textAlign: 'center',
+    },
 });

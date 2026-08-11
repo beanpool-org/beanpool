@@ -22,6 +22,12 @@ import appConfig from '../../app.json';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../utils/LocalAuth';
+import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
+import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
+import { FriendPickerSheet } from '../../components/FriendPickerSheet';
+import { protectionFrom } from '../../utils/protection-state';
+import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
+import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -267,7 +273,52 @@ export default function SettingsScreen() {
         const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
         return () => { showSub.remove(); hideSub.remove(); };
     }, []);
-    const [mode, setMode] = useState<'menu' | 'profile' | 'seed' | 'advanced' | 'wipe' | 'notifications' | 'recovery-requests' | 'diagnostics'>('menu');
+    const [mode, setMode] = useState<'menu' | 'profile' | 'seed' | 'advanced' | 'wipe' | 'notifications' | 'recovery-requests' | 'diagnostics' | 'protection'>('menu');
+
+    // --- Protection state ---
+    const [protectionResult, setProtectionResult] = useState<KeeperEnrolmentResult | null>(null);
+    const [protectionLoading, setProtectionLoading] = useState(false);
+    const [showSsoSheet, setShowSsoSheet] = useState(false);
+    const [showFriendSheet, setShowFriendSheet] = useState(false);
+
+    const fetchProtectionStatus = async () => {
+        setProtectionLoading(true);
+        try {
+            const url = await getAnchorUrl();
+            if (!url || !identity) { setProtectionLoading(false); return; }
+            const res = await signedPost(url, '/api/recovery/shares/status', {}, identity);
+            if (!res.ok) { setProtectionLoading(false); return; }
+            const body = await res.json() as {
+                keepers: { holderType: string; count: number }[];
+                threshold: number;
+                recoverable: boolean;
+                total: number;
+            };
+            // Convert server status to KeeperEnrolmentResult for protectionFrom()
+            const enrolled: ('hub' | 'member' | 'sso')[] = [];
+            if (Array.isArray(body?.keepers)) {
+                for (const k of body.keepers) {
+                    for (let i = 0; i < (k.count || 0); i++) {
+                        enrolled.push(k.holderType as 'hub' | 'member' | 'sso');
+                    }
+                }
+            }
+            setProtectionResult({
+                enrolled,
+                generation: 1,
+                skipped: [],
+                available: body.total,
+            });
+        } catch (e) {
+            console.warn('[Protection] fetch failed:', e);
+        } finally {
+            setProtectionLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (mode === 'protection') { fetchProtectionStatus(); }
+    }, [mode]);
     const [dbStats, setDbStats] = useState<{ members: number, posts: number, transactions: number, messages: number, integrity: string } | null>(null);
     const [diagLoading, setDiagLoading] = useState(false);
     const [dbSize, setDbSize] = useState<string>('0.0 MB');
@@ -1077,8 +1128,17 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
-                    <Pressable style={styles.menuBtn} onPress={() => { setMode('recovery-requests'); }} accessibilityRole="button">
+                    <Pressable style={styles.menuBtn} onPress={() => { setMode('protection'); }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Account Protection</Text>
+                            <Text style={styles.menuSub}>Manage how you get back into your account</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.menuBtn} onPress={() => { setMode('recovery-requests'); }} accessibilityRole="button">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🤝</Text></View>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.menuText}>Recovery Requests</Text>
                             <Text style={styles.menuSub}>Help a friend recover their identity</Text>
@@ -1310,6 +1370,63 @@ export default function SettingsScreen() {
                 </Text>
                 </>
             )}
+
+            {mode === 'protection' && (
+                <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>🛡️ Account Protection</Text>
+                    <Text style={styles.infoText}>
+                        This is how you get back into your account if you lose your phone.
+                    </Text>
+
+                    {protectionLoading ? (
+                        <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} />
+                    ) : (
+                        <>
+                            <KeeperProtectionPanel
+                                protection={protectionFrom(protectionResult)}
+                                onProtectSso={Platform.OS === 'ios' ? () => setShowSsoSheet(true) : undefined}
+                                onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
+                            />
+
+                            {Platform.OS === 'web' && (
+                                <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
+                                    <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
+                                        The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
+                                    </Text>
+                                    <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
+                                        For Apple sign-in or friend-based recovery, use the BeanPool app on your phone.
+                                    </Text>
+                                </View>
+                            )}
+                        </>
+                    )}
+
+                    <Pressable
+                        style={[styles.backBtn, { marginTop: 16 }]}
+                        onPress={() => setMode('menu')}
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.backBtnText}>← Back</Text>
+                    </Pressable>
+                </View>
+            )}
+
+            <SsoEnrolSheet
+                visible={showSsoSheet}
+                onClose={() => setShowSsoSheet(false)}
+                onEnrolled={(result) => {
+                    setProtectionResult(result);
+                    setShowSsoSheet(false);
+                }}
+            />
+            <FriendPickerSheet
+                visible={showFriendSheet}
+                onClose={() => setShowFriendSheet(false)}
+                onEnrolled={(result) => {
+                    setProtectionResult(result);
+                    setShowFriendSheet(false);
+                }}
+            />
 
             {mode === 'recovery-requests' && (
                 <View style={styles.card}>

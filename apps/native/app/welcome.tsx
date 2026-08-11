@@ -18,6 +18,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
+import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
+import { FriendPickerSheet } from '../components/FriendPickerSheet';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
@@ -117,6 +119,9 @@ export default function WelcomeScreen() {
     // shape to compare them against, instead of a cliff where the old rows have no variant.
     const protectionShownRef = useRef(false);
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
+    // Sheet visibility for SSO and friend enrolment flows
+    const [showSsoSheet, setShowSsoSheet] = useState(false);
+    const [showFriendSheet, setShowFriendSheet] = useState(false);
     /** Whether a covered member has asked to see the words anyway. Never hides them once shown. */
     const [revealWords, setRevealWords] = useState(false);
     const protection = protectionFrom(enrolment);
@@ -909,7 +914,39 @@ export default function WelcomeScreen() {
                 <ScrollView contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={3} />
                     <View style={styles.card}>
-                        <KeeperProtectionPanel protection={protection} />
+                        <KeeperProtectionPanel
+                            protection={protection}
+                            onProtectSso={Platform.OS === 'ios' ? () => setShowSsoSheet(true) : undefined}
+                            onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
+                        />
+
+                        {Platform.OS === 'web' && (
+                            <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                                <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
+                                    The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
+                                </Text>
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
+                                    For Apple sign-in or friend-based recovery, use the BeanPool app on your phone.
+                                </Text>
+                            </View>
+                        )}
+
+                        <SsoEnrolSheet
+                            visible={showSsoSheet}
+                            onClose={() => setShowSsoSheet(false)}
+                            onEnrolled={(result) => {
+                                setEnrolment(result);
+                                setShowSsoSheet(false);
+                            }}
+                        />
+                        <FriendPickerSheet
+                            visible={showFriendSheet}
+                            onClose={() => setShowFriendSheet(false)}
+                            onEnrolled={(result) => {
+                                setEnrolment(result);
+                                setShowFriendSheet(false);
+                            }}
+                        />
 
                         {/*
                           The words follow the panel rather than opening the screen.

@@ -155,7 +155,8 @@
       "@react-native-community/datetimepicker",
       "expo-secure-store",
       "expo-sharing",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "router": {},

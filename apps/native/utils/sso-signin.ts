@@ -40,8 +40,18 @@
 
 import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { GoogleSignin, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
+
+/**
+ * Web client ID — the `aud` claim the node expects in a Google id_token.
+ *
+ * This is the "Web application" client ID from the Google Cloud project. The Android and iOS
+ * client IDs are implicit (derived from package name + signing key + google-services.json).
+ * The web client ID is what makes the SDK return an `idToken` rather than just an access token.
+ */
+export const GOOGLE_WEB_CLIENT_ID = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 
 export type SsoProvider = 'apple' | 'google';
 
@@ -211,6 +221,93 @@ export async function signInWithApple(nonce: string): Promise<Omit<SsoSignIn, 'p
 }
 
 /**
+ * Can this device offer Sign in with Google?
+ *
+ * Google Sign-In works on both Android and iOS native, but not on web.
+ * On iOS it is a secondary option (Apple is native there); on Android it is the primary.
+ */
+export function googleSignInAvailable(): boolean {
+    return Platform.OS === 'android' || Platform.OS === 'ios';
+}
+
+/**
+ * Map Google Sign-In errors to SsoFailure reasons.
+ *
+ * Same pattern as describeAppleError: a discriminant the caller can act on.
+ * SIGN_IN_CANCELLED is the one that matters — the member opened the sheet, looked, and
+ * decided not to. Not a failure.
+ */
+export function describeGoogleError(e: unknown): SsoFailure {
+    if (isErrorWithCode(e)) {
+        if (e.code === statusCodes.SIGN_IN_CANCELLED) return 'cancelled';
+        if (e.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) return 'unsupported';
+    }
+    return 'provider';
+}
+
+/**
+ * Run the Google Sign-In sheet.
+ *
+ * NONCE HANDLING — not available in the free `GoogleSignin.signIn()` API.
+ *
+ * The "Original Google Sign In" API (`GoogleSignin.signIn()`) does not accept a custom nonce.
+ * Nonce support requires the premium "Universal Sign In" API (`GoogleOneTapSignIn`). The server's
+ * `verifyIdToken` checks the nonce claim, and if none is present the nonce check will fail.
+ *
+ * Two paths forward:
+ *   1. Use the premium API (licence cost, but full nonce binding like Apple).
+ *   2. Skip the nonce for Google and instead have the server issue + verify a challenge via a
+ *      different channel (e.g. the signed request body).
+ *
+ * For now, `signInWithGoogle` obtains the `idToken` without nonce binding. The probe screen
+ * exists to measure what the token contains and whether the server can verify it (which requires
+ * the server to tolerate a missing nonce for Google, or an alternative binding).
+ *
+ * The raw nonce is still passed through so the caller's signature stays unchanged and the server
+ * can log it even though the token won't contain it.
+ */
+export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
+    if (!googleSignInAvailable()) {
+        throw new SsoSignInError('unsupported', 'This device cannot sign in with Google.');
+    }
+
+    GoogleSignin.configure({
+        webClientId: GOOGLE_WEB_CLIENT_ID,
+    });
+
+    let result;
+    try {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        result = await GoogleSignin.signIn();
+    } catch (e) {
+        const reason = describeGoogleError(e);
+        throw new SsoSignInError(
+            reason,
+            reason === 'cancelled'
+                ? 'Sign-in was cancelled.'
+                : reason === 'unsupported'
+                    ? 'Google Play Services is not available on this device.'
+                    : `Google could not sign you in: ${e instanceof Error ? e.message : String(e)}`,
+        );
+    }
+
+    if (result.type === 'cancelled') {
+        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    }
+
+    const idToken = result.data?.idToken;
+    if (!idToken) {
+        throw new SsoSignInError('no-token', 'Google completed the sign-in but returned no token.');
+    }
+
+    return {
+        idToken,
+        nonce,
+        email: result.data?.user?.email ?? undefined,
+    };
+}
+
+/**
  * Nonce, then sheet, then hand both back — the whole client half of a sign-in.
  *
  * Deliberately stops here rather than depositing anything. What a fragment gets sealed to and how
@@ -230,7 +327,5 @@ export async function startSsoSignIn(
     if (provider === 'apple') {
         return { provider, ...await signInWithApple(nonce) };
     }
-    // Google needs a package this app does not yet carry. Named rather than silently unsupported,
-    // so the button that gets built next fails loudly here instead of appearing to work.
-    throw new SsoSignInError('unsupported', 'Google sign-in is not built yet.');
+    return { provider, ...await signInWithGoogle(nonce) };
 }

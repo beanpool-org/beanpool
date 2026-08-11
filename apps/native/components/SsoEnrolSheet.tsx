@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { colors } from '../constants/colors';
 import { anchorUrl } from '../utils/node-post';
 import { startSsoSignIn, SsoSignInError } from '../utils/sso-signin';
+import type { SsoProvider } from '../utils/sso-signin';
 import { enrolSsoKeeper, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { useIdentity } from '../app/IdentityContext';
 
@@ -28,11 +29,15 @@ export function SsoEnrolSheet({
     visible,
     onClose,
     onEnrolled,
+    provider = Platform.OS === 'ios' ? 'apple' : 'google',
 }: {
     visible: boolean;
     onClose: () => void;
     onEnrolled: (result: KeeperEnrolmentResult) => void;
+    /** Which SSO provider to use. Defaults to Apple on iOS, Google elsewhere. */
+    provider?: SsoProvider;
 }): React.JSX.Element | null {
+    const PROVIDER_NAME = provider === 'apple' ? 'Apple' : 'Google';
     const { identity } = useIdentity();
     const [step, setStep] = useState<'explain' | 'processing' | 'success' | 'error'>('explain');
     const [errorMessage, setErrorMessage] = useState('');
@@ -49,7 +54,7 @@ export function SsoEnrolSheet({
 
     const handleConnect = async () => {
         if (!identity) {
-            setErrorMessage('You must be signed in to connect Apple.');
+            setErrorMessage(`You must be signed in to connect ${PROVIDER_NAME}.`);
             setStep('error');
             return;
         }
@@ -63,7 +68,7 @@ export function SsoEnrolSheet({
                 return;
             }
 
-            const signin = await startSsoSignIn('apple', url, identity);
+            const signin = await startSsoSignIn(provider, url, identity);
             const sub = extractSub(signin.idToken);
 
             const result = await enrolSsoKeeper({
@@ -88,9 +93,9 @@ export function SsoEnrolSheet({
                     return;
                 }
                 if (e.reason === 'unsupported') {
-                    setErrorMessage("This device can't sign in with Apple.");
+                    setErrorMessage(`This device can't sign in with ${PROVIDER_NAME}.`);
                 } else if (e.reason === 'no-token' || e.reason === 'provider') {
-                    setErrorMessage("Apple couldn't complete the sign-in. Try again.");
+                    setErrorMessage(`${PROVIDER_NAME} couldn't complete the sign-in. Try again.`);
                 } else if (e.reason === 'nonce') {
                     setErrorMessage("Couldn't reach your hub. Check your connection.");
                 } else {
@@ -121,13 +126,13 @@ export function SsoEnrolSheet({
                 <View style={styles.sheet}>
                     {step === 'explain' && (
                         <View style={styles.content}>
-                            <Text style={styles.title} accessibilityRole="header">Protect with Apple sign-in</Text>
+                            <Text style={styles.title} accessibilityRole="header">Protect with {PROVIDER_NAME} sign-in</Text>
                             <Text style={styles.body}>
-                                If you lose this phone, signing in with Apple on a new one will get you back into your account.
+                                If you lose this phone, signing in with {PROVIDER_NAME} on a new one will get you back into your account.
                             </Text>
                             <View style={styles.warningBox}>
                                 <Text style={styles.warningText}>
-                                    Your hub operator can reconstruct your account if they also control your Apple sign-in. If full sovereignty matters, use trusted friends instead.
+                                    Your hub operator can reconstruct your account if they also control your {PROVIDER_NAME} sign-in. If full sovereignty matters, use trusted friends instead.
                                 </Text>
                             </View>
                             <TouchableOpacity
@@ -135,7 +140,7 @@ export function SsoEnrolSheet({
                                 onPress={handleConnect}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.primaryButtonText}>Connect Apple</Text>
+                                <Text style={styles.primaryButtonText}>Connect {PROVIDER_NAME}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.secondaryButton}
@@ -148,7 +153,7 @@ export function SsoEnrolSheet({
                     )}
 
                     {step === 'processing' && (
-                        <View style={styles.centerContent}>
+                        <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             <ActivityIndicator size="large" color={colors.brand.primary} />
                             <Text style={styles.processingText}>Connecting...</Text>
                         </View>
@@ -161,7 +166,7 @@ export function SsoEnrolSheet({
                             </View>
                             <Text style={styles.title} accessibilityRole="header">You're covered</Text>
                             <Text style={styles.body}>
-                                Your Apple sign-in is now linked. If you lose this phone, sign in with Apple to get back in.
+                                Your {PROVIDER_NAME} sign-in is now linked. If you lose this phone, sign in with {PROVIDER_NAME} to get back in.
                             </Text>
                             <TouchableOpacity
                                 style={styles.primaryButton}
@@ -174,9 +179,9 @@ export function SsoEnrolSheet({
                     )}
 
                     {step === 'error' && (
-                        <View style={styles.content}>
+                        <View style={styles.content} accessibilityLiveRegion="assertive">
                             <Text style={styles.title} accessibilityRole="header">Something went wrong</Text>
-                            <Text style={styles.body}>{errorMessage}</Text>
+                            <Text style={styles.body} accessibilityRole="alert">{errorMessage}</Text>
                             <TouchableOpacity
                                 style={styles.primaryButton}
                                 onPress={() => setStep('explain')}

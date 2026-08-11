@@ -46,7 +46,7 @@ export function KeeperProtectionPanel({
                             style={{ marginTop: 12 }}
                         >
                             <Text style={styles.offer}>
-                                Want extra protection? Add a trusted friend — then you can recover without Apple too.
+                                Want extra protection? Add a trusted friend — then you can recover without {Platform.OS === 'ios' ? 'Apple' : 'Google'} too.
                             </Text>
                         </TouchableOpacity>
                     )}
@@ -98,10 +98,18 @@ export function KeeperProtectionPanel({
             </Text>
 
             <View style={styles.buttonContainer}>
-                {Platform.OS === 'ios' && onProtectSso && (
+                {Platform.OS !== 'web' && onProtectSso && (
                     <View style={styles.actionBlock}>
-                        <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectSso} accessibilityRole="button">
-                            <Text style={styles.buttonSecondaryText}>Protect with Apple sign-in</Text>
+                        <TouchableOpacity
+                            style={styles.buttonSecondary}
+                            onPress={onProtectSso}
+                            accessibilityRole="button"
+                            accessibilityLabel={Platform.OS === 'ios' ? 'Protect with Apple sign-in' : 'Protect with Google sign-in'}
+                            accessibilityHint="Opens sheet to set up sign-in account recovery. This is not a login."
+                        >
+                            <Text style={styles.buttonSecondaryText}>
+                                {Platform.OS === 'ios' ? 'Protect with Apple sign-in' : 'Protect with Google sign-in'}
+                            </Text>
                         </TouchableOpacity>
                         <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
                     </View>

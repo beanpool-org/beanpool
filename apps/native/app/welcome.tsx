@@ -944,6 +944,7 @@ export default function WelcomeScreen() {
 
                         <SsoEnrolSheet
                             visible={showSsoSheet}
+                            identity={pendingIdentity}
                             onClose={() => setShowSsoSheet(false)}
                             onEnrolled={(result) => {
                                 setEnrolment(result);

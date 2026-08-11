@@ -6,6 +6,7 @@ import { startSsoSignIn, SsoSignInError } from '../utils/sso-signin';
 import type { SsoProvider } from '../utils/sso-signin';
 import { enrolSsoKeeper, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { useIdentity } from '../app/IdentityContext';
+import type { BeanPoolIdentity } from '../utils/identity';
 
 /**
  * Decode the `sub` claim from a JWT id_token without signature verification.
@@ -30,15 +31,19 @@ export function SsoEnrolSheet({
     onClose,
     onEnrolled,
     provider = Platform.OS === 'ios' ? 'apple' : 'google',
+    identity: passedIdentity,
 }: {
     visible: boolean;
     onClose: () => void;
     onEnrolled: (result: KeeperEnrolmentResult) => void;
     /** Which SSO provider to use. Defaults to Apple on iOS, Google elsewhere. */
     provider?: SsoProvider;
+    /** Identity to use for enrolment. Defaults to useIdentity().identity if omitted. */
+    identity?: BeanPoolIdentity | null;
 }): React.JSX.Element | null {
     const PROVIDER_NAME = provider === 'apple' ? 'Apple' : 'Google';
-    const { identity } = useIdentity();
+    const { identity: contextIdentity } = useIdentity();
+    const identity = passedIdentity ?? contextIdentity;
     const [step, setStep] = useState<'explain' | 'processing' | 'success' | 'error'>('explain');
     const [errorMessage, setErrorMessage] = useState('');
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);

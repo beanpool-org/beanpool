@@ -232,3 +232,79 @@ export async function combineRecoveryPhrase(shares: Uint8Array[]): Promise<strin
 
     return phrase;
 }
+
+// ---------------------------------------------------------------------------
+// Bytes-level Shamir API — used by the two-layer split
+// ---------------------------------------------------------------------------
+//
+// The phrase-level API above wraps the secret in an envelope with a version byte
+// and checksum before splitting. The bytes-level API below is the raw primitive:
+// it splits and combines arbitrary byte buffers with no envelope. The two-layer
+// split needs this because it operates on `B = seed ⊕ A`, which is already
+// bytes, and carries its own integrity check at a higher level.
+//
+// These deliberately do NOT re-export `split`/`combine` from shamir-secret-sharing
+// directly — the validation and error translation belong in this module, and an
+// unguarded re-export would let callers bypass both.
+
+/**
+ * Splits an arbitrary byte buffer into `shareCount` Shamir shares at the given
+ * threshold, using the same Shamir core as the phrase-level API.
+ *
+ * No envelope or checksum is applied — the caller is responsible for integrity.
+ * This is the right API for the two-layer split, where integrity is checked at
+ * the outer layer (seed checksum) rather than per-share.
+ *
+ * @param secret      the bytes to split — must not be empty
+ * @param shareCount  how many shares to produce; must be ≥ threshold and ≤ 255
+ * @param threshold   how many shares are needed to reconstruct; must be ≥ 2
+ */
+export async function splitBytes(
+    secret: Uint8Array,
+    shareCount: number,
+    threshold: number,
+): Promise<Uint8Array[]> {
+    if (!(secret instanceof Uint8Array) || secret.length === 0) {
+        throw new Error('splitBytes: secret must be a non-empty Uint8Array.');
+    }
+    if (!Number.isInteger(threshold) || threshold < 2) {
+        throw new Error(`splitBytes: threshold must be an integer ≥ 2, got ${threshold}.`);
+    }
+    if (!Number.isInteger(shareCount) || shareCount < threshold) {
+        throw new Error(
+            `splitBytes: shareCount must be ≥ threshold (${threshold}), got ${shareCount}.`,
+        );
+    }
+    if (shareCount > 255) {
+        throw new Error(`splitBytes: shareCount must be ≤ 255, got ${shareCount}.`);
+    }
+
+    assertRecoveryCsprngAvailable();
+    return split(secret, shareCount, threshold);
+}
+
+/**
+ * Combines Shamir shares back into the original byte buffer.
+ *
+ * This is the raw inverse of {@link splitBytes}. No envelope or checksum is
+ * verified — the caller must validate the result independently.
+ *
+ * @param shares  at least `threshold` shares from the same split
+ * @throws {RecoveryCombineError} if the library rejects the shares (duplicates,
+ *         mismatched lengths, etc.)
+ */
+export async function combineBytes(shares: Uint8Array[]): Promise<Uint8Array> {
+    if (!Array.isArray(shares) || shares.length < 2) {
+        throw new RecoveryCombineError(
+            `combineBytes needs at least 2 shares, got ${shares?.length ?? 0}.`,
+        );
+    }
+
+    try {
+        return await combine(shares);
+    } catch (e) {
+        throw new RecoveryCombineError(
+            `Shares could not be combined: ${e instanceof Error ? e.message : String(e)}`,
+        );
+    }
+}

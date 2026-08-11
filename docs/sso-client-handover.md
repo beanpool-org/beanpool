@@ -82,18 +82,38 @@ PRs **#223, #224, #230, #232** — all merged 2026-08-07.
 - Audiences configured: `BEANPOOL_APPLE_BUNDLE_ID = 'org.beanpool.pillar'`,
   `BEANPOOL_APPLE_SERVICES_ID = 'org.beanpool.web'`, 4 Google client IDs
 
-### Open, unreviewed, all mergeable
+### All merged 2026-08-11
 
-| PR | Branch | What |
+| PR | What |
+|---|---|
+| **#248** | SSO seal key: one HKDF pass → scrypt, **plus a cost ceiling** (below) |
+| **#249** | the design doc |
+| **#250** | client half of Sign in with Apple + the `apple-probe` screen |
+| **#251** | CR follow-up on the doc: migration section, PWA cost, threshold clarification |
+
+**The ceiling in #248 is the one to understand.** `N` had a floor but no cap. scrypt allocates
+about `128 * N * r` bytes, so a fragment claiming `N = 2^24` asks for ~17 GB — and the party
+allocating it is the **member's phone**, opening a fragment the node just handed it, mid
+recovery. A hostile node could have turned every restore into an OOM crash that reads as a
+broken app. Capped at 65536, four times what sealing writes, so raising the cost later needs
+no opener change.
+
+### The clean slate is verified, not assumed
+
+Every plan here rests on "no fragment has ever been deposited", which is what makes changing
+the split shape a schema edit rather than a data migration. **Checked 2026-08-11 against the
+live database, read-only:**
+
+| Node | `recovery_shares` | `members` |
 |---|---|---|
-| **#248** | `fix/sso-seal-scrypt` | SSO seal key: one HKDF pass → scrypt (`scrypt-xc20p-v1`) |
-| **#249** | `docs/recovery-model` | the design doc |
-| **#250** | `feat/apple-signin` | client half of Sign in with Apple + the `apple-probe` screen |
+| **mullum** (the live community) | **0** | 32 |
+| test | 0 | — |
 
-**Merge #248 first and soon.** Its old comment justified a weak key with "it yields ONE
-fragment, and the threshold is three". `A ⊕ B` made that false — the SSO fragment is now half
-of two, sitting next to the other half in plaintext in the same table. **No fragments exist
-yet, so there is nothing to migrate. That window closes the moment anyone enrols.**
+bris and bindarrabi were not checked; both are effectively empty and neither has ever run
+enrolment, but if you are about to rely on this, check them. Recipe in §7.
+
+**Re-check this before the enrolment rewrite lands.** It is one query, and it is the single
+assumption whose failure would strand real people's recovery.
 
 ### Not built at all
 
@@ -211,24 +231,35 @@ measured. The measurement is recorded in the header comment of
 
 ## 6. Next steps, in order
 
-### Step 1 — ~~close the last link~~ DONE 2026-08-11
+### Steps 1–3 — ~~verify a real token, merge #248/#249/#250~~ DONE 2026-08-11
 
-Section 4 of the probe verified a real Apple token against the node. See §3.
+All four PRs merged. Section 4 of the probe verified a real Apple token. See §3.
 
-### Step 2 — merge #248 (scrypt), while migration is still free
+### Step 4 — the two-layer split and enrolment rewrite (the main build) ← **NEXT**
 
-### Step 3 — merge #249 (doc) and #250 (client)
+This is the large one, and it is the one everything else waits on. `seed = A ⊕ B`, then Shamir
+on `B`. Touches enrolment, the keeper panel, and `RECOVERY_THRESHOLD` semantics (3 → 2, layer
+two only). The existing client keeper code predates the model and should be rewritten, not
+patched.
 
-### Step 4 — the two-layer split and enrolment rewrite (the main build)
+**Do this before Google.** Google sign-in adds a second provider to a flow that still deposits
+the *old* share shape — so building it first means writing the deposit path twice and having
+two providers to re-verify instead of one. Apple already proves the whole chain end to end;
+Google adds reach, not knowledge. Reach is worth less than not doing the work twice.
 
-This is the large one. `seed = A ⊕ B`, then Shamir on `B`. Touches enrolment, the keeper
-panel, and `RECOVERY_THRESHOLD` semantics (3 → 2, layer two only). The existing client keeper
-code predates the model and should be rewritten, not patched.
+Sequencing note: the migration is free only while `recovery_shares` is empty everywhere
+(§2). This step is what closes that window, so re-check the counts immediately before it
+lands, not weeks earlier.
 
 ### Step 5 — Google sign-in on Android, and measure its nonce echo
 
 Marty chose the **native Google library**, not a web flow. `startSsoSignIn` already throws a
 named `unsupported` error for Google so it fails loudly rather than appearing to work.
+
+Two things to establish, and neither is guesswork once the button exists: whether Google
+echoes the nonce **verbatim or hashed** (Apple was verbatim — measure, do not assume they
+match), and that a Google `sub` verifies against the four configured client IDs in `sso.ts`.
+Until Google is measured, the `nonceMayBeHashed` tolerance stays.
 
 ### Step 6 — the PIN (non-SSO only), the copy pass, add-a-friend
 
@@ -288,6 +319,20 @@ codesign -d --entitlements - --xml <path>/BeanPool.app | plutil -p -
 curl -s "https://test.beanpool.org/api/recovery/keepers/<callsign>"
 # 200 + JSON = route exists. Plain-text "Not Found" = node predates #223.
 ```
+
+**Count fragments on a live node — READ ONLY.** This is how §2 was verified, and how to
+re-verify it before the enrolment rewrite. `readonly: true` is not decoration: `mullum` is a
+real community and this is the one query it is acceptable to run there.
+
+```bash
+ssh ssh-qld.beanpool.org "docker exec -w /app/apps/server beanpool-mullum-beanpool-node-1 \
+  node -e \"const D=require('better-sqlite3');const d=new D('/data/state.db',{readonly:true});\
+  console.log(d.prepare('SELECT COUNT(*) c FROM recovery_shares').get().c)\""
+```
+
+The qld VM hosts `test`, `mullum`, `bris` and `bindarrabi`; container names follow
+`beanpool-<node>-beanpool-node-1`. The database is `/data/state.db` — there is no `/app/data`,
+and no `sqlite3` binary in the image, which is why this goes through `better-sqlite3`.
 
 ---
 

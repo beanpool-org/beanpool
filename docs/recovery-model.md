@@ -192,6 +192,14 @@ So the rule is broader than "no keeper enrolment on the PWA" (decided 2026-08-10
 PWA does not enrol keepers, does not approve as a keeper, and does not run a recovery.**
 Recovery is set up and used in the app, and the PWA says so.
 
+**What this costs, stated rather than glossed (CR).** Browsers evict storage: Safari's ITP
+caps script-writable storage at seven days without interaction, and any "clear browsing data"
+takes the rest. A PWA member who never writes their 12 words down has no second chance —
+there is no hub fragment and no friend to ask. That is a real loss mode, and it is the price
+of the paragraph above rather than an oversight in it. The mitigation is not a keeper tier
+it cannot safely have; it is that the PWA must ask for the 12 words early, insistently, and
+must not present itself as a place where an account can safely live unbacked.
+
 **PWA members are the sovereign tier**, always. 12 words, nothing stored, no exceptions —
 including no SSO tier, since an SSO recovery in the browser hands the operator the seed
 just as readily.
@@ -317,6 +325,14 @@ request without a moment's consideration.
 | Wrong PIN | **no** — there is nothing the owner can do about it |
 | Correct PIN | **yes** — *"Someone is recovering your account"* → **[Stop it]** |
 
+**This table describes the non-SSO tier only, and the gap is worth naming (CR).** There, the
+notice fires when the PIN is entered — before any friend has released — so **[Stop it]** has
+real time to work. The SSO tier has no PIN and no delay: a sign-in *is* the recovery, so any
+notice necessarily arrives after the seed is already reconstructable, and **[Stop it]** can
+re-split for next time but cannot undo this one. That is not a flaw in the notification
+design; it is the custodial trade being visible from a second angle. Anyone who finds it
+unacceptable is really objecting to sign-in-and-you're-in, which is the decision to reopen.
+
 "Change your PIN" was considered and rejected as an action: against uniform guessing a new
 six-digit PIN is exactly as likely to be hit as the old one. It creates alarm and changes
 nothing. **Only notify when there is something to do.**
@@ -403,26 +419,61 @@ holder types), the protection panel copy, `schema.sql`.
 derivation from one HKDF pass to scrypt, because `A ⊕ B` made the old justification false.
 Both `sealShareToSso` and `openShareFromSso` are now async.
 
+**Built since (2026-08-11, PR #250):** the Apple sign-in client, and a probe that ran the
+whole chain on hardware — a node-issued nonce, Apple's sheet, and the node verifying a real
+token against Apple's live JWKS. Apple echoes the nonce **verbatim**. See
+`docs/sso-client-handover.md`.
+
 **Not built at all:**
 
-- Any sign-in button in the client. Every claim about the SSO tier is theoretical until
-  this exists, and it is unaffected by every decision in this document.
+- Google sign-in. `startSsoSignIn` throws a named `unsupported` rather than pretending.
 - The restore flow client. The server half is complete; there is no client code.
 - Add-a-friend — now the *only* recovery route for non-SSO members.
 - The PIN, in any form.
+- The two-layer split itself. Enrolment still writes the old shape.
 
-`RECOVERY_THRESHOLD` changes meaning: it becomes the threshold of layer two only, and its
-value drops from 3 to 2.
+### `RECOVERY_THRESHOLD`, and what it does not count
+
+Its meaning changes: it becomes the threshold of **layer two only**, and its value drops
+from 3 to 2.
+
+Spelled out because a reviewer read the drop as "any 2 of {hub, sso, friends} reconstructs"
+and called it a downgrade (CR). It is not, and the difference is the whole point of the two
+layers: **the hub is never a share in the threshold.** `A` is XOR-mandatory and sits outside
+the count. Two friends reaching threshold yields `B` and nothing else; `B` without `A` is
+noise. There is no combination of counted shares that reconstructs a seed on its own.
+
+The one case where an operator does get in is the SSO tier, and that is not the threshold
+doing it — it is the `sub` arriving in plaintext during verification, stated plainly above
+and chosen deliberately.
+
+### Migration
+
+Not optional, and not covered by the sections above (CR).
+
+- `RECOVERY_THRESHOLD` is read by live code and stored per-request as
+  `recovery_requests.quorum_required`. Changing the constant does not change rows already
+  written, so an in-flight recovery keeps the old quorum and a new one gets the new — decide
+  explicitly which wins rather than discovering it.
+- `recovery_shares.holder_type` carries a `CHECK` constraint. Any new or retired holder type
+  needs the constraint rebuilt in the same migration, or inserts fail at runtime rather than
+  at deploy.
+- **Today this is free, and that is the whole reason to do it now.** No member has ever
+  deposited a fragment — the probe deliberately sends a wrong nonce so it cannot. The moment
+  enrolment ships, every one of these becomes a data migration instead of a schema edit.
 
 ---
 
 ## Open questions
 
-1. **Does the node persist the raw `sub`?** If it does, the SSO tier's cold-database
-   protection evaporates. This gates the SSO row of every table above and has not been
-   checked.
+1. ~~**Does the node persist the raw `sub`?**~~ **Answered 2026-08-11: it does not.**
+   `ssoLookupHash` stores a scrypt hash with a per-share random salt and the raw value is
+   never written. The cold-database protection stands — but only against an attacker who
+   never sees a live sign-in, since the `sub` does arrive in plaintext during verification.
 2. **How many members are on the PWA?** The decision above excludes them from recovery
-   entirely. Unmeasured, and it determines how loudly that needs saying.
+   entirely. Marty's read (2026-08-11) is that the native share is much the larger and the
+   PWA is an edge case; still unmeasured numerically, and it determines how loudly that
+   needs saying.
 3. **Re-keying.** Re-splitting produces a new curve for the same seed, so an old backup
    still reconstructs. Only migrating to a new keypair truly revokes. Deferred by decision.
 4. **Node backup durability.** Every fragment for every member lives on one disk. This is

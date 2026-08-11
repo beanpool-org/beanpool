@@ -211,7 +211,41 @@ describe('sign-in keeper (K3)', () => {
             kdfParams: JSON.stringify({ ...JSON.parse(sealed.kdfParams), N: 2 }),
         };
         await expect(openShareFromSso(weakened, 'apple', 'sub-1'))
-            .rejects.toThrow(/below the minimum/);
+            .rejects.toThrow(/outside the permitted range/);
+    });
+
+    it('refuses a fragment whose cost would exhaust the device opening it', async () => {
+        // The mirror of the downgrade above, and the more dangerous direction (CR). scrypt takes
+        // about 128 * N * r bytes, so N: 2^24 at r: 8 asks for ~17 GB — and the machine asked is
+        // the member's PHONE, opening a fragment the node just handed it, in the middle of
+        // recovering an account. Unbounded, a hostile node turns every restore into an OOM crash
+        // that reads as a broken app rather than an attack.
+        //
+        // Asserted by the error rather than by timing it: the whole point is that the allocation
+        // never happens, so a test that waited for it would be testing the bug.
+        const sealed = await sealShareToSso(randomBytes(32), 'apple', 'sub-1');
+        const inflated = {
+            ...sealed,
+            kdfParams: JSON.stringify({ ...JSON.parse(sealed.kdfParams), N: 2 ** 24 }),
+        };
+        await expect(openShareFromSso(inflated, 'apple', 'sub-1'))
+            .rejects.toThrow(/outside the permitted range/);
+    });
+
+    it('still opens a fragment written at the highest cost it will accept', async () => {
+        // The ceiling has to leave room to raise the cost, or it becomes a migration the first
+        // time anyone tightens scrypt. Sealing writes SSO_SCRYPT.N; this proves the opener accepts
+        // the top of the range too, so that raise needs no opener change.
+        const share = randomBytes(32);
+        const sealed = await sealShareToSso(share, 'apple', 'sub-1');
+        const atCeiling = {
+            ...sealed,
+            kdfParams: JSON.stringify({ ...JSON.parse(sealed.kdfParams), N: 65536 }),
+        };
+        // The tag fails because the key differs at a different N — which is itself the proof that
+        // N reached the derivation rather than being rejected by the range check.
+        await expect(openShareFromSso(atCeiling, 'apple', 'sub-1'))
+            .rejects.not.toThrow(/outside the permitted range/);
     });
 
     it('refuses a fragment with no cost recorded at all', async () => {
@@ -221,7 +255,7 @@ describe('sign-in keeper (K3)', () => {
         const sealed = await sealShareToSso(randomBytes(32), 'apple', 'sub-1');
         const { N, ...withoutN } = JSON.parse(sealed.kdfParams);
         await expect(openShareFromSso({ ...sealed, kdfParams: JSON.stringify(withoutN) }, 'apple', 'sub-1'))
-            .rejects.toThrow(/below the minimum/);
+            .rejects.toThrow(/outside the permitted range/);
     });
 
     it('refuses to seal without a provider or a sub', async () => {

@@ -96,6 +96,14 @@ const SSO_SCRYPT = { N: 16384, r: 8, p: 1, dkLen: 32 } as const;
  * from quietly accepting it.
  */
 const SSO_SCRYPT_MIN_N = 16384;
+/**
+ * The most expensive fragment an opener will attempt — four times the cost we write today.
+ *
+ * scrypt's memory is roughly `128 * N * r`, so this caps a single open at about 67 MB on r = 8.
+ * Without it, a fragment claiming N = 2^24 asks the opener for ~17 GB, and the opener is a phone
+ * mid-recovery. Headroom for raising the cost, but not enough to be used as a weapon.
+ */
+const SSO_SCRYPT_MAX_N = 65536;
 /** K2's honest name for "not encrypted". See {@link recordShareForHub}. */
 export const KEEPER_ALG_PLAINTEXT = 'plaintext-v1';
 /** The scheme a keeper re-wraps under when releasing to a recovering device. */
@@ -404,9 +412,20 @@ export async function openShareFromSso(
         throw new KeeperCryptoError('A sign-in fragment is missing the salt its key derives from.');
     }
     const N = params.N;
-    if (typeof N !== 'number' || !Number.isInteger(N) || N < SSO_SCRYPT_MIN_N) {
+    // Bounded at BOTH ends (CR). The floor stops a tampered fragment weakening its own key; the
+    // ceiling stops one weaponising it. scrypt allocates about 128 * N * r bytes, so with r = 8 an
+    // N of 2^24 asks for ~17 GB — and the party who allocates it is the MEMBER'S PHONE, opening a
+    // fragment handed to it by the node, at the exact moment they are recovering an account. A
+    // hostile or compromised node could turn every restore attempt into an out-of-memory crash
+    // that looks like a broken app.
+    //
+    // The ceiling is four times the current cost, so raising N later needs no opener change; going
+    // beyond it is a deliberate migration, which is the right shape for a number this expensive.
+    if (typeof N !== 'number' || !Number.isInteger(N)
+        || N < SSO_SCRYPT_MIN_N || N > SSO_SCRYPT_MAX_N) {
         throw new KeeperCryptoError(
-            `A sign-in fragment claims a scrypt cost of ${String(N)}, below the minimum of ${SSO_SCRYPT_MIN_N}.`,
+            `A sign-in fragment claims a scrypt cost of ${String(N)}, outside the permitted range `
+            + `${SSO_SCRYPT_MIN_N}–${SSO_SCRYPT_MAX_N}.`,
         );
     }
     const key = await deriveSsoKey(provider, sub, unb64(params.salt, 'salt'), N);

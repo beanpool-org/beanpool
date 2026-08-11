@@ -1384,7 +1384,7 @@ export default function SettingsScreen() {
                         <>
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
-                                onProtectSso={Platform.OS === 'ios' ? () => setShowSsoSheet(true) : undefined}
+                                onProtectSso={Platform.OS !== 'web' ? () => setShowSsoSheet(true) : undefined}
                                 onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                             />
 

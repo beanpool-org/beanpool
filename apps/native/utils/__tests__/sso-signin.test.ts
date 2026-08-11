@@ -8,6 +8,9 @@
  *
  * Every one of those produces a request the node rejects, at which point the visible symptom is
  * "your sign-in did not check out" and the actual cause is three steps upstream.
+ *
+ * Google's sheet has the same shape: same nonce, same credential structure, same cancel-vs-error
+ * distinction. The tests below cover its error mapping the same way Apple's are covered.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -20,11 +23,26 @@ vi.mock('expo-apple-authentication', () => ({
     signInAsync: vi.fn(),
     AppleAuthenticationScope: { EMAIL: 0, FULL_NAME: 1 },
 }));
+vi.mock('@react-native-google-signin/google-signin', () => ({
+    GoogleSignin: { configure: vi.fn(), signIn: vi.fn() },
+    isErrorWithCode: (e: any) => e && typeof e === 'object' && 'code' in e,
+    isNoSavedCredentialFoundResponse: (r: any) => r?.type === 'noSavedCredentialFound',
+    statusCodes: {
+        SIGN_IN_CANCELLED: 'SIGN_IN_CANCELLED',
+        PLAY_SERVICES_NOT_AVAILABLE: 'PLAY_SERVICES_NOT_AVAILABLE',
+        IN_PROGRESS: 'IN_PROGRESS',
+    },
+}));
+vi.mock('expo-crypto', () => ({
+    digestStringAsync: vi.fn(async (_alg: string, input: string) => 'sha256_' + input),
+    CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+}));
 vi.mock('../node-post', () => ({ signedPost: vi.fn(), anchorUrl: vi.fn() }));
 
 import {
     SsoSignInError,
     describeAppleError,
+    describeGoogleError,
     readAppleCredential,
     readNonceResponse,
 } from '../sso-signin';
@@ -36,9 +54,6 @@ describe('the nonce the node sends back', () => {
     });
 
     it('refuses a missing, empty, or non-string nonce rather than passing it on', () => {
-        // Each of these would otherwise reach the provider, come back inside a signed token, and
-        // fail server-side as a nonce mismatch — which is indistinguishable from replay in the
-        // logs. The node sent nothing; say that.
         for (const body of [{}, { nonce: '' }, { nonce: 42 }, { nonce: null }, null, undefined]) {
             expect(() => readNonceResponse(body), JSON.stringify(body)).toThrow(SsoSignInError);
             expect(() => readNonceResponse(body)).toThrow(/did not send a sign-in nonce/);
@@ -46,24 +61,17 @@ describe('the nonce the node sends back', () => {
     });
 
     it('drops provider names it does not recognise instead of offering them', () => {
-        // A node advertising something this build cannot do would otherwise produce a button that
-        // fails at the sheet. Unknown means unusable, not "try it and see".
         expect(readNonceResponse({ nonce: 'n', providers: ['apple', 'facebook', 7, null] }).providers)
             .toEqual(['apple']);
     });
 
     it('treats absent providers as "the node did not say", not as "none"', () => {
-        // startSsoSignIn only enforces the list when it is non-empty. An older node that does not
-        // send the field must not have every provider refused on its behalf.
         expect(readNonceResponse({ nonce: 'n' }).providers).toEqual([]);
     });
 });
 
 describe('what the Apple sheet threw', () => {
     it('reads a cancel as a cancel', () => {
-        // The most common outcome by far, and not a failure: somebody opened the sheet to see
-        // what it said. A caller that reported this as an error would turn a shrug into a
-        // support ticket.
         expect(describeAppleError({ code: 'ERR_REQUEST_CANCELED' })).toBe('cancelled');
         expect(describeAppleError({ code: 'ERR_CANCELED' })).toBe('cancelled');
     });
@@ -76,6 +84,23 @@ describe('what the Apple sheet threw', () => {
     });
 });
 
+describe('what the Google sheet threw', () => {
+    it('reads a cancel as a cancel', () => {
+        expect(describeGoogleError({ code: 'SIGN_IN_CANCELLED' })).toBe('cancelled');
+    });
+
+    it('reads Play Services unavailable as unsupported', () => {
+        expect(describeGoogleError({ code: 'PLAY_SERVICES_NOT_AVAILABLE' })).toBe('unsupported');
+    });
+
+    it('reads anything else as a provider failure', () => {
+        expect(describeGoogleError({ code: 'IN_PROGRESS' })).toBe('provider');
+        expect(describeGoogleError(new Error('network down'))).toBe('provider');
+        expect(describeGoogleError(null)).toBe('provider');
+        expect(describeGoogleError(undefined)).toBe('provider');
+    });
+});
+
 describe('the credential Apple hands back', () => {
     it('takes the token and the email when both are there', () => {
         expect(readAppleCredential({ identityToken: 'jwt.goes.here', email: 'someone@example.com' }))
@@ -83,18 +108,12 @@ describe('the credential Apple hands back', () => {
     });
 
     it('accepts a credential with no email, because that is the normal case', () => {
-        // Apple returns the email on the FIRST authorization only. Every sign-in after that has
-        // none, so treating its absence as a failure would break the flow for everybody except
-        // first-timers — and the server's own comment says the keeper list must render without it.
         expect(readAppleCredential({ identityToken: 'jwt', email: null }))
             .toEqual({ idToken: 'jwt', email: undefined });
         expect(readAppleCredential({ identityToken: 'jwt' })).toEqual({ idToken: 'jwt', email: undefined });
     });
 
     it('refuses a null token instead of sending the string "null" to the node', () => {
-        // identityToken is genuinely nullable — a simulator with no Apple ID, an authorization
-        // revoked mid-flow. Unchecked it becomes "null" in the request body and the node reports a
-        // malformed JWT, sending whoever is debugging after the token rather than after the sheet.
         expect(() => readAppleCredential({ identityToken: null })).toThrow(/returned no token/);
         expect(() => readAppleCredential({})).toThrow(/returned no token/);
         expect(() => readAppleCredential({ identityToken: '' })).toThrow(/returned no token/);

@@ -132,7 +132,7 @@ async function main(): Promise<void> {
     const publicBody = await publicRes.json().catch(() => undefined) as any;
     assert(publicRes.status === 200,
         `GET /api/recovery/keepers/:callsign is reachable with NO credentials (got ${publicRes.status})`);
-    assert(publicBody?.total === 2 && publicBody?.threshold === 2,
+    assert(publicBody?.total === 2 && publicBody?.threshold === 3,
         '...and answers with the keeper summary a restore screen needs');
     assert(!JSON.stringify(publicBody).includes(pubKeyHex),
         '...without naming the member whose keepers they are');

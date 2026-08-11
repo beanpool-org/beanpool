@@ -280,35 +280,6 @@ export default function SettingsScreen() {
     const [protectionLoading, setProtectionLoading] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [showFriendSheet, setShowFriendSheet] = useState(false);
-    const [revealWords, setRevealWords] = useState(false);
-    const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
-    const [copiedWords, setCopiedWords] = useState(false);
-
-    const handleRevealWords = async () => {
-        if (revealWords) {
-            setRevealWords(false);
-            return;
-        }
-        try {
-            const words = await getMnemonic(identity);
-            if (words && Array.isArray(words)) {
-                setMnemonicWords(words.join(' '));
-                setRevealWords(true);
-            } else {
-                Alert.alert("No recovery words found", "Your account key was generated without local passphrase words.");
-            }
-        } catch (e) {
-            Alert.alert("Error reading recovery words", (e as Error).message);
-        }
-    };
-
-    const handleCopyWords = async () => {
-        if (!mnemonicWords) return;
-        await Clipboard.setStringAsync(mnemonicWords);
-        hapticTick();
-        setCopiedWords(true);
-        setTimeout(() => setCopiedWords(false), 2000);
-    };
 
     const fetchProtectionStatus = async () => {
         setProtectionLoading(true);
@@ -1416,65 +1387,6 @@ export default function SettingsScreen() {
                                 onProtectSso={Platform.OS !== 'web' ? () => setShowSsoSheet(true) : undefined}
                                 onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                             />
-
-                            <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                                <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
-                                    🔑 12 Recovery Words
-                                </Text>
-                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
-                                    Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.
-                                </Text>
-
-                                {!revealWords ? (
-                                    <Pressable
-                                        style={{
-                                            backgroundColor: colors.surface.card,
-                                            borderColor: colors.border.default,
-                                            borderWidth: 1,
-                                            borderRadius: 12,
-                                            padding: 14,
-                                            alignItems: 'center',
-                                        }}
-                                        onPress={handleRevealWords}
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Show my 12 recovery words"
-                                    >
-                                        <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
-                                            👁️ Show My 12 Recovery Words
-                                        </Text>
-                                    </Pressable>
-                                ) : (
-                                    <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
-                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                                            {mnemonicWords?.split(' ').map((word, idx) => (
-                                                <View key={idx} style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' }}>
-                                                    <Text style={{ color: colors.text.muted, fontSize: 11, marginRight: 6 }}>{idx + 1}.</Text>
-                                                    <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
-                                                </View>
-                                            ))}
-                                        </View>
-
-                                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                                            <Pressable
-                                                style={{ flex: 1, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
-                                                onPress={handleCopyWords}
-                                                accessibilityRole="button"
-                                            >
-                                                <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 14 }}>
-                                                    {copiedWords ? '✅ Copied!' : '📋 Copy Words'}
-                                                </Text>
-                                            </Pressable>
-                                            <Pressable
-                                                style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}
-                                                onPress={() => setRevealWords(false)}
-                                                accessibilityRole="button"
-                                            >
-                                                <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
-                                            </Pressable>
-                                        </View>
-                                    </View>
-                                )}
-                            </View>
 
                             {Platform.OS === 'web' && (
                                 <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>

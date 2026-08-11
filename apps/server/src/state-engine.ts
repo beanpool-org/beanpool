@@ -3580,6 +3580,7 @@ export function getMemberPreferences(publicKey: string): Record<string, string> 
         notify_chat: 'true',
         notify_marketplace: 'true',
         notify_escrow: 'true',
+        notify_recovery: 'true',
     };
     for (const r of rows) prefs[r.pref_key] = r.pref_value;
     return prefs;
@@ -3661,7 +3662,7 @@ export function dispatchPushNotification(
     title: string,
     body: string,
     data: Record<string, any>,
-    categoryId: 'chat' | 'marketplace' | 'escrow'
+    categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery'
 ): void {
     // Filter out the actor and SYSTEM from targets
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM');
@@ -3674,6 +3675,7 @@ export function dispatchPushNotification(
         chat: 'chat',
         marketplace: 'marketplace',
         escrow: 'escrow',
+        recovery: 'recovery',
     };
 
     // Map categoryId to notification sound
@@ -3681,6 +3683,7 @@ export function dispatchPushNotification(
         chat: 'default',      // Softer sound for chat (uses system default for now)
         marketplace: 'default',
         escrow: 'default',
+        recovery: 'default',
     };
 
     const allMessages: any[] = [];

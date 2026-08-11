@@ -26,6 +26,7 @@ import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '.
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 
+
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
@@ -122,6 +123,7 @@ export default function WelcomeScreen() {
     // Sheet visibility for SSO and friend enrolment flows
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [showFriendSheet, setShowFriendSheet] = useState(false);
+
     /** Whether a covered member has asked to see the words anyway. Never hides them once shown. */
     const [revealWords, setRevealWords] = useState(false);
     const protection = protectionFrom(enrolment);
@@ -931,6 +933,15 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
+                        {__DEV__ && (
+                            <Pressable
+                                style={{ backgroundColor: '#2f6b46', padding: 12, borderRadius: 8, marginTop: 16, alignItems: 'center' }}
+                                onPress={() => router.push('/google-probe')}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>🧪 Open Google SSO Probe</Text>
+                            </Pressable>
+                        )}
+
                         <SsoEnrolSheet
                             visible={showSsoSheet}
                             onClose={() => setShowSsoSheet(false)}
@@ -1350,6 +1361,15 @@ export default function WelcomeScreen() {
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Next →</Text>}
                         </Pressable>
 
+                        {__DEV__ && (
+                            <Pressable
+                                style={{ backgroundColor: '#2f6b46', padding: 12, borderRadius: 8, marginTop: 12, alignItems: 'center' }}
+                                onPress={() => router.push('/google-probe')}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: '600' }}>🧪 Open Google SSO Probe</Text>
+                            </Pressable>
+                        )}
+
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back">
                             <Text style={styles.backBtnText}>← Back</Text>
                         </Pressable>
@@ -1605,6 +1625,8 @@ export default function WelcomeScreen() {
         );
     }
 
+
+
     // --- MAIN WELCOME SCREEN (two choices like the PWA) ---
     return (
         <SafeAreaView style={styles.container}>
@@ -1622,6 +1644,15 @@ export default function WelcomeScreen() {
                 <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button">
                     <Text style={styles.memberBtnText}>🎟️ I'm New Here</Text>
                 </Pressable>
+
+                {__DEV__ && (
+                    <Pressable
+                        style={{ backgroundColor: '#2f6b46', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, marginTop: 12, width: '100%', alignItems: 'center' }}
+                        onPress={() => router.push('/google-probe')}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>🧪 Open Google SSO Probe</Text>
+                    </Pressable>
+                )}
 
                 <Text style={styles.inviteOnlyHint}>
                     BeanPool is invite-only — you join with an invite from a member.{'\n'}

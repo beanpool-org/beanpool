@@ -280,6 +280,51 @@ export default function SettingsScreen() {
     const [protectionLoading, setProtectionLoading] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [showFriendSheet, setShowFriendSheet] = useState(false);
+    const [revealWords, setRevealWords] = useState(false);
+    const [revealLoading, setRevealLoading] = useState(false);
+    const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
+    const [copiedWords, setCopiedWords] = useState(false);
+
+    const handleRevealWords = async () => {
+        if (revealWords) {
+            setRevealWords(false);
+            setMnemonicWords(null);
+            return;
+        }
+        setRevealLoading(true);
+        try {
+            const words = await getMnemonic(identity);
+            if (words && Array.isArray(words)) {
+                setMnemonicWords(words.join(' '));
+                setRevealWords(true);
+            } else {
+                Alert.alert("No recovery words found", "Your account key was generated without local passphrase words.");
+            }
+        } catch (e) {
+            Alert.alert("Error reading recovery words", (e as Error).message);
+        } finally {
+            setRevealLoading(false);
+        }
+    };
+
+    const handleCopyWords = async () => {
+        if (!mnemonicWords) return;
+        await Clipboard.setStringAsync(mnemonicWords);
+        hapticTick();
+        setCopiedWords(true);
+        setTimeout(() => setCopiedWords(false), 2000);
+
+        // Auto-wipe system clipboard after 30 seconds
+        const wordsSnapshot = mnemonicWords;
+        setTimeout(async () => {
+            try {
+                const current = await Clipboard.getStringAsync();
+                if (current === wordsSnapshot) {
+                    await Clipboard.setStringAsync('');
+                }
+            } catch {}
+        }, 30000);
+    };
 
     const fetchProtectionStatus = async () => {
         setProtectionLoading(true);
@@ -1388,6 +1433,73 @@ export default function SettingsScreen() {
                                 onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                             />
 
+                            <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
+                                <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
+                                    🔑 12 Recovery Words
+                                </Text>
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
+                                    Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.
+                                </Text>
+
+                                {!revealWords ? (
+                                    <Pressable
+                                        style={{
+                                            backgroundColor: colors.surface.card,
+                                            borderColor: colors.border.default,
+                                            borderWidth: 1,
+                                            borderRadius: 12,
+                                            padding: 14,
+                                            alignItems: 'center',
+                                        }}
+                                        onPress={handleRevealWords}
+                                        disabled={revealLoading}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Show my 12 recovery words"
+                                    >
+                                        <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 15 }}>
+                                            👁️ Show My 12 Recovery Words
+                                        </Text>
+                                    </Pressable>
+                                ) : (
+                                    <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
+                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                                            {mnemonicWords?.split(' ').map((word, idx) => (
+                                                <View
+                                                    key={`${word}-${idx}`}
+                                                    accessible={true}
+                                                    accessibilityLabel={`Word ${idx + 1}: ${word}`}
+                                                    style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' }}
+                                                >
+                                                    <Text style={{ color: colors.text.muted, fontSize: 11, marginRight: 6 }}>{idx + 1}.</Text>
+                                                    <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+
+                                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                                            <Pressable
+                                                style={{ flex: 1, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
+                                                onPress={handleCopyWords}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={copiedWords ? "Recovery words copied to clipboard" : "Copy 12 recovery words to clipboard"}
+                                            >
+                                                <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 14 }}>
+                                                    {copiedWords ? '✅ Copied!' : '📋 Copy Words'}
+                                                </Text>
+                                            </Pressable>
+                                            <Pressable
+                                                style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}
+                                                onPress={() => { setRevealWords(false); setMnemonicWords(null); }}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="Hide 12 recovery words"
+                                            >
+                                                <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
+                                            </Pressable>
+                                        </View>
+                                    </View>
+                                )}
+                            </View>
+
                             {Platform.OS === 'web' && (
                                 <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
                                     <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
@@ -1397,6 +1509,15 @@ export default function SettingsScreen() {
                                         For Apple sign-in or friend-based recovery, use the BeanPool app on your phone.
                                     </Text>
                                 </View>
+                            )}
+
+                            {__DEV__ && (
+                                <Pressable
+                                    style={{ backgroundColor: '#2f6b46', padding: 12, borderRadius: 8, marginTop: 16, alignItems: 'center' }}
+                                    onPress={() => router.push('/google-probe')}
+                                >
+                                    <Text style={{ color: '#fff', fontWeight: '600' }}>🧪 Open Google SSO Probe</Text>
+                                </Pressable>
                             )}
                         </>
                     )}

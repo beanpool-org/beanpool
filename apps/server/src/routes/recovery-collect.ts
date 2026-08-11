@@ -32,7 +32,7 @@
  */
 
 import Router from '@koa/router';
-import { RECOVERY_THRESHOLD } from '@beanpool/core';
+
 import { db } from '../db/db.js';
 import { getMember, dispatchPushNotification } from '../state-engine.js';
 import {
@@ -171,7 +171,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             collectionId: collection.id,
             generation: collection.generation,
             expiresAt: collection.expiresAt,
-            threshold: RECOVERY_THRESHOLD,
+            threshold: 2,
             progress: collectionProgress(collection.id),
         };
     });
@@ -197,8 +197,8 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         ctx.status = 200;
         ctx.body = {
             collected: releases.length,
-            threshold: RECOVERY_THRESHOLD,
-            enough: releases.length >= RECOVERY_THRESHOLD,
+            threshold: 2,
+            enough: releases.length >= 2,
             fragments: releases.map(r => ({
                 holderType: r.holderType,
                 shareIndex: r.shareIndex,

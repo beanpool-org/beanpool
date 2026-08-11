@@ -393,7 +393,7 @@ CREATE INDEX IF NOT EXISTS idx_recovery_approvals_created_at ON recovery_approva
 CREATE TABLE IF NOT EXISTS recovery_shares (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     owner_pubkey TEXT NOT NULL REFERENCES members(public_key),
-    holder_type TEXT NOT NULL CHECK (holder_type IN ('device', 'hub', 'member', 'sso')),
+    holder_type TEXT NOT NULL CHECK (holder_type IN ('hub', 'member', 'sso')),
     holder_ref TEXT NOT NULL,        -- member pubkey | provider name | 'self'
     share_index INTEGER NOT NULL,    -- Shamir evaluation point (the fragment's x-coordinate)
     encrypted_share TEXT NOT NULL,

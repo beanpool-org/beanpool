@@ -250,3 +250,113 @@ export async function combineTwoLayer(
 
     return seed;
 }
+
+// ---------------------------------------------------------------------------
+// SSO-tier variant — hub + whole B (no Shamir)
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of {@link splitHubAndWhole}.
+ *
+ * Identical in structure to {@link TwoLayerSplitResult} except there is a
+ * single `otherHalf` instead of Shamir friend shares. Used when the member
+ * has signed in with Google or Apple and the whole of `B` is sealed to the
+ * provider's `sub` claim.
+ */
+export interface HubAndWholeSplitResult {
+    hubShare: Uint8Array;
+    /** `B = seed ⊕ A`, un-split. The caller seals this to the SSO provider. */
+    otherHalf: Uint8Array;
+    seedChecksum: Uint8Array;
+}
+
+/**
+ * Splits a 32-byte Ed25519 seed into a hub share and a single other half.
+ *
+ * This is the SSO-tier variant of {@link splitTwoLayer}: same `A ⊕ B` XOR
+ * layer, but `B` is kept whole rather than Shamir-split, because the SSO
+ * provider seals the single piece. Two keepers (hub + sign-in), no friends
+ * required.
+ *
+ * @param seed  exactly 32 bytes — the raw Ed25519 private key seed
+ * @returns     `{ hubShare, otherHalf, seedChecksum }`
+ */
+export async function splitHubAndWhole(
+    seed: Uint8Array,
+): Promise<HubAndWholeSplitResult> {
+    if (!(seed instanceof Uint8Array) || seed.length !== SEED_LENGTH) {
+        throw new Error(
+            `splitHubAndWhole: seed must be exactly ${SEED_LENGTH} bytes, ` +
+            `got ${seed instanceof Uint8Array ? seed.length : typeof seed}.`,
+        );
+    }
+
+    assertRecoveryCsprngAvailable();
+
+    // --- layer 1: XOR ---
+    const hubShare = new Uint8Array(SEED_LENGTH);
+    crypto.getRandomValues(hubShare);
+
+    const otherHalf = xorBytes(seed, hubShare);
+
+    // --- integrity checksum ---
+    const checksum = seedChecksum(seed);
+
+    return { hubShare, otherHalf, seedChecksum: checksum };
+}
+
+/**
+ * Reconstructs a 32-byte Ed25519 seed from a hub share and its other half.
+ *
+ * This is the SSO-tier variant of {@link combineTwoLayer}: `seed = A ⊕ B`
+ * where `B` is the whole un-split other half.
+ *
+ * @param hubShare   the `A` returned by {@link splitHubAndWhole}
+ * @param otherHalf  the `B` from the same split
+ * @param checksum   the `seedChecksum` from the same split — used to verify integrity
+ * @returns          the original 32-byte seed
+ * @throws {TwoLayerCombineError} if the reconstructed seed does not match the checksum
+ */
+export function combineHubAndWhole(
+    hubShare: Uint8Array,
+    otherHalf: Uint8Array,
+    checksum: Uint8Array,
+): Uint8Array {
+    if (!(hubShare instanceof Uint8Array) || hubShare.length !== SEED_LENGTH) {
+        throw new TwoLayerCombineError(
+            `combineHubAndWhole: hubShare must be exactly ${SEED_LENGTH} bytes, ` +
+            `got ${hubShare instanceof Uint8Array ? hubShare.length : typeof hubShare}.`,
+        );
+    }
+    if (!(otherHalf instanceof Uint8Array) || otherHalf.length !== SEED_LENGTH) {
+        throw new TwoLayerCombineError(
+            `combineHubAndWhole: otherHalf must be exactly ${SEED_LENGTH} bytes, ` +
+            `got ${otherHalf instanceof Uint8Array ? otherHalf.length : typeof otherHalf}.`,
+        );
+    }
+    if (!(checksum instanceof Uint8Array) || checksum.length !== SEED_CHECKSUM_LENGTH) {
+        throw new TwoLayerCombineError(
+            `combineHubAndWhole: checksum must be exactly ${SEED_CHECKSUM_LENGTH} bytes.`,
+        );
+    }
+
+    // --- layer 1: XOR → seed ---
+    const seed = xorBytes(hubShare, otherHalf);
+
+    // --- integrity check (constant-time comparison) ---
+    const actual = seedChecksum(seed);
+    let diff = 0;
+    for (let i = 0; i < SEED_CHECKSUM_LENGTH; i++) {
+        diff |= actual[i] ^ checksum[i];
+    }
+    if (diff !== 0) {
+        throw new TwoLayerCombineError(
+            'Reconstructed seed does not match its checksum. This usually means the ' +
+            'hub share and other half come from different splits. The result was NOT ' +
+            'returned — without this check it would have been a valid but wrong ' +
+            'Ed25519 seed.',
+        );
+    }
+
+    return seed;
+}

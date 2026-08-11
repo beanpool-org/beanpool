@@ -5,8 +5,8 @@
  * real person cannot get back in, too loose and a stranger walks off with one. So the tests are
  * arranged around the four things that must hold no matter what a caller asks for:
  *
- *   1. The node NEVER releases a K1 device fragment. Not "after a delay" — not at all. If it did,
- *      hub + sign-in + device is three pieces the node can assemble on its own behalf and the
+ *   1. The node NEVER releases a K1 sso fragment. Not "after a delay" — not at all. If it did,
+ *      hub + sign-in + sso is three pieces the node can assemble on its own behalf and the
  *      threshold protects nobody from the party holding everything.
  *   2. A human keeper's fragment goes the instant THEY approve, and only they can approve it (D6).
  *   3. The hub waits 24h unless a human has already approved (D7).
@@ -18,7 +18,6 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 import crypto from 'node:crypto';
-import { RECOVERY_THRESHOLD } from '@beanpool/core';
 import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { putShareGeneration, type KeeperShareInput } from './engine/recovery-shares.js';
@@ -65,8 +64,6 @@ const frag = (i: number) => ({
 });
 
 /** K1 is RECORDED, not uploaded — the node stores that the keeper exists and none of its bytes. */
-const deviceFrag = (i: number) => ({ shareIndex: i, encryptedShare: '', shareIv: '', shareTag: '' });
-
 const EPH = 'cmVxdWVzdGVyLWVwaGVtZXJhbA';
 
 /** What a keeper hands back once they have decrypted their own copy and re-wrapped it. */
@@ -77,10 +74,10 @@ const rewrap = (label: string) => ({
     ephemeralPubkey: Buffer.from(`reph-${label}`).toString('base64'),
 });
 
-/** device + hub + one human + sign-in. Four keepers against a threshold of 3. */
+/** sso + hub + one human + sign-in. Four keepers against a threshold of 3. */
 function split(owner: string, buddy: string, ssoHash: string): number {
     const shares: KeeperShareInput[] = [
-        { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
+        { holderType: 'sso', holderRef: 'self', ...frag(1) },
         { holderType: 'hub', holderRef: 'node', ...frag(2) },
         { holderType: 'member', holderRef: buddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
         { holderType: 'sso', holderRef: 'google', ssoLookupHash: ssoHash, ssoLookupSalt: 'c2FsdA', ...frag(4) },
@@ -112,24 +109,24 @@ function main(): void {
     assert(openCollection(owner, EPH).id !== c.id, 'every session gets its own id');
 
     rejects(() => openCollection(owner, ''),
-        'a session without the recovering device\'s ephemeral key is refused — keepers would have nowhere to send a fragment');
+        'a session without the recovering sso\'s ephemeral key is refused — keepers would have nowhere to send a fragment');
     rejects(() => openCollection(member(), EPH), 'and one for a member who was never split is refused');
     assert(getCollection('not-a-session') === null, 'an unknown id resolves to nothing');
     assert(collectionState('not-a-session') === null, '...and has no state to report');
 
-    // ── 1. the device fragment is never served ────────────────────────────────────────────────
+    // ── 1. the sso fragment is never served ────────────────────────────────────────────────
     console.log('\n── K1 is not the node\'s to give ─────────────────────────');
 
-    assert(!isReleasableType('device'), 'THE RULE: a device fragment is not a releasable type');
+    assert(!isReleasableType('sso'), 'THE RULE: a sso fragment is not a releasable type');
     assert(isReleasableType('hub') && isReleasableType('member') && isReleasableType('sso'),
         '...while hub, member and sign-in are');
     // There is deliberately no releaseDeviceFragment to call. The absence IS the control, so the
     // test asserts the shape of what exists rather than the behaviour of what does not: a future
-    // release path added for 'device' would have to add it to RELEASABLE and fail here first.
-    const deviceRow = db.prepare(`SELECT id FROM recovery_shares
-        WHERE owner_pubkey = ? AND holder_type = 'device'`).get(owner) as { id: number };
-    assert(!!deviceRow, 'the device fragment IS stored (the count must be honest)...');
-    assert(!listReleases(c.id).some(r => r.shareId === deviceRow.id),
+    // release path added for 'sso' would have to add it to RELEASABLE and fail here first.
+    const ssoRow = db.prepare(`SELECT id FROM recovery_shares
+        WHERE owner_pubkey = ? AND holder_type = 'sso'`).get(owner) as { id: number };
+    assert(!!ssoRow, 'the sso fragment IS stored (the count must be honest)...');
+    assert(!listReleases(c.id).some(r => r.shareId === ssoRow.id),
         '...but nothing can put it into a collection');
 
     // ── 2. D6: a human keeper, instantly ──────────────────────────────────────────────────────
@@ -141,7 +138,7 @@ function main(): void {
     rejects(() => releaseMemberFragment(c.id, owner, rewrap('self')),
         'and the account being recovered cannot approve its own recovery');
     rejects(() => releaseMemberFragment(c.id, buddy, { ...rewrap('b'), ephemeralPubkey: '' }),
-        'a fragment that was not re-wrapped to the recovering device is refused');
+        'a fragment that was not re-wrapped to the recovering sso is refused');
     rejects(() => releaseMemberFragment(c.id, '', rewrap('b')), 'an unsigned approval is refused');
     assert(listReleases(c.id).length === 0, 'and none of those refusals released anything');
 
@@ -151,7 +148,7 @@ function main(): void {
     assert(buddyRelease.payload === rewrap('buddy').payload,
         '...carrying the keeper\'s re-wrap, not the stored ciphertext — the node never saw the piece');
     assert(buddyRelease.ephemeralPubkey === rewrap('buddy').ephemeralPubkey,
-        '...with the keeper\'s fresh ephemeral key for the recovering device to unwrap with');
+        '...with the keeper\'s fresh ephemeral key for the recovering sso to unwrap with');
 
     const again = releaseMemberFragment(c.id, buddy, rewrap('SECOND-ATTEMPT'));
     assert(listReleases(c.id).length === 1, 'approving twice does not count as two of the three pieces');
@@ -208,7 +205,7 @@ function main(): void {
     assert(sso.holderType === 'sso' && sso.releasedBy === null,
         'a verified sign-in releases the K4 fragment, with no human named');
     assert(sso.payload === frag(4).encryptedShare,
-        '...as stored ciphertext the device opens with HKDF(sub, salt) — the node never holds that key');
+        '...as stored ciphertext the sso opens with HKDF(sub, salt) — the node never holds that key');
 
     const other = member();
     const otherBuddy = member();
@@ -224,7 +221,7 @@ function main(): void {
     console.log('\n── progress ─────────────────────────────────────────────');
 
     const p = collectionProgress(c.id)!;
-    assert(p.collected === 3 && p.threshold === RECOVERY_THRESHOLD && p.enough === true,
+    assert(p.collected === 3 && p.threshold === 2 && p.enough === true,
         'three released fragments is enough to rebuild the phrase');
     assert(JSON.stringify(p).indexOf(rewrap('buddy').payload) === -1,
         'and progress never contains the fragments themselves — polling is not a way to collect');
@@ -300,21 +297,21 @@ function main(): void {
 
     // The constraint is on the COUNT, not the name. `holder_ref` is decorative for a machine
     // keeper — the schema's vocabulary is "member pubkey | provider name | 'self'" and #214's own
-    // fixtures use 'self' for BOTH device and hub — so pinning a magic string would have broken
+    // fixtures use 'self' for BOTH sso and hub — so pinning a magic string would have broken
     // existing data to enforce a convention nobody agreed. Two hub fragments is the real error.
     const misfiled = member();
     const misfiledBuddy = member();
     assert(putShareGeneration(misfiled, [
-        { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
+        { holderType: 'sso', holderRef: 'self', ...frag(1) },
         { holderType: 'hub', holderRef: 'whatever-the-client-calls-it', ...frag(2) },
         { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
     ]) === 1, 'a hub fragment may be filed under any ref — the name carries no meaning');
 
-    for (const dup of ['hub', 'device'] as const) {
+    for (const dup of ['hub', 'sso'] as const) {
         let refused = false;
         try {
             putShareGeneration(misfiled, [
-                { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
+                { holderType: 'sso', holderRef: 'self', ...frag(1) },
                 { holderType: 'hub', holderRef: 'node', ...frag(2) },
                 { holderType: dup, holderRef: 'a-second-one', ...frag(3) },
                 { holderType: 'member', holderRef: misfiledBuddy, ephemeralPubkey: 'ZXBo', ...frag(4) },
@@ -338,7 +335,7 @@ function main(): void {
 
     // Two hub rows in one generation is permitted by UNIQUE(owner, generation, type, ref) but
     // cannot be resolved. Refusing beats picking: releasing one of two would hand over a piece
-    // whose twin stays behind, and the device would collect fragments that do not fit together.
+    // whose twin stays behind, and the sso would collect fragments that do not fit together.
     const twin = member();
     const twinBuddy = member();
     split(twin, twinBuddy, crypto.randomBytes(32).toString('base64url'));

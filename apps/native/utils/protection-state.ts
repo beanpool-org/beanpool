@@ -52,11 +52,16 @@ export interface Protection {
     showWords: boolean;
 }
 
-/** Human-readable keeper names, for a screen that must not say "K2" to anybody. */
+/**
+ * Human-readable keeper names, for a screen that must not say "K2" to anybody.
+ *
+ * `device` was retired with the two-layer model (docs/recovery-model.md). The hub is always
+ * present in any split but is XOR-mandatory, not a counted keeper — it shows up as "Your
+ * community hub" only when a split exists.
+ */
 export const KEEPER_LABELS: Record<string, string> = {
-    device: "This phone's backup",
     hub: 'Your community hub',
-    member: 'The person who invited you',
+    member: 'A keeper you chose',
     sso: 'Your sign-in account',
 };
 

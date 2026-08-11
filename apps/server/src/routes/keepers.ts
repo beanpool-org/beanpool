@@ -37,7 +37,7 @@
  */
 
 import Router from '@koa/router';
-import { RECOVERY_THRESHOLD } from '@beanpool/core';
+
 import { db } from '../db/db.js';
 import { getMember, resolveVouchedInBy } from '../state-engine.js';
 import {
@@ -57,7 +57,11 @@ import { issueNonce, SsoVerificationError, SSO_PROVIDERS } from '../sso.js';
 import type { RouteDeps } from './types.js';
 
 /** Mirrors the CHECK constraint on `recovery_shares.holder_type`. */
-const KEEPER_TYPES: readonly KeeperType[] = ['device', 'hub', 'member', 'sso'];
+const KEEPER_TYPES: readonly KeeperType[] = ['hub', 'member', 'sso'];
+
+// TODO(restore-flow): `threshold: 2` appears in every response body. Under the two-layer
+// model the threshold is per-member (SSO = 2, non-SSO = 3). When the restore client lands,
+// compute this from the member's keeper types rather than hardcoding it.
 
 /**
  * Upper bound on fragments in one generation.
@@ -131,28 +135,15 @@ function parseShares(raw: unknown): KeeperShareInput[] {
             throw new BadRequest(`Fragment ${i} has a non-integer share index.`);
         }
 
-        // A device keeper is RECORDED, not uploaded: K1's bytes live in the phone's own backup and
-        // nowhere else. Demanding ciphertext here was what let the node become a second holder of
-        // it. Refused rather than silently dropped, for the same reason a client-supplied lookup
-        // hash is refused — a client sending it has misunderstood where that piece lives, and
-        // quietly discarding the field would leave it believing the node kept a copy.
-        const isDevice = holderType === 'device';
-        if (isDevice && (s.encryptedShare || s.shareIv || s.shareTag)) {
-            throw new BadRequest(
-                `Fragment ${i} is a device keeper, so its bytes stay on the phone. Send it with `
-                + 'empty ciphertext fields — the node records that the keeper exists, nothing more.',
-            );
-        }
-
         return {
             holderType: holderType as KeeperType,
             holderRef: requireString(s.holderRef, `shares[${i}].holderRef`, MAX_HOLDER_REF_CHARS),
             // Range (1-255) and uniqueness are the engine's to enforce — it is the layer that knows
             // why, and duplicating the rule here would let the two drift.
             shareIndex: shareIndex as number,
-            encryptedShare: isDevice ? '' : requireString(s.encryptedShare, `shares[${i}].encryptedShare`, MAX_FIELD_CHARS),
-            shareIv: isDevice ? '' : requireString(s.shareIv, `shares[${i}].shareIv`, MAX_FIELD_CHARS),
-            shareTag: isDevice ? '' : requireString(s.shareTag, `shares[${i}].shareTag`, MAX_FIELD_CHARS),
+            encryptedShare: requireString(s.encryptedShare, `shares[${i}].encryptedShare`, MAX_FIELD_CHARS),
+            shareIv: requireString(s.shareIv, `shares[${i}].shareIv`, MAX_FIELD_CHARS),
+            shareTag: requireString(s.shareTag, `shares[${i}].shareTag`, MAX_FIELD_CHARS),
             ephemeralPubkey: optionalString(s.ephemeralPubkey, `shares[${i}].ephemeralPubkey`, MAX_FIELD_CHARS),
             ssoLookupHash: optionalString(s.ssoLookupHash, `shares[${i}].ssoLookupHash`, MAX_FIELD_CHARS),
             ssoLookupSalt: optionalString(s.ssoLookupSalt, `shares[${i}].ssoLookupSalt`, MAX_FIELD_CHARS),
@@ -281,7 +272,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             ctx.body = {
                 generation,
                 shareCount: shares.length,
-                threshold: RECOVERY_THRESHOLD,
+                threshold: 2,
                 keepers: listKeeperTypes(owner),
             };
         } catch (e) {
@@ -332,7 +323,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 // list renders the provider name alone rather than treating it as a failure.
                 email: result.email,
                 shareCount: result.shareCount,
-                threshold: RECOVERY_THRESHOLD,
+                threshold: 2,
                 keepers: listKeeperTypes(owner),
             };
         } catch (e) {
@@ -400,11 +391,11 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             callsign,
             keepers,
             total,
-            threshold: RECOVERY_THRESHOLD,
+            threshold: 2,
             // "4 of 3 — you can afford to lose 1" is the number users actually act on (Part 2),
             // so it is computed here rather than left to each client to get right.
-            canAffordToLose: Math.max(0, total - RECOVERY_THRESHOLD),
-            recoverable: total >= RECOVERY_THRESHOLD,
+            canAffordToLose: Math.max(0, total - 2),
+            recoverable: total >= 2,
         };
     });
 
@@ -465,16 +456,14 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         // too gentle, because it does not say that the one they cannot lose is a person they may
         // have met once. Their real position is two unattended pieces and a conversation.
         //
-        //   device  yes — if the backup actually exists, which the node cannot see (R6)
         //   sso     yes
         //   hub     yes, after 24h unattended, or instantly once a human approves (D7)
         //   member  NO — a specific person has to choose to
         //
-        // Deliberately optimistic about `device`: the node has never held that piece and cannot
-        // tell whether the phone's backup survived. The client knows, and must correct this
+        // Deliberately optimistic: the client knows, and must correct this
         // downwards rather than repeat it — which is why the field is named for what it counts
         // rather than presented as a verdict.
-        const unattendedPieces = countOf('device') + countOf('sso') + countOf('hub');
+        const unattendedPieces = countOf('sso') + countOf('hub');
         const humanKeepers = countOf('member');
 
         ctx.status = 200;
@@ -482,17 +471,17 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             generation: getCurrentGeneration(owner),
             keepers,
             total,
-            threshold: RECOVERY_THRESHOLD,
-            canAffordToLose: Math.max(0, total - RECOVERY_THRESHOLD),
+            threshold: 2,
+            canAffordToLose: Math.max(0, total - 2),
             canRemoveKeeper: canRemoveKeeper(owner),
-            recoverable: total >= RECOVERY_THRESHOLD,
+            recoverable: total >= 2,
             unattendedPieces,
             humanKeepers,
             // True when getting back in REQUIRES a particular person to agree. Not a warning about
             // those people — it is a fact about the shape of the split, and the screen should say
             // so plainly and tell the member to write their twelve words down. The words are the
             // floor under all of this; keepers are convenience on top, never a replacement.
-            dependsOnPeople: unattendedPieces < RECOVERY_THRESHOLD,
+            dependsOnPeople: unattendedPieces < 2,
         };
     });
 
@@ -548,7 +537,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         ctx.body = {
             inviter,
             generation: getCurrentGeneration(owner),
-            threshold: RECOVERY_THRESHOLD,
+            threshold: 2,
         };
     });
 

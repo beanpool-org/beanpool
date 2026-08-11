@@ -9,11 +9,13 @@ const result = (over: Partial<KeeperEnrolmentResult> = {}): KeeperEnrolmentResul
 
 describe('a member who is covered', () => {
     it('reports the state and who is holding a piece', () => {
-        const p = protectionFrom(result({ enrolled: ['device', 'hub', 'member'], generation: 1, available: 3 }));
+        // Under the two-layer model: hub + sso + member is a valid covered state.
+        // The hub is XOR-mandatory (A), and the other keepers hold B.
+        const p = protectionFrom(result({ enrolled: ['hub', 'sso', 'member'], generation: 1, available: 3 }));
         expect(p.state).toBe('covered');
         expect(p.stillNeeded).toBe(0);
         expect(p.holding).toEqual([
-            KEEPER_LABELS.device, KEEPER_LABELS.hub, KEEPER_LABELS.member,
+            KEEPER_LABELS.hub, KEEPER_LABELS.sso, KEEPER_LABELS.member,
         ]);
     });
 
@@ -21,9 +23,8 @@ describe('a member who is covered', () => {
         // The doc's State A hides them and offers "want a spare?" instead. That offer does not
         // exist: the sign-in keeper needs a flow nobody has built and neither does add-a-friend,
         // so a member at exactly three is stuck there. Hiding the words would offer them nothing
-        // and take away the only thing that helps. Worst for the people this project is built
-        // for — the automatic fourth keeper is sign-in, and many of them have no such account.
-        const p = protectionFrom(result({ enrolled: ['device', 'hub', 'member'], available: 3 }));
+        // and take away the only thing that helps.
+        const p = protectionFrom(result({ enrolled: ['hub', 'sso', 'member'], available: 3 }));
         expect(p.state).toBe('covered');
         expect(p.spare).toBe(0);
         expect(p.showWords).toBe(true);
@@ -31,17 +32,15 @@ describe('a member who is covered', () => {
 
     it('tucks the words behind a tap once a keeper could actually go missing', () => {
         // With slack, "one of these could fail" stops being the member's problem to solve today.
-        // Four keepers means the inviter plus one friend — NOT sign-in, which `enrolKeepers`
-        // has no way to produce, so this state is unreachable until the add-a-friend flow lands.
-        const p = protectionFrom(result({ enrolled: ['device', 'hub', 'member', 'member'], available: 4 }));
+        const p = protectionFrom(result({ enrolled: ['hub', 'sso', 'member', 'member'], available: 4 }));
         expect(p.spare).toBe(1);
         expect(p.showWords).toBe(false);
     });
 
-    it('never says "K2" or "device" to a person', () => {
-        const p = protectionFrom(result({ enrolled: ['device', 'hub', 'member', 'member'], available: 4 }));
+    it('never says "K2" or raw keeper type to a person', () => {
+        const p = protectionFrom(result({ enrolled: ['hub', 'sso', 'member', 'member'], available: 4 }));
         for (const label of p.holding) {
-            expect(label).not.toMatch(/^(device|hub|member|sso)$/);
+            expect(label).not.toMatch(/^(hub|member|sso)$/);
             expect(label).not.toMatch(/K[1-5]/);
         }
     });
@@ -49,9 +48,8 @@ describe('a member who is covered', () => {
 
 describe('a member who is one keeper short', () => {
     it('is "almost", and is NOT shown anyone as holding a piece', () => {
-        // The doc's State B mock ticks two keepers ✅. Nothing is holding anything — below the
-        // threshold nothing is split at all — so ticking them would claim a protection that does
-        // not exist, which is the one thing this screen must never do.
+        // Below the threshold nothing is split at all, so ticking keepers would claim a
+        // protection that does not exist.
         const p = protectionFrom(result({ available: RECOVERY_THRESHOLD - 1 }));
         expect(p.state).toBe('almost');
         expect(p.holding).toEqual([]);
@@ -68,15 +66,12 @@ describe('a member whose words are the way back', () => {
     });
 
     it('does not call two-short "almost"', () => {
-        // Two short is not "almost" in any sense a member would recognise. Calling it that
-        // would be the same overclaiming in a quieter voice.
+        // Two short is not "almost" in any sense a member would recognise.
         expect(protectionFrom(result({ available: 1 })).state).toBe('words-only');
     });
 
     it('shows the words while enrolment has not answered yet', () => {
-        // Not a spinner state. If the result never arrives — dead node, hung request — the
-        // screen still has to say something true, and the words are true in every case. Nobody
-        // should sit in front of a screen waiting to learn whether they are safe.
+        // Not a spinner state. If the result never arrives, the words are true in every case.
         const p = protectionFrom(null);
         expect(p.state).toBe('words-only');
         expect(p.showWords).toBe(true);
@@ -84,9 +79,8 @@ describe('a member whose words are the way back', () => {
 
     it('degrades a partial enrolment to honest rather than trusting it', () => {
         // Unreachable today — enrolment writes nothing below the threshold — but a partial
-        // result reported as "covered" is the precise failure this whole model exists to
-        // prevent, so it is not left resting on an invariant held in another file.
-        const p = protectionFrom(result({ enrolled: ['device', 'hub'], generation: 1, available: 3 }));
+        // result reported as "covered" is the precise failure this model exists to prevent.
+        const p = protectionFrom(result({ enrolled: ['hub', 'sso'], generation: 1, available: 3 }));
         expect(p.state).not.toBe('covered');
         expect(p.state).toBe('words-only');
         expect(p.stillNeeded).toBe(1);
@@ -96,7 +90,7 @@ describe('a member whose words are the way back', () => {
 describe('the rule that outranks the others', () => {
     it.each([
         ['nothing enrolled', result({ available: 2 })],
-        ['a partial enrolment', result({ enrolled: ['device', 'hub'], available: 3 })],
+        ['a partial enrolment', result({ enrolled: ['hub', 'sso'], available: 3 })],
         ['no result at all', null],
         ['an outright failure', result({ available: 0, error: 'no node configured yet' })],
     ])('never claims cover from %s', (_label, input) => {
@@ -107,5 +101,17 @@ describe('the rule that outranks the others', () => {
         expect(p.holding.length).toBeLessThan(RECOVERY_THRESHOLD);
         expect(p.showWords).toBe(true);
         expect(p.spare).toBe(0);
+    });
+});
+
+describe('KEEPER_LABELS', () => {
+    it('does not include device — retired with the two-layer model', () => {
+        expect(KEEPER_LABELS).not.toHaveProperty('device');
+    });
+
+    it('includes hub, member, and sso', () => {
+        expect(KEEPER_LABELS).toHaveProperty('hub');
+        expect(KEEPER_LABELS).toHaveProperty('member');
+        expect(KEEPER_LABELS).toHaveProperty('sso');
     });
 });

@@ -2,7 +2,7 @@
  * The recovery collection routes — who may drive a session, and what falls out of it.
  *
  * engine/recovery-release.ts already proves D6, D7 and the K1 refusal. What is new here is that a
- * device with NO identity can drive the flow at all, and the property that replaced the bearer
+ * sso with NO identity can drive the flow at all, and the property that replaced the bearer
  * token the engine was drafted around:
  *
  *   THE SESSION IS OWNED BY A KEY, NOT BY ITS ID. Every request is checked against
@@ -63,7 +63,7 @@ function member(): { pubkey: string; callsign: string } {
     return { pubkey, callsign };
 }
 
-/** A device with no identity at all — just a freshly minted keypair, which anybody can make. */
+/** A sso with no identity at all — just a freshly minted keypair, which anybody can make. */
 const ephemeral = (): string => crypto.randomBytes(32).toString('hex');
 
 const frag = (i: number) => ({
@@ -72,7 +72,7 @@ const frag = (i: number) => ({
     shareIv: Buffer.from(`iv-${i}`).toString('base64'),
     shareTag: Buffer.from(`tag-${i}`).toString('base64'),
 });
-const deviceFrag = (i: number) => ({ shareIndex: i, encryptedShare: '', shareIv: '', shareTag: '' });
+const ssoFrag = (i: number) => ({ shareIndex: i, encryptedShare: '', shareIv: '', shareTag: '' });
 
 const rewrap = (label: string) => ({
     payload: Buffer.from(`rw-${label}`).toString('base64'),
@@ -84,7 +84,7 @@ const rewrap = (label: string) => ({
 const SSO_HASH_SALT = 'c2FsdA';
 function split(owner: string, buddy: string, ssoHash?: string): number {
     const shares: KeeperShareInput[] = [
-        { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
+        { holderType: 'sso', holderRef: 'self', ...ssoFrag(1) },
         { holderType: 'hub', holderRef: 'node', ...frag(2) },
         { holderType: 'member', holderRef: buddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
     ];
@@ -106,19 +106,19 @@ async function main(): Promise<void> {
     // ── opening ───────────────────────────────────────────────────────────────────────────────
     console.log('── opening a session ────────────────────────────────────');
 
-    const device = ephemeral();
-    const opened = await call('/api/recovery/collect', device, { callsign: owner.callsign });
+    const sso = ephemeral();
+    const opened = await call('/api/recovery/collect', sso, { callsign: owner.callsign });
     assert(opened.status === 200 && typeof opened.body.collectionId === 'string',
-        'a device with NO identity can open a collection — it only has to sign');
+        'a sso with NO identity can open a collection — it only has to sign');
     assert(opened.body.generation === 1 && opened.body.threshold === 3,
         '...pinned to the generation it is collecting');
     const cid = opened.body.collectionId as string;
 
     assert((await call('/api/recovery/collect', undefined, { callsign: owner.callsign })).status === 401,
         'but an UNSIGNED open is refused — there would be nobody to bind the session to');
-    assert((await call('/api/recovery/collect', device, {})).status === 400,
+    assert((await call('/api/recovery/collect', sso, {})).status === 400,
         'and one without a callsign is refused');
-    assert((await call('/api/recovery/collect', device, { callsign: 'nobody-here' })).status === 400,
+    assert((await call('/api/recovery/collect', sso, { callsign: 'nobody-here' })).status === 400,
         'an unknown callsign gets the same answer as a member with no split — no sharper an oracle');
 
     // ── THE PROPERTY: the id is not a credential ──────────────────────────────────────────────
@@ -132,12 +132,12 @@ async function main(): Promise<void> {
     }
     assert((await call('/api/recovery/collect/status', undefined, { collectionId: cid })).status === 404,
         '...and neither is knowing it with no signature at all');
-    assert((await call('/api/recovery/collect/status', device, { collectionId: 'made-up' })).status === 404,
+    assert((await call('/api/recovery/collect/status', sso, { collectionId: 'made-up' })).status === 404,
         'a made-up id and somebody else\'s id are indistinguishable — no existence oracle');
 
-    const mine = await call('/api/recovery/collect/status', device, { collectionId: cid });
+    const mine = await call('/api/recovery/collect/status', sso, { collectionId: cid });
     assert(mine.status === 200 && mine.body.collected === 0,
-        '...while the device that opened it can read its own progress');
+        '...while the sso that opened it can read its own progress');
 
     // ── D6 through the route ──────────────────────────────────────────────────────────────────
     console.log('\n── a keeper approves ────────────────────────────────────');
@@ -160,8 +160,8 @@ async function main(): Promise<void> {
         'a keeper can see WHOSE account is being recovered...');
     assert(context.body.fragment.encryptedShare === frag(3).encryptedShare,
         '...and gets their own wrapped fragment to unwrap');
-    assert(context.body.recipientEphemeralPubkey === device,
-        '...and the key to re-wrap it to, which is the device that opened the session');
+    assert(context.body.recipientEphemeralPubkey === sso,
+        '...and the key to re-wrap it to, which is the sso that opened the session');
     assert((await call('/api/recovery/approve-keeper/context', outsider.pubkey,
         { collectionId: cid })).status === 404,
         '...while a non-keeper is told nothing about the session at all');
@@ -174,11 +174,11 @@ async function main(): Promise<void> {
     // ── fragments come from releases, never from polling ──────────────────────────────────────
     console.log('\n── fragments ────────────────────────────────────────────');
 
-    const status = await call('/api/recovery/collect/status', device, { collectionId: cid });
+    const status = await call('/api/recovery/collect/status', sso, { collectionId: cid });
     assert(!JSON.stringify(status.body).includes(rewrap('buddy').payload),
         'polling status never returns the fragments themselves');
 
-    const frags = await call('/api/recovery/collect/fragments', device, { collectionId: cid });
+    const frags = await call('/api/recovery/collect/fragments', sso, { collectionId: cid });
     assert(frags.status === 200 && frags.body.fragments.length === 1,
         'asking for the fragments returns what was actually released');
     assert(frags.body.fragments[0].payload === rewrap('buddy').payload,
@@ -188,7 +188,7 @@ async function main(): Promise<void> {
     // ── D7 through the route ──────────────────────────────────────────────────────────────────
     console.log('\n── the hub (D7) ─────────────────────────────────────────');
 
-    const hubNow = await call('/api/recovery/collect/hub', device, { collectionId: cid });
+    const hubNow = await call('/api/recovery/collect/hub', sso, { collectionId: cid });
     assert(hubNow.status === 200 && hubNow.body.collected === 2,
         'with a human already approved, the hub releases immediately');
 
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
 
     const nonceRes = await call('/api/recovery/collect/sso-nonce', ssoDevice, { collectionId: ssoId });
     assert(nonceRes.status === 200 && typeof nonceRes.body.nonce === 'string',
-        'the recovering device gets a sign-in nonce bound to its OWN ephemeral key');
+        'the recovering sso gets a sign-in nonce bound to its OWN ephemeral key');
     assert((await call('/api/recovery/collect/sso-nonce', thief, { collectionId: ssoId })).status === 404,
         '...and nobody else can get one for that session');
 
@@ -251,17 +251,17 @@ async function main(): Promise<void> {
     assert(cancelled.status === 200 && cancelled.body.cancelled === true,
         'but the account owner can — the one person who does not have the session id');
 
-    assert((await call('/api/recovery/collect/hub', device, { collectionId: cid })).status === 400,
+    assert((await call('/api/recovery/collect/hub', sso, { collectionId: cid })).status === 400,
         '...and the cancelled session can release nothing more');
-    const deadStatus = await call('/api/recovery/collect/status', device, { collectionId: cid });
+    const deadStatus = await call('/api/recovery/collect/status', sso, { collectionId: cid });
     assert(deadStatus.body.live === false && deadStatus.body.reason === 'cancelled',
         '...and reports itself cancelled rather than silently stalling');
     assert(deadStatus.body.hubEligibleAt === null,
         '...with no hub countdown to wait on');
 
-    // The fragments it already collected stay readable — the device may still be mid-rebuild, and
+    // The fragments it already collected stay readable — the sso may still be mid-rebuild, and
     // taking them back would not un-release them anyway.
-    const afterCancel = await call('/api/recovery/collect/fragments', device, { collectionId: cid });
+    const afterCancel = await call('/api/recovery/collect/fragments', sso, { collectionId: cid });
     assert(afterCancel.status === 200 && afterCancel.body.fragments.length === 2,
         'what was already released stays readable — cancelling stops the future, not the past');
 

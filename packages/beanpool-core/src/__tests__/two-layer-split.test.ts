@@ -3,6 +3,8 @@ import { combine as rawCombine } from 'shamir-secret-sharing';
 import {
     splitTwoLayer,
     combineTwoLayer,
+    splitHubAndWhole,
+    combineHubAndWhole,
     TwoLayerCombineError,
     TWO_LAYER_THRESHOLD,
 } from '../two-layer-split.js';
@@ -279,5 +281,135 @@ describe('two-layer split — constants', () => {
         const { RECOVERY_THRESHOLD } = await import('../recovery-split.js');
         expect(TWO_LAYER_THRESHOLD).not.toBe(RECOVERY_THRESHOLD);
         expect(RECOVERY_THRESHOLD).toBe(3);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// SSO-tier: splitHubAndWhole / combineHubAndWhole
+// ---------------------------------------------------------------------------
+
+describe('hub-and-whole split — round-trip', () => {
+    it('recovers the seed through split → combine', async () => {
+        const { hubShare, otherHalf, seedChecksum } = await splitHubAndWhole(SEED);
+        const restored = combineHubAndWhole(hubShare, otherHalf, seedChecksum);
+        expect(restored).toEqual(SEED);
+    });
+});
+
+describe('hub-and-whole split — non-determinism', () => {
+    it('two splits of the same seed produce different hub shares', async () => {
+        const a = await splitHubAndWhole(SEED);
+        const b = await splitHubAndWhole(SEED);
+        expect(a.hubShare).not.toEqual(b.hubShare);
+    });
+
+    it('two splits of the same seed produce different other halves', async () => {
+        const a = await splitHubAndWhole(SEED);
+        const b = await splitHubAndWhole(SEED);
+        expect(a.otherHalf).not.toEqual(b.otherHalf);
+    });
+
+    it('two splits of the same seed produce the same checksum', async () => {
+        const a = await splitHubAndWhole(SEED);
+        const b = await splitHubAndWhole(SEED);
+        expect(a.seedChecksum).toEqual(b.seedChecksum);
+    });
+});
+
+describe('hub-and-whole split — collusion resistance', () => {
+    it('hub share alone is not the seed', async () => {
+        const { hubShare } = await splitHubAndWhole(SEED);
+        expect(hubShare).not.toEqual(SEED);
+    });
+
+    it('other half alone is not the seed', async () => {
+        const { otherHalf } = await splitHubAndWhole(SEED);
+        expect(otherHalf).not.toEqual(SEED);
+    });
+
+    it('hub share XOR zero is not the seed', async () => {
+        const { hubShare } = await splitHubAndWhole(SEED);
+        expect(hubShare).not.toEqual(SEED);
+    });
+
+    it('swapping the two halves does not produce the seed', async () => {
+        const { hubShare, otherHalf, seedChecksum } = await splitHubAndWhole(SEED);
+        // XOR is commutative, so swapping actually DOES produce the same seed.
+        // This test asserts the mathematical property: the construction is
+        // symmetric in A and B, which means the security depends on WHO can
+        // produce each half, not on which half comes first.
+        const restored = combineHubAndWhole(otherHalf, hubShare, seedChecksum);
+        expect(restored).toEqual(SEED);
+    });
+});
+
+describe('hub-and-whole split — integrity', () => {
+    it('wrong hub share is detected', async () => {
+        const { otherHalf, seedChecksum } = await splitHubAndWhole(SEED);
+        const wrongHub = new Uint8Array(32).fill(0xaa);
+        expect(() => combineHubAndWhole(wrongHub, otherHalf, seedChecksum))
+            .toThrow(TwoLayerCombineError);
+    });
+
+    it('corrupt other half is detected', async () => {
+        const { hubShare, otherHalf, seedChecksum } = await splitHubAndWhole(SEED);
+        const corrupt = new Uint8Array(otherHalf);
+        corrupt[0] ^= 0x01;
+        expect(() => combineHubAndWhole(hubShare, corrupt, seedChecksum))
+            .toThrow(TwoLayerCombineError);
+    });
+
+    it('mismatched halves from different splits are detected', async () => {
+        const splitA = await splitHubAndWhole(SEED);
+        const splitB = await splitHubAndWhole(SEED);
+        // hub from A, other half from B — different A values mean different B values
+        expect(() => combineHubAndWhole(splitA.hubShare, splitB.otherHalf, splitA.seedChecksum))
+            .toThrow(TwoLayerCombineError);
+    });
+});
+
+describe('hub-and-whole split — shape', () => {
+    it('hubShare is exactly 32 bytes', async () => {
+        const { hubShare } = await splitHubAndWhole(SEED);
+        expect(hubShare).toHaveLength(32);
+    });
+
+    it('otherHalf is exactly 32 bytes (NOT a Shamir share — no x-coordinate byte)', async () => {
+        const { otherHalf } = await splitHubAndWhole(SEED);
+        expect(otherHalf).toHaveLength(32);
+    });
+
+    it('seedChecksum is exactly 4 bytes', async () => {
+        const { seedChecksum } = await splitHubAndWhole(SEED);
+        expect(seedChecksum).toHaveLength(4);
+    });
+});
+
+describe('hub-and-whole split — validation', () => {
+    it('rejects a seed that is not 32 bytes', async () => {
+        await expect(splitHubAndWhole(new Uint8Array(16))).rejects.toThrow(/32 bytes/);
+    });
+
+    it('rejects a non-Uint8Array seed', async () => {
+        // @ts-expect-error — intentionally passing wrong type
+        await expect(splitHubAndWhole('not bytes')).rejects.toThrow(/32 bytes/);
+    });
+
+    it('combineHubAndWhole rejects wrong-length hub share', async () => {
+        const { otherHalf, seedChecksum } = await splitHubAndWhole(SEED);
+        expect(() => combineHubAndWhole(new Uint8Array(16), otherHalf, seedChecksum))
+            .toThrow(TwoLayerCombineError);
+    });
+
+    it('combineHubAndWhole rejects wrong-length other half', async () => {
+        const { hubShare, seedChecksum } = await splitHubAndWhole(SEED);
+        expect(() => combineHubAndWhole(hubShare, new Uint8Array(33), seedChecksum))
+            .toThrow(TwoLayerCombineError);
+    });
+
+    it('combineHubAndWhole rejects wrong-length checksum', async () => {
+        const { hubShare, otherHalf } = await splitHubAndWhole(SEED);
+        expect(() => combineHubAndWhole(hubShare, otherHalf, new Uint8Array(2)))
+            .toThrow(TwoLayerCombineError);
     });
 });

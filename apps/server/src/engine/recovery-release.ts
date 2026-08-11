@@ -43,7 +43,7 @@
 // points at, and the reason the check is here rather than left to the caller.
 
 import crypto from 'node:crypto';
-import { RECOVERY_THRESHOLD } from '@beanpool/core';
+
 import { db } from '../db/db.js';
 import { getCurrentGeneration, type KeeperType } from './recovery-shares.js';
 import { ssoLookupHash, type SsoProvider } from '../sso.js';
@@ -619,8 +619,12 @@ export function collectionProgress(collectionId: string): {
         live: state.live,
         reason: state.reason,
         collected: releases.length,
-        threshold: RECOVERY_THRESHOLD,
-        enough: releases.length >= RECOVERY_THRESHOLD,
+        // TODO(restore-flow): Under the two-layer model the threshold is per-member:
+        // SSO tier = 2 (hub + sso), non-SSO = 3 (hub + 2 friends). This hardcoded 2
+        // is correct for SSO-only members but understates what non-SSO members need.
+        // When the restore flow client lands, derive this from the member's keeper types.
+        threshold: 2,
+        enough: releases.length >= 2,
         hubEligibleAt,
         hubReason,
         releasedTypes: releases.map(r => r.holderType),

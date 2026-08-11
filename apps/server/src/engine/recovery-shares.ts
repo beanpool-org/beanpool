@@ -20,11 +20,11 @@
 // unlikely: a member can never be left holding fewer fragments than the threshold, and a
 // stale fragment can never be combined with fresh ones.
 
-import { RECOVERY_THRESHOLD } from '@beanpool/core';
+
 import { db } from '../db/db.js';
 
 /** Who holds a fragment. Mirrors the CHECK constraint on `recovery_shares.holder_type`. */
-export type KeeperType = 'device' | 'hub' | 'member' | 'sso';
+export type KeeperType = 'hub' | 'member' | 'sso';
 
 /** One fragment as the client uploads it, already encrypted to its keeper. */
 export interface KeeperShareInput {
@@ -108,11 +108,11 @@ export function getCurrentGeneration(ownerPubkey: string): number {
  * @throws {RecoveryShareError} if the batch could not be recombined by its own owner
  */
 export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput[]): number {
-    if (!Array.isArray(shares) || shares.length < RECOVERY_THRESHOLD) {
+    if (!Array.isArray(shares) || shares.length < 2) {
         // Accepting this would store a set that can never be recombined — a silent, total loss
         // that only surfaces when the member actually needs to recover.
         throw new RecoveryShareError(
-            `A recovery split needs at least ${RECOVERY_THRESHOLD} fragments, got ${shares?.length ?? 0}.`
+            `A recovery split needs at least 2 fragments, got ${shares?.length ?? 0}.`
         );
     }
 
@@ -122,7 +122,7 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
      * Review raised that `'Member'` or a stray type could slip past the human-keeper count and
      * reopen R1. It cannot, and it could not before this existed: the route rejects anything
      * outside this list, and `recovery_shares` carries
-     * `CHECK (holder_type IN ('device','hub','member','sso'))`, so the database refuses it too.
+     * `CHECK (holder_type IN ('hub','member','sso'))`, so the database refuses it too.
      * What this adds is a sentence instead of `SQLITE_CONSTRAINT_CHECK`, raised before the
      * transaction opens rather than inside it.
      *
@@ -132,34 +132,10 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
      * a predicate that means one thing in one place and another elsewhere, which this codebase
      * has already been bitten by once.
      */
-    const KNOWN_TYPES = new Set<KeeperType>(['device', 'hub', 'member', 'sso']);
+    const KNOWN_TYPES = new Set<KeeperType>(['hub', 'member', 'sso']);
 
     /** Keeper types there can only be one of. A member has many buddies but one phone and one hub. */
-    const SINGLETON_TYPES = new Set<KeeperType>(['hub', 'device']);
-
-    /**
-     * At most two keepers may be people. This is what closes R1.
-     *
-     * R1 — "three colluding human keepers take an account" — was in the risk register as High and
-     * **Accepted**, on the grounds that no server rule could reach it: keepers must decrypt to
-     * approve, so the node cannot tell a genuine release from a conspiracy. That reasoning is
-     * still correct, and it is also beside the point. Three people cannot collude to reach the
-     * threshold if a member can never have three human keepers in the first place. The rule that
-     * was unreachable at release time is trivial at deposit time.
-     *
-     * The cost is real and worth stating: a member cannot hand pieces to four friends. Two is
-     * already what the model aims at — the doc's own nudge fires at "<2 human keepers" — so this
-     * makes the target a ceiling rather than introducing a new number. What it forbids is the
-     * arrangement where every piece is a person, which is also the arrangement where recovery
-     * depends entirely on other people answering their phones.
-     *
-     * What it does NOT close, stated plainly so nobody reads more into it than it does: the node
-     * holds K2 in the clear and can derive K3's key from a subject claim it may well know, so a
-     * dishonest node plus ONE human keeper is still three pieces. That residual predates this
-     * rule and is unchanged by it. The margin is one human keeper either way — this rule stops
-     * the humans alone from being enough.
-     */
-    const MAX_HUMAN_KEEPERS = 2;
+    const SINGLETON_TYPES = new Set<KeeperType>(['hub']);
 
     const holders = new Set<string>();
     const indices = new Set<number>();
@@ -195,7 +171,7 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
 
         // Machine keepers are SINGLETONS (CR on #224).
         //
-        // There is one phone and one hub per split, so `hub` and `device` may appear at most once
+        // There is one hub per split, so `hub` may appear at most once
         // in a generation. The UNIQUE constraint does not say this: it is on (owner, generation,
         // holder_type, holder_ref), so two hub fragments under different refs are perfectly legal
         // to it, and the release path — which asks for "the" hub fragment — then cannot resolve
@@ -217,27 +193,6 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
             }
             singletons.set(s.holderType, s.holderRef);
         }
-
-        // K1 NEVER LEAVES THE PHONE. The node records that a device keeper EXISTS — so "4 of 3,
-        // you can afford to lose 1" stays honest — and stores none of its bytes.
-        //
-        // ONBOARDING has always said so: K1's "piece stored" is "an ordinary file in the app's
-        // backed-up directory", where K2's is "on the node". Accepting ciphertext for every keeper
-        // type let the node quietly become a second holder of K1, and that is not a small
-        // difference. The K1 file carries no user secret and no hardware key by design — it has to
-        // survive the phone dying, so nothing device-bound can lock it — which means the node's
-        // copy would be a piece anyone reading the database could simply use.
-        //
-        // Count what a fully compromised node (database AND environment) could then assemble:
-        // K1 outright, plus K2 which it wraps with its own env key. Two of the three needed, from
-        // one break-in, with no human involved. Holding nothing of K1 puts it back to one.
-        if (s.holderType === 'device' && (s.encryptedShare || s.shareIv || s.shareTag)) {
-            throw new RecoveryShareError(
-                'A device fragment is recorded, never uploaded — its bytes live in the phone\'s own '
-                + 'backup and nowhere else. Send the keeper with empty ciphertext fields.',
-            );
-        }
-
         if (s.holderType === 'sso' && !s.ssoLookupHash) {
             throw new RecoveryShareError('A sign-in fragment needs an sso_lookup_hash to be findable.');
         }
@@ -248,18 +203,8 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         }
     }
 
-    // Checked after the loop rather than inside it, so the message can report the real number a
-    // client tried to store instead of whichever fragment happened to tip it over.
-    const humanKeepers = shares.filter(s => s.holderType === 'member').length;
-    if (humanKeepers > MAX_HUMAN_KEEPERS) {
-        throw new RecoveryShareError(
-            `A split may have at most ${MAX_HUMAN_KEEPERS} human keepers, and this one has `
-            + `${humanKeepers}. Three people who each hold a piece are three people who could `
-            + `agree to take the account, and nothing at release time can tell that apart from a `
-            + `genuine recovery. At least one piece must be held by this phone, this node, or a `
-            + `sign-in account.`,
-        );
-    }
+    // MAX_HUMAN_KEEPERS logic was removed here: retired with the two-layer model; see docs/recovery-model.md.
+    // The structural guarantee is now provided by the two-layer A⊕B shape rather than a share-count cap.
 
     const insert = db.prepare(`
         INSERT INTO recovery_shares (
@@ -407,7 +352,7 @@ export function findShareBySsoLookup(ssoLookupHash: string): StoredKeeperShare |
  * so the caller can refuse the request before the user believes it worked.
  */
 export function canRemoveKeeper(ownerPubkey: string): boolean {
-    return countCurrentShares(ownerPubkey) > RECOVERY_THRESHOLD;
+    return countCurrentShares(ownerPubkey) > 2;
 }
 
 /**

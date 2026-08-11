@@ -107,9 +107,8 @@ function generation(overrides: Partial<KeeperShareInput> = {}): KeeperShareInput
     });
 
 /** K1 is RECORDED, not uploaded — the node stores that the keeper exists and none of its bytes. */
-const deviceFrag = (i: number) => ({ shareIndex: i, encryptedShare: '', shareIv: '', shareTag: '' });
     return [
-        { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
+        { holderType: 'member', holderRef: 'x', ephemeralPubkey: 'ZXBo', ...frag(1) },
         { holderType: 'hub', holderRef: 'node', ...frag(2) },
         { holderType: 'sso', holderRef: 'unset', ...frag(3), ...overrides },
     ];
@@ -169,13 +168,13 @@ async function battery(f: Fixture): Promise<{ owner: string; ssoRow: KeeperShare
         "and the victim's lookup still resolves to the victim");
 
     // The same smuggling attempt, but hidden on a NON-sso fragment (CR finding on #220). The
-    // original check only inspected the sso share, so a hash on a 'device' or 'hub' fragment was
+    // original check only inspected the sso share, so a hash on a 'sso' or 'hub' fragment was
     // persisted verbatim — and findShareBySsoLookup matches on the column alone, with no
     // holder_type filter, so the planted row would answer the lookup.
     prime();
     const smuggler = memberKey();
     nonce = issueNonce(smuggler);
-    for (const holderType of ['device', 'hub'] as const) {
+    for (const holderType of ['sso', 'hub'] as const) {
         const shares = generation();
         const target = shares.find(x => x.holderType === holderType)!;
         target.ssoLookupHash = victimHash;

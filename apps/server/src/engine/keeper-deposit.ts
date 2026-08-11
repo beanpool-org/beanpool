@@ -134,7 +134,7 @@ export async function depositSsoKeeperGeneration(
 
     // Refused, not ignored, and checked across EVERY fragment rather than just the sso one (CR).
     // Only inspecting `ssoShare` left the invariant enforced on one row out of three: a hash set on
-    // a 'device' or 'hub' fragment sailed through and was persisted verbatim. That matters because
+    // a 'hub' fragment sailed through and was persisted verbatim. That matters because
     // findShareBySsoLookup matches on `sso_lookup_hash` alone with NO holder_type filter, so a
     // planted row is returned as the match — the column, not the keeper type, is what a restore
     // resolves. Whether that is reachable today depends on a restore flow which does not exist yet,

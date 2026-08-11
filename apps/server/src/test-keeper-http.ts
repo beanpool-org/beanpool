@@ -80,11 +80,7 @@ const frag = (i: number) => ({
     shareTag: Buffer.from(`tag-${i}`).toString('base64'),
 });
 
-/** K1 is RECORDED, not uploaded — the node stores that the keeper exists and none of its bytes. */
-const deviceFrag = (i: number) => ({ shareIndex: i, encryptedShare: '', shareIv: '', shareTag: '' });
-
 const GENERATION = [
-    { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
     { holderType: 'hub', holderRef: 'node', ...frag(2) },
     { holderType: 'member', holderRef: 'b'.repeat(64), ephemeralPubkey: 'ZXBoZW1lcmFs', ...frag(3) },
 ];
@@ -106,7 +102,7 @@ async function main(): Promise<void> {
     assert(deposit.status !== 404, 'POST /api/recovery/shares is mounted (not a 404)');
     assert(deposit.status === 200,
         `a signed deposit succeeds through the real middleware (got ${deposit.status} ${deposit.body?.error ?? ''})`);
-    assert(deposit.body?.generation === 1 && deposit.body?.shareCount === 3,
+    assert(deposit.body?.generation === 1 && deposit.body?.shareCount === 2,
         '...and the handler saw an actor it could file the fragments under');
 
     // ── 2. the middleware refuses before the handler ──────────────────────────────────────────
@@ -122,13 +118,13 @@ async function main(): Promise<void> {
         '...and refuses an unsigned caller');
 
     const status = await signedFetch('POST', '/api/recovery/shares/status', {});
-    assert(status.status === 200 && status.body?.total === 3,
+    assert(status.status === 200 && status.body?.total === 2,
         'POST /api/recovery/shares/status is mounted and answers for the signer');
 
     // DELETE carries a body, which is the part most likely to be dropped in transit — the
     // middleware only parses one for POST/PUT/DELETE with a JSON content-type.
     const noConfirm = await signedFetch('DELETE', '/api/recovery/shares', {});
-    assert(noConfirm.status === 400 && noConfirm.body?.currentShareCount === 3,
+    assert(noConfirm.status === 400 && noConfirm.body?.currentShareCount === 2,
         'DELETE /api/recovery/shares is mounted and reads its confirmation body');
 
     // ── 3. the public read, which is the whole point of the allowlist entry ───────────────────
@@ -136,7 +132,7 @@ async function main(): Promise<void> {
     const publicBody = await publicRes.json().catch(() => undefined) as any;
     assert(publicRes.status === 200,
         `GET /api/recovery/keepers/:callsign is reachable with NO credentials (got ${publicRes.status})`);
-    assert(publicBody?.total === 3 && publicBody?.threshold === 3,
+    assert(publicBody?.total === 2 && publicBody?.threshold === 3,
         '...and answers with the keeper summary a restore screen needs');
     assert(!JSON.stringify(publicBody).includes(pubKeyHex),
         '...without naming the member whose keepers they are');

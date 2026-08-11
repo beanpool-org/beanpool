@@ -72,7 +72,6 @@ const frag = (i: number) => ({
     shareIv: Buffer.from(`iv-${i}`).toString('base64'),
     shareTag: Buffer.from(`tag-${i}`).toString('base64'),
 });
-const deviceFrag = (i: number) => ({ shareIndex: i, encryptedShare: '', shareIv: '', shareTag: '' });
 
 const rewrap = (label: string) => ({
     payload: Buffer.from(`rw-${label}`).toString('base64'),
@@ -84,13 +83,14 @@ const rewrap = (label: string) => ({
 const SSO_HASH_SALT = 'c2FsdA';
 function split(owner: string, buddy: string, ssoHash?: string): number {
     const shares: KeeperShareInput[] = [
-        { holderType: 'device', holderRef: 'self', ...deviceFrag(1) },
-        { holderType: 'hub', holderRef: 'node', ...frag(2) },
-        { holderType: 'member', holderRef: buddy, ephemeralPubkey: 'ZXBo', ...frag(3) },
+        { holderType: 'hub', holderRef: 'node', ...frag(1) },
+        { holderType: 'member', holderRef: buddy, ephemeralPubkey: 'ZXBo', ...frag(2) },
     ];
     if (ssoHash) {
         shares.push({ holderType: 'sso', holderRef: 'google', ssoLookupHash: ssoHash,
-                      ssoLookupSalt: SSO_HASH_SALT, ...frag(4) });
+                      ssoLookupSalt: SSO_HASH_SALT, ...frag(3) });
+    } else {
+        shares.push({ holderType: 'member', holderRef: 'buddy-2', ephemeralPubkey: 'ZXBoMg', ...frag(3) });
     }
     return putShareGeneration(owner, shares);
 }
@@ -158,7 +158,7 @@ async function main(): Promise<void> {
     const context = await call('/api/recovery/approve-keeper/context', buddy.pubkey, { collectionId: cid });
     assert(context.status === 200 && context.body.callsign === owner.callsign,
         'a keeper can see WHOSE account is being recovered...');
-    assert(context.body.fragment.encryptedShare === frag(3).encryptedShare,
+    assert(context.body.fragment.encryptedShare === frag(2).encryptedShare,
         '...and gets their own wrapped fragment to unwrap');
     assert(context.body.recipientEphemeralPubkey === device,
         '...and the key to re-wrap it to, which is the device that opened the session');

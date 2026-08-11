@@ -18,10 +18,8 @@ import * as Crypto from 'expo-crypto';
 import { Stack } from 'expo-router';
 import { useIdentity } from './IdentityContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
-import { SsoSignInError, fetchSsoNonce } from '../utils/sso-signin';
+import { SsoSignInError, fetchSsoNonce, GOOGLE_WEB_CLIENT_ID } from '../utils/sso-signin';
 import type { BeanPoolIdentity } from '../utils/identity';
-
-const GOOGLE_WEB_CLIENT_ID = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 
 /**
  * Which form of the nonce Google echoed — and this is a measurement, not a check.

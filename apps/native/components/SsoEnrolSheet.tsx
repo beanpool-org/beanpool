@@ -7,10 +7,6 @@ import type { SsoProvider } from '../utils/sso-signin';
 import { enrolSsoKeeper, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { useIdentity } from '../app/IdentityContext';
 
-/** Which provider this platform uses for the sign-in keeper. */
-const SSO_PROVIDER: SsoProvider = Platform.OS === 'ios' ? 'apple' : 'google';
-const PROVIDER_NAME = SSO_PROVIDER === 'apple' ? 'Apple' : 'Google';
-
 /**
  * Decode the `sub` claim from a JWT id_token without signature verification.
  * Follows the same pattern as decodeJwtPayload in apple-probe.tsx.
@@ -33,11 +29,15 @@ export function SsoEnrolSheet({
     visible,
     onClose,
     onEnrolled,
+    provider = Platform.OS === 'ios' ? 'apple' : 'google',
 }: {
     visible: boolean;
     onClose: () => void;
     onEnrolled: (result: KeeperEnrolmentResult) => void;
+    /** Which SSO provider to use. Defaults to Apple on iOS, Google elsewhere. */
+    provider?: SsoProvider;
 }): React.JSX.Element | null {
+    const PROVIDER_NAME = provider === 'apple' ? 'Apple' : 'Google';
     const { identity } = useIdentity();
     const [step, setStep] = useState<'explain' | 'processing' | 'success' | 'error'>('explain');
     const [errorMessage, setErrorMessage] = useState('');
@@ -68,7 +68,7 @@ export function SsoEnrolSheet({
                 return;
             }
 
-            const signin = await startSsoSignIn(SSO_PROVIDER, url, identity);
+            const signin = await startSsoSignIn(provider, url, identity);
             const sub = extractSub(signin.idToken);
 
             const result = await enrolSsoKeeper({
@@ -153,7 +153,7 @@ export function SsoEnrolSheet({
                     )}
 
                     {step === 'processing' && (
-                        <View style={styles.centerContent}>
+                        <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             <ActivityIndicator size="large" color={colors.brand.primary} />
                             <Text style={styles.processingText}>Connecting...</Text>
                         </View>
@@ -179,9 +179,9 @@ export function SsoEnrolSheet({
                     )}
 
                     {step === 'error' && (
-                        <View style={styles.content}>
+                        <View style={styles.content} accessibilityLiveRegion="assertive">
                             <Text style={styles.title} accessibilityRole="header">Something went wrong</Text>
-                            <Text style={styles.body}>{errorMessage}</Text>
+                            <Text style={styles.body} accessibilityRole="alert">{errorMessage}</Text>
                             <TouchableOpacity
                                 style={styles.primaryButton}
                                 onPress={() => setStep('explain')}

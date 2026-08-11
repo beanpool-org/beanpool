@@ -100,7 +100,13 @@ export function KeeperProtectionPanel({
             <View style={styles.buttonContainer}>
                 {Platform.OS !== 'web' && onProtectSso && (
                     <View style={styles.actionBlock}>
-                        <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectSso} accessibilityRole="button">
+                        <TouchableOpacity
+                            style={styles.buttonSecondary}
+                            onPress={onProtectSso}
+                            accessibilityRole="button"
+                            accessibilityLabel={Platform.OS === 'ios' ? 'Protect with Apple sign-in' : 'Protect with Google sign-in'}
+                            accessibilityHint="Opens sheet to set up sign-in account recovery. This is not a login."
+                        >
                             <Text style={styles.buttonSecondaryText}>
                                 {Platform.OS === 'ios' ? 'Protect with Apple sign-in' : 'Protect with Google sign-in'}
                             </Text>

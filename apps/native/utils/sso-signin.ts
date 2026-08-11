@@ -51,7 +51,7 @@ import type { BeanPoolIdentity } from './identity';
  * client IDs are implicit (derived from package name + signing key + google-services.json).
  * The web client ID is what makes the SDK return an `idToken` rather than just an access token.
  */
-const GOOGLE_WEB_CLIENT_ID = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
+export const GOOGLE_WEB_CLIENT_ID = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 
 export type SsoProvider = 'apple' | 'google';
 
@@ -277,6 +277,7 @@ export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, '
 
     let result;
     try {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
         result = await GoogleSignin.signIn();
     } catch (e) {
         const reason = describeGoogleError(e);
@@ -286,7 +287,7 @@ export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, '
                 ? 'Sign-in was cancelled.'
                 : reason === 'unsupported'
                     ? 'Google Play Services is not available on this device.'
-                    : `Google could not sign you in: ${(e as Error).message}`,
+                    : `Google could not sign you in: ${e instanceof Error ? e.message : String(e)}`,
         );
     }
 

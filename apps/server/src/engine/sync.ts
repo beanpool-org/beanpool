@@ -281,7 +281,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'recoveryRequests', 'recoveryApprovals', 'settlements', 'tombstones',
+        'messages', 'abuseReports', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'settlements', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -293,7 +293,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     let newMembers = 0, newPosts = 0;
     let updatedMembers = 0, updatedPosts = 0;
     let newTransactions = 0, accountChanges = 0, marketplaceTxns = 0, newMessages = 0;
-    let tombstonesApplied = 0, conflictsSkipped = 0;
+    let tombstonesApplied = 0, conflictsSkipped = 0, recoverySharesImported = 0;
 
     currentImportOrigin = remote.nodeId;
     db.pragma('foreign_keys = OFF');
@@ -714,6 +714,28 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         st.reservedUntil ?? null, st.state, st.receipt ?? null, st.receiptPayload ?? null,
                         st.failureReason ?? null, st.createdAt, st.updatedAt,
                     );
+                }
+            }
+
+            // Recovery shares — hub fragment A (XOR-mandatory) and keeper fragments.
+            // INSERT OR REPLACE keyed on the UNIQUE(owner_pubkey, generation, holder_type, holder_ref) constraint,
+            // so the latest version from the primary always wins. This is the critical path that closes
+            // the live-replication gap: without it, a promoted backup node has an empty recovery_shares table.
+            if (remote.recoveryShares) {
+                const insertShare = db.prepare(`INSERT OR REPLACE INTO recovery_shares
+                    (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share,
+                     share_iv, share_tag, ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt,
+                     kdf_params, generation, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                for (const rs of remote.recoveryShares) {
+                    const res = insertShare.run(
+                        rs.ownerPubkey, rs.holderType, rs.holderRef, rs.shareIndex,
+                        rs.encryptedShare, rs.shareIv, rs.shareTag,
+                        rs.ephemeralPubkey ?? null, rs.ssoLookupHash ?? null,
+                        rs.ssoLookupSalt ?? null, rs.kdfParams ?? null,
+                        rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt,
+                    );
+                    if (res.changes > 0) recoverySharesImported++;
                 }
             }
 

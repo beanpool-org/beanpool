@@ -121,7 +121,13 @@ async function probeNodeVerification(
     }
     // Everything the server can say about a nonce, kept broad on purpose: matching the exact
     // sentence would turn a reworded error message into a false failure.
-    if (/nonce|replay|already been used|not issued/i.test(text)) {
+    //
+    // "could not be matched to this request" is the one that matters and the one this originally
+    // missed — sso.ts phrases the nonce rejection without using the word "nonce" at all, because
+    // the member-facing sentence should not name an internal mechanism. That cost a real reading:
+    // the first live run reported STOPPED EARLIER when it had in fact passed every step. A
+    // diagnostic that reads the server's prose has to be checked against the server's prose.
+    if (/nonce|replay|already been used|not issued|could not be matched to this request/i.test(text)) {
         return `VERIFIED (${res.status}) — rejected on the nonce, which means Apple's JWKS, the `
             + `RS256 signature, the issuer, the audience and the expiry ALL passed against a real `
             + `token. Server said: ${text.slice(0, 200)}`;

@@ -281,14 +281,17 @@ export default function SettingsScreen() {
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [showFriendSheet, setShowFriendSheet] = useState(false);
     const [revealWords, setRevealWords] = useState(false);
+    const [revealLoading, setRevealLoading] = useState(false);
     const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
     const [copiedWords, setCopiedWords] = useState(false);
 
     const handleRevealWords = async () => {
         if (revealWords) {
             setRevealWords(false);
+            setMnemonicWords(null);
             return;
         }
+        setRevealLoading(true);
         try {
             const words = await getMnemonic(identity);
             if (words && Array.isArray(words)) {
@@ -299,6 +302,8 @@ export default function SettingsScreen() {
             }
         } catch (e) {
             Alert.alert("Error reading recovery words", (e as Error).message);
+        } finally {
+            setRevealLoading(false);
         }
     };
 
@@ -308,6 +313,17 @@ export default function SettingsScreen() {
         hapticTick();
         setCopiedWords(true);
         setTimeout(() => setCopiedWords(false), 2000);
+
+        // Auto-wipe system clipboard after 30 seconds
+        const wordsSnapshot = mnemonicWords;
+        setTimeout(async () => {
+            try {
+                const current = await Clipboard.getStringAsync();
+                if (current === wordsSnapshot) {
+                    await Clipboard.setStringAsync('');
+                }
+            } catch {}
+        }, 30000);
     };
 
     const fetchProtectionStatus = async () => {
@@ -1436,6 +1452,7 @@ export default function SettingsScreen() {
                                             alignItems: 'center',
                                         }}
                                         onPress={handleRevealWords}
+                                        disabled={revealLoading}
                                         accessibilityRole="button"
                                         accessibilityLabel="Show my 12 recovery words"
                                     >
@@ -1447,7 +1464,12 @@ export default function SettingsScreen() {
                                     <View style={{ backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16 }}>
                                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                                             {mnemonicWords?.split(' ').map((word, idx) => (
-                                                <View key={idx} style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' }}>
+                                                <View
+                                                    key={`${word}-${idx}`}
+                                                    accessible={true}
+                                                    accessibilityLabel={`Word ${idx + 1}: ${word}`}
+                                                    style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center' }}
+                                                >
                                                     <Text style={{ color: colors.text.muted, fontSize: 11, marginRight: 6 }}>{idx + 1}.</Text>
                                                     <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>{word}</Text>
                                                 </View>
@@ -1459,6 +1481,7 @@ export default function SettingsScreen() {
                                                 style={{ flex: 1, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
                                                 onPress={handleCopyWords}
                                                 accessibilityRole="button"
+                                                accessibilityLabel={copiedWords ? "Recovery words copied to clipboard" : "Copy 12 recovery words to clipboard"}
                                             >
                                                 <Text style={{ color: colors.text.inverse, fontWeight: 'bold', fontSize: 14 }}>
                                                     {copiedWords ? '✅ Copied!' : '📋 Copy Words'}
@@ -1466,8 +1489,9 @@ export default function SettingsScreen() {
                                             </Pressable>
                                             <Pressable
                                                 style={{ backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center' }}
-                                                onPress={() => setRevealWords(false)}
+                                                onPress={() => { setRevealWords(false); setMnemonicWords(null); }}
                                                 accessibilityRole="button"
+                                                accessibilityLabel="Hide 12 recovery words"
                                             >
                                                 <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
                                             </Pressable>

@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
+import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
 import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership, recordOnboardingEvent} from '../lib/api';
@@ -921,18 +921,19 @@ export function WelcomePage({ onComplete }: Props) {
                                   is meant to remove. It says what is true today, and gets
                                   the keeper wording in Phase B when the keepers are real.
                                 */}
-                                <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-2">
-                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🔑 Getting Back In</h4>
+                                <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 space-y-2">
+                                    <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🔑 Your 12 Words Are Everything</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        Right now your 12 words are the only way back into your account. No email,
+                                        Right now your 12 words are the <strong>only</strong> way back into your account. No email,
                                         no password reset — nobody, including your hub, can restore it for you.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        📝 Find them any time under <strong>Settings → Recovery Phrase</strong>.
+                                        ⚠️ <strong>Browser storage can be wiped without warning.</strong> Safari clears site data after
+                                        7 days of inactivity, and clearing browsing data erases your identity permanently.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        🤝 Soon you'll be able to share the job with your hub and the person who
-                                        invited you, so losing your phone stops being a problem you carry alone.
+                                        📝 Find them any time under <strong>Settings → Recovery Phrase</strong>.
+                                        Write them down on paper — it's the only backup that can't be wiped.
                                     </p>
                                 </div>
 
@@ -996,6 +997,21 @@ export function WelcomePage({ onComplete }: Props) {
                                 This is the <strong>only</strong> way to recover your identity if you lose this device.
                             </p>
 
+                            {/* Browser storage eviction warning — PWA is sovereign-only, no keepers.
+                                Tailwind rather than inline style: the amber-500 hex this used to
+                                hardcode sits at ~2:1 against the pale background, which is unreadable
+                                for exactly the people this warning is for. */}
+                            <div role="alert" className="p-3 mb-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 space-y-1">
+                                <p className="text-xs font-semibold text-amber-900 dark:text-amber-300">
+                                    <span aria-hidden="true">⚠️</span> Browser storage is not permanent
+                                </p>
+                                <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
+                                    Safari can clear site data after <strong>7 days of inactivity</strong>, and
+                                    clearing your browsing data erases your identity permanently.
+                                    Your 12 words on paper are the only backup that can't be wiped.
+                                </p>
+                            </div>
+
                             <div style={{
                                 display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
                                 gap: '0.4rem', marginBottom: '1rem',
@@ -1022,7 +1038,8 @@ export function WelcomePage({ onComplete }: Props) {
                             */}
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                                 No pen handy? Carry on — you can come back to these any time under
-                                Settings → Recovery Phrase.
+                                Settings → Recovery Phrase. But <strong>don't leave it too long</strong> — your browser
+                                could clear this data without asking.
                             </p>
 
                             <label htmlFor="seedConfirmed" style={{
@@ -1057,6 +1074,14 @@ export function WelcomePage({ onComplete }: Props) {
                             <button
                                 onClick={() => {
                                     recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
+                                    // A member who ticked "I've written them down" has done the thing
+                                    // Settings' banner nags about. Without this, finishing onboarding
+                                    // correctly still greets them with "you haven't saved your recovery
+                                    // phrase yet" — a warning that is not true, which is how warnings
+                                    // stop being read. Only on confirm: skipping leaves it showing.
+                                    if (seedConfirmed && pendingIdentity) {
+                                        localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
+                                    }
                                     setShowOnboardingGuide(true);
                                     setError(null);
                                 }}

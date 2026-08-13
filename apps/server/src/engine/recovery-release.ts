@@ -145,6 +145,7 @@ export interface ReleasedFragment {
     payloadIv: string;
     payloadTag: string;
     ephemeralPubkey: string | null;
+    kdfParams: string | null;
     releasedBy: string | null;
     releasedAt: string;
 }
@@ -295,6 +296,7 @@ export function listReleases(collectionId: string): ReleasedFragment[] {
         payloadIv: r.payload_iv as string,
         payloadTag: r.payload_tag as string,
         ephemeralPubkey: (r.ephemeral_pubkey as string | null) ?? null,
+        kdfParams: (r.kdf_params as string | null) ?? null,
         releasedBy: (r.released_by as string | null) ?? null,
         releasedAt: r.released_at as string,
     }));
@@ -304,23 +306,36 @@ export function listReleases(collectionId: string): ReleasedFragment[] {
  * D7, as a function of what has already happened.
  *
  * "≥1 human piece already released" means a `member` release — a person who tapped Approve. A
- * sign-in release does not count, and neither does another machine piece: the entire purpose is
- * that a human is in the loop, and K3 is the member's own account proving itself unattended.
+ * sign-in release does not count for friend-tier splits: the entire purpose is that a human is in
+ * the loop.
+ *
+ * In the SSO tier there are no humans (docs/recovery-model.md §D7). When an SSO piece has been
+ * verified and released into this collection, the hub releases immediately.
  */
-export function hubReleaseEligibleAt(collectionId: string): { eligibleAt: number; reason: 'human-approved' | 'delay' } {
+export function hubReleaseEligibleAt(collectionId: string): { eligibleAt: number; reason: 'human-approved' | 'sso-approved' | 'delay' } {
     const collection = getCollection(collectionId);
     if (!collection) throw new RecoveryReleaseError('No such recovery session.');
 
     const humanReleases = db.prepare(`
         SELECT MIN(released_at) AS first FROM recovery_releases
         WHERE collection_id = ? AND holder_type = 'member'
-    `).get(collectionId) as { first: string | null };
+    `).get(collectionId) as { first: string | null } | undefined;
 
-    if (humanReleases.first) {
+    if (humanReleases?.first) {
         // Eligible from the moment the human approved, not from now — so a hub request that
         // arrives a second later is not told to wait.
         return { eligibleAt: Date.parse(humanReleases.first), reason: 'human-approved' };
     }
+
+    const ssoReleases = db.prepare(`
+        SELECT MIN(released_at) AS first FROM recovery_releases
+        WHERE collection_id = ? AND holder_type = 'sso'
+    `).get(collectionId) as { first: string | null } | undefined;
+
+    if (ssoReleases?.first) {
+        return { eligibleAt: Date.parse(ssoReleases.first), reason: 'sso-approved' };
+    }
+
     return { eligibleAt: Date.parse(collection.createdAt) + HUB_DELAY_MS, reason: 'delay' };
 }
 
@@ -378,6 +393,7 @@ function recordRelease(args: {
     payloadIv: string;
     payloadTag: string;
     ephemeralPubkey: string | null;
+    kdfParams?: string | null;
     releasedBy: string | null;
 }): ReleasedFragment {
     // INSERT OR IGNORE against UNIQUE(collection_id, share_id): a keeper tapping Approve twice, or
@@ -387,12 +403,12 @@ function recordRelease(args: {
     db.prepare(`
         INSERT OR IGNORE INTO recovery_releases
             (collection_id, share_id, holder_type, share_index,
-             payload, payload_iv, payload_tag, ephemeral_pubkey, released_by, released_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             payload, payload_iv, payload_tag, ephemeral_pubkey, kdf_params, released_by, released_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         args.collectionId, args.shareId, args.holderType, args.shareIndex,
         args.payload, args.payloadIv, args.payloadTag,
-        args.ephemeralPubkey, args.releasedBy, nowIso(),
+        args.ephemeralPubkey, args.kdfParams ?? null, args.releasedBy, nowIso(),
     );
 
     const released = listReleases(args.collectionId).find(r => r.shareId === args.shareId);
@@ -441,6 +457,7 @@ export function releaseMemberFragment(
         payloadIv: rewrapped.payloadIv,
         payloadTag: rewrapped.payloadTag,
         ephemeralPubkey: rewrapped.ephemeralPubkey,
+        kdfParams: null,
         releasedBy: keeperPubkey,
     });
 }
@@ -528,6 +545,7 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
         payloadIv: share.share_iv as string,
         payloadTag: share.share_tag as string,
         ephemeralPubkey: null,
+        kdfParams: (share.kdf_params as string | null) ?? null,
         releasedBy: null,
     });
 }
@@ -572,6 +590,7 @@ export function releaseHubFragment(collectionId: string): ReleasedFragment {
         payloadIv: share.share_iv as string,
         payloadTag: share.share_tag as string,
         ephemeralPubkey: null,
+        kdfParams: (share.kdf_params as string | null) ?? null,
         releasedBy: null,
     });
 }
@@ -590,7 +609,7 @@ export function collectionProgress(collectionId: string): {
     threshold: number;
     enough: boolean;
     hubEligibleAt: string | null;
-    hubReason: 'human-approved' | 'delay' | null;
+    hubReason: 'human-approved' | 'sso-approved' | 'delay' | null;
     releasedTypes: KeeperType[];
 } | null {
     const state = collectionState(collectionId);
@@ -603,7 +622,7 @@ export function collectionProgress(collectionId: string): {
     `).get(state.collection.ownerPubkey, state.collection.generation) as { present: number } | undefined;
 
     let hubEligibleAt: string | null = null;
-    let hubReason: 'human-approved' | 'delay' | null = null;
+    let hubReason: 'human-approved' | 'sso-approved' | 'delay' | null = null;
     // Only for a LIVE session (CR). A dead one — expired, cancelled, or killed by a re-split —
     // would otherwise report "the hub releases in 6h" about a session that will never release
     // anything, and a countdown is exactly the sort of thing a user waits on instead of starting

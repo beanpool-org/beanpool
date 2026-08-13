@@ -25,6 +25,8 @@ import { protectionFrom } from '../utils/protection-state';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
+import { recoverAccountWithSso } from '../utils/sso-recovery';
+import { type SsoProvider } from '../utils/sso-signin';
 
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
@@ -55,13 +57,15 @@ export default function WelcomeScreen() {
     const incomingUrl = Linking.useURL();
     const { setIdentity } = useIdentity();
     const { recheck: recheckNodeStatus } = useNodeStatus();
-    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>('home');
+    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>('home');
     const [callsign, setCallsign] = useState('');
     // Fun-name suggestions shown when the chosen first-join name is taken on the node.
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
+    const [ssoCallsign, setSsoCallsign] = useState('');
+    const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -650,6 +654,53 @@ export default function WelcomeScreen() {
             setError('Recovery failed. Check words and try again.');
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function handleSsoRecover(provider: SsoProvider) {
+        const trimmedCallsign = ssoCallsign.trim();
+        if (!trimmedCallsign) {
+            setError('Please enter your callsign.');
+            return;
+        }
+        const rawAnchor = recoveryAnchorUrl.trim();
+        if (!rawAnchor) {
+            setError('Please enter your community node address.');
+            return;
+        }
+        const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
+        if (!looksLikeNodeAddress(finalAnchorUrl)) {
+            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            return;
+        }
+        if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
+            setError('That node address is insecure (http on a public host). Use https:// instead.');
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        setSsoProgressMessage('Connecting to recovery session...');
+        try {
+            const result = await recoverAccountWithSso({
+                callsign: trimmedCallsign,
+                anchorUrl: finalAnchorUrl,
+                provider,
+                onProgress: (p) => setSsoProgressMessage(p.message),
+            });
+            await clearPendingOnboarding();
+            setIdentity(result.identity);
+            setMode('home');
+            router.replace('/');
+        } catch (e: any) {
+            if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
+                setError(null);
+            } else {
+                setError(e.message || `Recovery failed: ${String(e)}`);
+            }
+        } finally {
+            setLoading(false);
+            setSsoProgressMessage(null);
         }
     }
 
@@ -1400,6 +1451,10 @@ export default function WelcomeScreen() {
 
 
 
+                        <Pressable style={styles.ssoRecoverBtn} onPress={() => { setMode('ssoRecover'); setError(null); }} accessibilityRole="button">
+                            <Text style={styles.ssoRecoverBtnText}>🌐 Recover with Google / Apple</Text>
+                        </Pressable>
+
                         <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
                             <Text style={styles.recoverBtnText}>🔑 Recover with 12 Words</Text>
                         </Pressable>
@@ -1626,6 +1681,95 @@ export default function WelcomeScreen() {
         );
     }
 
+    if (mode === 'ssoRecover') {
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style="dark" />
+                <KeyboardAvoidingView
+                    behavior="padding"
+                    style={{ flex: 1 }}
+                >
+                    <ScrollView contentContainerStyle={styles.scroll}>
+                        <View style={styles.card}>
+                            <Text style={styles.title}>🌐 Recover with Sign-In</Text>
+                            <Text style={styles.subtitle}>
+                                If you enabled Google or Apple recovery, enter your callsign and node address to restore your account.
+                            </Text>
+
+                            <TextInput
+                                accessibilityLabel="Callsign"
+                                style={styles.input}
+                                placeholder="Your Callsign (e.g. Monnunit)"
+                                placeholderTextColor={colors.text.muted}
+                                value={ssoCallsign}
+                                onChangeText={setSsoCallsign}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                editable={!loading}
+                            />
+
+                            <TextInput
+                                accessibilityLabel="Community Node URL"
+                                style={styles.input}
+                                placeholder="Community Node URL (e.g. https://test.beanpool.org)"
+                                placeholderTextColor={colors.text.muted}
+                                value={recoveryAnchorUrl}
+                                onChangeText={setRecoveryAnchorUrl}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                keyboardType="url"
+                                editable={!loading}
+                            />
+
+                            {loading && ssoProgressMessage && (
+                                <View style={{ alignItems: 'center', marginVertical: 16 }}>
+                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                        {ssoProgressMessage}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {error && <Text style={styles.error}>{error}</Text>}
+
+                            {!loading && (
+                                <>
+                                    <Pressable
+                                        style={[styles.primaryBtn, { backgroundColor: '#4285F4', marginBottom: 10 }]}
+                                        onPress={() => handleSsoRecover('google')}
+                                        accessibilityRole="button"
+                                    >
+                                        <Text style={styles.primaryBtnText}>Recover with Google</Text>
+                                    </Pressable>
+
+                                    {Platform.OS === 'ios' && (
+                                        <Pressable
+                                            style={[styles.primaryBtn, { backgroundColor: '#000000', marginBottom: 10 }]}
+                                            onPress={() => handleSsoRecover('apple')}
+                                            accessibilityRole="button"
+                                        >
+                                            <Text style={styles.primaryBtnText}>Recover with Apple</Text>
+                                        </Pressable>
+                                    )}
+                                </>
+                            )}
+
+                            <Pressable
+                                style={styles.backBtn}
+                                onPress={() => { setMode('member'); setError(null); }}
+                                disabled={loading}
+                                accessibilityRole="button"
+                                accessibilityLabel="Back"
+                            >
+                                <Text style={styles.backBtnText}>← Back</Text>
+                            </Pressable>
+                        </View>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </SafeAreaView>
+        );
+    }
+
 
 
     // --- MAIN WELCOME SCREEN (two choices like the PWA) ---
@@ -1730,7 +1874,8 @@ const styles = StyleSheet.create({
     secondaryBtnText: { color: palette.gray600, fontSize: 16, fontWeight: '600' },
 
     // Member sub-options
-
+    ssoRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#93C5FD', backgroundColor: '#EFF6FF', alignItems: 'center', marginBottom: 10 },
+    ssoRecoverBtnText: { color: '#1D4ED8', fontSize: 16, fontWeight: '700' },
     recoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.recoverBorder, backgroundColor: colors.onboarding.recoverBg, alignItems: 'center', marginBottom: 10 },
     recoverBtnText: { color: palette.amber800, fontSize: 16, fontWeight: '700' },
     socialRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.socialRecoverBorder, backgroundColor: colors.onboarding.socialRecoverBg, alignItems: 'center', marginBottom: 10 },

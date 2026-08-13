@@ -480,6 +480,7 @@ CREATE TABLE IF NOT EXISTS recovery_releases (
     payload_iv TEXT NOT NULL,
     payload_tag TEXT NOT NULL,
     ephemeral_pubkey TEXT,
+    kdf_params TEXT,
     -- The keeper who approved, for 'member' releases. NULL for machine-released pieces, which is
     -- exactly the distinction D7 turns on.
     released_by TEXT,

@@ -1,11 +1,30 @@
-# SSO client handover — 2026-08-11
+# SSO client handover — 2026-08-11, revised 2026-08-13
 
-**Read this before touching recovery, keepers, or Sign in with Apple.**
+**Read this before touching recovery, keepers, or Sign in with Apple or Google.**
 
-You are picking up mid-build. The design was settled on 2026-08-10, three PRs are open and
-unreviewed, the server half has been merged since 2026-08-07, and on 2026-08-11 the sign-in
-chain ran on real hardware for the first time. What remains is one short verification step
-and then the main build.
+You are picking up mid-build. The design was settled on 2026-08-10 and the server half merged
+2026-08-07. Since then Steps 4a–5 have all landed: the two-layer primitive, the enrolment
+rewrite, and Google sign-in on Android. **Real fragments now exist on the `test` node**, which
+closed the free-migration window this document was originally written around.
+
+**The one thing that has never run is recovery itself** — reading the fragments back and
+rebuilding a seed. Start at §6 Step 5b.
+
+> **Revision note.** Sections 2, 3 and 6 were rewritten on 2026-08-13 after the original text
+> was found describing shipped work as unbuilt. §5 gained traps 9–12 and §7 gained two
+> recipes from the same session. Everything asserted here was checked against `main`, the
+> running image, or the live database — not against a chat summary. Sections 4, 8 and 9 are
+> original and were re-read, not re-verified.
+
+### Start here
+
+1. `test` is on **1.1.42** with everything below deployed and live-verified (§2).
+2. The one thing that has never run is **recovery itself** — §6 Step 5b. It has a recorded
+   pass/fail condition; use it.
+3. If `test.beanpool.org` is unreachable, read **§5 trap 9** before touching anything — a
+   deploy can drop the tunnel while the node stays perfectly healthy.
+4. Two things are recorded as **decided-but-not-signed-off**: the Google nonce-binding
+   trade-off (end of §2) and the SSO tier being custodial by choice (§1). Neither is a bug.
 
 ---
 
@@ -98,29 +117,77 @@ recovery. A hostile node could have turned every restore into an OOM crash that 
 broken app. Capped at 65536, four times what sealing writes, so raising the cost later needs
 no opener change.
 
-### The clean slate is verified, not assumed
+### The clean slate CLOSED on 2026-08-13
 
-Every plan here rests on "no fragment has ever been deposited", which is what makes changing
-the split shape a schema edit rather than a data migration. **Checked 2026-08-11 against the
-live database, read-only:**
+Everything below this line was written while `recovery_shares` was empty everywhere, which is
+what made changing the split shape a schema edit rather than a data migration. **That window
+is now shut.** The first real fragments were deposited on `test` on 2026-08-13:
 
-| Node | `recovery_shares` | `members` |
+| Node | `recovery_shares` | Note |
 |---|---|---|
-| **mullum** (the live community) | **0** | 32 |
-| test | 0 | — |
+| **mullum** (the live community) | **0** as of 2026-08-11 | re-check before assuming |
+| test | **2** (`hub` + `sso`/`google`, member `Monnunit`) | real, not probe placeholders |
 
-bris and bindarrabi were not checked; both are effectively empty and neither has ever run
-enrolment, but if you are about to rely on this, check them. Recipe in §7.
+Changing the split shape from here is a **data migration**, not a schema edit. Anyone planning
+one must now answer what happens to existing fragments.
 
-**Re-check this before the enrolment rewrite lands.** It is one query, and it is the single
-assumption whose failure would strand real people's recovery.
+bris and bindarrabi were never checked. Recipe in §7.
 
-### Not built at all
+### Built since this document was first written (2026-08-11 → 13)
 
-- Any enrolment under the two-layer model. The client keeper code that exists predates it.
-- Google sign-in. `startSsoSignIn` throws `unsupported` for `'google'` — deliberately loud.
-- The PIN, the add-a-friend flow, the copy pass.
+The list below said "not built at all". Most of it now is. Verified against `main` and, where
+noted, against the live database — not taken from a chat report.
+
+- **The two-layer primitive** — `packages/beanpool-core/src/two-layer-split.ts` + tests (#256).
+- **The enrolment rewrite** under the two-layer model (#257), and keeper tiers reachable from
+  the app (#258).
+- **Google sign-in on Android** (#259). `startSsoSignIn` no longer throws `unsupported`.
+  End-to-end enrolment confirmed by the two DB rows above.
+- **The PIN** — server half only (#262). Endpoints `/api/recovery/pin/{set,status,verify}`,
+  table `recovery_pin`. **No client UI exists.**
+- **PWA sovereignty warnings** (#263) and recovery push routing (#264).
+
+### Deployed and verified LIVE on 2026-08-13
+
+`test` runs **1.1.42** (`DEPLOY_PULL=1 bash deploy.sh 11`, CI image from `main`). Confirmed by
+grepping the running image and by signed requests against the public host — not by the version
+string, and not from a chat report:
+
+| Check | Result |
+|---|---|
+| PIN routes in the running image (`dist/routes/pin.js`) | ✅ |
+| `recovery_pin` table created | ✅ |
+| `quorum_required` default back to **3** | ✅ |
+| the 2 recovery fragments survived the deploy | ✅ |
+| anti-enumeration: unknown vs real vs wrong-case callsign | ✅ byte-identical |
+
+**A caveat about `pin.ts`'s own header.** It says the verify endpoint is *"UNAUTHENTICATED
+(recovering device has no identity to sign with)"*. That is wrong and will cost the next
+person time: `requireSignature` gates **every** mutating `/api/*` request, and
+`/api/recovery/pin/verify` is a POST that is *not* on the bypass list. It does not require
+**membership** — the middleware only binds `ctx.state.actor` to whatever key signed — so a
+recovering device signs with a **throwaway keypair**. Unsigned calls get
+`401 Missing cryptographic signature headers`. Recipe in §7.
+
+### Still not built
+
+- **The Google recovery ROUND-TRIP.** Deposit is proven; reconstruction has never executed
+  once. This is the single largest unverified gap in the feature — see §3.
+- The add-a-friend flow, the trusted-friends client UI, the copy pass.
 - Node backup durability for the hub fragment.
+
+### ⚠️ A nonce-binding property was traded away on 2026-08-13
+
+`9375d98` relaxed `verifyIdToken` to accept **Google** `id_token`s carrying no `nonce` claim,
+because the free `GoogleSignin.signIn()` API cannot embed one (binding needs the premium
+`GoogleOneTapSignIn`). Google tokens are therefore **no longer cryptographically bound to the
+nonce**; the remaining anti-replay is `consumeNonce()`'s single-use + member-binding on the
+server-issued value, plus the signed-request envelope. Apple is unaffected and still strict.
+
+`test-sso.ts` asserts this tolerated path explicitly (#266) so it is covered rather than
+merely un-asserted. **This has not been signed off as acceptable for production** — it is
+recorded here because `sso.ts` reasons carefully about nonce binding everywhere else, and a
+future reader should not mistake it for an oversight or for a settled decision.
 
 ---
 
@@ -151,13 +218,15 @@ sign-in could not be matched to this request"* and never uses the word "nonce", 
 a member-facing sentence should not name an internal mechanism. The first live run therefore
 reported `STOPPED EARLIER` on what was actually a pass.
 
-**Still not proven:**
+**Still not proven (as of 2026-08-11) — since CLOSED for Google:**
 
 > `ssoLookupHash` and the storage path have never run against a real token.
 
-They execute only *after* a correct nonce, which the probe deliberately never sends. They are
-covered by unit tests, and they are local code with no external dependency — so this is a much
-smaller gap than the one that just closed, but it is not zero.
+They executed for the first time on 2026-08-13, when a real Google enrolment wrote an `sso`
+row carrying a genuine `sso_lookup_hash` on `test`. The Apple equivalent remains unrun.
+
+**What replaced it as the open gap:** nothing has ever *read* a fragment back. Storage is
+proven; reconstruction is not. See §6 Step 5b.
 
 ### On the VERBATIM result
 
@@ -227,89 +296,108 @@ measured. The measurement is recorded in the header comment of
 8. **Native JS changes need a rebuild.** Marty tests standalone builds, not dev-client +
    Metro. Never tell him a native change can be tested without rebuilding.
 
+### Added 2026-08-13 — each of these cost real time in one session
+
+9. **`deploy.sh` overwrites every node's Cloudflare tunnel token.** Line ~130 writes the
+   single global `CF_TUNNEL_TOKEN` from your local `.env` over `<node>/data/tunnel-token`.
+   Deploying to `test` took `test.beanpool.org` off the internet for ~20 minutes with
+   Cloudflare **error 1033 / HTTP 530**, cloudflared logging `Unauthorized: Tunnel not found`.
+   The token bytes were unchanged (same SHA-256 as the siblings), so the likeliest story is
+   that the tunnel had already been deleted Cloudflare-side and the *running* container was
+   coasting on an established connection — recreating it forced a re-registration that failed.
+   Either way: **a deploy can drop a node's public reachability, and the node itself will look
+   perfectly healthy while it happens.** Diagnose in this order:
+   - node direct (`docker exec … curl -k https://localhost:8446/…`) — 200 means the app is fine
+   - `docker logs <stack>-cloudflared-1` — the real error is here
+   - only ONE cloudflared container runs on the qld VM (test's). mullum/bris/bindarrabi hold
+     token files but run no tunnel, so *they are not affected by this*, and their 404s are
+     normal, not an outage.
+   Decode which tunnel a token names without exposing the secret:
+   ```bash
+   ssh ssh-qld.beanpool.org "cat /root/BeanPool-Test/data/tunnel-token" | python3 -c \
+     "import sys,base64,json; d=json.loads(base64.b64decode(sys.stdin.read().strip()+'==')); print('tunnel:',d['t'])"
+   ```
+10. **`/api/community` 404s on a perfectly healthy node.** It is not a route. Using it as a
+    health check invents outages — `/api/version` or `/api/recovery/keepers/<callsign>` are
+    real. This wasted a diagnostic cycle during the incident above.
+11. **The SSO sheet swallows the real error.** `SsoEnrolSheet.tsx` maps the `provider` and
+    `no-token` reasons to a generic *"…couldn't complete the sign-in. Try again."* and drops
+    `e.message`. On Android the true cause is in `logcat`, not on screen. `234cad0` improved
+    this; do not assume the UI text is the whole story.
+12. **Firebase SHA-1 fingerprints are a dead end for Google Sign-In here.** A red ⚠ on a
+    fingerprint in the Firebase console (`beanpool-6196d`, project number `751074523085`) is
+    **cosmetic for this app** — per Google's own docs it only affects Firebase Auth and
+    Dynamic Links, and BeanPool uses neither (only `expo-notifications` for FCM, which
+    authenticates by API key + sender ID). Real Google Sign-In lives in a *different* GCP
+    project, `653933790375` — the one whose client IDs are in `sso.ts` and `sso-signin.ts`.
+    `apps/native/google-services.json` even has `"oauth_client": []`. Hours went into that
+    console screen before this was established. **The authoritative signing SHA-1 is Play
+    Console → Release → Setup → App integrity**, and it is `…FB:08:…` (the SHA-256 there
+    matches `PLAY_APP_SIGNING_SHA256` already hardcoded in `routes/settings.ts`).
+    The Play Developer API **cannot** return it — no endpoint exposes the signing certificate.
+
 ---
 
 ## 6. Next steps, in order
 
-### Steps 1–3 — ~~verify a real token, merge #248/#249/#250~~ DONE 2026-08-11
+### Steps 1–5 — DONE (2026-08-11 → 13)
 
-All four PRs merged. Section 4 of the probe verified a real Apple token. See §3.
+| Step | What | Where |
+|---|---|---|
+| 1–3 | verify a real Apple token, merge #248/#249/#250/#251 | done 2026-08-11 |
+| 4a | the two-layer primitive | `packages/beanpool-core/src/two-layer-split.ts` (#256) |
+| 4b | the enrolment rewrite | #257 |
+| 4c | keeper tiers reachable from the app | #258 |
+| 5 | Google sign-in on Android | #259 |
 
-### Step 4a — the two-layer primitive (DO THIS FIRST, it is self-contained)
+**Step 5's nonce question was answered, and the answer was "we cannot".** The free
+`GoogleSignin.signIn()` API accepts no custom nonce, so there is nothing to measure — the
+claim is simply absent. The server was relaxed to tolerate that (`9375d98`) rather than
+Google being dropped. See the warning at the end of §2 before treating this as settled.
 
-Build **only** this before touching enrolment. It changes no existing behaviour, it is
-exhaustively testable, and everything later sits on it. If work stops after 4a, nothing is
-left broken.
+### Step 5b — the recovery ROUND-TRIP ← **DO THIS NEXT**
 
-**Where things already are** — read these before writing anything:
+**This is the gap.** Enrolment writes fragments — proven, two real rows on `test`. Nothing
+has ever read them back. The whole feature is the round trip, and half of it has never run.
 
-| File | What it has |
+Wipe the app (or Settings → Wipe Local Data), reinstall, choose Recover, sign in with Google.
+That should pull fragment `A` from the node plus the SSO-sealed `B` share, unseal `B` with
+the provider subject, XOR them back into the seed, and land on the SAME public key.
+
+**The pass condition, recorded here so it cannot be fudged after the fact.** As of
+2026-08-13 the enrolled member on `test` is:
+
+| | |
 |---|---|
-| `packages/beanpool-core/src/recovery-split.ts` | `RECOVERY_THRESHOLD = 3`, `splitRecoveryPhrase(phrase, shareCount)`, `combineRecoveryPhrase(shares)`, `assertRecoveryCsprngAvailable()`, envelope version + 4-byte checksum |
-| `packages/beanpool-core/src/keeper-crypto.ts` | the per-holder sealing: `sealShareToMember` / `openShareAsMember` (x25519), `sealShareToSso` / `openShareFromSso` (scrypt, **async**), `recordShareForHub` / `readHubShare` (plaintext) |
+| callsign | `Monnunit` |
+| public key | `50b70b5ae9920531fadc70e6064ee1371f93829a515f3ef39df6d69cd13d9121` |
+| fragments | `hub`/`node` + `sso`/`google`, generation 1 |
+| members on node | 57 (before recovery) |
 
-Note the existing Shamir API is **phrase-level**, not bytes-level. Layer two needs to split
-`B`, which is bytes. Add a bytes-level pair beside the phrase-level one reusing the same
-Shamir core and the same envelope/checksum — do not fork a second implementation, and do not
-change the existing phrase-level signatures (the sovereign tier still uses them).
+Recovery passes **only** if the phone comes back as that exact public key.
 
-**What to build.** A new module, `packages/beanpool-core/src/two-layer-split.ts`:
-
-```
-splitTwoLayer(phrase, friendCount)  ->  { hubShare, friendShares }
-combineTwoLayer(hubShare, friendShares)  ->  phrase
+```bash
+adb -s <device> logcat -c    # then run the recovery on the phone
+adb -s <device> logcat -d | grep -iE "pubkey|recover|50b70b5a"
 ```
 
-Construction, and every part of it is load-bearing:
+Then confirm on the node that **no new member row appeared** and the count is still 57
+(recipe §7). **A recovery that silently mints a NEW identity looks identical on screen and is
+total failure** — the member's beans, trades and standing stay stranded on the old key. This
+is the single most likely way this step "passes" while being broken, so check the count, not
+the screen.
 
-1. `A` = fresh random bytes the same length as the secret payload, from the same CSPRNG the
-   existing code asserts on. **`A` is the hub share.** It is not a Shamir share and is never
-   counted in any threshold.
-2. `B = secret XOR A`. Both halves mandatory: `A` alone is noise, `B` alone is noise.
-3. Shamir-split `B` across `friendCount` shares at **threshold 2**.
+Note the deposit path was verified this way and the report was accurate; the failure mode
+above is hypothetical, not observed. Check it anyway.
 
-**Invariants the tests must actually assert** (not just round-trip):
+### Step 6 — the PIN client half, the copy pass, add-a-friend
 
-- `A` alone reconstructs nothing, and `B` alone reconstructs nothing.
-- **All** friend shares together, without `A`, reconstruct nothing. This is the property that
-  makes friend collusion structurally impossible, and it is the one a naive flat-Shamir
-  implementation silently loses.
-- Any 2 friend shares **plus** `A` reconstruct the phrase; 1 friend share plus `A` does not.
-- Round-trip survives the envelope/checksum path unchanged.
-- Two calls on the same phrase produce different `A` and different shares.
+The PIN **server** half merged in #262 (`/api/recovery/pin/{set,status,verify}`, table
+`recovery_pin`). **No client UI exists**, so the feature is unreachable by any member today.
 
-**On `RECOVERY_THRESHOLD`.** It becomes the threshold of **layer two only** and drops 3 → 2.
-Do not reuse the existing constant for both layers — the sovereign/phrase path still means the
-old thing. Introduce the layer-two constant explicitly rather than mutating the old one in
-place, and check every existing reader of `RECOVERY_THRESHOLD` before changing its value.
-
-### Step 4b — the enrolment rewrite (only after 4a is merged) ← **NEXT after 4a**
-
-This is the large one, and it is the one everything else waits on. `seed = A ⊕ B`, then Shamir
-on `B`. Touches enrolment, the keeper panel, and `RECOVERY_THRESHOLD` semantics (3 → 2, layer
-two only). The existing client keeper code predates the model and should be rewritten, not
-patched.
-
-**Do this before Google.** Google sign-in adds a second provider to a flow that still deposits
-the *old* share shape — so building it first means writing the deposit path twice and having
-two providers to re-verify instead of one. Apple already proves the whole chain end to end;
-Google adds reach, not knowledge. Reach is worth less than not doing the work twice.
-
-Sequencing note: the migration is free only while `recovery_shares` is empty everywhere
-(§2). This step is what closes that window, so re-check the counts immediately before it
-lands, not weeks earlier.
-
-### Step 5 — Google sign-in on Android, and measure its nonce echo
-
-Marty chose the **native Google library**, not a web flow. `startSsoSignIn` already throws a
-named `unsupported` error for Google so it fails loudly rather than appearing to work.
-
-Two things to establish, and neither is guesswork once the button exists: whether Google
-echoes the nonce **verbatim or hashed** (Apple was verbatim — measure, do not assume they
-match), and that a Google `sub` verifies against the four configured client IDs in `sso.ts`.
-Until Google is measured, the `nonceMayBeHashed` tolerance stays.
-
-### Step 6 — the PIN (non-SSO only), the copy pass, add-a-friend
+Note what the PIN is: it reveals the *keeper list* so a recovering member knows which friends
+to ring. It does NOT gate release of fragment `A`. Forgetting it costs convenience, not the
+account — build the UI to say that.
 
 ### Step 7 — node backup durability for the hub fragment
 
@@ -317,11 +405,13 @@ Every fragment lives on the node. **Backups are availability; guardians are sove
 Do not confuse the two — keepers do not protect against node loss, and if the node's disk is
 gone the member has nothing to connect to anyway.
 
+Now more urgent than when first written: `test` holds real fragments, so this is no longer
+theoretical.
+
 ### Also outstanding
 
-**The recovery push notification currently rides the `'escrow'` category**
-(`apps/server/src/routes/recovery-collect.ts:154`). Anyone who muted deal notifications has
-silently opted out of recovery alerts. It needs its own category.
+- **The recovery push category** — was outstanding here, and shipped in #264. The
+  `'escrow'`-category problem below is FIXED; left as a pointer only.
 
 ---
 
@@ -368,6 +458,42 @@ curl -s "https://test.beanpool.org/api/recovery/keepers/<callsign>"
 # 200 + JSON = route exists. Plain-text "Not Found" = node predates #223.
 ```
 
+**Call a signed API endpoint as a "recovering device" (no membership needed).** This is how
+the PIN anti-enumeration property was verified against the live node, and it is the shape any
+recovery-side client call must take. Save as `pintest.mjs`, run with plain `node`:
+
+```javascript
+import crypto from 'node:crypto';
+const BASE = 'https://test.beanpool.org';
+const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');   // throwaway identity
+const pub = publicKey.export({ format: 'der', type: 'spki' }).subarray(12).toString('hex');
+
+async function signedPost(path, body) {
+    const raw = JSON.stringify(body);
+    const ts = Date.now().toString();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const msg = `POST\n${path}\n${ts}\n${nonce}\n${raw}`;          // EXACT signed payload shape
+    const sig = crypto.sign(null, Buffer.from(msg), privateKey).toString('base64');
+    const res = await fetch(BASE + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Public-Key': pub,
+                   'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce },
+        body: raw,
+    });
+    return { status: res.status, body: await res.text() };
+}
+
+const fake = await signedPost('/api/recovery/pin/verify', { callsign: 'no-such-callsign', pin: '000000' });
+const real = await signedPost('/api/recovery/pin/verify', { callsign: 'Monnunit',         pin: '000000' });
+console.log(fake, real);
+console.log('anti-enumeration:', fake.body === real.body ? 'PASS' : 'FAIL');
+```
+
+Both must return **byte-identical** `{"verified":false,"keepers":null}`. If the real callsign
+ever answers differently — including a `rateLimited` field — the endpoint has become a
+membership oracle and that is a regression, not a feature. (It leaked exactly that way in
+#262 before review; see the CR fixes in that PR.)
+
 **Count fragments on a live node — READ ONLY.** This is how §2 was verified, and how to
 re-verify it before the enrolment rewrite. `readonly: true` is not decoration: `mullum` is a
 real community and this is the one query it is acceptable to run there.
@@ -376,6 +502,18 @@ real community and this is the one query it is acceptable to run there.
 ssh ssh-qld.beanpool.org "docker exec -w /app/apps/server beanpool-mullum-beanpool-node-1 \
   node -e \"const D=require('better-sqlite3');const d=new D('/data/state.db',{readonly:true});\
   console.log(d.prepare('SELECT COUNT(*) c FROM recovery_shares').get().c)\""
+```
+
+**Did a recovery mint a NEW identity instead of restoring the old one?** The check that
+decides whether Step 5b passed. Run it before and after.
+
+```bash
+ssh ssh-qld.beanpool.org "docker exec -w /app/apps/server beanpool-test-beanpool-node-1 \
+  node -e \"const D=require('better-sqlite3');const d=new D('/data/state.db',{readonly:true});
+  console.log('members:', d.prepare('SELECT COUNT(*) c FROM members').get().c);
+  console.log(JSON.stringify(d.prepare(\\\"SELECT callsign, public_key, status FROM members WHERE lower(callsign)='monnunit'\\\").all()))\""
+# PASS: still 57 members, ONE Monnunit row, pubkey 50b70b5ae992…d13d9121
+# FAIL: 58 members, or a second Monnunit row, or a different pubkey
 ```
 
 The qld VM hosts `test`, `mullum`, `bris` and `bindarrabi`; container names follow

@@ -11,8 +11,12 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+let GoogleSigninModule: any = null;
+try {
+    GoogleSigninModule = require('@react-native-google-signin/google-signin');
+} catch (e) {
+    console.warn('[Probe] GoogleSignin native module unavailable:', e);
+}
 import * as Clipboard from 'expo-clipboard';
 import * as Crypto from 'expo-crypto';
 import { Stack } from 'expo-router';
@@ -153,6 +157,11 @@ export default function GoogleProbeScreen() {
         
         const nonce = chain.stage === 'ready' ? chain.nonce : undefined;
         try {
+            const GoogleSignin = GoogleSigninModule?.GoogleSignin;
+            if (!GoogleSignin) {
+                setError('Google Sign-In native module is not available in this build.');
+                return;
+            }
             await GoogleSignin.hasPlayServices();
             
             // Configure with webClientId to get an idToken back.

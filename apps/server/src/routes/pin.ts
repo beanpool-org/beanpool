@@ -37,7 +37,7 @@ import type { RouteDeps } from './types.js';
 /** Resolve callsign → public_key. Returns null for non-existent or pruned/migrated members. */
 function resolveCallsign(callsign: string): string | null {
     const row = db.prepare(
-        `SELECT public_key FROM members WHERE callsign = ? AND status NOT IN ('migrated', 'pruned')`
+        `SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned')`
     ).get(callsign) as { public_key: string } | undefined;
     return row?.public_key ?? null;
 }
@@ -103,10 +103,16 @@ export function createPinRoutes(deps: RouteDeps): Router {
         if (!rateLimit(ctx)) return;
 
         const body = (ctx as any).requestBody;
-        const pin = body?.pin;
+        if (!body || !('pin' in body)) {
+            ctx.status = 400;
+            ctx.body = { error: 'Missing required field: pin.' };
+            return;
+        }
+        const pin = body.pin;
 
-        // Allow clearing PIN by passing null/empty
-        if (pin === null || pin === '' || pin === undefined) {
+        // Allow clearing PIN by passing null/empty — but only when the caller says so
+        // explicitly. An omitted field is a malformed request, not "clear my PIN".
+        if (pin === null || pin === '') {
             db.prepare(`DELETE FROM recovery_pin WHERE owner_pubkey = ?`).run(actor);
             ctx.status = 200;
             ctx.body = { ok: true, pinSet: false };
@@ -195,17 +201,13 @@ export function createPinRoutes(deps: RouteDeps): Router {
             const elapsed = Date.now() - new Date(pinRow.last_attempt_at).getTime();
             if (elapsed < COOLDOWN_MS) {
                 const remainingMins = Math.ceil((COOLDOWN_MS - elapsed) / 60_000);
-                // Log rate-limited attempt with IP
+                // Log rate-limited attempt with IP. The response itself stays the uniform
+                // `deny()` shape — surfacing `rateLimited` here would tell an attacker their
+                // callsign guess was real, which is exactly the oracle this endpoint exists
+                // to deny. Node operators get the same signal from the log line instead.
                 const ip = ctx.request.ip || ctx.ip || 'unknown';
                 console.warn(`[PIN] ⏳ Rate-limited attempt for callsign="${callsign}" from IP=${ip} (${remainingMins}m remaining)`);
-                ctx.status = 200;
-                ctx.body = {
-                    verified: false,
-                    keepers: null,
-                    rateLimited: true,
-                    retryAfterMinutes: remainingMins,
-                };
-                return;
+                return deny();
             }
         }
 

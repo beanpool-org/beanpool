@@ -355,7 +355,7 @@ CREATE TABLE IF NOT EXISTS recovery_requests (
     old_pubkey TEXT NOT NULL REFERENCES members(public_key),
     new_pubkey TEXT NOT NULL,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'cancelled', 'expired', 'executed')),
-    quorum_required INTEGER DEFAULT 2,
+    quorum_required INTEGER DEFAULT 3,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     cooldown_until DATETIME,
     executed_at DATETIME,

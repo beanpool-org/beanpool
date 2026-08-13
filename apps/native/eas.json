@@ -16,6 +16,10 @@
       "channel": "preview",
       "env": {
         "GOOGLE_MAPS_API_KEY": "AIzaSyDpRO8fjR8U-7pyFPbjvro6FCAPLZL2bBo"
+      },
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "local"
       }
     },
     "production": {

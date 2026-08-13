@@ -23,6 +23,7 @@ import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../utils/LocalAuth';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
+import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { FriendPickerSheet } from '../../components/FriendPickerSheet';
 import { protectionFrom } from '../../utils/protection-state';
@@ -1427,6 +1428,7 @@ export default function SettingsScreen() {
                         <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} />
                     ) : (
                         <>
+                            <RecoveryAlertBanner />
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
                                 onProtectSso={Platform.OS !== 'web' ? () => setShowSsoSheet(true) : undefined}

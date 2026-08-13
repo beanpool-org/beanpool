@@ -40,9 +40,15 @@
 
 import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { GoogleSignin, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
+
+let GoogleSigninModule: any = null;
+try {
+    GoogleSigninModule = require('@react-native-google-signin/google-signin');
+} catch (e) {
+    console.warn('[SSO] Native GoogleSignin module unavailable:', e);
+}
 
 /**
  * Web client ID — the `aud` claim the node expects in a Google id_token.
@@ -227,7 +233,12 @@ export async function signInWithApple(nonce: string): Promise<Omit<SsoSignIn, 'p
  * On iOS it is a secondary option (Apple is native there); on Android it is the primary.
  */
 export function googleSignInAvailable(): boolean {
+    if (Platform.OS === 'web') return false;
     return Platform.OS === 'android' || Platform.OS === 'ios';
+}
+
+function isErrorWithCode(e: unknown): e is { code: string } {
+    return typeof e === 'object' && e !== null && 'code' in e;
 }
 
 /**
@@ -239,8 +250,9 @@ export function googleSignInAvailable(): boolean {
  */
 export function describeGoogleError(e: unknown): SsoFailure {
     if (isErrorWithCode(e)) {
-        if (e.code === statusCodes.SIGN_IN_CANCELLED) return 'cancelled';
-        if (e.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) return 'unsupported';
+        const sc = GoogleSigninModule?.statusCodes;
+        if (e.code === 'SIGN_IN_CANCELLED' || (sc && e.code === sc.SIGN_IN_CANCELLED)) return 'cancelled';
+        if (e.code === 'PLAY_SERVICES_NOT_AVAILABLE' || (sc && e.code === sc.PLAY_SERVICES_NOT_AVAILABLE)) return 'unsupported';
     }
     return 'provider';
 }
@@ -268,8 +280,10 @@ export function describeGoogleError(e: unknown): SsoFailure {
  */
 export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
     if (!googleSignInAvailable()) {
-        throw new SsoSignInError('unsupported', 'This device cannot sign in with Google.');
+        throw new SsoSignInError('unsupported', 'This device or build cannot sign in with Google.');
     }
+
+    const { GoogleSignin } = GoogleSigninModule;
 
     GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,

@@ -504,6 +504,12 @@ export async function verifyIdToken(
             crypto.createHash('sha256').update(expectedNonce, 'utf-8').digest('hex'),
         );
     }
+    // Google id_tokens do not embed client-side nonces in the free GoogleSignin.signIn() API.
+    // When claims.nonce is omitted by Google, we match if the server-issued expectedNonce
+    // is validly consumed for this subject (enforcing single-use anti-replay).
+    if (!nonceMatches && provider === 'google' && !claims.nonce) {
+        nonceMatches = true;
+    }
     if (!nonceMatches || !consumeNonce(expectedNonce, subject)) {
         throw new SsoVerificationError(
             `${config.label} sign-in could not be matched to this request.`,

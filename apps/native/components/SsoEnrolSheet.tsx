@@ -92,17 +92,18 @@ export function SsoEnrolSheet({
                 setStep('success');
             }
         } catch (e) {
+            console.error('[SSO Error]', e);
             if (e instanceof SsoSignInError) {
                 if (e.reason === 'cancelled') {
                     onClose();
                     return;
                 }
                 if (e.reason === 'unsupported') {
-                    setErrorMessage(`This device can't sign in with ${PROVIDER_NAME}.`);
+                    setErrorMessage(`This device can't sign in with ${PROVIDER_NAME}. (${e.message})`);
                 } else if (e.reason === 'no-token' || e.reason === 'provider') {
-                    setErrorMessage(`${PROVIDER_NAME} couldn't complete the sign-in. Try again.`);
+                    setErrorMessage(`${PROVIDER_NAME} sign-in failed: ${e.message}`);
                 } else if (e.reason === 'nonce') {
-                    setErrorMessage("Couldn't reach your hub. Check your connection.");
+                    setErrorMessage(`Sign-in setup failed: ${e.message}`);
                 } else {
                     setErrorMessage(e.message);
                 }

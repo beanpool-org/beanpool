@@ -26,7 +26,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { authenticateUser, getAppLockEnabled } from '../utils/LocalAuth';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
 
-LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS', 'has been extracted']);
+LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS', 'has been extracted', 'No route named "apple-probe"', 'No route named "google-probe"']);
 
 // Forward-compatible read signing (SRV-2/SRV-4): sign GET requests to the anchor
 // node so read-auth can be enforced server-side later without another app-store

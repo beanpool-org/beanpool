@@ -1,11 +1,19 @@
-# SSO client handover — 2026-08-11
+# SSO client handover — 2026-08-11, revised 2026-08-13
 
-**Read this before touching recovery, keepers, or Sign in with Apple.**
+**Read this before touching recovery, keepers, or Sign in with Apple or Google.**
 
-You are picking up mid-build. The design was settled on 2026-08-10, three PRs are open and
-unreviewed, the server half has been merged since 2026-08-07, and on 2026-08-11 the sign-in
-chain ran on real hardware for the first time. What remains is one short verification step
-and then the main build.
+You are picking up mid-build. The design was settled on 2026-08-10 and the server half merged
+2026-08-07. Since then Steps 4a–5 have all landed: the two-layer primitive, the enrolment
+rewrite, and Google sign-in on Android. **Real fragments now exist on the `test` node**, which
+closed the free-migration window this document was originally written around.
+
+**The one thing that has never run is recovery itself** — reading the fragments back and
+rebuilding a seed. Start at §6 Step 5b.
+
+> **Revision note.** Sections 2, 3 and 6 were rewritten on 2026-08-13 after the original text
+> was found describing shipped work as unbuilt. Everything asserted here was checked against
+> `main` or the live database, not against a chat summary. Sections 4, 5, 7, 8 and 9 are
+> original and were re-read, not re-verified.
 
 ---
 
@@ -98,29 +106,55 @@ recovery. A hostile node could have turned every restore into an OOM crash that 
 broken app. Capped at 65536, four times what sealing writes, so raising the cost later needs
 no opener change.
 
-### The clean slate is verified, not assumed
+### The clean slate CLOSED on 2026-08-13
 
-Every plan here rests on "no fragment has ever been deposited", which is what makes changing
-the split shape a schema edit rather than a data migration. **Checked 2026-08-11 against the
-live database, read-only:**
+Everything below this line was written while `recovery_shares` was empty everywhere, which is
+what made changing the split shape a schema edit rather than a data migration. **That window
+is now shut.** The first real fragments were deposited on `test` on 2026-08-13:
 
-| Node | `recovery_shares` | `members` |
+| Node | `recovery_shares` | Note |
 |---|---|---|
-| **mullum** (the live community) | **0** | 32 |
-| test | 0 | — |
+| **mullum** (the live community) | **0** as of 2026-08-11 | re-check before assuming |
+| test | **2** (`hub` + `sso`/`google`, member `Monnunit`) | real, not probe placeholders |
 
-bris and bindarrabi were not checked; both are effectively empty and neither has ever run
-enrolment, but if you are about to rely on this, check them. Recipe in §7.
+Changing the split shape from here is a **data migration**, not a schema edit. Anyone planning
+one must now answer what happens to existing fragments.
 
-**Re-check this before the enrolment rewrite lands.** It is one query, and it is the single
-assumption whose failure would strand real people's recovery.
+bris and bindarrabi were never checked. Recipe in §7.
 
-### Not built at all
+### Built since this document was first written (2026-08-11 → 13)
 
-- Any enrolment under the two-layer model. The client keeper code that exists predates it.
-- Google sign-in. `startSsoSignIn` throws `unsupported` for `'google'` — deliberately loud.
-- The PIN, the add-a-friend flow, the copy pass.
+The list below said "not built at all". Most of it now is. Verified against `main` and, where
+noted, against the live database — not taken from a chat report.
+
+- **The two-layer primitive** — `packages/beanpool-core/src/two-layer-split.ts` + tests (#256).
+- **The enrolment rewrite** under the two-layer model (#257), and keeper tiers reachable from
+  the app (#258).
+- **Google sign-in on Android** (#259). `startSsoSignIn` no longer throws `unsupported`.
+  End-to-end enrolment confirmed by the two DB rows above.
+- **The PIN** — server half only (#262). Endpoints `/api/recovery/pin/{set,status,verify}`,
+  table `recovery_pin`. **No client UI exists.**
+- **PWA sovereignty warnings** (#263) and recovery push routing (#264).
+
+### Still not built
+
+- **The Google recovery ROUND-TRIP.** Deposit is proven; reconstruction has never executed
+  once. This is the single largest unverified gap in the feature — see §3.
+- The add-a-friend flow, the trusted-friends client UI, the copy pass.
 - Node backup durability for the hub fragment.
+
+### ⚠️ A nonce-binding property was traded away on 2026-08-13
+
+`9375d98` relaxed `verifyIdToken` to accept **Google** `id_token`s carrying no `nonce` claim,
+because the free `GoogleSignin.signIn()` API cannot embed one (binding needs the premium
+`GoogleOneTapSignIn`). Google tokens are therefore **no longer cryptographically bound to the
+nonce**; the remaining anti-replay is `consumeNonce()`'s single-use + member-binding on the
+server-issued value, plus the signed-request envelope. Apple is unaffected and still strict.
+
+`test-sso.ts` asserts this tolerated path explicitly (#266) so it is covered rather than
+merely un-asserted. **This has not been signed off as acceptable for production** — it is
+recorded here because `sso.ts` reasons carefully about nonce binding everywhere else, and a
+future reader should not mistake it for an oversight or for a settled decision.
 
 ---
 
@@ -151,13 +185,15 @@ sign-in could not be matched to this request"* and never uses the word "nonce", 
 a member-facing sentence should not name an internal mechanism. The first live run therefore
 reported `STOPPED EARLIER` on what was actually a pass.
 
-**Still not proven:**
+**Still not proven (as of 2026-08-11) — since CLOSED for Google:**
 
 > `ssoLookupHash` and the storage path have never run against a real token.
 
-They execute only *after* a correct nonce, which the probe deliberately never sends. They are
-covered by unit tests, and they are local code with no external dependency — so this is a much
-smaller gap than the one that just closed, but it is not zero.
+They executed for the first time on 2026-08-13, when a real Google enrolment wrote an `sso`
+row carrying a genuine `sso_lookup_hash` on `test`. The Apple equivalent remains unrun.
+
+**What replaced it as the open gap:** nothing has ever *read* a fragment back. Storage is
+proven; reconstruction is not. See §6 Step 5b.
 
 ### On the VERBATIM result
 
@@ -231,85 +267,49 @@ measured. The measurement is recorded in the header comment of
 
 ## 6. Next steps, in order
 
-### Steps 1–3 — ~~verify a real token, merge #248/#249/#250~~ DONE 2026-08-11
+### Steps 1–5 — DONE (2026-08-11 → 13)
 
-All four PRs merged. Section 4 of the probe verified a real Apple token. See §3.
+| Step | What | Where |
+|---|---|---|
+| 1–3 | verify a real Apple token, merge #248/#249/#250/#251 | done 2026-08-11 |
+| 4a | the two-layer primitive | `packages/beanpool-core/src/two-layer-split.ts` (#256) |
+| 4b | the enrolment rewrite | #257 |
+| 4c | keeper tiers reachable from the app | #258 |
+| 5 | Google sign-in on Android | #259 |
 
-### Step 4a — the two-layer primitive (DO THIS FIRST, it is self-contained)
+**Step 5's nonce question was answered, and the answer was "we cannot".** The free
+`GoogleSignin.signIn()` API accepts no custom nonce, so there is nothing to measure — the
+claim is simply absent. The server was relaxed to tolerate that (`9375d98`) rather than
+Google being dropped. See the warning at the end of §2 before treating this as settled.
 
-Build **only** this before touching enrolment. It changes no existing behaviour, it is
-exhaustively testable, and everything later sits on it. If work stops after 4a, nothing is
-left broken.
+### Step 5b — the recovery ROUND-TRIP ← **DO THIS NEXT**
 
-**Where things already are** — read these before writing anything:
+**This is the gap.** Enrolment writes fragments — proven, two real rows on `test`. Nothing
+has ever read them back. The whole feature is the round trip, and half of it has never run.
 
-| File | What it has |
-|---|---|
-| `packages/beanpool-core/src/recovery-split.ts` | `RECOVERY_THRESHOLD = 3`, `splitRecoveryPhrase(phrase, shareCount)`, `combineRecoveryPhrase(shares)`, `assertRecoveryCsprngAvailable()`, envelope version + 4-byte checksum |
-| `packages/beanpool-core/src/keeper-crypto.ts` | the per-holder sealing: `sealShareToMember` / `openShareAsMember` (x25519), `sealShareToSso` / `openShareFromSso` (scrypt, **async**), `recordShareForHub` / `readHubShare` (plaintext) |
+Wipe the app (or Settings → Wipe Local Data), reinstall, choose Recover, sign in with Google.
+That should pull fragment `A` from the node plus the SSO-sealed `B` share, unseal `B` with
+the provider subject, XOR them back into the seed, and land on the SAME public key.
 
-Note the existing Shamir API is **phrase-level**, not bytes-level. Layer two needs to split
-`B`, which is bytes. Add a bytes-level pair beside the phrase-level one reusing the same
-Shamir core and the same envelope/checksum — do not fork a second implementation, and do not
-change the existing phrase-level signatures (the sovereign tier still uses them).
+Verify it for real, not from the screen:
 
-**What to build.** A new module, `packages/beanpool-core/src/two-layer-split.ts`:
-
+```bash
+# the recovered device must come back as the SAME pubkey, not a new identity
+adb -s <device> logcat -c && adb -s <device> logcat -d | grep -i "pubkey\|recover"
 ```
-splitTwoLayer(phrase, friendCount)  ->  { hubShare, friendShares }
-combineTwoLayer(hubShare, friendShares)  ->  phrase
-```
 
-Construction, and every part of it is load-bearing:
+and confirm on the node that no SECOND member row appeared for that callsign (recipe §7). A
+recovery that silently mints a new identity looks like success on the phone and is total
+failure — the member's beans, trades and standing stay with the old key.
 
-1. `A` = fresh random bytes the same length as the secret payload, from the same CSPRNG the
-   existing code asserts on. **`A` is the hub share.** It is not a Shamir share and is never
-   counted in any threshold.
-2. `B = secret XOR A`. Both halves mandatory: `A` alone is noise, `B` alone is noise.
-3. Shamir-split `B` across `friendCount` shares at **threshold 2**.
+### Step 6 — the PIN client half, the copy pass, add-a-friend
 
-**Invariants the tests must actually assert** (not just round-trip):
+The PIN **server** half merged in #262 (`/api/recovery/pin/{set,status,verify}`, table
+`recovery_pin`). **No client UI exists**, so the feature is unreachable by any member today.
 
-- `A` alone reconstructs nothing, and `B` alone reconstructs nothing.
-- **All** friend shares together, without `A`, reconstruct nothing. This is the property that
-  makes friend collusion structurally impossible, and it is the one a naive flat-Shamir
-  implementation silently loses.
-- Any 2 friend shares **plus** `A` reconstruct the phrase; 1 friend share plus `A` does not.
-- Round-trip survives the envelope/checksum path unchanged.
-- Two calls on the same phrase produce different `A` and different shares.
-
-**On `RECOVERY_THRESHOLD`.** It becomes the threshold of **layer two only** and drops 3 → 2.
-Do not reuse the existing constant for both layers — the sovereign/phrase path still means the
-old thing. Introduce the layer-two constant explicitly rather than mutating the old one in
-place, and check every existing reader of `RECOVERY_THRESHOLD` before changing its value.
-
-### Step 4b — the enrolment rewrite (only after 4a is merged) ← **NEXT after 4a**
-
-This is the large one, and it is the one everything else waits on. `seed = A ⊕ B`, then Shamir
-on `B`. Touches enrolment, the keeper panel, and `RECOVERY_THRESHOLD` semantics (3 → 2, layer
-two only). The existing client keeper code predates the model and should be rewritten, not
-patched.
-
-**Do this before Google.** Google sign-in adds a second provider to a flow that still deposits
-the *old* share shape — so building it first means writing the deposit path twice and having
-two providers to re-verify instead of one. Apple already proves the whole chain end to end;
-Google adds reach, not knowledge. Reach is worth less than not doing the work twice.
-
-Sequencing note: the migration is free only while `recovery_shares` is empty everywhere
-(§2). This step is what closes that window, so re-check the counts immediately before it
-lands, not weeks earlier.
-
-### Step 5 — Google sign-in on Android, and measure its nonce echo
-
-Marty chose the **native Google library**, not a web flow. `startSsoSignIn` already throws a
-named `unsupported` error for Google so it fails loudly rather than appearing to work.
-
-Two things to establish, and neither is guesswork once the button exists: whether Google
-echoes the nonce **verbatim or hashed** (Apple was verbatim — measure, do not assume they
-match), and that a Google `sub` verifies against the four configured client IDs in `sso.ts`.
-Until Google is measured, the `nonceMayBeHashed` tolerance stays.
-
-### Step 6 — the PIN (non-SSO only), the copy pass, add-a-friend
+Note what the PIN is: it reveals the *keeper list* so a recovering member knows which friends
+to ring. It does NOT gate release of fragment `A`. Forgetting it costs convenience, not the
+account — build the UI to say that.
 
 ### Step 7 — node backup durability for the hub fragment
 
@@ -317,11 +317,13 @@ Every fragment lives on the node. **Backups are availability; guardians are sove
 Do not confuse the two — keepers do not protect against node loss, and if the node's disk is
 gone the member has nothing to connect to anyway.
 
+Now more urgent than when first written: `test` holds real fragments, so this is no longer
+theoretical.
+
 ### Also outstanding
 
-**The recovery push notification currently rides the `'escrow'` category**
-(`apps/server/src/routes/recovery-collect.ts:154`). Anyone who muted deal notifications has
-silently opted out of recovery alerts. It needs its own category.
+- **The recovery push category** — was outstanding here, and shipped in #264. The
+  `'escrow'`-category problem below is FIXED; left as a pointer only.
 
 ---
 

@@ -11,9 +11,20 @@ closed the free-migration window this document was originally written around.
 rebuilding a seed. Start at §6 Step 5b.
 
 > **Revision note.** Sections 2, 3 and 6 were rewritten on 2026-08-13 after the original text
-> was found describing shipped work as unbuilt. Everything asserted here was checked against
-> `main` or the live database, not against a chat summary. Sections 4, 5, 7, 8 and 9 are
+> was found describing shipped work as unbuilt. §5 gained traps 9–12 and §7 gained two
+> recipes from the same session. Everything asserted here was checked against `main`, the
+> running image, or the live database — not against a chat summary. Sections 4, 8 and 9 are
 > original and were re-read, not re-verified.
+
+### Start here
+
+1. `test` is on **1.1.42** with everything below deployed and live-verified (§2).
+2. The one thing that has never run is **recovery itself** — §6 Step 5b. It has a recorded
+   pass/fail condition; use it.
+3. If `test.beanpool.org` is unreachable, read **§5 trap 9** before touching anything — a
+   deploy can drop the tunnel while the node stays perfectly healthy.
+4. Two things are recorded as **decided-but-not-signed-off**: the Google nonce-binding
+   trade-off (end of §2) and the SSO tier being custodial by choice (§1). Neither is a bug.
 
 ---
 
@@ -135,6 +146,28 @@ noted, against the live database — not taken from a chat report.
 - **The PIN** — server half only (#262). Endpoints `/api/recovery/pin/{set,status,verify}`,
   table `recovery_pin`. **No client UI exists.**
 - **PWA sovereignty warnings** (#263) and recovery push routing (#264).
+
+### Deployed and verified LIVE on 2026-08-13
+
+`test` runs **1.1.42** (`DEPLOY_PULL=1 bash deploy.sh 11`, CI image from `main`). Confirmed by
+grepping the running image and by signed requests against the public host — not by the version
+string, and not from a chat report:
+
+| Check | Result |
+|---|---|
+| PIN routes in the running image (`dist/routes/pin.js`) | ✅ |
+| `recovery_pin` table created | ✅ |
+| `quorum_required` default back to **3** | ✅ |
+| the 2 recovery fragments survived the deploy | ✅ |
+| anti-enumeration: unknown vs real vs wrong-case callsign | ✅ byte-identical |
+
+**A caveat about `pin.ts`'s own header.** It says the verify endpoint is *"UNAUTHENTICATED
+(recovering device has no identity to sign with)"*. That is wrong and will cost the next
+person time: `requireSignature` gates **every** mutating `/api/*` request, and
+`/api/recovery/pin/verify` is a POST that is *not* on the bypass list. It does not require
+**membership** — the middleware only binds `ctx.state.actor` to whatever key signed — so a
+recovering device signs with a **throwaway keypair**. Unsigned calls get
+`401 Missing cryptographic signature headers`. Recipe in §7.
 
 ### Still not built
 
@@ -263,6 +296,46 @@ measured. The measurement is recorded in the header comment of
 8. **Native JS changes need a rebuild.** Marty tests standalone builds, not dev-client +
    Metro. Never tell him a native change can be tested without rebuilding.
 
+### Added 2026-08-13 — each of these cost real time in one session
+
+9. **`deploy.sh` overwrites every node's Cloudflare tunnel token.** Line ~130 writes the
+   single global `CF_TUNNEL_TOKEN` from your local `.env` over `<node>/data/tunnel-token`.
+   Deploying to `test` took `test.beanpool.org` off the internet for ~20 minutes with
+   Cloudflare **error 1033 / HTTP 530**, cloudflared logging `Unauthorized: Tunnel not found`.
+   The token bytes were unchanged (same SHA-256 as the siblings), so the likeliest story is
+   that the tunnel had already been deleted Cloudflare-side and the *running* container was
+   coasting on an established connection — recreating it forced a re-registration that failed.
+   Either way: **a deploy can drop a node's public reachability, and the node itself will look
+   perfectly healthy while it happens.** Diagnose in this order:
+   - node direct (`docker exec … curl -k https://localhost:8446/…`) — 200 means the app is fine
+   - `docker logs <stack>-cloudflared-1` — the real error is here
+   - only ONE cloudflared container runs on the qld VM (test's). mullum/bris/bindarrabi hold
+     token files but run no tunnel, so *they are not affected by this*, and their 404s are
+     normal, not an outage.
+   Decode which tunnel a token names without exposing the secret:
+   ```bash
+   ssh ssh-qld.beanpool.org "cat /root/BeanPool-Test/data/tunnel-token" | python3 -c \
+     "import sys,base64,json; d=json.loads(base64.b64decode(sys.stdin.read().strip()+'==')); print('tunnel:',d['t'])"
+   ```
+10. **`/api/community` 404s on a perfectly healthy node.** It is not a route. Using it as a
+    health check invents outages — `/api/version` or `/api/recovery/keepers/<callsign>` are
+    real. This wasted a diagnostic cycle during the incident above.
+11. **The SSO sheet swallows the real error.** `SsoEnrolSheet.tsx` maps the `provider` and
+    `no-token` reasons to a generic *"…couldn't complete the sign-in. Try again."* and drops
+    `e.message`. On Android the true cause is in `logcat`, not on screen. `234cad0` improved
+    this; do not assume the UI text is the whole story.
+12. **Firebase SHA-1 fingerprints are a dead end for Google Sign-In here.** A red ⚠ on a
+    fingerprint in the Firebase console (`beanpool-6196d`, project number `751074523085`) is
+    **cosmetic for this app** — per Google's own docs it only affects Firebase Auth and
+    Dynamic Links, and BeanPool uses neither (only `expo-notifications` for FCM, which
+    authenticates by API key + sender ID). Real Google Sign-In lives in a *different* GCP
+    project, `653933790375` — the one whose client IDs are in `sso.ts` and `sso-signin.ts`.
+    `apps/native/google-services.json` even has `"oauth_client": []`. Hours went into that
+    console screen before this was established. **The authoritative signing SHA-1 is Play
+    Console → Release → Setup → App integrity**, and it is `…FB:08:…` (the SHA-256 there
+    matches `PLAY_APP_SIGNING_SHA256` already hardcoded in `routes/settings.ts`).
+    The Play Developer API **cannot** return it — no endpoint exposes the signing certificate.
+
 ---
 
 ## 6. Next steps, in order
@@ -291,16 +364,31 @@ Wipe the app (or Settings → Wipe Local Data), reinstall, choose Recover, sign 
 That should pull fragment `A` from the node plus the SSO-sealed `B` share, unseal `B` with
 the provider subject, XOR them back into the seed, and land on the SAME public key.
 
-Verify it for real, not from the screen:
+**The pass condition, recorded here so it cannot be fudged after the fact.** As of
+2026-08-13 the enrolled member on `test` is:
+
+| | |
+|---|---|
+| callsign | `Monnunit` |
+| public key | `50b70b5ae9920531fadc70e6064ee1371f93829a515f3ef39df6d69cd13d9121` |
+| fragments | `hub`/`node` + `sso`/`google`, generation 1 |
+| members on node | 57 (before recovery) |
+
+Recovery passes **only** if the phone comes back as that exact public key.
 
 ```bash
-# the recovered device must come back as the SAME pubkey, not a new identity
-adb -s <device> logcat -c && adb -s <device> logcat -d | grep -i "pubkey\|recover"
+adb -s <device> logcat -c    # then run the recovery on the phone
+adb -s <device> logcat -d | grep -iE "pubkey|recover|50b70b5a"
 ```
 
-and confirm on the node that no SECOND member row appeared for that callsign (recipe §7). A
-recovery that silently mints a new identity looks like success on the phone and is total
-failure — the member's beans, trades and standing stay with the old key.
+Then confirm on the node that **no new member row appeared** and the count is still 57
+(recipe §7). **A recovery that silently mints a NEW identity looks identical on screen and is
+total failure** — the member's beans, trades and standing stay stranded on the old key. This
+is the single most likely way this step "passes" while being broken, so check the count, not
+the screen.
+
+Note the deposit path was verified this way and the report was accurate; the failure mode
+above is hypothetical, not observed. Check it anyway.
 
 ### Step 6 — the PIN client half, the copy pass, add-a-friend
 
@@ -370,6 +458,42 @@ curl -s "https://test.beanpool.org/api/recovery/keepers/<callsign>"
 # 200 + JSON = route exists. Plain-text "Not Found" = node predates #223.
 ```
 
+**Call a signed API endpoint as a "recovering device" (no membership needed).** This is how
+the PIN anti-enumeration property was verified against the live node, and it is the shape any
+recovery-side client call must take. Save as `pintest.mjs`, run with plain `node`:
+
+```javascript
+import crypto from 'node:crypto';
+const BASE = 'https://test.beanpool.org';
+const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');   // throwaway identity
+const pub = publicKey.export({ format: 'der', type: 'spki' }).subarray(12).toString('hex');
+
+async function signedPost(path, body) {
+    const raw = JSON.stringify(body);
+    const ts = Date.now().toString();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const msg = `POST\n${path}\n${ts}\n${nonce}\n${raw}`;          // EXACT signed payload shape
+    const sig = crypto.sign(null, Buffer.from(msg), privateKey).toString('base64');
+    const res = await fetch(BASE + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Public-Key': pub,
+                   'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce },
+        body: raw,
+    });
+    return { status: res.status, body: await res.text() };
+}
+
+const fake = await signedPost('/api/recovery/pin/verify', { callsign: 'no-such-callsign', pin: '000000' });
+const real = await signedPost('/api/recovery/pin/verify', { callsign: 'Monnunit',         pin: '000000' });
+console.log(fake, real);
+console.log('anti-enumeration:', fake.body === real.body ? 'PASS' : 'FAIL');
+```
+
+Both must return **byte-identical** `{"verified":false,"keepers":null}`. If the real callsign
+ever answers differently — including a `rateLimited` field — the endpoint has become a
+membership oracle and that is a regression, not a feature. (It leaked exactly that way in
+#262 before review; see the CR fixes in that PR.)
+
 **Count fragments on a live node — READ ONLY.** This is how §2 was verified, and how to
 re-verify it before the enrolment rewrite. `readonly: true` is not decoration: `mullum` is a
 real community and this is the one query it is acceptable to run there.
@@ -378,6 +502,18 @@ real community and this is the one query it is acceptable to run there.
 ssh ssh-qld.beanpool.org "docker exec -w /app/apps/server beanpool-mullum-beanpool-node-1 \
   node -e \"const D=require('better-sqlite3');const d=new D('/data/state.db',{readonly:true});\
   console.log(d.prepare('SELECT COUNT(*) c FROM recovery_shares').get().c)\""
+```
+
+**Did a recovery mint a NEW identity instead of restoring the old one?** The check that
+decides whether Step 5b passed. Run it before and after.
+
+```bash
+ssh ssh-qld.beanpool.org "docker exec -w /app/apps/server beanpool-test-beanpool-node-1 \
+  node -e \"const D=require('better-sqlite3');const d=new D('/data/state.db',{readonly:true});
+  console.log('members:', d.prepare('SELECT COUNT(*) c FROM members').get().c);
+  console.log(JSON.stringify(d.prepare(\\\"SELECT callsign, public_key, status FROM members WHERE lower(callsign)='monnunit'\\\").all()))\""
+# PASS: still 57 members, ONE Monnunit row, pubkey 50b70b5ae992…d13d9121
+# FAIL: 58 members, or a second Monnunit row, or a different pubkey
 ```
 
 The qld VM hosts `test`, `mullum`, `bris` and `bindarrabi`; container names follow

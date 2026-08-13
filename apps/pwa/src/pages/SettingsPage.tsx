@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic } from '../lib/identity';
+import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import {
     getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getPendingRecoveryRequests,
@@ -96,7 +96,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
     // This is deliberately stored in localStorage, not on the server — the server
     // cannot see a PWA member's phrase and should not know whether they've saved it.
     const [seedViewed, setSeedViewed] = useState(() => {
-        return localStorage.getItem('beanpool_seed_viewed') === 'true';
+        return localStorage.getItem(seedViewedKey(identity.publicKey)) === 'true';
     });
 
     // Holiday mode
@@ -268,7 +268,18 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
             return;
         }
         let cancelled = false;
-        getMnemonic(identity).then(w => { if (!cancelled) setSeedWords(w); });
+        getMnemonic(identity).then(w => {
+            if (cancelled) return;
+            setSeedWords(w);
+            // Mark as viewed HERE — when the words are actually on screen — rather than on
+            // the button that navigates here. A mis-tap that bounces straight back out
+            // would otherwise permanently clear the one warning standing between the member
+            // and silent browser eviction.
+            if (w && w.length > 0) {
+                localStorage.setItem(seedViewedKey(identity.publicKey), 'true');
+                setSeedViewed(true);
+            }
+        });
         return () => { cancelled = true; };
     }, [identity, mode]);
 
@@ -434,17 +445,17 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
                                 {/* Sovereignty banner — shown until the member has viewed their 12 words */}
                                 {!seedViewed && (
-                                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 space-y-2">
-                                        <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
-                                            ⚠️ You haven't saved your recovery phrase yet
+                                    <div role="alert" className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 space-y-2">
+                                        <p className="text-sm font-bold text-amber-900 dark:text-amber-300">
+                                            <span aria-hidden="true">⚠️</span> You haven't saved your recovery phrase yet
                                         </p>
-                                        <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                                        <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
                                             Your 12 words are the <strong>only</strong> way to recover your account.
                                             Browsers can clear site data without warning — Safari does it after 7 days of inactivity.
                                         </p>
                                         <button
                                             onClick={() => setMode('seed')}
-                                            className="mt-1 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white border-none cursor-pointer transition-colors"
+                                            className="mt-1 min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-700 hover:bg-amber-800 text-white border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                                         >
                                             View & Save Recovery Phrase
                                         </button>
@@ -477,14 +488,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 </button>
 
                                 <button
-                                    onClick={() => {
-                                        setMode('seed');
-                                        // Mark seed as viewed — removes the persistent banner
-                                        if (!seedViewed) {
-                                            localStorage.setItem('beanpool_seed_viewed', 'true');
-                                            setSeedViewed(true);
-                                        }
-                                    }}
+                                    onClick={() => setMode('seed')}
                                     className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
                                 >
                                     <span className="text-xl">🔑</span>

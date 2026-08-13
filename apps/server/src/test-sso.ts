@@ -263,8 +263,16 @@ async function battery(f: Fixture): Promise<void> {
 
     only(f);
     nonce = issueNonce(SUBJECT);
-    await rejects(() => verifyIdToken(provider, mint({}), [aud], nonce, SUBJECT),
-        'a token with NO nonce is refused');
+    if (provider === 'google') {
+        // Google's free GoogleSignin.signIn() API never embeds a nonce claim (see the
+        // dedicated comment in sso.ts) — a missing claim is the EXPECTED shape for this
+        // provider, tolerated only when expectedNonce itself is validly issued+consumed.
+        const identity = await verifyIdToken(provider, mint({}), [aud], nonce, SUBJECT);
+        assert(identity.sub === f.sub, 'a Google token with NO nonce still verifies (tolerated for the free API)');
+    } else {
+        await rejects(() => verifyIdToken(provider, mint({}), [aud], nonce, SUBJECT),
+            'a token with NO nonce is refused');
+    }
 
     only(f);
     nonce = issueNonce(SUBJECT);

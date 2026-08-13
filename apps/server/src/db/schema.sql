@@ -878,3 +878,21 @@ CREATE TABLE IF NOT EXISTS sync_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_peer ON sync_audit_log(origin_peer_id, synced_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_time ON sync_audit_log(synced_at DESC);
+
+-- ===================== RECOVERY PIN =====================
+-- Optional 6-digit numeric PIN for non-SSO recovery. When set, a correct PIN entry
+-- reveals the member's keeper list (which friends hold their Shamir fragments) —
+-- it does NOT gate release of fragment A itself.
+--
+-- Rate limited: 2 free attempts, then 1 attempt per 15 minutes. No hard lockout.
+-- The response for "wrong PIN" and "no such callsign" is intentionally identical
+-- to prevent member enumeration.
+CREATE TABLE IF NOT EXISTS recovery_pin (
+    owner_pubkey   TEXT PRIMARY KEY REFERENCES members(public_key),
+    pin_hash       TEXT NOT NULL,
+    pin_salt       TEXT NOT NULL,
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    last_attempt_at DATETIME,
+    created_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);

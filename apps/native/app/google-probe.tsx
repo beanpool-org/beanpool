@@ -11,6 +11,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 let GoogleSigninModule: any = null;
 try {
     GoogleSigninModule = require('@react-native-google-signin/google-signin');

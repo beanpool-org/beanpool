@@ -3523,7 +3523,7 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports',
-        'recovery_requests', 'recovery_approvals', 'recovery_shares', 'settlements', 'tombstones',
+        'recovery_requests', 'recovery_approvals', 'recovery_shares', 'recovery_pin', 'settlements', 'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {

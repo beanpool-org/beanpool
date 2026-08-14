@@ -30,6 +30,8 @@ import { protectionFrom } from '../../utils/protection-state';
 import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
 import type { SsoProvider } from '../../utils/sso-signin';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
+import { RecoveryPinModal } from '../../components/RecoveryPinModal';
+import { getPinStatus } from '../../utils/pin';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -282,6 +284,8 @@ export default function SettingsScreen() {
     const [protectionLoading, setProtectionLoading] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [ssoEnrolProvider, setSsoEnrolProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
+    const [showPinModal, setShowPinModal] = useState(false);
+    const [pinSet, setPinSet] = useState<boolean | null>(null);
     const [showFriendSheet, setShowFriendSheet] = useState(false);
     const [revealWords, setRevealWords] = useState(false);
     const [revealLoading, setRevealLoading] = useState(false);
@@ -357,6 +361,9 @@ export default function SettingsScreen() {
                 skipped: [],
                 available: body.total,
             });
+
+            const pinRes = await getPinStatus(url, identity);
+            setPinSet(pinRes.pinSet);
         } catch (e) {
             console.warn('[Protection] fetch failed:', e);
         } finally {
@@ -1507,6 +1514,35 @@ export default function SettingsScreen() {
                                 )}
                             </View>
 
+                            <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
+                                <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
+                                    🔢 Friend List Recovery PIN (Optional)
+                                </Text>
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
+                                    Protects your trusted friends list during recovery so strangers cannot harvest your contacts. Forgetting it does not lock you out.
+                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface.subtle, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default }}>
+                                    <View style={{ flex: 1, marginRight: 12 }}>
+                                        <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>
+                                            {pinSet ? '✓ PIN Active' : 'No PIN Set'}
+                                        </Text>
+                                        <Text style={{ color: colors.text.muted, fontSize: 12, marginTop: 2 }}>
+                                            {pinSet ? 'Hides friend list during recovery' : 'Friend list is revealed during recovery'}
+                                        </Text>
+                                    </View>
+                                    <Pressable
+                                        style={{ backgroundColor: colors.surface.card, borderColor: colors.border.default, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 }}
+                                        onPress={() => setShowPinModal(true)}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={pinSet ? 'Manage recovery PIN' : 'Set recovery PIN'}
+                                    >
+                                        <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 13 }}>
+                                            {pinSet ? 'Manage' : 'Set PIN'}
+                                        </Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+
                             {Platform.OS === 'web' && (
                                 <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
                                     <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
@@ -1556,6 +1592,15 @@ export default function SettingsScreen() {
                     setShowFriendSheet(false);
                 }}
             />
+            {identity && (
+                <RecoveryPinModal
+                    visible={showPinModal}
+                    currentPinSet={!!pinSet}
+                    identity={identity}
+                    onClose={() => setShowPinModal(false)}
+                    onSuccess={(newPinSet) => setPinSet(newPinSet)}
+                />
+            )}
 
             {mode === 'recovery-requests' && (
                 <View style={styles.card}>

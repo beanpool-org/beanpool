@@ -28,6 +28,7 @@ import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { FriendPickerSheet } from '../../components/FriendPickerSheet';
 import { protectionFrom } from '../../utils/protection-state';
 import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
+import type { SsoProvider } from '../../utils/sso-signin';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
 
 
@@ -280,6 +281,7 @@ export default function SettingsScreen() {
     const [protectionResult, setProtectionResult] = useState<KeeperEnrolmentResult | null>(null);
     const [protectionLoading, setProtectionLoading] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
+    const [ssoEnrolProvider, setSsoEnrolProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
     const [showFriendSheet, setShowFriendSheet] = useState(false);
     const [revealWords, setRevealWords] = useState(false);
     const [revealLoading, setRevealLoading] = useState(false);
@@ -1431,7 +1433,10 @@ export default function SettingsScreen() {
                             <RecoveryAlertBanner />
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
-                                onProtectSso={Platform.OS !== 'web' ? () => setShowSsoSheet(true) : undefined}
+                                onProtectSso={Platform.OS !== 'web' ? (prov) => {
+                                    if (prov) setSsoEnrolProvider(prov);
+                                    setShowSsoSheet(true);
+                                } : undefined}
                                 onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                             />
 
@@ -1536,6 +1541,7 @@ export default function SettingsScreen() {
 
             <SsoEnrolSheet
                 visible={showSsoSheet}
+                provider={ssoEnrolProvider}
                 onClose={() => setShowSsoSheet(false)}
                 onEnrolled={(result) => {
                     setProtectionResult(result);

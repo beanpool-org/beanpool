@@ -44,18 +44,16 @@ export function SsoEnrolSheet({
     const PROVIDER_NAME = provider === 'apple' ? 'Apple' : 'Google';
     const { identity: contextIdentity } = useIdentity();
     const identity = passedIdentity ?? contextIdentity;
-    const [step, setStep] = useState<'explain' | 'processing' | 'success' | 'error'>('explain');
+    const [step, setStep] = useState<'processing' | 'success' | 'error'>('processing');
     const [errorMessage, setErrorMessage] = useState('');
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);
+    const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Reset state when opened
     React.useEffect(() => {
-        if (visible) {
-            setStep('explain');
-            setErrorMessage('');
-            setEnrolResult(null);
-        }
-    }, [visible]);
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
+    }, []);
 
     const handleConnect = async () => {
         if (!identity) {
@@ -90,6 +88,11 @@ export function SsoEnrolSheet({
             } else {
                 setEnrolResult(result);
                 setStep('success');
+                if (timerRef.current) clearTimeout(timerRef.current);
+                timerRef.current = setTimeout(() => {
+                    onEnrolled(result);
+                    onClose();
+                }, 1000);
             }
         } catch (e) {
             console.error('[SSO Error]', e);
@@ -114,7 +117,18 @@ export function SsoEnrolSheet({
         }
     };
 
+    // Auto-trigger sign-in when opened
+    React.useEffect(() => {
+        if (visible && identity) {
+            setStep('processing');
+            setErrorMessage('');
+            setEnrolResult(null);
+            handleConnect();
+        }
+    }, [visible, provider, identity]);
+
     const handleDone = () => {
+        if (timerRef.current) clearTimeout(timerRef.current);
         if (enrolResult) {
             onEnrolled(enrolResult);
         }
@@ -130,38 +144,18 @@ export function SsoEnrolSheet({
         >
             <View style={styles.overlay}>
                 <View style={styles.sheet}>
-                    {step === 'explain' && (
-                        <View style={styles.content}>
-                            <Text style={styles.title} accessibilityRole="header">Protect with {PROVIDER_NAME} sign-in</Text>
-                            <Text style={styles.body}>
-                                If you lose this phone, signing in with {PROVIDER_NAME} on a new one will get you back into your account.
-                            </Text>
-                            <View style={styles.warningBox}>
-                                <Text style={styles.warningText}>
-                                    Your hub operator can reconstruct your account if they also control your {PROVIDER_NAME} sign-in. If full sovereignty matters, use trusted friends instead.
-                                </Text>
-                            </View>
-                            <TouchableOpacity
-                                style={styles.primaryButton}
-                                onPress={handleConnect}
-                                accessibilityRole="button"
-                            >
-                                <Text style={styles.primaryButtonText}>Connect {PROVIDER_NAME}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.secondaryButton}
-                                onPress={onClose}
-                                accessibilityRole="button"
-                            >
-                                <Text style={styles.secondaryButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
                     {step === 'processing' && (
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             <ActivityIndicator size="large" color={colors.brand.primary} />
-                            <Text style={styles.processingText}>Connecting...</Text>
+                            <Text style={styles.processingText}>Connecting with {PROVIDER_NAME}...</Text>
+                            <TouchableOpacity
+                                style={[styles.secondaryButton, { marginTop: 24, alignSelf: 'stretch' }]}
+                                onPress={onClose}
+                                accessibilityRole="button"
+                                accessibilityLabel="Cancel connection"
+                            >
+                                <Text style={styles.secondaryButtonText}>Cancel</Text>
+                            </TouchableOpacity>
                         </View>
                     )}
 
@@ -190,7 +184,7 @@ export function SsoEnrolSheet({
                             <Text style={styles.body} accessibilityRole="alert">{errorMessage}</Text>
                             <TouchableOpacity
                                 style={styles.primaryButton}
-                                onPress={() => setStep('explain')}
+                                onPress={handleConnect}
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.primaryButtonText}>Try again</Text>

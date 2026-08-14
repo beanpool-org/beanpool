@@ -14,6 +14,7 @@ import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native
 import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 import { colors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
+import { GoogleButton, AppleButton } from './SsoButton';
 
 export function KeeperProtectionPanel({ 
     protection,
@@ -21,7 +22,7 @@ export function KeeperProtectionPanel({
     onProtectFriends,
 }: { 
     protection: Protection;
-    onProtectSso?: () => void;
+    onProtectSso?: (provider?: 'google' | 'apple') => void;
     onProtectFriends?: () => void;
 }): React.JSX.Element {
     if (protection.state === 'covered') {
@@ -100,24 +101,36 @@ export function KeeperProtectionPanel({
             <View style={styles.buttonContainer}>
                 {Platform.OS !== 'web' && onProtectSso && (
                     <View style={styles.actionBlock}>
-                        <TouchableOpacity
-                            style={styles.buttonSecondary}
-                            onPress={onProtectSso}
-                            accessibilityRole="button"
-                            accessibilityLabel={Platform.OS === 'ios' ? 'Protect with Apple sign-in' : 'Protect with Google sign-in'}
-                            accessibilityHint="Opens sheet to set up sign-in account recovery. This is not a login."
-                        >
-                            <Text style={styles.buttonSecondaryText}>
-                                {Platform.OS === 'ios' ? 'Protect with Apple sign-in' : 'Protect with Google sign-in'}
-                            </Text>
-                        </TouchableOpacity>
+                        {Platform.OS === 'ios' ? (
+                            <>
+                                <AppleButton
+                                    title="Protect with Apple"
+                                    onPress={() => onProtectSso('apple')}
+                                />
+                                <GoogleButton
+                                    title="Protect with Google"
+                                    onPress={() => onProtectSso('google')}
+                                    style={{ marginTop: 10 }}
+                                />
+                            </>
+                        ) : (
+                            <GoogleButton
+                                title="Protect with Google"
+                                onPress={() => onProtectSso('google')}
+                            />
+                        )}
                         <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
                     </View>
                 )}
                 {onProtectFriends && (
                     <View style={styles.actionBlock}>
-                        <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectFriends} accessibilityRole="button">
-                            <Text style={styles.buttonSecondaryText}>Protect with trusted friends</Text>
+                        <TouchableOpacity
+                            style={styles.buttonSecondary}
+                            onPress={onProtectFriends}
+                            accessibilityRole="button"
+                            accessibilityLabel="Protect with trusted friends"
+                        >
+                            <Text style={styles.buttonSecondaryText}>🛡️ Protect with trusted friends</Text>
                         </TouchableOpacity>
                     </View>
                 )}

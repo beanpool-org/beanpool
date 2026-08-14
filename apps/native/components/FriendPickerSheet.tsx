@@ -254,7 +254,13 @@ export function FriendPickerSheet({
         const selectedMembers = members.filter(m => selectedKeys.has(m.publicKey));
         return (
             <View style={styles.stepContainer}>
-                <Text style={styles.successTitle} accessibilityRole="header">✅ You're covered</Text>
+                <Text 
+                    style={styles.successTitle} 
+                    accessibilityRole="header"
+                    accessibilityLabel="You're covered"
+                >
+                    ✅ You're covered
+                </Text>
                 <Text style={styles.body}>
                     Your account has been split. Any {TWO_LAYER_THRESHOLD} of your friends plus your hub can bring you back.
                 </Text>
@@ -307,13 +313,22 @@ export function FriendPickerSheet({
         </View>
     );
 
+    const handleDismiss = () => {
+        if (step === 4) return;
+        if (step === 5 && enrolmentResult) {
+            onEnrolled(enrolmentResult);
+        }
+        onClose();
+    };
+
     return (
-        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={handleDismiss}>
             <View style={styles.modalOverlay}>
                 <TouchableOpacity
                     style={StyleSheet.absoluteFill}
                     activeOpacity={1}
-                    onPress={onClose}
+                    onPress={handleDismiss}
+                    disabled={step === 4}
                     accessibilityLabel="Close friend picker backdrop"
                     accessibilityRole="button"
                 />

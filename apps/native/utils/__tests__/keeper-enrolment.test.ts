@@ -23,21 +23,22 @@ vi.mock('../node-post', () => ({
     signedPost: vi.fn(),
 }));
 
+import { ed25519 } from '@noble/curves/ed25519.js';
 import { enrolKeepers, enrolFriendKeepers, enrolSsoKeeper } from '../keeper-enrolment';
 import { signedPost, anchorUrl } from '../node-post';
 
 const IDENTITY = {
     callsign: 'Alice',
-    publicKey: 'aa'.repeat(32),
-    privateKey: 'bb'.repeat(32),
+    publicKey: Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(9))).toString('hex'),
+    privateKey: Buffer.from(new Uint8Array(32).fill(9)).toString('hex'),
     createdAt: '2026-08-14T00:00:00.000Z',
     mnemonic: 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' '),
 } as any;
 
 const FRIEND_KEYS = [
-    '11'.repeat(32),
-    '22'.repeat(32),
-    '33'.repeat(32),
+    Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(1))).toString('hex'),
+    Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(2))).toString('hex'),
+    Buffer.from(ed25519.getPublicKey(new Uint8Array(32).fill(3))).toString('hex'),
 ];
 
 describe('keeper-enrolment.ts', () => {

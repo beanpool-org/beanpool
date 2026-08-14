@@ -19,7 +19,7 @@
       },
       "android": {
         "buildType": "apk",
-        "credentialsSource": "local"
+        "credentialsSource": "remote"
       }
     },
     "production": {
@@ -28,7 +28,7 @@
         "GOOGLE_MAPS_API_KEY": "AIzaSyDpRO8fjR8U-7pyFPbjvro6FCAPLZL2bBo"
       },
       "android": {
-        "credentialsSource": "local"
+        "credentialsSource": "remote"
       },
       "ios": {
         "credentialsSource": "remote"

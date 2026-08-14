@@ -988,15 +988,6 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        {__DEV__ && (
-                            <Pressable
-                                style={{ backgroundColor: '#2f6b46', padding: 12, borderRadius: 8, marginTop: 16, alignItems: 'center' }}
-                                onPress={() => router.push('/google-probe')}
-                            >
-                                <Text style={{ color: '#fff', fontWeight: '600' }}>🧪 Open Google SSO Probe</Text>
-                            </Pressable>
-                        )}
-
                         <SsoEnrolSheet
                             visible={showSsoSheet}
                             provider={ssoProvider}
@@ -1418,15 +1409,6 @@ export default function WelcomeScreen() {
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Next →</Text>}
                         </Pressable>
 
-                        {__DEV__ && (
-                            <Pressable
-                                style={{ backgroundColor: '#2f6b46', padding: 12, borderRadius: 8, marginTop: 12, alignItems: 'center' }}
-                                onPress={() => router.push('/google-probe')}
-                            >
-                                <Text style={{ color: '#fff', fontWeight: '600' }}>🧪 Open Google SSO Probe</Text>
-                            </Pressable>
-                        )}
-
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back">
                             <Text style={styles.backBtnText}>← Back</Text>
                         </Pressable>
@@ -1821,15 +1803,6 @@ export default function WelcomeScreen() {
                 <Pressable style={styles.memberBtn} onPress={() => setMode('create')} accessibilityRole="button">
                     <Text style={styles.memberBtnText}>🎟️ I'm New Here</Text>
                 </Pressable>
-
-                {__DEV__ && (
-                    <Pressable
-                        style={{ backgroundColor: '#2f6b46', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, marginTop: 12, width: '100%', alignItems: 'center' }}
-                        onPress={() => router.push('/google-probe')}
-                    >
-                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>🧪 Open Google SSO Probe</Text>
-                    </Pressable>
-                )}
 
                 <Text style={styles.inviteOnlyHint}>
                     BeanPool is invite-only — you join with an invite from a member.{'\n'}

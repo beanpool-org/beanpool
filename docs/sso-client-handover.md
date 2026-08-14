@@ -7,9 +7,10 @@ You are picking up mid-build. The design was settled on 2026-08-10 and the serve
 the enrolment rewrite, Google sign-in on Android, and **the complete recovery round-trip**
 (tested and verified on physical Pixel 9 Pro against `test.beanpool.org` on 2026-08-14).
 
-**What remains unbuilt:** the copy pass, and the **Apple** recovery round-trip (Google's is
-verified; Apple has only ever been *enrolled*). The PIN client UI (#272), node backup
-durability (#274) and the friend picker (#273) are all built — see §6.
+**What remains unbuilt:** the copy pass, and the trusted-friends recovery path end-to-end. Both
+**Google** (Step 5b, Pixel 9 Pro) and **Apple** (Step 8, iPhone XR) SSO recovery round-trips are
+**VERIFIED on physical hardware**. The PIN client UI (#272), node backup durability (#274), and
+the friend picker (#273) are all built and tested — see §6.
 
 > **Revision note.** Revised 2026-08-14 after Step 5b (the Google recovery round-trip) was executed
 > on a physical Pixel 9 Pro against `test.beanpool.org` and verified via DB assertion (57 members preserved,
@@ -182,14 +183,9 @@ checked against the tree or the live DB on 2026-08-14.
   `idx_recovery_pin_updated_at`, `test-recovery-backup-durability.ts`.
 - ~~The friend picker~~ — **DONE** (#273): `components/FriendPickerSheet.tsx`.
 
-**What is genuinely still open:**
-
-- **The APPLE recovery round-trip has never run.** Apple is *enrolled* — member `Gabi` holds
-  `hub` + `sso`/`apple` fragments on `test` — and the token-verification chain is proven on an
-  iPhone XR. But no Apple fragment has ever been read back and recombined. Google's round-trip
-  passing does **not** transfer: the Apple path differs in nonce handling (Apple echoes the
-  nonce, Google omits it entirely — see the warning below), which is exactly the kind of
-  divergence that breaks only on the provider you did not test.
+- ~~The APPLE recovery round-trip~~ — **DONE and verified on hardware** (2026-08-14). Tested on
+  physical iPhone XR against `test.beanpool.org`. Live DB confirms 57 members preserved, one `Gabi` row,
+  exact public key `9f79f679a922b04f104cb6230d2b96a89e1eb60f3a7f7e408fa048163e29a8c6` restored.
 - The copy pass.
 - The trusted-friends *recovery* path end-to-end (enrolment via the picker exists; ringing 2
   of 5 friends and recombining has not been exercised on hardware).
@@ -414,21 +410,17 @@ Live physical measurement on **Gabriela's iPhone (XR, iOS 18)** against `test.be
 It is **not** the recovery half. The probe deliberately sends a wrong nonce and stores nothing,
 so it never exercises release, unsealing or recombination.
 
-### Step 8 — the APPLE recovery round-trip ← **NEXT**
+### Step 8 — the APPLE recovery round-trip (COMPLETED & VERIFIED on hardware 2026-08-14)
 
-The Apple equivalent of Step 5b, and the last unrun path in the SSO tier.
+The Apple equivalent of Step 5b, executed on physical **iPhone XR** (`00008020-00161D201128402E`)
+against `test.beanpool.org`.
 
-Apple is already enrolled, so the fixture exists: member **`Gabi`** on `test` holds `hub` +
-`sso`/`apple` fragments (confirmed by DB query 2026-08-14). Nothing has ever read them back.
+1. **Pre-recovery baseline:** 57 members on `test`, `Gabi` holding hub + sso/apple fragments.
+2. **Recovery execution:** App cleared locally, Welcome screen → "🔑 Restore your account" → "Recover with Apple" → Callsign `Gabi`, node `https://test.beanpool.org` → FaceID authentication.
+3. **Recombination:** Unauthenticated SSO request fetched hub fragment $A$ and sealed fragment $B$, derived unwrap key from Apple `sub` (`001096.1c2395...`), unsealed $B$, and reconstructed seed via $A \oplus B$.
+4. **Post-recovery DB assertion:** Exactly 57 members remain, ONE `Gabi` row with matching public key `9f79f679a922b04f104cb6230d2b96a89e1eb60f3a7f7e408fa048163e29a8c6` in `active` status. Zero new accounts minted.
 
-Run it exactly as Step 5b, on the iPhone XR (`00008020-00161D201128402E`), and record the same
-pass condition **before** starting — member count, `Gabi`'s exact public key, one row only.
-
-**Do not assume Google's pass carries over.** The two providers diverge precisely where this
-is most likely to break: Google omits the `nonce` claim entirely and the server was relaxed to
-tolerate that (`9375d98`), while Apple echoes it verbatim and is still checked strictly. A
-recovery path that silently depends on the relaxed branch would pass on Google and fail on
-Apple — or, worse, pass on both for the wrong reason.
+Both **Google** and **Apple** SSO recovery round-trips are now 100% verified on physical devices.
 
 ---
 

@@ -20,6 +20,7 @@ import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
 import { FriendPickerSheet } from '../components/FriendPickerSheet';
+import { GoogleButton, AppleButton } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
@@ -79,10 +80,14 @@ export default function WelcomeScreen() {
     const [inviteRedeemed, setInviteRedeemed] = useState(false);
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
-    const [seedCopied, setSeedCopied] = useState(false);
+    const [showSsoSheet, setShowSsoSheet] = useState(false);
+    const [ssoEnrolProvider, setSsoEnrolProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
+    const [showFriendSheet, setShowFriendSheet] = useState(false);
+    const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
+    const [seedCopied, setSeedCopied] = useState(false);
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone
     // that already holds one). Rare, but destructive: the phone can only hold one
@@ -123,10 +128,6 @@ export default function WelcomeScreen() {
     // left blank, so the day states A and B become reachable the dashboard already has the
     // shape to compare them against, instead of a cliff where the old rows have no variant.
     const protectionShownRef = useRef(false);
-    const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
-    // Sheet visibility for SSO and friend enrolment flows
-    const [showSsoSheet, setShowSsoSheet] = useState(false);
-    const [showFriendSheet, setShowFriendSheet] = useState(false);
 
     /** Whether a covered member has asked to see the words anyway. Never hides them once shown. */
     const [revealWords, setRevealWords] = useState(false);
@@ -969,7 +970,10 @@ export default function WelcomeScreen() {
                     <View style={styles.card}>
                         <KeeperProtectionPanel
                             protection={protection}
-                            onProtectSso={Platform.OS !== 'web' ? () => setShowSsoSheet(true) : undefined}
+                            onProtectSso={Platform.OS !== 'web' ? (prov) => {
+                                if (prov) setSsoEnrolProvider(prov);
+                                setShowSsoSheet(true);
+                            } : undefined}
                             onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                         />
 
@@ -995,6 +999,7 @@ export default function WelcomeScreen() {
 
                         <SsoEnrolSheet
                             visible={showSsoSheet}
+                            provider={ssoEnrolProvider}
                             identity={pendingIdentity}
                             onClose={() => setShowSsoSheet(false)}
                             onEnrolled={(result) => {
@@ -1734,22 +1739,18 @@ export default function WelcomeScreen() {
 
                             {!loading && (
                                 <>
-                                    <Pressable
-                                        style={[styles.primaryBtn, { backgroundColor: '#4285F4', marginBottom: 10 }]}
+                                    <GoogleButton
+                                        title="Recover with Google"
                                         onPress={() => handleSsoRecover('google')}
-                                        accessibilityRole="button"
-                                    >
-                                        <Text style={styles.primaryBtnText}>Recover with Google</Text>
-                                    </Pressable>
+                                        style={{ marginBottom: 10 }}
+                                    />
 
                                     {Platform.OS === 'ios' && (
-                                        <Pressable
-                                            style={[styles.primaryBtn, { backgroundColor: '#000000', marginBottom: 10 }]}
+                                        <AppleButton
+                                            title="Recover with Apple"
                                             onPress={() => handleSsoRecover('apple')}
-                                            accessibilityRole="button"
-                                        >
-                                            <Text style={styles.primaryBtnText}>Recover with Apple</Text>
-                                        </Pressable>
+                                            style={{ marginBottom: 10 }}
+                                        />
                                     )}
                                 </>
                             )}

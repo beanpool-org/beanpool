@@ -40,12 +40,14 @@ export function GoogleButton({
     onPress,
     title = 'Protect with Google',
     disabled = false,
+    accessibilityHint,
     style,
     textStyle,
 }: {
     onPress: () => void;
     title?: string;
     disabled?: boolean;
+    accessibilityHint?: string;
     style?: StyleProp<ViewStyle>;
     textStyle?: StyleProp<TextStyle>;
 }) {
@@ -57,6 +59,8 @@ export function GoogleButton({
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={title}
+            accessibilityHint={accessibilityHint}
+            accessibilityState={{ disabled }}
         >
             <View style={styles.iconContainer}>
                 <GoogleLogo size={20} />
@@ -70,12 +74,14 @@ export function AppleButton({
     onPress,
     title = 'Protect with Apple',
     disabled = false,
+    accessibilityHint,
     style,
     textStyle,
 }: {
     onPress: () => void;
     title?: string;
     disabled?: boolean;
+    accessibilityHint?: string;
     style?: StyleProp<ViewStyle>;
     textStyle?: StyleProp<TextStyle>;
 }) {
@@ -87,6 +93,8 @@ export function AppleButton({
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel={title}
+            accessibilityHint={accessibilityHint}
+            accessibilityState={{ disabled }}
         >
             <View style={styles.iconContainer}>
                 <AppleLogo size={18} color="#FFFFFF" />
@@ -126,7 +134,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         backgroundColor: '#000000',
         borderWidth: 1,
-        borderColor: '#000000',
+        borderColor: '#333333',
         borderRadius: 12,
         paddingVertical: 14,
         paddingHorizontal: 16,

@@ -47,6 +47,13 @@ export function SsoEnrolSheet({
     const [step, setStep] = useState<'processing' | 'success' | 'error'>('processing');
     const [errorMessage, setErrorMessage] = useState('');
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);
+    const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    React.useEffect(() => {
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
+    }, []);
 
     const handleConnect = async () => {
         if (!identity) {
@@ -81,8 +88,8 @@ export function SsoEnrolSheet({
             } else {
                 setEnrolResult(result);
                 setStep('success');
-                // Automatically complete after brief feedback
-                setTimeout(() => {
+                if (timerRef.current) clearTimeout(timerRef.current);
+                timerRef.current = setTimeout(() => {
                     onEnrolled(result);
                     onClose();
                 }, 1000);
@@ -112,14 +119,16 @@ export function SsoEnrolSheet({
 
     // Auto-trigger sign-in when opened
     React.useEffect(() => {
-        if (visible) {
+        if (visible && identity) {
+            setStep('processing');
             setErrorMessage('');
             setEnrolResult(null);
             handleConnect();
         }
-    }, [visible]);
+    }, [visible, provider, identity]);
 
     const handleDone = () => {
+        if (timerRef.current) clearTimeout(timerRef.current);
         if (enrolResult) {
             onEnrolled(enrolResult);
         }
@@ -139,6 +148,14 @@ export function SsoEnrolSheet({
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             <ActivityIndicator size="large" color={colors.brand.primary} />
                             <Text style={styles.processingText}>Connecting with {PROVIDER_NAME}...</Text>
+                            <TouchableOpacity
+                                style={[styles.secondaryButton, { marginTop: 24, alignSelf: 'stretch' }]}
+                                onPress={onClose}
+                                accessibilityRole="button"
+                                accessibilityLabel="Cancel connection"
+                            >
+                                <Text style={styles.secondaryButtonText}>Cancel</Text>
+                            </TouchableOpacity>
                         </View>
                     )}
 

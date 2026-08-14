@@ -124,7 +124,12 @@ export function KeeperProtectionPanel({
                 )}
                 {onProtectFriends && (
                     <View style={styles.actionBlock}>
-                        <TouchableOpacity style={styles.buttonSecondary} onPress={onProtectFriends} accessibilityRole="button">
+                        <TouchableOpacity
+                            style={styles.buttonSecondary}
+                            onPress={onProtectFriends}
+                            accessibilityRole="button"
+                            accessibilityLabel="Protect with trusted friends"
+                        >
                             <Text style={styles.buttonSecondaryText}>🛡️ Protect with trusted friends</Text>
                         </TouchableOpacity>
                     </View>

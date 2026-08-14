@@ -364,14 +364,12 @@ Executed and verified on a physical Pixel 9 Pro (`4B231FDAP000YL`) against `test
 6. Local WebSocket connected to `wss://test.beanpool.org/ws?callsign=monnunit&pubkey=50b70b5ae9920531fadc70e6064ee1371f93829a515f3ef39df6d69cd13d9121` signed with the restored private key.
 7. **Post-recovery DB assertion:** Exactly 57 members remain, ONE `Monnunit` row with matching public key `50b70b5ae9920531fadc70e6064ee1371f93829a515f3ef39df6d69cd13d9121` in `active` status. Zero new accounts minted.
 
-### Step 6 — the PIN client half, the copy pass, add-a-friend ← **DO THIS NEXT**
+### Step 6 — the PIN client half, settings management & Guardian recovery (COMPLETED in #272)
 
-The PIN **server** half merged in #262 (`/api/recovery/pin/{set,status,verify}`, table
-`recovery_pin`). **No client UI exists**, so the feature is unreachable by any member today.
-
-Note what the PIN is: it reveals the *keeper list* so a recovering member knows which friends
-to ring. It does NOT gate release of fragment `A`. Forgetting it costs convenience, not the
-account — build the UI to say that.
+The PIN client utilities (`apps/native/utils/pin.ts`), Settings management UI (`RecoveryPinModal.tsx`), and Guardian recovery integration (`recover-identity.tsx`) merged in #272 (`243a880`).
+- Authenticated endpoints (`/api/recovery/pin/status` and `/api/recovery/pin/set`) wired to Settings → Account Protection.
+- Unauthenticated endpoint (`/api/recovery/pin/verify`) wired to Social Recovery with non-lockout skip fallback.
+- Comprehensive unit tests in `apps/native/utils/__tests__/pin.test.ts` (51/51 native tests pass).
 
 ### Step 7 — node backup durability for the hub fragment
 

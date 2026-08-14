@@ -1452,13 +1452,40 @@ export default function WelcomeScreen() {
                 <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
                         <Text style={styles.title}>🔑 Restore your account</Text>
-                        <Text style={styles.subtitle}>Your account isn't lost — bring it to this device with your 12 recovery words, or with help from your Guardians.</Text>
+                        <Text style={styles.subtitle}>Your account isn't lost — bring it to this device with your Google or Apple sign-in, 12 recovery words, or Guardians.</Text>
 
-
-
-                        <Pressable style={styles.ssoRecoverBtn} onPress={() => { setMode('ssoRecover'); setError(null); }} accessibilityRole="button">
-                            <Text style={styles.ssoRecoverBtnText}>🌐 Recover with Google / Apple</Text>
-                        </Pressable>
+                        {Platform.OS === 'ios' ? (
+                            <>
+                                <AppleButton
+                                    title="Recover with Apple"
+                                    onPress={() => {
+                                        setSsoEnrolProvider('apple');
+                                        setMode('ssoRecover');
+                                        setError(null);
+                                    }}
+                                    style={{ marginBottom: 12, width: '100%' }}
+                                />
+                                <GoogleButton
+                                    title="Recover with Google"
+                                    onPress={() => {
+                                        setSsoEnrolProvider('google');
+                                        setMode('ssoRecover');
+                                        setError(null);
+                                    }}
+                                    style={{ marginBottom: 12, width: '100%' }}
+                                />
+                            </>
+                        ) : (
+                            <GoogleButton
+                                title="Recover with Google"
+                                onPress={() => {
+                                    setSsoEnrolProvider('google');
+                                    setMode('ssoRecover');
+                                    setError(null);
+                                }}
+                                style={{ marginBottom: 12, width: '100%' }}
+                            />
+                        )}
 
                         <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
                             <Text style={styles.recoverBtnText}>🔑 Recover with 12 Words</Text>
@@ -1687,6 +1714,8 @@ export default function WelcomeScreen() {
     }
 
     if (mode === 'ssoRecover') {
+        const isApple = ssoEnrolProvider === 'apple';
+        const providerName = isApple ? 'Apple' : 'Google';
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
@@ -1696,9 +1725,11 @@ export default function WelcomeScreen() {
                 >
                     <ScrollView contentContainerStyle={styles.scroll}>
                         <View style={styles.card}>
-                            <Text style={styles.title}>🌐 Recover with Sign-In</Text>
+                            <Text style={styles.title}>
+                                {isApple ? ' Recover with Apple' : 'Recover with Google'}
+                            </Text>
                             <Text style={styles.subtitle}>
-                                If you enabled Google or Apple recovery, enter your callsign and node address to restore your account.
+                                Enter your callsign and node address to restore your account with {providerName}.
                             </Text>
 
                             <TextInput
@@ -1726,11 +1757,11 @@ export default function WelcomeScreen() {
                                 editable={!loading}
                             />
 
-                            {loading && ssoProgressMessage && (
+                            {loading && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }}>
                                     <ActivityIndicator size="large" color={palette.blue600} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        {ssoProgressMessage}
+                                        {ssoProgressMessage || `Verifying with ${providerName}...`}
                                     </Text>
                                 </View>
                             )}
@@ -1738,21 +1769,19 @@ export default function WelcomeScreen() {
                             {error && <Text style={styles.error}>{error}</Text>}
 
                             {!loading && (
-                                <>
+                                isApple ? (
+                                    <AppleButton
+                                        title="Recover with Apple"
+                                        onPress={() => handleSsoRecover('apple')}
+                                        style={{ marginBottom: 10, width: '100%' }}
+                                    />
+                                ) : (
                                     <GoogleButton
                                         title="Recover with Google"
                                         onPress={() => handleSsoRecover('google')}
-                                        style={{ marginBottom: 10 }}
+                                        style={{ marginBottom: 10, width: '100%' }}
                                     />
-
-                                    {Platform.OS === 'ios' && (
-                                        <AppleButton
-                                            title="Recover with Apple"
-                                            onPress={() => handleSsoRecover('apple')}
-                                            style={{ marginBottom: 10 }}
-                                        />
-                                    )}
-                                </>
+                                )
                             )}
 
                             <Pressable

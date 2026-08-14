@@ -1,26 +1,23 @@
-# SSO client handover — 2026-08-11, revised 2026-08-13
+# SSO client handover — 2026-08-11, revised 2026-08-14
 
 **Read this before touching recovery, keepers, or Sign in with Apple or Google.**
 
 You are picking up mid-build. The design was settled on 2026-08-10 and the server half merged
-2026-08-07. Since then Steps 4a–5 have all landed: the two-layer primitive, the enrolment
-rewrite, and Google sign-in on Android. **Real fragments now exist on the `test` node**, which
-closed the free-migration window this document was originally written around.
+2026-08-07. Steps 4a–5b have all landed and been verified on hardware: the two-layer primitive,
+the enrolment rewrite, Google sign-in on Android, and **the complete recovery round-trip**
+(tested and verified on physical Pixel 9 Pro against `test.beanpool.org` on 2026-08-14).
 
-**The one thing that has never run is recovery itself** — reading the fragments back and
-rebuilding a seed. Start at §6 Step 5b.
+**What remains unbuilt:** The PIN client UI, copy polish, and add-a-friend flows. Start at §6 Step 6.
 
-> **Revision note.** Sections 2, 3 and 6 were rewritten on 2026-08-13 after the original text
-> was found describing shipped work as unbuilt. §5 gained traps 9–12 and §7 gained two
-> recipes from the same session. Everything asserted here was checked against `main`, the
-> running image, or the live database — not against a chat summary. Sections 4, 8 and 9 are
-> original and were re-read, not re-verified.
+> **Revision note.** Revised 2026-08-14 after Step 5b (the Google recovery round-trip) was executed
+> on a physical Pixel 9 Pro against `test.beanpool.org` and verified via DB assertion (57 members preserved,
+> exact public key restored, PR #268 merged). Everything asserted here was checked against `main`, the
+> running image, or the live database — not against a chat summary.
 
 ### Start here
 
 1. `test` is on **1.1.42** with everything below deployed and live-verified (§2).
-2. The one thing that has never run is **recovery itself** — §6 Step 5b. It has a recorded
-   pass/fail condition; use it.
+2. **Step 5b (the recovery round-trip) is COMPLETE and VERIFIED** on physical Pixel 9 Pro.
 3. If `test.beanpool.org` is unreachable, read **§5 trap 9** before touching anything — a
    deploy can drop the tunnel while the node stays perfectly healthy.
 4. Two things are recorded as **decided-but-not-signed-off**: the Google nonce-binding
@@ -340,7 +337,7 @@ measured. The measurement is recorded in the header comment of
 
 ## 6. Next steps, in order
 
-### Steps 1–5 — DONE (2026-08-11 → 13)
+### Steps 1–5b — DONE (2026-08-11 → 14)
 
 | Step | What | Where |
 |---|---|---|
@@ -349,48 +346,25 @@ measured. The measurement is recorded in the header comment of
 | 4b | the enrolment rewrite | #257 |
 | 4c | keeper tiers reachable from the app | #258 |
 | 5 | Google sign-in on Android | #259 |
+| 5b | Google recovery round-trip | #268 (verified on Pixel 9 Pro 2026-08-14) |
 
 **Step 5's nonce question was answered, and the answer was "we cannot".** The free
 `GoogleSignin.signIn()` API accepts no custom nonce, so there is nothing to measure — the
 claim is simply absent. The server was relaxed to tolerate that (`9375d98`) rather than
 Google being dropped. See the warning at the end of §2 before treating this as settled.
 
-### Step 5b — the recovery ROUND-TRIP ← **DO THIS NEXT**
+### Step 5b — the recovery ROUND-TRIP — **VERIFIED PASS (2026-08-14)**
 
-**This is the gap.** Enrolment writes fragments — proven, two real rows on `test`. Nothing
-has ever read them back. The whole feature is the round trip, and half of it has never run.
+Executed and verified on a physical Pixel 9 Pro (`4B231FDAP000YL`) against `test.beanpool.org` on 2026-08-14:
+1. Local app data wiped on device (`adb shell pm clear org.beanpool.pillar`).
+2. Standalone APK built and installed (`versionCode 213`, `1.1.95`).
+3. User selected "Restore your account" → "Recover with Google / Apple" → entered `Monnunit` and `https://test.beanpool.org`.
+4. Recovery session opened, Google token verified, SSO fragment released (`share_index 2` with `kdf_params`), and Hub fragment instantly released (`share_index 1` with `sso-approved`).
+5. App fetched released fragments, unsealed `B` via Google sub, read `A` from Hub, XOR-combined into seed, and derived keypair.
+6. Local WebSocket connected to `wss://test.beanpool.org/ws?callsign=monnunit&pubkey=50b70b5ae9920531fadc70e6064ee1371f93829a515f3ef39df6d69cd13d9121` signed with the restored private key.
+7. **Post-recovery DB assertion:** Exactly 57 members remain, ONE `Monnunit` row with matching public key `50b70b5ae9920531fadc70e6064ee1371f93829a515f3ef39df6d69cd13d9121` in `active` status. Zero new accounts minted.
 
-Wipe the app (or Settings → Wipe Local Data), reinstall, choose Recover, sign in with Google.
-That should pull fragment `A` from the node plus the SSO-sealed `B` share, unseal `B` with
-the provider subject, XOR them back into the seed, and land on the SAME public key.
-
-**The pass condition, recorded here so it cannot be fudged after the fact.** As of
-2026-08-13 the enrolled member on `test` is:
-
-| | |
-|---|---|
-| callsign | `Monnunit` |
-| public key | `50b70b5ae9920531fadc70e6064ee1371f93829a515f3ef39df6d69cd13d9121` |
-| fragments | `hub`/`node` + `sso`/`google`, generation 1 |
-| members on node | 57 (before recovery) |
-
-Recovery passes **only** if the phone comes back as that exact public key.
-
-```bash
-adb -s <device> logcat -c    # then run the recovery on the phone
-adb -s <device> logcat -d | grep -iE "pubkey|recover|50b70b5a"
-```
-
-Then confirm on the node that **no new member row appeared** and the count is still 57
-(recipe §7). **A recovery that silently mints a NEW identity looks identical on screen and is
-total failure** — the member's beans, trades and standing stay stranded on the old key. This
-is the single most likely way this step "passes" while being broken, so check the count, not
-the screen.
-
-Note the deposit path was verified this way and the report was accurate; the failure mode
-above is hypothetical, not observed. Check it anyway.
-
-### Step 6 — the PIN client half, the copy pass, add-a-friend
+### Step 6 — the PIN client half, the copy pass, add-a-friend ← **DO THIS NEXT**
 
 The PIN **server** half merged in #262 (`/api/recovery/pin/{set,status,verify}`, table
 `recovery_pin`). **No client UI exists**, so the feature is unreachable by any member today.

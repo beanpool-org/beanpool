@@ -81,7 +81,7 @@ export default function WelcomeScreen() {
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
-    const [ssoEnrolProvider, setSsoEnrolProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
+    const [ssoProvider, setSsoProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
     const [showFriendSheet, setShowFriendSheet] = useState(false);
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
     const [inviterName, setInviterName] = useState<string | null>(null);
@@ -971,7 +971,7 @@ export default function WelcomeScreen() {
                         <KeeperProtectionPanel
                             protection={protection}
                             onProtectSso={Platform.OS !== 'web' ? (prov) => {
-                                if (prov) setSsoEnrolProvider(prov);
+                                if (prov) setSsoProvider(prov);
                                 setShowSsoSheet(true);
                             } : undefined}
                             onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
@@ -999,7 +999,7 @@ export default function WelcomeScreen() {
 
                         <SsoEnrolSheet
                             visible={showSsoSheet}
-                            provider={ssoEnrolProvider}
+                            provider={ssoProvider}
                             identity={pendingIdentity}
                             onClose={() => setShowSsoSheet(false)}
                             onEnrolled={(result) => {
@@ -1451,15 +1451,17 @@ export default function WelcomeScreen() {
                 <StatusBar style="dark" />
                 <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
-                        <Text style={styles.title}>🔑 Restore your account</Text>
-                        <Text style={styles.subtitle}>Your account isn't lost — bring it to this device with your Google or Apple sign-in, 12 recovery words, or Guardians.</Text>
+                        <Text style={styles.title} accessibilityRole="header">🔑 Restore your account</Text>
+                        <Text style={styles.subtitle}>
+                            Your account isn't lost — bring it to this device with your {Platform.OS === 'ios' ? 'Apple or Google' : 'Google'} sign-in, 12 recovery words, or Guardians.
+                        </Text>
 
                         {Platform.OS === 'ios' ? (
                             <>
                                 <AppleButton
                                     title="Recover with Apple"
                                     onPress={() => {
-                                        setSsoEnrolProvider('apple');
+                                        setSsoProvider('apple');
                                         setMode('ssoRecover');
                                         setError(null);
                                     }}
@@ -1468,7 +1470,7 @@ export default function WelcomeScreen() {
                                 <GoogleButton
                                     title="Recover with Google"
                                     onPress={() => {
-                                        setSsoEnrolProvider('google');
+                                        setSsoProvider('google');
                                         setMode('ssoRecover');
                                         setError(null);
                                     }}
@@ -1479,7 +1481,7 @@ export default function WelcomeScreen() {
                             <GoogleButton
                                 title="Recover with Google"
                                 onPress={() => {
-                                    setSsoEnrolProvider('google');
+                                    setSsoProvider('google');
                                     setMode('ssoRecover');
                                     setError(null);
                                 }}
@@ -1714,7 +1716,7 @@ export default function WelcomeScreen() {
     }
 
     if (mode === 'ssoRecover') {
-        const isApple = ssoEnrolProvider === 'apple';
+        const isApple = ssoProvider === 'apple';
         const providerName = isApple ? 'Apple' : 'Google';
         return (
             <SafeAreaView style={styles.container}>
@@ -1725,8 +1727,8 @@ export default function WelcomeScreen() {
                 >
                     <ScrollView contentContainerStyle={styles.scroll}>
                         <View style={styles.card}>
-                            <Text style={styles.title}>
-                                {isApple ? ' Recover with Apple' : 'Recover with Google'}
+                            <Text style={styles.title} accessibilityRole="header">
+                                Recover with {providerName}
                             </Text>
                             <Text style={styles.subtitle}>
                                 Enter your callsign and node address to restore your account with {providerName}.
@@ -1758,7 +1760,7 @@ export default function WelcomeScreen() {
                             />
 
                             {loading && (
-                                <View style={{ alignItems: 'center', marginVertical: 16 }}>
+                                <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={palette.blue600} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
                                         {ssoProgressMessage || `Verifying with ${providerName}...`}

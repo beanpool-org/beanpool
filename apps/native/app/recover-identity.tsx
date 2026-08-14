@@ -10,14 +10,17 @@ import { createIdentity, wipeIdentity } from '../utils/identity';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import { colors } from '../constants/colors';
 import { useIdentity } from './IdentityContext';
+import { verifyRecoveryPin } from '../utils/pin';
 
 export default function RecoverIdentityScreen() {
     const { identity, setIdentity } = useIdentity();
-    const [step, setStep] = useState<'lookup' | 'select' | 'guess' | 'creating' | 'waiting'>('lookup');
+    const [step, setStep] = useState<'lookup' | 'select' | 'pin' | 'guess' | 'creating' | 'waiting'>('lookup');
     const [callsign, setCallsign] = useState('');
     const [anchorUrl, setAnchorUrl] = useState('');
     const [lookupResults, setLookupResults] = useState<any[]>([]);
     const [selectedProfile, setSelectedProfile] = useState<any>(null);
+    const [pin, setPin] = useState('');
+    const [pinVerified, setPinVerified] = useState(false);
     const [guardianGuess, setGuardianGuess] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -83,6 +86,40 @@ export default function RecoverIdentityScreen() {
 
     const handleSelect = (profile: any) => {
         setSelectedProfile(profile);
+        setPin('');
+        setError(null);
+        setStep('pin');
+    };
+
+    const handleVerifyPin = async () => {
+        if (!/^\d{6}$/.test(pin)) {
+            setError('PIN must be exactly 6 digits.');
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+            const rawAnchor = anchorUrl.trim();
+            const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
+            const res = await verifyRecoveryPin(finalAnchorUrl, selectedProfile.callsign, pin);
+            if (res.verified) {
+                setPinVerified(true);
+                setError(null);
+                setStep('guess');
+            } else if (res.error) {
+                setError(res.error);
+            } else {
+                setError("PIN didn't match. If you forgot your PIN, tap 'Skip PIN' to continue.");
+            }
+        } catch (e: any) {
+            setError(e.message || 'Verification failed. Try again or skip.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSkipPin = () => {
+        setError(null);
         setStep('guess');
     };
 
@@ -230,6 +267,60 @@ export default function RecoverIdentityScreen() {
                         </>
                     )}
 
+                    {step === 'pin' && (
+                        <>
+                            <Text style={styles.title} accessibilityRole="header">🔢 Recovery PIN</Text>
+                            <Text style={styles.subtitle}>
+                                If you set a 6-digit Recovery PIN, enter it below to verify your account. If you don't have a PIN or forgot it, tap 'Skip PIN' — forgetting your PIN never locks you out.
+                            </Text>
+
+                            <TextInput
+                                accessibilityLabel="6 digit recovery PIN"
+                                style={styles.pinInput}
+                                placeholder="••••••"
+                                placeholderTextColor={colors.text.muted}
+                                value={pin}
+                                onChangeText={(text) => {
+                                    const clean = text.replace(/[^0-9]/g, '').slice(0, 6);
+                                    setPin(clean);
+                                    setError(null);
+                                }}
+                                keyboardType="number-pad"
+                                maxLength={6}
+                                secureTextEntry={true}
+                                autoFocus={true}
+                                autoComplete="off"
+                                textContentType="oneTimeCode"
+                                editable={!loading}
+                            />
+
+                            {error && <Text style={styles.error} accessibilityLiveRegion="assertive">{error}</Text>}
+
+                            <Pressable
+                                style={[styles.primaryBtn, (loading || pin.length !== 6) && { opacity: 0.5 }]}
+                                onPress={handleVerifyPin}
+                                disabled={loading || pin.length !== 6}
+                                accessibilityRole="button"
+                                accessibilityState={{ disabled: loading || pin.length !== 6 }}
+                            >
+                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Verify PIN</Text>}
+                            </Pressable>
+
+                            <Pressable
+                                style={styles.secondaryBtn}
+                                onPress={handleSkipPin}
+                                disabled={loading}
+                                accessibilityRole="button"
+                            >
+                                <Text style={styles.secondaryBtnText}>Skip PIN / I Don't Have One</Text>
+                            </Pressable>
+
+                            <Pressable style={styles.backBtn} onPress={() => setStep('select')} accessibilityRole="button">
+                                <Text style={styles.backBtnText}>← Back</Text>
+                            </Pressable>
+                        </>
+                    )}
+
                     {step === 'guess' && (
                         <>
                             <Text style={styles.title}>Guardian Knowledge Check</Text>
@@ -299,6 +390,36 @@ const styles = StyleSheet.create({
     backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
     backBtnText: { color: colors.text.secondary, fontSize: 14 },
     error: { color: colors.feedback.danger.solid, fontSize: 14, marginBottom: 16, textAlign: 'center' },
+
+    pinInput: {
+        backgroundColor: colors.surface.card,
+        borderWidth: 1,
+        borderColor: colors.border.strong,
+        borderRadius: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        fontSize: 24,
+        letterSpacing: 12,
+        textAlign: 'center',
+        color: colors.text.heading,
+        marginBottom: 16,
+        alignSelf: 'center',
+        width: 220,
+    },
+    secondaryBtn: {
+        backgroundColor: colors.surface.subtle,
+        borderWidth: 1,
+        borderColor: colors.border.default,
+        padding: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    secondaryBtnText: {
+        color: colors.text.body,
+        fontSize: 14,
+        fontWeight: '600',
+    },
 
     profileBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.subtle, padding: 12, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default },
     avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', marginRight: 12 },

@@ -379,10 +379,14 @@ Guaranteed durability for all recovery fragments and PIN hashes across automated
 - **Database Optimization**: Added `idx_recovery_pin_updated_at` index on `recovery_pin(updated_at)`.
 - **Automated Durability Test**: New 16-point integration suite in `apps/server/src/test-recovery-backup-durability.ts` verifying atomic `VACUUM INTO` snapshots, disk wipe/restore integrity, live primary-to-backup mirror replication, and force-resync table sweeps (all 7 monorepo suites and 59 integration suites passing).
 
-### Also outstanding
+### Physical iOS Apple Sign-In & Probe Verification (COMPLETED on hardware 2026-08-14)
 
-- **The recovery push category** — was outstanding here, and shipped in #264. The
-  `'escrow'`-category problem below is FIXED; left as a pointer only.
+Live physical measurement on **Gabriela's iPhone (XR, iOS 18)** against `test.beanpool.org`:
+- **Nonce Binding**: Apple iOS Authentication Services returned the nonce **`VERBATIM`** in the JWT claims (`claims.nonce === nonce`). The node accepted this form directly.
+- **Cryptographic Token Verification**: `probeNodeVerification` against `https://test.beanpool.org/api/recovery/shares/sso` reported:
+  `VERIFIED (400) — rejected on the nonce, which means Apple's JWKS, the RS256 signature, the issuer, the audience and the expiry ALL passed against a real token.`
+- **Audience & Claims**: `aud === 'org.beanpool.pillar'` matched the configured bundle ID; `credential.user` matched `claims.sub` (`001096.1c23950fb36f4f21ab14de52dd6f8705.0151`).
+- **Conclusion**: The entire live Apple Sign-In cryptographic verification chain (JWKS download, live RS256 verification, audience/issuer/nonce binding) is 100% verified end-to-end on physical Apple hardware.
 
 ---
 

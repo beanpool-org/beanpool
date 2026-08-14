@@ -182,6 +182,22 @@ export interface SyncRecoveryShare {
     updatedAt: string;
 }
 
+/**
+ * Replicated 6-digit Recovery PIN state.
+ *
+ * Protects the friend list from contact harvesting without locking the user out.
+ * Replicated to backup mirror nodes so promoted secondaries can verify PINs.
+ */
+export interface SyncRecoveryPin {
+    ownerPubkey: string;
+    pinHash: string;
+    pinSalt: string;
+    attempts?: number;
+    lastAttemptAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -202,6 +218,7 @@ export interface SyncPayload {
     recoveryRequests?: SyncRecoveryRequest[];
     recoveryApprovals?: SyncRecoveryApproval[];
     recoveryShares?: SyncRecoveryShare[];
+    recoveryPins?: SyncRecoveryPin[];
     settlements?: SyncSettlement[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     nodeId: string;
@@ -422,6 +439,22 @@ export function exportSyncState(
         updatedAt: row.updated_at || row.created_at,
     }));
 
+    let recoveryPins: SyncRecoveryPin[] = [];
+    try {
+        const recoveryPinRows = sel('recovery_pin', 'updated_at');
+        recoveryPins = recoveryPinRows.map((row: any) => ({
+            ownerPubkey: row.owner_pubkey,
+            pinHash: row.pin_hash,
+            pinSalt: row.pin_salt,
+            attempts: row.attempts ?? 0,
+            lastAttemptAt: row.last_attempt_at ?? null,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at || row.created_at,
+        }));
+    } catch {
+        // recovery_pin table may not exist on older test fixtures
+    }
+
     // Settlements. Uses the same `sel` cursor helper as every other table, so delta sync picks up a row
     // whose state has moved without re-sending the whole outbox.
     const settlementRows = sel('settlements', 'updated_at');
@@ -473,6 +506,7 @@ export function exportSyncState(
         recoveryRequests,
         recoveryApprovals,
         recoveryShares,
+        recoveryPins,
         settlements,
         tombstones,
     };

@@ -744,6 +744,25 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
+            // Recovery PINs — 6-digit PIN bcrypt hashes protecting friend lists.
+            // INSERT OR REPLACE keyed on PRIMARY KEY(owner_pubkey) so latest PIN wins.
+            if (remote.recoveryPins) {
+                const insertPin = db.prepare(`INSERT OR REPLACE INTO recovery_pin
+                    (owner_pubkey, pin_hash, pin_salt, attempts, last_attempt_at, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)`);
+                for (const rp of remote.recoveryPins) {
+                    try {
+                        insertPin.run(
+                            rp.ownerPubkey, rp.pinHash, rp.pinSalt,
+                            rp.attempts ?? 0, rp.lastAttemptAt ?? null,
+                            rp.createdAt, rp.updatedAt || rp.createdAt,
+                        );
+                    } catch {
+                        // recovery_pin table may not exist on certain older migrations/mocks
+                    }
+                }
+            }
+
             if (remote.tombstones) {
                 for (const ts of remote.tombstones) {
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);

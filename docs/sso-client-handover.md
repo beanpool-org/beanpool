@@ -371,14 +371,13 @@ The PIN client utilities (`apps/native/utils/pin.ts`), Settings management UI (`
 - Unauthenticated endpoint (`/api/recovery/pin/verify`) wired to Social Recovery with non-lockout skip fallback.
 - Comprehensive unit tests in `apps/native/utils/__tests__/pin.test.ts` (51/51 native tests pass).
 
-### Step 7 — node backup durability for the hub fragment
+### Step 7 — node backup durability for the hub fragment (COMPLETED in #274)
 
-Every fragment lives on the node. **Backups are availability; guardians are sovereignty.**
-Do not confuse the two — keepers do not protect against node loss, and if the node's disk is
-gone the member has nothing to connect to anyway.
-
-Now more urgent than when first written: `test` holds real fragments, so this is no longer
-theoretical.
+Guaranteed durability for all recovery fragments and PIN hashes across automated database snapshots and live node-to-node replication (#274, `2c40003`).
+- **Engine Sync Layer**: `SyncRecoveryPin` interface and `recoveryPins` field in `SyncPayload` mapped from `recovery_pin` table.
+- **Server Replication & Importer**: Added `recoveryPins` replication in `importRemoteState` with LWW conflict resolution, and included `recovery_pin` in `clearReplicatedTables`.
+- **Database Optimization**: Added `idx_recovery_pin_updated_at` index on `recovery_pin(updated_at)`.
+- **Automated Durability Test**: New 16-point integration suite in `apps/server/src/test-recovery-backup-durability.ts` verifying atomic `VACUUM INTO` snapshots, disk wipe/restore integrity, live primary-to-backup mirror replication, and force-resync table sweeps (all 7 monorepo suites and 59 integration suites passing).
 
 ### Also outstanding
 

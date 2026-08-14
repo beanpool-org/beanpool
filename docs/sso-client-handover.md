@@ -7,7 +7,9 @@ You are picking up mid-build. The design was settled on 2026-08-10 and the serve
 the enrolment rewrite, Google sign-in on Android, and **the complete recovery round-trip**
 (tested and verified on physical Pixel 9 Pro against `test.beanpool.org` on 2026-08-14).
 
-**What remains unbuilt:** The PIN client UI, copy polish, and add-a-friend flows. Start at §6 Step 6.
+**What remains unbuilt:** the copy pass, and the **Apple** recovery round-trip (Google's is
+verified; Apple has only ever been *enrolled*). The PIN client UI (#272), node backup
+durability (#274) and the friend picker (#273) are all built — see §6.
 
 > **Revision note.** Revised 2026-08-14 after Step 5b (the Google recovery round-trip) was executed
 > on a physical Pixel 9 Pro against `test.beanpool.org` and verified via DB assertion (57 members preserved,
@@ -166,12 +168,31 @@ person time: `requireSignature` gates **every** mutating `/api/*` request, and
 recovering device signs with a **throwaway keypair**. Unsigned calls get
 `401 Missing cryptographic signature headers`. Recipe in §7.
 
-### Still not built
+### Still not built — CORRECTED 2026-08-14
 
-- **The Google recovery ROUND-TRIP.** Deposit is proven; reconstruction has never executed
-  once. This is the single largest unverified gap in the feature — see §3.
-- The add-a-friend flow, the trusted-friends client UI, the copy pass.
-- Node backup durability for the hub fragment.
+This list went stale within a day and contradicted the rest of the document: it still called
+the Google round-trip "the single largest unverified gap" after §6 recorded it as a verified
+pass, and still listed backup durability after #274 shipped it. Corrected below, each line
+checked against the tree or the live DB on 2026-08-14.
+
+- ~~The Google recovery ROUND-TRIP~~ — **DONE and independently re-verified** (#268). See §6
+  Step 5b. Live DB confirms 57 members, one `Monnunit` row, exact pubkey restored.
+- ~~The PIN client UI~~ — **DONE** (#272): `utils/pin.ts`, `components/RecoveryPinModal.tsx`.
+- ~~Node backup durability~~ — **DONE** (#274): `recoveryPins` in the sync payload,
+  `idx_recovery_pin_updated_at`, `test-recovery-backup-durability.ts`.
+- ~~The friend picker~~ — **DONE** (#273): `components/FriendPickerSheet.tsx`.
+
+**What is genuinely still open:**
+
+- **The APPLE recovery round-trip has never run.** Apple is *enrolled* — member `Gabi` holds
+  `hub` + `sso`/`apple` fragments on `test` — and the token-verification chain is proven on an
+  iPhone XR. But no Apple fragment has ever been read back and recombined. Google's round-trip
+  passing does **not** transfer: the Apple path differs in nonce handling (Apple echoes the
+  nonce, Google omits it entirely — see the warning below), which is exactly the kind of
+  divergence that breaks only on the provider you did not test.
+- The copy pass.
+- The trusted-friends *recovery* path end-to-end (enrolment via the picker exists; ringing 2
+  of 5 friends and recombining has not been exercised on hardware).
 
 ### ⚠️ A nonce-binding property was traded away on 2026-08-13
 
@@ -387,6 +408,27 @@ Live physical measurement on **Gabriela's iPhone (XR, iOS 18)** against `test.be
   `VERIFIED (400) — rejected on the nonce, which means Apple's JWKS, the RS256 signature, the issuer, the audience and the expiry ALL passed against a real token.`
 - **Audience & Claims**: `aud === 'org.beanpool.pillar'` matched the configured bundle ID; `credential.user` matched `claims.sub` (`001096.1c23950fb36f4f21ab14de52dd6f8705.0151`).
 - **Conclusion**: The entire live Apple Sign-In cryptographic verification chain (JWKS download, live RS256 verification, audience/issuer/nonce binding) is 100% verified end-to-end on physical Apple hardware.
+
+**Scope of that conclusion — read this before treating Apple as finished.** What is proven is
+*token verification*: Apple's JWKS, RS256, issuer, audience, nonce. That is the sign-in half.
+It is **not** the recovery half. The probe deliberately sends a wrong nonce and stores nothing,
+so it never exercises release, unsealing or recombination.
+
+### Step 8 — the APPLE recovery round-trip ← **NEXT**
+
+The Apple equivalent of Step 5b, and the last unrun path in the SSO tier.
+
+Apple is already enrolled, so the fixture exists: member **`Gabi`** on `test` holds `hub` +
+`sso`/`apple` fragments (confirmed by DB query 2026-08-14). Nothing has ever read them back.
+
+Run it exactly as Step 5b, on the iPhone XR (`00008020-00161D201128402E`), and record the same
+pass condition **before** starting — member count, `Gabi`'s exact public key, one row only.
+
+**Do not assume Google's pass carries over.** The two providers diverge precisely where this
+is most likely to break: Google omits the `nonce` claim entirely and the server was relaxed to
+tolerate that (`9375d98`), while Apple echoes it verbatim and is still checked strictly. A
+recovery path that silently depends on the relaxed branch would pass on Google and fail on
+Apple — or, worse, pass on both for the wrong reason.
 
 ---
 

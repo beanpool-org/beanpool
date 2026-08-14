@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Modal, View, Text, StyleSheet, TouchableOpacity, FlatList, 
-    ActivityIndicator, Image, SafeAreaView, Platform
+    ActivityIndicator, SafeAreaView, Platform
 } from 'react-native';
 import { colors } from '../constants/colors';
 import { anchorUrl } from '../utils/node-post';
 import { useIdentity } from '../app/IdentityContext';
 import { enrolFriendKeepers, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
+import { MemberAvatar } from './MemberAvatar';
 
 interface Member {
     publicKey: string;
@@ -113,17 +114,27 @@ export function FriendPickerSheet({
 
     const renderStep1 = () => (
         <View style={styles.stepContainer}>
-            <Text style={styles.title}>Protect with trusted friends</Text>
+            <Text style={styles.title} accessibilityRole="header">Protect with trusted friends</Text>
             <Text style={styles.body}>
                 Pick at least {TWO_LAYER_THRESHOLD} friends from your community. If you lose this phone, call any {TWO_LAYER_THRESHOLD} of them — they'll approve your recovery from their phone.
             </Text>
             <View style={styles.noteBox}>
                 <Text style={styles.noteText}>Note: Choose people you can actually reach by phone. They get no notification — you'll need to call them.</Text>
             </View>
-            <TouchableOpacity style={styles.primaryButton} onPress={() => setStep(2)}>
+            <TouchableOpacity 
+                style={styles.primaryButton} 
+                onPress={() => setStep(2)}
+                accessibilityRole="button"
+                accessibilityLabel="Choose friends"
+            >
                 <Text style={styles.primaryButtonText}>Choose friends</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.secondaryButton, {marginTop: 12}]} onPress={onClose}>
+            <TouchableOpacity 
+                style={[styles.secondaryButton, {marginTop: 12}]} 
+                onPress={onClose}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel friend selection"
+            >
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
             </TouchableOpacity>
         </View>
@@ -133,8 +144,8 @@ export function FriendPickerSheet({
         const canConfirm = selectedKeys.size >= TWO_LAYER_THRESHOLD;
         return (
             <View style={styles.stepContainer}>
-                <Text style={styles.title}>Select friends</Text>
-                <Text style={styles.counter}>
+                <Text style={styles.title} accessibilityRole="header">Select friends</Text>
+                <Text style={styles.counter} accessibilityLiveRegion="polite">
                     Selected: {selectedKeys.size}/5 (need at least {TWO_LAYER_THRESHOLD})
                 </Text>
                 {loadingMembers ? (
@@ -160,11 +171,14 @@ export function FriendPickerSheet({
                                     accessibilityState={{ checked: isSelected }}
                                     accessibilityLabel={`Select ${item.callsign || 'Anonymous'}`}
                                 >
-                                    {item.avatarUrl ? (
-                                        <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
-                                    ) : (
-                                        <View style={styles.avatarFallback} />
-                                    )}
+                                    <View style={{ marginRight: 12 }}>
+                                        <MemberAvatar 
+                                            avatarUrl={item.avatarUrl} 
+                                            pubkey={item.publicKey} 
+                                            callsign={item.callsign || '?'} 
+                                            size={40} 
+                                        />
+                                    </View>
                                     <Text style={styles.memberName}>{item.callsign || 'Anonymous'}</Text>
                                     <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
                                         {isSelected && <Text style={styles.checkmark}>✓</Text>}
@@ -175,13 +189,19 @@ export function FriendPickerSheet({
                     />
                 )}
                 <View style={styles.actionsRow}>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={() => setStep(1)}>
+                    <TouchableOpacity 
+                        style={styles.secondaryButton} 
+                        onPress={() => setStep(1)}
+                        accessibilityRole="button"
+                    >
                         <Text style={styles.secondaryButtonText}>Back</Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
                         style={[styles.primaryButton, !canConfirm && styles.buttonDisabled]} 
                         onPress={handleConfirmSelection}
                         disabled={!canConfirm}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: !canConfirm }}
                     >
                         <Text style={styles.primaryButtonText}>Confirm</Text>
                     </TouchableOpacity>
@@ -194,24 +214,28 @@ export function FriendPickerSheet({
         const selectedMembers = members.filter(m => selectedKeys.has(m.publicKey));
         return (
             <View style={styles.stepContainer}>
-                <Text style={styles.title}>These friends will each hold a piece:</Text>
+                <Text style={styles.title} accessibilityRole="header">These friends will each hold a piece:</Text>
                 <View style={styles.selectedList}>
                     {selectedMembers.map(m => (
                         <Text key={m.publicKey} style={styles.selectedMemberText}>• {m.callsign || 'Anonymous'}</Text>
                     ))}
                 </View>
-                {/* 
-                  Marty's rule: never leave someone in false-success limbo, and no hard gates. 
-                  (The hub piece A is XOR-mandatory and never counted in a threshold).
-                */}
                 <Text style={styles.body}>
                     Any {TWO_LAYER_THRESHOLD} of them plus your hub can bring you back. They cannot open your account alone.
                 </Text>
                 <View style={styles.actionsRow}>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={() => setStep(2)}>
+                    <TouchableOpacity 
+                        style={styles.secondaryButton} 
+                        onPress={() => setStep(2)}
+                        accessibilityRole="button"
+                    >
                         <Text style={styles.secondaryButtonText}>Back</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.primaryButton} onPress={handleSplit}>
+                    <TouchableOpacity 
+                        style={styles.primaryButton} 
+                        onPress={handleSplit}
+                        accessibilityRole="button"
+                    >
                         <Text style={styles.primaryButtonText}>Split and protect</Text>
                     </TouchableOpacity>
                 </View>
@@ -230,7 +254,13 @@ export function FriendPickerSheet({
         const selectedMembers = members.filter(m => selectedKeys.has(m.publicKey));
         return (
             <View style={styles.stepContainer}>
-                <Text style={styles.successTitle}>✅ You're covered</Text>
+                <Text 
+                    style={styles.successTitle} 
+                    accessibilityRole="header"
+                    accessibilityLabel="You're covered"
+                >
+                    ✅ You're covered
+                </Text>
                 <Text style={styles.body}>
                     Your account has been split. Any {TWO_LAYER_THRESHOLD} of your friends plus your hub can bring you back.
                 </Text>
@@ -239,10 +269,14 @@ export function FriendPickerSheet({
                         <Text key={m.publicKey} style={styles.selectedMemberText}>✅ {m.callsign || 'Anonymous'}</Text>
                     ))}
                 </View>
-                <TouchableOpacity style={styles.primaryButton} onPress={() => {
-                    if (enrolmentResult) onEnrolled(enrolmentResult);
-                    onClose();
-                }}>
+                <TouchableOpacity 
+                    style={styles.primaryButton} 
+                    onPress={() => {
+                        if (enrolmentResult) onEnrolled(enrolmentResult);
+                        onClose();
+                    }}
+                    accessibilityRole="button"
+                >
                     <Text style={styles.primaryButtonText}>Done</Text>
                 </TouchableOpacity>
             </View>
@@ -251,30 +285,58 @@ export function FriendPickerSheet({
 
     const renderStep6 = () => (
         <View style={styles.stepContainer}>
-            <Text style={styles.errorTitle}>Error</Text>
-            <Text style={styles.errorText}>{errorMsg}</Text>
+            <Text style={styles.errorTitle} accessibilityRole="header">Error</Text>
+            <Text style={styles.errorText} accessibilityLiveRegion="assertive">{errorMsg}</Text>
             <View style={styles.actionsRow}>
-                <TouchableOpacity style={styles.secondaryButton} onPress={onClose}>
+                <TouchableOpacity 
+                    style={styles.secondaryButton} 
+                    onPress={onClose}
+                    accessibilityRole="button"
+                >
                     <Text style={styles.secondaryButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryButton} onPress={() => {
-                    if (members.length === 0) {
-                        setMembersLoaded(false);
-                        setStep(2);
-                    } else {
-                        setStep(3);
-                    }
-                }}>
+                <TouchableOpacity 
+                    style={styles.primaryButton} 
+                    onPress={() => {
+                        if (members.length === 0) {
+                            setMembersLoaded(false);
+                            setStep(2);
+                        } else {
+                            setStep(3);
+                        }
+                    }}
+                    accessibilityRole="button"
+                >
                     <Text style={styles.primaryButtonText}>Try again</Text>
                 </TouchableOpacity>
             </View>
         </View>
     );
 
+    const handleDismiss = () => {
+        if (step === 4) return;
+        if (step === 5 && enrolmentResult) {
+            onEnrolled(enrolmentResult);
+        }
+        onClose();
+    };
+
     return (
-        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={handleDismiss}>
             <View style={styles.modalOverlay}>
-                <SafeAreaView style={styles.modalContent}>
+                <TouchableOpacity
+                    style={StyleSheet.absoluteFill}
+                    activeOpacity={1}
+                    onPress={handleDismiss}
+                    disabled={step === 4}
+                    accessibilityLabel="Close friend picker backdrop"
+                    accessibilityRole="button"
+                />
+                <SafeAreaView 
+                    style={styles.modalContent}
+                    accessibilityViewIsModal={true}
+                    aria-modal={true}
+                >
                     {step === 1 && renderStep1()}
                     {step === 2 && renderStep2()}
                     {step === 3 && renderStep3()}
@@ -290,7 +352,7 @@ export function FriendPickerSheet({
 const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: colors.overlay.scrim,
         justifyContent: 'flex-end',
     },
     modalContent: {
@@ -365,20 +427,7 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: colors.border.default,
-    },
-    avatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        marginRight: 12,
-        backgroundColor: colors.surface.subtle,
-    },
-    avatarFallback: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        marginRight: 12,
-        backgroundColor: colors.surface.subtle,
+        minHeight: 52,
     },
     memberName: {
         flex: 1,
@@ -435,12 +484,15 @@ const styles = StyleSheet.create({
         backgroundColor: colors.brand.primary,
         paddingVertical: 14,
         paddingHorizontal: 24,
+        minHeight: 44,
         borderRadius: 12,
         alignItems: 'center',
+        justifyContent: 'center',
         flex: 1,
     },
     buttonDisabled: {
         backgroundColor: colors.border.default,
+        opacity: 0.5,
     },
     primaryButtonText: {
         color: '#ffffff',
@@ -451,8 +503,10 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface.subtle,
         paddingVertical: 14,
         paddingHorizontal: 24,
+        minHeight: 44,
         borderRadius: 12,
         alignItems: 'center',
+        justifyContent: 'center',
         flex: 1,
     },
     secondaryButtonText: {

@@ -173,6 +173,18 @@ export async function mnemonicToKeypair(words: string[]): Promise<{
     };
 }
 
+export async function seedToKeypair(seed: Uint8Array): Promise<{
+    publicKeyHex: string;
+    privateKeyHex: string;
+}> {
+    const rawSeed = toEd25519Seed(seed);
+    const publicKeyRaw = await getPublicKey(rawSeed);
+    return {
+        publicKeyHex: bytesToHex(publicKeyRaw),
+        privateKeyHex: bytesToHex(rawSeed),
+    };
+}
+
 export async function signData(message: Uint8Array, privateKey: Uint8Array): Promise<Uint8Array> {
     // Identities imported from the PWA arrive PKCS8-wrapped; noble signs with the raw
     // seed. Both forms are normalised in @beanpool/core so the two clients cannot drift

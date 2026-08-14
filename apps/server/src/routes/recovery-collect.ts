@@ -207,6 +207,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
                 payloadIv: r.payloadIv,
                 payloadTag: r.payloadTag,
                 ephemeralPubkey: r.ephemeralPubkey,
+                kdfParams: r.kdfParams,
             })),
         };
     });

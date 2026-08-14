@@ -289,9 +289,15 @@ describe('two-layer split — constants', () => {
 // ---------------------------------------------------------------------------
 
 describe('hub-and-whole split — round-trip', () => {
-    it('recovers the seed through split → combine', async () => {
+    it('recovers the seed through split → combine (with checksum)', async () => {
         const { hubShare, otherHalf, seedChecksum } = await splitHubAndWhole(SEED);
         const restored = combineHubAndWhole(hubShare, otherHalf, seedChecksum);
+        expect(restored).toEqual(SEED);
+    });
+
+    it('recovers the seed through split → combine (without checksum)', async () => {
+        const { hubShare, otherHalf } = await splitHubAndWhole(SEED);
+        const restored = combineHubAndWhole(hubShare, otherHalf);
         expect(restored).toEqual(SEED);
     });
 });

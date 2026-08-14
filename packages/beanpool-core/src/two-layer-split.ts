@@ -313,14 +313,14 @@ export async function splitHubAndWhole(
  *
  * @param hubShare   the `A` returned by {@link splitHubAndWhole}
  * @param otherHalf  the `B` from the same split
- * @param checksum   the `seedChecksum` from the same split — used to verify integrity
+ * @param checksum   optional `seedChecksum` from the same split — used to verify integrity if available
  * @returns          the original 32-byte seed
- * @throws {TwoLayerCombineError} if the reconstructed seed does not match the checksum
+ * @throws {TwoLayerCombineError} if the reconstructed seed does not match the checksum (when provided)
  */
 export function combineHubAndWhole(
     hubShare: Uint8Array,
     otherHalf: Uint8Array,
-    checksum: Uint8Array,
+    checksum?: Uint8Array,
 ): Uint8Array {
     if (!(hubShare instanceof Uint8Array) || hubShare.length !== SEED_LENGTH) {
         throw new TwoLayerCombineError(
@@ -334,7 +334,7 @@ export function combineHubAndWhole(
             `got ${otherHalf instanceof Uint8Array ? otherHalf.length : typeof otherHalf}.`,
         );
     }
-    if (!(checksum instanceof Uint8Array) || checksum.length !== SEED_CHECKSUM_LENGTH) {
+    if (checksum !== undefined && (!(checksum instanceof Uint8Array) || checksum.length !== SEED_CHECKSUM_LENGTH)) {
         throw new TwoLayerCombineError(
             `combineHubAndWhole: checksum must be exactly ${SEED_CHECKSUM_LENGTH} bytes.`,
         );
@@ -343,19 +343,21 @@ export function combineHubAndWhole(
     // --- layer 1: XOR → seed ---
     const seed = xorBytes(hubShare, otherHalf);
 
-    // --- integrity check (constant-time comparison) ---
-    const actual = seedChecksum(seed);
-    let diff = 0;
-    for (let i = 0; i < SEED_CHECKSUM_LENGTH; i++) {
-        diff |= actual[i] ^ checksum[i];
-    }
-    if (diff !== 0) {
-        throw new TwoLayerCombineError(
-            'Reconstructed seed does not match its checksum. This usually means the ' +
-            'hub share and other half come from different splits. The result was NOT ' +
-            'returned — without this check it would have been a valid but wrong ' +
-            'Ed25519 seed.',
-        );
+    // --- integrity check (constant-time comparison) if checksum is provided ---
+    if (checksum !== undefined) {
+        const actual = seedChecksum(seed);
+        let diff = 0;
+        for (let i = 0; i < SEED_CHECKSUM_LENGTH; i++) {
+            diff |= actual[i] ^ checksum[i];
+        }
+        if (diff !== 0) {
+            throw new TwoLayerCombineError(
+                'Reconstructed seed does not match its checksum. This usually means the ' +
+                'hub share and other half come from different splits. The result was NOT ' +
+                'returned — without this check it would have been a valid but wrong ' +
+                'Ed25519 seed.',
+            );
+        }
     }
 
     return seed;

@@ -181,13 +181,13 @@ function main(): void {
     assert(releaseHubFragment(patient.id).holderType === 'hub',
         '...but the hub now releases with no human involved at all');
 
-    // A sign-in release must NOT satisfy D7 — it is a machine piece, which is the whole point.
+    // Under docs/recovery-model.md §D7, SSO tier has no human keepers, so verified sign-in releases the hub immediately.
     const machine = openCollection(owner, EPH);
     releaseSsoFragment(machine.id, ssoHash);
-    assert(hubReleaseEligibleAt(machine.id).reason === 'delay',
-        'a SIGN-IN release does not count as the human D7 is waiting for');
-    rejects(() => releaseHubFragment(machine.id),
-        '...so hub + sign-in still cannot assemble a quiet takeover');
+    assert(hubReleaseEligibleAt(machine.id).reason === 'sso-approved',
+        'a SIGN-IN release unblocks the hub immediately for SSO tier (D7 not applied)');
+    assert(releaseHubFragment(machine.id).holderType === 'hub',
+        '...so hub + sign-in completes recovery without 24h tax');
 
     // ── 4. K4, scoped to this account and generation ──────────────────────────────────────────
     console.log('\n── K4: sign-in release ──────────────────────────────────');

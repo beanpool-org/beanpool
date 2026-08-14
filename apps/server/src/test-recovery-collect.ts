@@ -80,7 +80,7 @@ const rewrap = (label: string) => ({
     ephemeralPubkey: Buffer.from(`rweph-${label}`).toString('base64'),
 });
 
-const SSO_HASH_SALT = 'c2FsdA';
+const SSO_HASH_SALT = crypto.randomBytes(16).toString('base64url');
 function split(owner: string, buddy: string, ssoHash?: string): number {
     const shares: KeeperShareInput[] = [
         { holderType: 'hub', holderRef: 'node', ...frag(1) },

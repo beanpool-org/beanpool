@@ -148,7 +148,7 @@ export function RecoveryPinModal({
                 <View
                     style={styles.sheet}
                     accessibilityViewIsModal={true}
-                    aria-modal="true"
+                    aria-modal={true}
                 >
                     <Text style={styles.title} accessibilityRole="header">
                         {currentPinSet ? '🔢 Recovery PIN' : '🔢 Set Recovery PIN'}

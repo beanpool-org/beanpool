@@ -23,9 +23,12 @@ import {
     TWO_LAYER_THRESHOLD,
 } from '@beanpool/core';
 import { db } from './db/db.js';
+import { initStateEngine } from './state-engine.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
+
+initStateEngine();
 
 let passed = 0;
 function test(msg: string, fn: () => void | Promise<void>) {
@@ -267,7 +270,9 @@ async function main() {
     console.log(`\n⭐️ ALL ${passed}/${passed} SSO RECOVERY ROUND-TRIP CHECKS PASSED!\n`);
 }
 
-main().catch((e) => {
+main().then(() => {
+    process.exit(0);
+}).catch((e) => {
     console.error('❌ SSO Recovery Round-Trip Test FAILED:', e);
     process.exit(1);
 });

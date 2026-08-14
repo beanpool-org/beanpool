@@ -138,7 +138,18 @@ export function RecoveryPinModal({
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 style={styles.overlay}
             >
-                <View style={styles.sheet}>
+                <TouchableOpacity
+                    style={StyleSheet.absoluteFill}
+                    activeOpacity={1}
+                    onPress={onClose}
+                    accessibilityLabel="Close modal backdrop"
+                    accessibilityRole="button"
+                />
+                <View
+                    style={styles.sheet}
+                    accessibilityViewIsModal={true}
+                    aria-modal="true"
+                >
                     <Text style={styles.title} accessibilityRole="header">
                         {currentPinSet ? '🔢 Recovery PIN' : '🔢 Set Recovery PIN'}
                     </Text>
@@ -172,6 +183,9 @@ export function RecoveryPinModal({
                                 maxLength={6}
                                 secureTextEntry={true}
                                 autoFocus={true}
+                                autoComplete="off"
+                                textContentType="oneTimeCode"
+                                editable={!loading}
                                 accessibilityLabel="6 digit recovery PIN"
                             />
                         </View>
@@ -192,6 +206,9 @@ export function RecoveryPinModal({
                                 maxLength={6}
                                 secureTextEntry={true}
                                 autoFocus={true}
+                                autoComplete="off"
+                                textContentType="oneTimeCode"
+                                editable={!loading}
                                 accessibilityLabel="Confirm 6 digit recovery PIN"
                             />
                         </View>
@@ -213,6 +230,7 @@ export function RecoveryPinModal({
                                     onPress={handleNext}
                                     disabled={pin.length !== 6}
                                     accessibilityRole="button"
+                                    accessibilityState={{ disabled: pin.length !== 6 }}
                                 >
                                     <Text style={styles.primaryButtonText}>Next</Text>
                                 </TouchableOpacity>
@@ -222,6 +240,7 @@ export function RecoveryPinModal({
                                     onPress={handleSave}
                                     disabled={confirmPin.length !== 6}
                                     accessibilityRole="button"
+                                    accessibilityState={{ disabled: confirmPin.length !== 6 }}
                                 >
                                     <Text style={styles.primaryButtonText}>Save PIN</Text>
                                 </TouchableOpacity>
@@ -251,7 +270,7 @@ export function RecoveryPinModal({
                             )}
 
                             <TouchableOpacity
-                                style={styles.cancelButton}
+                                style={[styles.cancelButton, { minHeight: 44, justifyContent: 'center' }]}
                                 onPress={onClose}
                                 accessibilityRole="button"
                             >

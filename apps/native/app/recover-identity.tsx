@@ -106,6 +106,8 @@ export default function RecoverIdentityScreen() {
                 setPinVerified(true);
                 setError(null);
                 setStep('guess');
+            } else if (res.error) {
+                setError(res.error);
             } else {
                 setError("PIN didn't match. If you forgot your PIN, tap 'Skip PIN' to continue.");
             }
@@ -287,15 +289,19 @@ export default function RecoverIdentityScreen() {
                                 maxLength={6}
                                 secureTextEntry={true}
                                 autoFocus={true}
+                                autoComplete="off"
+                                textContentType="oneTimeCode"
+                                editable={!loading}
                             />
 
                             {error && <Text style={styles.error} accessibilityLiveRegion="assertive">{error}</Text>}
 
                             <Pressable
-                                style={[styles.primaryBtn, pin.length !== 6 && { opacity: 0.5 }]}
+                                style={[styles.primaryBtn, (loading || pin.length !== 6) && { opacity: 0.5 }]}
                                 onPress={handleVerifyPin}
                                 disabled={loading || pin.length !== 6}
                                 accessibilityRole="button"
+                                accessibilityState={{ disabled: loading || pin.length !== 6 }}
                             >
                                 {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Verify PIN</Text>}
                             </Pressable>

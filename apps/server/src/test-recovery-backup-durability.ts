@@ -57,7 +57,6 @@ async function run() {
     try {
         const ownerPubkey = 'aa'.repeat(32);
         const friend1Pubkey = '11'.repeat(32);
-        const friend2Pubkey = '22'.repeat(32);
 
         // 1. Seed member and recovery state
         db.prepare(`INSERT OR REPLACE INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)`).run(

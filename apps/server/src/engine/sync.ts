@@ -284,7 +284,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'settlements', 'tombstones',
+        'messages', 'abuseReports', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -745,21 +745,30 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             }
 
             // Recovery PINs — 6-digit PIN bcrypt hashes protecting friend lists.
-            // INSERT OR REPLACE keyed on PRIMARY KEY(owner_pubkey) so latest PIN wins.
+            // LWW on updated_at so newer PIN updates or attempts win on backup nodes.
             if (remote.recoveryPins) {
-                const insertPin = db.prepare(`INSERT OR REPLACE INTO recovery_pin
-                    (owner_pubkey, pin_hash, pin_salt, attempts, last_attempt_at, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)`);
-                for (const rp of remote.recoveryPins) {
-                    try {
+                try {
+                    const insertPin = db.prepare(`
+                        INSERT INTO recovery_pin
+                            (owner_pubkey, pin_hash, pin_salt, attempts, last_attempt_at, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(owner_pubkey) DO UPDATE SET
+                            pin_hash = excluded.pin_hash,
+                            pin_salt = excluded.pin_salt,
+                            attempts = excluded.attempts,
+                            last_attempt_at = excluded.last_attempt_at,
+                            updated_at = excluded.updated_at
+                        WHERE recovery_pin.updated_at IS NULL OR excluded.updated_at >= recovery_pin.updated_at
+                    `);
+                    for (const rp of remote.recoveryPins) {
                         insertPin.run(
                             rp.ownerPubkey, rp.pinHash, rp.pinSalt,
                             rp.attempts ?? 0, rp.lastAttemptAt ?? null,
                             rp.createdAt, rp.updatedAt || rp.createdAt,
                         );
-                    } catch {
-                        // recovery_pin table may not exist on certain older migrations/mocks
                     }
+                } catch {
+                    // recovery_pin table may not exist on certain older migrations/mocks
                 }
             }
 

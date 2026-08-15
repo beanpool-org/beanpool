@@ -194,8 +194,9 @@ export async function completeFriendRecovery(
         throw new Error('Not enough recovery fragments released yet.');
     }
 
-    const hubFragment = rawFragments.fragments.find((f: any) => f.holderType === 'hub');
-    const memberFragments = rawFragments.fragments.filter((f: any) => f.holderType === 'member');
+    const fragments = Array.isArray(rawFragments.fragments) ? rawFragments.fragments : [];
+    const hubFragment = fragments.find((f: any) => f.holderType === 'hub');
+    const memberFragments = fragments.filter((f: any) => f.holderType === 'member');
 
     if (!hubFragment) {
         throw new Error('Hub recovery fragment is missing from response.');

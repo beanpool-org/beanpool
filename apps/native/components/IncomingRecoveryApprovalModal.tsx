@@ -138,7 +138,17 @@ export function IncomingRecoveryApprovalModal({
                                         </Text>
                                     </View>
 
-                                    {errorMsg ? <Text style={styles.errorText} accessibilityRole="alert">{errorMsg}</Text> : null}
+                                    {context && !context.live ? (
+                                        <Text style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+                                            This recovery session is no longer active ({context.reason || 'expired'}).
+                                        </Text>
+                                    ) : null}
+
+                                    {errorMsg ? (
+                                        <Text style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+                                            {errorMsg}
+                                        </Text>
+                                    ) : null}
 
                                     <View style={styles.buttonStack}>
                                         <TouchableOpacity
@@ -157,10 +167,11 @@ export function IncomingRecoveryApprovalModal({
                                         </TouchableOpacity>
 
                                         <TouchableOpacity
-                                            style={styles.cancelBtn}
+                                            style={[styles.cancelBtn, approving && styles.btnDisabled]}
                                             onPress={onClose}
                                             disabled={approving}
                                             accessibilityRole="button"
+                                            accessibilityState={{ disabled: approving }}
                                         >
                                             <Text style={styles.cancelBtnText}>Decline / Cancel</Text>
                                         </TouchableOpacity>
@@ -259,22 +270,22 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     warningBox: {
-        backgroundColor: '#FEF3C7',
+        backgroundColor: colors.feedback.warning.bg,
         borderRadius: 12,
         padding: 14,
         marginBottom: 18,
         borderWidth: 1,
-        borderColor: '#FCD34D',
+        borderColor: colors.feedback.warning.border,
     },
     warningTitle: {
         fontSize: 14,
         fontWeight: '700',
-        color: '#92400E',
+        color: colors.feedback.warning.fg,
         marginBottom: 4,
     },
     warningText: {
         fontSize: 13,
-        color: '#78350F',
+        color: colors.feedback.warning.fg,
         lineHeight: 18,
     },
     bold: {

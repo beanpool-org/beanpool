@@ -5,8 +5,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { lookupRecoveryCallsign, createRecoveryRequest, getRecoveryStatus } from '../utils/db';
-import { createIdentity, wipeIdentity } from '../utils/identity';
+import { lookupRecoveryCallsign } from '../utils/db';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import { colors } from '../constants/colors';
 import { useIdentity } from './IdentityContext';
@@ -19,7 +18,7 @@ import {
 import type { BeanPoolIdentity } from '../utils/identity';
 
 export default function RecoverIdentityScreen() {
-    const { identity, setIdentity } = useIdentity();
+    const { setIdentity } = useIdentity();
     const [step, setStep] = useState<'lookup' | 'select' | 'pin' | 'waiting' | 'reconstructing'>('lookup');
     const [callsign, setCallsign] = useState('');
     const [anchorUrl, setAnchorUrl] = useState('');

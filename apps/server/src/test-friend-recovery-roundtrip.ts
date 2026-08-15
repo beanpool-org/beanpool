@@ -33,7 +33,6 @@ import {
     openRewrappedShare,
     recordShareForHub,
     readHubShare,
-    TWO_LAYER_THRESHOLD,
 } from '@beanpool/core';
 import { db } from './db/db.js';
 import { initStateEngine } from './state-engine.js';

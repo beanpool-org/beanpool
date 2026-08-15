@@ -814,7 +814,7 @@ router.get('/api/invite/mine/:publicKey', async (ctx) => {
 // ===================== PROFILE API (PUBLIC) =====================
 
 router.post('/api/profile/update', async (ctx) => {
-    const { avatar, bio, contact, callsign } = (ctx as any).requestBody || {};
+    const { avatar, bio, contact, callsign, archetype } = (ctx as any).requestBody || {};
     const activeKey = ctx.state.actor || (ctx as any).requestBody?.publicKey;
     if (!activeKey) {
         ctx.status = 400;
@@ -829,7 +829,7 @@ router.post('/api/profile/update', async (ctx) => {
 
     let profile;
     try {
-        profile = updateProfile(activeKey, { avatar, bio, contact, callsign });
+        profile = updateProfile(activeKey, { avatar, bio, contact, callsign, archetype });
     } catch (e: any) {
         if (e?.message === 'CALLSIGN_TAKEN') {
             ctx.status = 409;
@@ -1434,6 +1434,7 @@ router.get('/api/members', async (ctx) => {
         profileUpdatedAt: m.profileUpdatedAt,
         earnedCredit: m.earnedCredit ?? 0,
         elderVouchedBy: m.elderVouchedBy || null,
+        archetype: m.archetype || null,
     }));
 });
 

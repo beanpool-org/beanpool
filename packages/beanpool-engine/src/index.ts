@@ -15,6 +15,7 @@ export * from './posts.js';
 export * from './escrow.js';
 export * from './messaging.js';
 export * from './sync.js';
+export * from './archetypes.js';
 
 
 

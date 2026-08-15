@@ -33,6 +33,8 @@ import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
 import { RecoveryPinModal } from '../../components/RecoveryPinModal';
 import { IncomingRecoveryApprovalModal } from '../../components/IncomingRecoveryApprovalModal';
 import { getPinStatus } from '../../utils/pin';
+import { ArchetypeQuizModal } from '../../components/ArchetypeQuizModal';
+import { parseArchetype, ARCHETYPES, type QuizResult } from '../../utils/archetypes';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -271,6 +273,178 @@ export default function SettingsScreen() {
         visibilityOptionDesc: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
         visibilityOptionDescActive: { color: colors.feedback.info.solid },
         visibilityCheck: { fontSize: 18, fontWeight: '800', color: colors.feedback.info.solid },
+
+        // ─── Archetype Card ───
+        archetypeCard: {
+            backgroundColor: colors.surface.card,
+            borderRadius: 18,
+            padding: 20,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.04,
+            shadowRadius: 8,
+            elevation: 2,
+            marginBottom: 20,
+        },
+        archetypeHeaderRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 12,
+        },
+        archetypeEmoji: {
+            fontSize: 40,
+        },
+        archetypeName: {
+            fontSize: 20,
+            fontWeight: '900',
+            color: colors.text.heading,
+        },
+        archetypeTagline: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.brand.primary,
+            marginTop: 2,
+        },
+        archetypeModeBadge: {
+            backgroundColor: colors.brand.tint,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.brand.primary,
+        },
+        archetypeModeText: {
+            fontSize: 11,
+            fontWeight: '800',
+            color: colors.brand.primary,
+        },
+        archetypeDescText: {
+            fontSize: 13,
+            lineHeight: 19,
+            color: colors.text.secondary,
+            marginBottom: 12,
+        },
+        archetypeSecondaryRow: {
+            backgroundColor: colors.surface.subtle,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 10,
+            alignSelf: 'flex-start',
+            marginBottom: 14,
+        },
+        archetypeSecondaryText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text.body,
+        },
+        archetypeDivider: {
+            height: 1,
+            backgroundColor: colors.border.default,
+            marginVertical: 12,
+        },
+        archetypeSectionTitle: {
+            fontSize: 13,
+            fontWeight: '800',
+            color: colors.text.heading,
+            marginBottom: 10,
+        },
+        archetypeBulletRow: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            marginBottom: 6,
+        },
+        archetypeBullet: {
+            fontSize: 14,
+            lineHeight: 18,
+            color: colors.brand.primary,
+            marginRight: 6,
+        },
+        archetypeBulletText: {
+            flex: 1,
+            fontSize: 12,
+            lineHeight: 18,
+            color: colors.text.body,
+        },
+        archetypeBtnRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            marginTop: 16,
+        },
+        archetypeActionBtn: {
+            flex: 1,
+            backgroundColor: colors.brand.dark,
+            paddingVertical: 12,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        archetypeActionBtnText: {
+            color: colors.text.inverse,
+            fontSize: 13,
+            fontWeight: '700',
+        },
+        archetypeActionBtnSubtle: {
+            backgroundColor: colors.surface.subtle,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+        },
+        archetypeActionBtnSubtleText: {
+            color: colors.text.body,
+            fontSize: 13,
+            fontWeight: '700',
+        },
+        archetypeEmptyCard: {
+            backgroundColor: colors.surface.card,
+            borderRadius: 18,
+            padding: 20,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.04,
+            shadowRadius: 8,
+            elevation: 2,
+            marginBottom: 20,
+        },
+        archetypeEmptyHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 16,
+        },
+        archetypeEmptyIconWrap: {
+            width: 48,
+            height: 48,
+            borderRadius: 14,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        archetypeEmptyTitle: {
+            fontSize: 16,
+            fontWeight: '800',
+            color: colors.text.heading,
+            marginBottom: 4,
+        },
+        archetypeEmptyDesc: {
+            fontSize: 12,
+            lineHeight: 17,
+            color: colors.text.secondary,
+        },
+        archetypeStartBtn: {
+            backgroundColor: colors.brand.dark,
+            paddingVertical: 14,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        archetypeStartBtnText: {
+            color: colors.text.inverse,
+            fontSize: 14,
+            fontWeight: '800',
+        },
     }));
 
     useEffect(() => {
@@ -449,6 +623,9 @@ export default function SettingsScreen() {
     const [bio, setBio] = useState('');
     const [contact, setContact] = useState('');
     const [contactVisibility, setContactVisibility] = useState<'hidden' | 'trade_partners' | 'friends' | 'community'>('community');
+    const [archetypeRaw, setArchetypeRaw] = useState<string | null>(null);
+    const [showQuizModal, setShowQuizModal] = useState(false);
+    const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
     const [loading, setLoading] = useState(false);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState<string>('Detecting...');
@@ -464,6 +641,7 @@ export default function SettingsScreen() {
                     if (profile.bio) setBio(profile.bio);
                     if (profile.contact_value) setContact(profile.contact_value);
                     if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
+                    if (profile.archetype) setArchetypeRaw(profile.archetype);
                 }
             }).catch(() => {});
         }
@@ -793,6 +971,15 @@ export default function SettingsScreen() {
                     callsign: newCallsign,
                 };
                 if (avatar) payloadObj.avatar = avatar;
+                if (archetypeRaw) {
+                    const parsed = parseArchetype(archetypeRaw);
+                    payloadObj.archetype = parsed ? JSON.stringify({
+                        primary: parsed.primary,
+                        secondary: parsed.secondary,
+                        mode: parsed.mode,
+                        updatedAt: parsed.updatedAt,
+                    }) : archetypeRaw;
+                }
                 const bodyString = JSON.stringify(payloadObj);
                 const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
 
@@ -835,6 +1022,7 @@ export default function SettingsScreen() {
                 contact_visibility: contact.trim() ? contactVisibility : 'hidden',
             };
             if (avatar) localUpdate.avatar_url = avatar;
+            if (archetypeRaw) localUpdate.archetype = archetypeRaw;
             await updateMemberProfile(identity.publicKey, localUpdate);
             if (newCallsign !== identity.callsign) {
                 const updated = await updateCallsign(newCallsign);
@@ -846,6 +1034,54 @@ export default function SettingsScreen() {
             Alert.alert('Error', e?.message || 'Could not update profile.');
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function handleQuizComplete(quizResult: QuizResult) {
+        if (!identity) return;
+        const jsonStr = JSON.stringify(quizResult);
+        setArchetypeRaw(jsonStr);
+        setShowQuizModal(false);
+
+        // Update local database
+        const localUpdate: any = {
+            callsign: identity.callsign || editCallsign,
+            avatar_url: avatar,
+            bio: bio.trim(),
+            contact_value: contact.trim(),
+            contact_visibility: contactVisibility,
+            archetype: jsonStr,
+        };
+        await updateMemberProfile(identity.publicKey, localUpdate);
+
+        // Best-effort push to server with public archetype metadata only (scores kept private locally)
+        try {
+            const url = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (url) {
+                const publicArchetype = JSON.stringify({
+                    primary: quizResult.primary,
+                    secondary: quizResult.secondary,
+                    mode: quizResult.mode,
+                    updatedAt: quizResult.updatedAt,
+                });
+                const payloadObj: any = {
+                    publicKey: identity.publicKey,
+                    callsign: identity.callsign || editCallsign,
+                    avatar,
+                    bio: bio.trim(),
+                    contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
+                    archetype: publicArchetype,
+                };
+                const bodyString = JSON.stringify(payloadObj);
+                const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
+                await fetch(`${url}/api/profile/update`, {
+                    method: 'POST',
+                    headers,
+                    body: bodyString,
+                });
+            }
+        } catch (e) {
+            console.warn('[Archetype] Profile push best effort:', e);
         }
     }
 
@@ -1181,6 +1417,107 @@ export default function SettingsScreen() {
 
             {mode === 'menu' && (
                 <>
+                {/* ─── Community Working Style & Archetype ─── */}
+                <Text style={styles.sectionHeader}>COMMUNITY WORKING STYLE</Text>
+                {(() => {
+                    const parsed = parseArchetype(archetypeRaw);
+                    const primary = parsed ? ARCHETYPES[parsed.primary] : null;
+                    const secondary = parsed ? ARCHETYPES[parsed.secondary] : null;
+
+                    if (parsed && primary) {
+                        return (
+                            <View style={styles.archetypeCard}>
+                                <View style={styles.archetypeHeaderRow}>
+                                    <Text style={styles.archetypeEmoji}>{primary.emoji}</Text>
+                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                        <Text style={styles.archetypeName}>{primary.name}</Text>
+                                        <Text style={styles.archetypeTagline}>{primary.tagline}</Text>
+                                    </View>
+                                    <View style={styles.archetypeModeBadge}>
+                                        <Text style={styles.archetypeModeText}>
+                                            {parsed.mode === 'deep' ? '27 Qs' : '9 Qs'}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <Text style={styles.archetypeDescText}>{primary.description}</Text>
+
+                                {secondary && (
+                                    <View style={styles.archetypeSecondaryRow}>
+                                        <Text style={styles.archetypeSecondaryText}>
+                                            Secondary Rhythm: {secondary.emoji} {secondary.name}
+                                        </Text>
+                                    </View>
+                                )}
+
+                                <View style={styles.archetypeDivider} />
+
+                                <Text style={styles.archetypeSectionTitle}>🌟 Your Community Superpowers</Text>
+                                {primary.superpowers.map((p, i) => (
+                                    <View key={i} style={styles.archetypeBulletRow}>
+                                        <Text style={styles.archetypeBullet}>•</Text>
+                                        <Text style={styles.archetypeBulletText}>{p}</Text>
+                                    </View>
+                                ))}
+
+                                <View style={styles.archetypeBtnRow}>
+                                    {parsed.mode === 'quick' && (
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Deepen working style quiz with 27 questions"
+                                            style={styles.archetypeActionBtn}
+                                            onPress={() => {
+                                                setQuizInitialMode('deep');
+                                                setShowQuizModal(true);
+                                            }}
+                                        >
+                                            <Text style={styles.archetypeActionBtnText}>🧭 Deepen (27 Qs)</Text>
+                                        </Pressable>
+                                    )}
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Retake community working style quiz"
+                                        style={[styles.archetypeActionBtn, styles.archetypeActionBtnSubtle]}
+                                        onPress={() => {
+                                            setQuizInitialMode('quick');
+                                            setShowQuizModal(true);
+                                        }}
+                                    >
+                                        <Text style={styles.archetypeActionBtnSubtleText}>🔄 Retake Quiz</Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+                        );
+                    }
+
+                    return (
+                        <View style={styles.archetypeEmptyCard}>
+                            <View style={styles.archetypeEmptyHeader}>
+                                <View style={styles.archetypeEmptyIconWrap}>
+                                    <Text style={{ fontSize: 24 }}>🌱</Text>
+                                </View>
+                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                    <Text style={styles.archetypeEmptyTitle}>Discover Your Archetype</Text>
+                                    <Text style={styles.archetypeEmptyDesc}>
+                                        Take the 60-second quiz to uncover your collaborative superpowers and see relational synergy with neighbours.
+                                    </Text>
+                                </View>
+                            </View>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel="Take 60-second community working style quiz"
+                                style={styles.archetypeStartBtn}
+                                onPress={() => {
+                                    setQuizInitialMode('quick');
+                                    setShowQuizModal(true);
+                                }}
+                            >
+                                <Text style={styles.archetypeStartBtnText}>⚡ Take 60s Quiz</Text>
+                            </Pressable>
+                        </View>
+                    );
+                })()}
+
                 {/* ─── Account & Identity ─── */}
                 <Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>
                 <View style={styles.menuGroup}>
@@ -2329,8 +2666,15 @@ export default function SettingsScreen() {
                             </>
                         )}
                     </View>
-                </View>
             </Modal>
+
+            {/* Archetype Quiz Modal */}
+            <ArchetypeQuizModal
+                visible={showQuizModal}
+                initialMode={quizInitialMode}
+                onClose={() => setShowQuizModal(false)}
+                onComplete={handleQuizComplete}
+            />
             </ScrollView>
         </KeyboardAvoidingView>
     );

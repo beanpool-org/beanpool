@@ -113,6 +113,20 @@ export function AnalyticsModule({
         };
     });
 
+    if (profiles.length === 0) {
+        return (
+            <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-12 text-center shadow-xl animate-fade-in">
+                <div className="w-16 h-16 mx-auto bg-nature-950 rounded-full flex items-center justify-center text-3xl mb-4 border border-nature-800 shadow-inner">
+                    📈
+                </div>
+                <h3 className="text-lg font-bold text-white m-0">No Node Profiles Active</h3>
+                <p className="text-sm text-nature-400 mt-2 max-w-md mx-auto leading-relaxed">
+                    Add one or more sovereign node profiles to begin monitoring telemetry, hardware capacity, and threshold analytics across the fleet.
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6 animate-fade-in font-sans">
             {/* Header Banner */}

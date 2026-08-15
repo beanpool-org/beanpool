@@ -417,7 +417,7 @@ export default function SettingsScreen() {
             width: 48,
             height: 48,
             borderRadius: 14,
-            backgroundColor: palette.green50,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -961,7 +961,15 @@ export default function SettingsScreen() {
                     callsign: newCallsign,
                 };
                 if (avatar) payloadObj.avatar = avatar;
-                if (archetypeRaw) payloadObj.archetype = archetypeRaw;
+                if (archetypeRaw) {
+                    const parsed = parseArchetype(archetypeRaw);
+                    payloadObj.archetype = parsed ? JSON.stringify({
+                        primary: parsed.primary,
+                        secondary: parsed.secondary,
+                        mode: parsed.mode,
+                        updatedAt: parsed.updatedAt,
+                    }) : archetypeRaw;
+                }
                 const bodyString = JSON.stringify(payloadObj);
                 const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
 
@@ -1036,17 +1044,23 @@ export default function SettingsScreen() {
         };
         await updateMemberProfile(identity.publicKey, localUpdate);
 
-        // Best-effort push to server
+        // Best-effort push to server with public archetype metadata only (scores kept private locally)
         try {
             const url = await AsyncStorage.getItem('beanpool_anchor_url');
             if (url) {
+                const publicArchetype = JSON.stringify({
+                    primary: quizResult.primary,
+                    secondary: quizResult.secondary,
+                    mode: quizResult.mode,
+                    updatedAt: quizResult.updatedAt,
+                });
                 const payloadObj: any = {
                     publicKey: identity.publicKey,
                     callsign: identity.callsign || editCallsign,
                     avatar,
                     bio: bio.trim(),
                     contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
-                    archetype: jsonStr,
+                    archetype: publicArchetype,
                 };
                 const bodyString = JSON.stringify(payloadObj);
                 const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
@@ -1440,6 +1454,7 @@ export default function SettingsScreen() {
                                     {parsed.mode === 'quick' && (
                                         <Pressable
                                             accessibilityRole="button"
+                                            accessibilityLabel="Deepen working style quiz with 27 questions"
                                             style={styles.archetypeActionBtn}
                                             onPress={() => {
                                                 setQuizInitialMode('deep');
@@ -1451,6 +1466,7 @@ export default function SettingsScreen() {
                                     )}
                                     <Pressable
                                         accessibilityRole="button"
+                                        accessibilityLabel="Retake community working style quiz"
                                         style={[styles.archetypeActionBtn, styles.archetypeActionBtnSubtle]}
                                         onPress={() => {
                                             setQuizInitialMode('quick');
@@ -1479,6 +1495,7 @@ export default function SettingsScreen() {
                             </View>
                             <Pressable
                                 accessibilityRole="button"
+                                accessibilityLabel="Take 60-second community working style quiz"
                                 style={styles.archetypeStartBtn}
                                 onPress={() => {
                                     setQuizInitialMode('quick');

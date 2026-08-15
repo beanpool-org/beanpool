@@ -564,8 +564,8 @@ export function scoreQuiz(
     const primary = sorted[0] || 'weaver';
     let secondary = sorted[1] || 'connector';
 
-    // If second place is tied with primary or 0, pick a complementary wing
-    if (scores[secondary] === 0 || secondary === primary) {
+    // If second place has 0 votes, pick a complementary wing
+    if (scores[secondary] === 0) {
         secondary = ARCHETYPES[primary].idealPartners[0] || 'harmonizer';
     }
 
@@ -592,35 +592,53 @@ export interface SynergyInsight {
  * Parses archetype metadata string (which could be JSON or plain string key)
  */
 export function parseArchetype(raw?: string | null): QuizResult | null {
-    if (!raw) return null;
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
     try {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && parsed.primary) {
-            return parsed as QuizResult;
+        const parsed = JSON.parse(trimmed);
+        if (
+            parsed &&
+            typeof parsed === 'object' &&
+            typeof parsed.primary === 'string' &&
+            Object.prototype.hasOwnProperty.call(ARCHETYPES, parsed.primary)
+        ) {
+            const primary = parsed.primary as ArchetypeKey;
+            const secondary = (typeof parsed.secondary === 'string' && Object.prototype.hasOwnProperty.call(ARCHETYPES, parsed.secondary))
+                ? (parsed.secondary as ArchetypeKey)
+                : (ARCHETYPES[primary].idealPartners[0] || 'harmonizer');
+            return {
+                primary,
+                secondary,
+                mode: parsed.mode === 'deep' ? 'deep' : 'quick',
+                scores: typeof parsed.scores === 'object' && parsed.scores !== null ? parsed.scores : { [primary]: 1 } as any,
+                updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+            };
         }
-    } catch {
-        // May be a raw key
-        if (ARCHETYPES[raw as ArchetypeKey]) {
-            const k = raw as ArchetypeKey;
+        if (typeof parsed === 'string' && Object.prototype.hasOwnProperty.call(ARCHETYPES, parsed)) {
+            const k = parsed as ArchetypeKey;
             return {
                 primary: k,
                 secondary: ARCHETYPES[k].idealPartners[0] || 'harmonizer',
                 mode: 'quick',
-                scores: {
-                    weaver: 0,
-                    connector: 0,
-                    catalyst: 0,
-                    artisan: 0,
-                    sage: 0,
-                    guardian: 0,
-                    spark: 0,
-                    champion: 0,
-                    harmonizer: 0,
-                    [k]: 1,
-                },
+                scores: { weaver: 0, connector: 0, catalyst: 0, artisan: 0, sage: 0, guardian: 0, spark: 0, champion: 0, harmonizer: 0, [k]: 1 },
                 updatedAt: new Date().toISOString(),
             };
         }
+    } catch {
+        // Fallback for unquoted raw string keys
+    }
+
+    if (Object.prototype.hasOwnProperty.call(ARCHETYPES, trimmed)) {
+        const k = trimmed as ArchetypeKey;
+        return {
+            primary: k,
+            secondary: ARCHETYPES[k].idealPartners[0] || 'harmonizer',
+            mode: 'quick',
+            scores: { weaver: 0, connector: 0, catalyst: 0, artisan: 0, sage: 0, guardian: 0, spark: 0, champion: 0, harmonizer: 0, [k]: 1 },
+            updatedAt: new Date().toISOString(),
+        };
     }
     return null;
 }
@@ -650,12 +668,13 @@ export function calculateSynergy(
 
     // Case 1: Kindred Spirits (Same archetype or close shared values)
     if (viewerArchetypeKey === memberArchetypeKey) {
+        const baseName = me.name.replace(/^The\s+/i, '');
         return {
             relationshipType: 'kindred_spirits',
             title: 'Kindred Rhythms',
             emoji: '🌱',
-            headline: `Shared ${me.name} intuition`,
-            summary: `You both share the ${me.name} rhythm. Conversations tend to flow effortlessly because you naturally prioritize similar values and community care.`,
+            headline: `Shared ${baseName} intuition`,
+            summary: `You both share the ${baseName} rhythm. Conversations tend to flow effortlessly because you naturally prioritize similar values and community care.`,
             strengths: [
                 `Instant mutual understanding of working style`,
                 `High alignment on ${me.tagline.toLowerCase()}`,

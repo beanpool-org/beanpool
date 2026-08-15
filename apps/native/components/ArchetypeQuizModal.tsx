@@ -123,6 +123,8 @@ export function ArchetypeQuizModal({
                     {step === 'quiz' ? (
                         <Pressable
                             accessibilityRole="button"
+                            accessibilityLabel="Go back to previous question"
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             style={styles.headerBtn}
                             onPress={handleBackQuestion}
                         >
@@ -146,6 +148,8 @@ export function ArchetypeQuizModal({
 
                     <Pressable
                         accessibilityRole="button"
+                        accessibilityLabel="Close quiz modal"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         style={styles.headerBtn}
                         onPress={onClose}
                     >
@@ -265,13 +269,23 @@ export function ArchetypeQuizModal({
                                         <View
                                             style={[
                                                 styles.timeBadge,
-                                                { backgroundColor: palette.emerald100 },
+                                                {
+                                                    backgroundColor:
+                                                        theme === 'dark'
+                                                            ? colors.brand.tint
+                                                            : palette.emerald100,
+                                                },
                                             ]}
                                         >
                                             <Text
                                                 style={[
                                                     styles.timeBadgeText,
-                                                    { color: palette.emerald800 },
+                                                    {
+                                                        color:
+                                                            theme === 'dark'
+                                                                ? colors.brand.primary
+                                                                : palette.emerald800,
+                                                    },
                                                 ]}
                                             >
                                                 27 Qs • ~3 min
@@ -330,7 +344,17 @@ export function ArchetypeQuizModal({
                 {step === 'quiz' && currentQ && (
                     <View style={styles.quizWrapper}>
                         {/* Progress Header */}
-                        <View style={styles.progressContainer}>
+                        <View
+                            style={styles.progressContainer}
+                            accessibilityRole="progressbar"
+                            accessibilityLabel="Quiz progress"
+                            accessibilityValue={{
+                                min: 1,
+                                max: totalQuestions,
+                                now: currentIndex + 1,
+                                text: `Question ${currentIndex + 1} of ${totalQuestions}`,
+                            }}
+                        >
                             <View style={styles.progressTrack}>
                                 <View
                                     style={[
@@ -375,7 +399,9 @@ export function ArchetypeQuizModal({
                                     return (
                                         <Pressable
                                             key={idx}
-                                            accessibilityRole="button"
+                                            accessibilityRole="radio"
+                                            accessibilityLabel={opt.text}
+                                            accessibilityState={{ selected: isSelected }}
                                             style={({ pressed }) => [
                                                 styles.optionButton,
                                                 {
@@ -391,7 +417,7 @@ export function ArchetypeQuizModal({
                                             onPress={() => handleSelectOption(opt.target)}
                                         >
                                             {opt.emoji && (
-                                                <Text style={styles.optionEmoji}>
+                                                <Text style={styles.optionEmoji} aria-hidden={true}>
                                                     {opt.emoji}
                                                 </Text>
                                             )}
@@ -539,6 +565,8 @@ export function ArchetypeQuizModal({
                         <View style={styles.actionButtonsWrap}>
                             <Pressable
                                 accessibilityRole="button"
+                                accessibilityLabel={saving ? "Saving archetype to profile" : "Save to My Profile"}
+                                accessibilityState={{ disabled: saving, busy: saving }}
                                 style={({ pressed }) => [
                                     styles.saveBtn,
                                     {

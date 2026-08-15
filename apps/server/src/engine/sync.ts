@@ -306,8 +306,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             for (const rm of remote.members ?? []) {
                 const existing = db.prepare("SELECT updated_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null } | undefined;
                 if (!existing) {
-                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
@@ -321,6 +321,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.status || 'active',
                         rm.lastActiveAt || null,
                         rm.elderVouchedBy || null,
+                        rm.archetype || null,
                         rm.updatedAt || rm.joinedAt
                     );
                     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(rm.publicKey);
@@ -339,6 +340,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         status = ?,
                         last_active_at = ?,
                         elder_vouched_by = COALESCE(elder_vouched_by, ?),
+                        archetype = ?,
                         updated_at = ?
                         WHERE public_key = ?`).run(
                         rm.callsign,
@@ -349,6 +351,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.status || 'active',
                         rm.lastActiveAt || null,
                         rm.elderVouchedBy || null,
+                        rm.archetype || null,
                         rm.updatedAt || existing.updated_at || new Date().toISOString(),
                         rm.publicKey
                     );

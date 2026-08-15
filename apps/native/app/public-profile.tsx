@@ -383,11 +383,25 @@ export default function PublicProfileScreen() {
         setShowQuizModal(false);
         setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
 
+        const publicArchetype = JSON.stringify({
+            primary: quizResult.primary,
+            secondary: quizResult.secondary,
+            mode: quizResult.mode,
+            updatedAt: quizResult.updatedAt,
+        });
+
         const localUpdate: any = {
-            callsign: identity.callsign || '',
+            callsign: identity.callsign || viewerProfile?.callsign || '',
+            avatar_url: viewerProfile?.avatar_url || null,
+            bio: viewerProfile?.bio || '',
+            contact_value: viewerProfile?.contact_value || '',
+            contact_visibility: viewerProfile?.contact_visibility || 'hidden',
             archetype: jsonStr,
         };
         await updateMemberProfile(identity.publicKey, localUpdate);
+        if (isSelf) {
+            setProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
+        }
 
         try {
             const url = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -395,7 +409,7 @@ export default function PublicProfileScreen() {
                 const payloadObj: any = {
                     publicKey: identity.publicKey,
                     callsign: identity.callsign || '',
-                    archetype: jsonStr,
+                    archetype: publicArchetype,
                 };
                 const bodyString = JSON.stringify(payloadObj);
                 const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
@@ -711,7 +725,7 @@ export default function PublicProfileScreen() {
                             {(() => {
                                 const viewerArchetype = parseArchetype(viewerProfile?.archetype);
                                 const targetArchetype = parseArchetype(profile?.archetype);
-                                const synergy = (viewerArchetype && targetArchetype)
+                                const synergy = (!isSelf && viewerArchetype && targetArchetype)
                                     ? calculateSynergy(viewerArchetype.primary, targetArchetype.primary)
                                     : null;
 
@@ -747,7 +761,7 @@ export default function PublicProfileScreen() {
                                     );
                                 }
 
-                                if (!viewerArchetype && targetArchetype) {
+                                if (!isSelf && !viewerArchetype && targetArchetype) {
                                     return (
                                         <View style={styles.synergyInviteCard}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -759,6 +773,7 @@ export default function PublicProfileScreen() {
                                             </Text>
                                             <Pressable
                                                 accessibilityRole="button"
+                                                accessibilityLabel="Take 60 second quiz to discover collaboration synergy"
                                                 style={styles.synergyTakeQuizBtn}
                                                 onPress={() => setShowQuizModal(true)}
                                             >

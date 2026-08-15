@@ -1434,6 +1434,7 @@ router.get('/api/members', async (ctx) => {
         profileUpdatedAt: m.profileUpdatedAt,
         earnedCredit: m.earnedCredit ?? 0,
         elderVouchedBy: m.elderVouchedBy || null,
+        archetype: m.archetype || null,
     }));
 });
 

@@ -245,8 +245,12 @@ export function updateProfile(
     if (update.contact !== undefined) {
         contact_value = update.contact?.value || null;
         contact_visibility = update.contact?.visibility || null;
+    let archetype = existing.archetype || null;
+    if (update.archetype === null) {
+        archetype = null;
+    } else if (typeof update.archetype === 'string') {
+        archetype = update.archetype.trim().slice(0, 4096);
     }
-    const archetype = update.archetype !== undefined ? update.archetype : (existing.archetype || null);
 
     const profileUpdatedAt = new Date().toISOString();
 

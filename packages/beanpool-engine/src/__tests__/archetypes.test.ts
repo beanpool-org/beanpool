@@ -90,7 +90,8 @@ describe('Archetype Engine', () => {
         assert.strictEqual(insight.relationshipType, 'kindred_spirits');
         assert.strictEqual(insight.emoji, '🌱');
         assert.strictEqual(insight.title, 'Kindred Rhythms');
-        assert.ok(insight.headline.includes('The Weaver'));
+        assert.strictEqual(insight.headline, 'Shared Weaver intuition');
+        assert.ok(insight.summary.includes('You both share the Weaver rhythm.'));
     });
 
     it('calculates Dynamic Complements synergy for ideal partner pairings', () => {
@@ -109,7 +110,7 @@ describe('Archetype Engine', () => {
         assert.strictEqual(insight.title, 'Balanced Collaboration');
     });
 
-    it('parses JSON string and raw keys cleanly with parseArchetype', () => {
+    it('parses JSON string, JSON-encoded keys, and raw keys cleanly with parseArchetype', () => {
         const validJson = JSON.stringify({
             primary: 'catalyst',
             secondary: 'sage',
@@ -125,6 +126,14 @@ describe('Archetype Engine', () => {
 
         const parsedRawKey = parseArchetype('guardian');
         assert.strictEqual(parsedRawKey?.primary, 'guardian');
+
+        const parsedJsonStringKey = parseArchetype('"weaver"');
+        assert.strictEqual(parsedJsonStringKey?.primary, 'weaver');
+
+        // Rejects prototype properties
+        assert.strictEqual(parseArchetype('toString'), null);
+        assert.strictEqual(parseArchetype('constructor'), null);
+        assert.strictEqual(parseArchetype('valueOf'), null);
 
         assert.strictEqual(parseArchetype(null), null);
         assert.strictEqual(parseArchetype(''), null);

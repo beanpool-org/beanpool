@@ -1345,12 +1345,12 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
         VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(public_key) DO UPDATE SET
             callsign = excluded.callsign,
-            avatar_url = excluded.avatar_url,
-            bio = excluded.bio,
-            contact_value = excluded.contact_value,
-            contact_visibility = excluded.contact_visibility,
-            archetype = COALESCE(excluded.archetype, members.archetype)
-    `, [pubkey, data.callsign, data.avatar_url || null, data.bio || null, data.contact_value || null, data.contact_visibility || 'hidden', data.archetype !== undefined ? data.archetype : null]);
+            avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
+            bio = COALESCE(excluded.bio, members.bio),
+            contact_value = COALESCE(excluded.contact_value, members.contact_value),
+            contact_visibility = COALESCE(excluded.contact_visibility, members.contact_visibility),
+            archetype = excluded.archetype
+    `, [pubkey, data.callsign, data.avatar_url || null, data.bio || null, data.contact_value || null, data.contact_visibility || null, data.archetype !== undefined ? data.archetype : null]);
 
     // Mirror the user's OWN profile into the canonical (node-independent) store
     // so it can be re-published to any other node they join. Guarded to the
@@ -1960,7 +1960,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
                    earned_credit = excluded.earned_credit,
                    elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                   archetype = COALESCE(excluded.archetype, members.archetype)`,
+                   archetype = excluded.archetype`,
                 [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch]
             );
         }
@@ -2279,7 +2279,7 @@ export async function syncMessages(publicKey: string) {
                                        callsign = excluded.callsign,
                                        avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
                                        elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                                       archetype = COALESCE(excluded.archetype, members.archetype)`,
+                                       archetype = excluded.archetype`,
                                     [pk, cs, av, evb, arch]
                                 );
                             }

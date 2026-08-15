@@ -280,7 +280,59 @@ export default function PostDetailModal() {
             color: colors.text.inverse,
             fontSize: 10,
             fontWeight: 'bold',
-        }
+        },
+        pulseInspirationBox: {
+            backgroundColor: colors.feedback.warning.bg,
+            borderRadius: 16,
+            padding: 20,
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: colors.feedback.warning.border,
+            marginVertical: 16,
+        },
+        pulseIcon: {
+            fontSize: 36,
+            marginBottom: 8,
+        },
+        pulseInspirationTitle: {
+            fontSize: 18,
+            fontWeight: '800',
+            color: colors.text.heading,
+            marginBottom: 6,
+            textAlign: 'center',
+        },
+        pulseInspirationText: {
+            fontSize: 14,
+            color: colors.text.secondary,
+            lineHeight: 20,
+            textAlign: 'center',
+            marginBottom: 16,
+        },
+        pulsePostOfferBtn: {
+            backgroundColor: palette.amber500,
+            paddingVertical: 12,
+            paddingHorizontal: 20,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+            elevation: 2,
+        },
+        pulsePostOfferBtnText: {
+            color: '#ffffff',
+            fontWeight: '800',
+            fontSize: 15,
+        },
+        pulseFooterText: {
+            fontSize: 11,
+            color: colors.text.muted,
+            marginTop: 12,
+            fontStyle: 'italic',
+            textAlign: 'center',
+        },
     }));
 
     const { id, txId } = useLocalSearchParams();
@@ -561,6 +613,7 @@ export default function PostDetailModal() {
     }
 
     const isOwnPost = identity?.publicKey === post.author_pubkey;
+    const isPulsePost = (post.author_callsign || post.authorCallsign) === 'Daily Pulse' || post.title?.includes('Daily Pulse') || (post.credits === 0 && (post.author_callsign || post.authorCallsign)?.toLowerCase().includes('pulse'));
     
     // --- Escrow Roles ---
     const isAcceptedByMe = activeTx 
@@ -1148,7 +1201,29 @@ export default function PostDetailModal() {
                 )}
 
                 {/* 3. Unaccepted Posts Displayed to Browsers */}
-                {!isOwnPost && post.status === 'active' && !isAcceptedByMe && (
+                {isPulsePost ? (
+                    <View style={styles.pulseInspirationBox}>
+                        <Text style={styles.pulseIcon}>🗞️</Text>
+                        <Text style={styles.pulseInspirationTitle}>Feeling Inspired?</Text>
+                        <Text style={styles.pulseInspirationText}>
+                            The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.
+                        </Text>
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Post your own offer"
+                            style={styles.pulsePostOfferBtn}
+                            onPress={() => {
+                                router.back();
+                                router.push('/create-post');
+                            }}
+                        >
+                            <Text style={styles.pulsePostOfferBtnText}>💡 Post Your Own Offer →</Text>
+                        </Pressable>
+                        <Text style={styles.pulseFooterText}>
+                            Daily Pulse — a daily thought for the post-extraction economy
+                        </Text>
+                    </View>
+                ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && (
                     <View style={styles.otherPostActions}>
                         {myRequest ? (
                             <View style={styles.confirmBox}>
@@ -1347,7 +1422,7 @@ export default function PostDetailModal() {
                 )}
 
                 {/* 4. Universal Actions for Peer (Message, Rate, Report) */}
-                {(!isOwnPost || post.status === 'pending' || post.status === 'completed' || activeTx) && (
+                {((!isOwnPost && !isPulsePost) || post.status === 'pending' || post.status === 'completed' || activeTx) && (
                     <View style={[styles.otherPostActions, { marginTop: post.status === 'pending' || post.status === 'active' ? 10 : 0 }]}>
                         {targetPeerPubkey && !((post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee)) && (
                             <Pressable accessibilityRole="button" style={styles.messageBtn} onPress={async () => {

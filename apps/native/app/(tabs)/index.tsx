@@ -218,6 +218,14 @@ export default function MarketScreen() {
             shadowColor: colors.trust.star,
             shadowOpacity: 0.15,
         },
+        pulseCard: {
+            borderWidth: 2,
+            borderColor: palette.amber400,
+            backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fffbeb',
+            shadowColor: palette.amber500,
+            shadowOpacity: 0.25,
+            shadowRadius: 10,
+        },
         gridRow: { gap: 16 },
         gridCard: { flex: 1, marginBottom: 16 },
         gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: 1 },
@@ -803,6 +811,15 @@ export default function MarketScreen() {
         return true;
     });
 
+    // Pin Daily Pulse to the top of the feed
+    filteredPosts.sort((a, b) => {
+        const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse' || a.title?.includes('Daily Pulse');
+        const isPulseB = (b.author_callsign || b.authorCallsign) === 'Daily Pulse' || b.title?.includes('Daily Pulse');
+        if (isPulseA && !isPulseB) return -1;
+        if (!isPulseA && isPulseB) return 1;
+        return 0;
+    });
+
     const selectedCategory = MARKETPLACE_CATEGORIES.find(c => c.id === categoryFilter);
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
     const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly;
@@ -1180,16 +1197,17 @@ export default function MarketScreen() {
         }
 
         const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || 'Unknown';
-        const elderCard = isElder(item.author_energy_cycled);
-        const isOwn = !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
+        const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse' || item.title?.includes('Daily Pulse') || (item.credits === 0 && (item.author_callsign || item.authorCallsign)?.toLowerCase().includes('pulse'));
+        const elderCard = !isPulse && isElder(item.author_energy_cycled);
+        const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
         
         const priceLabel = item.price_type === 'hourly' ? '/Hr' :
                            item.price_type === 'daily' ? '/Dy' :
                            item.price_type === 'weekly' ? '/Wk' :
                            item.price_type === 'monthly' ? '/Mo' : '';
 
-        const catEmoji = categoryEmoji(item.category);
-        const catLabel = categoryLabel(item.category);
+        const catEmoji = isPulse ? '🗞️' : categoryEmoji(item.category);
+        const catLabel = isPulse ? 'Daily Pulse' : categoryLabel(item.category);
 
         if (viewMode === 'grid') {
             return (
@@ -1198,6 +1216,7 @@ export default function MarketScreen() {
                         styles.card,
                         styles.gridCard,
                         elderCard && styles.elderCard,
+                        isPulse && styles.pulseCard,
                     ]}
                     onPress={() => router.push(`/post/${item.id}`)}
                     accessibilityRole="button"
@@ -1219,7 +1238,12 @@ export default function MarketScreen() {
                                 asView={true}
                             />
                         </View>
-                        {!!item.repeatable && (
+                        {isPulse && (
+                            <View style={[styles.gridPriceBadge, { left: 8, right: undefined, backgroundColor: '#f59e0b' }]}>
+                                <Text style={[styles.gridPriceText, { color: '#78350f', fontWeight: '900' }]}>🗞️ PULSE</Text>
+                            </View>
+                        )}
+                        {!!item.repeatable && !isPulse && (
                             <View style={[styles.gridPriceBadge, { left: 8, right: undefined }]}>
                                 <Text style={styles.gridPriceText}>↻ RECURRING</Text>
                             </View>
@@ -1247,7 +1271,7 @@ export default function MarketScreen() {
         if (viewMode === 'compact') {
             return (
                 <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${item.id}`)}>
-                    <View style={[styles.compactRow, elderCard && styles.elderCompactRow]}>
+                    <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
                         <Text style={styles.compactEmoji}>
                             {catEmoji}
                         </Text>
@@ -1267,13 +1291,13 @@ export default function MarketScreen() {
                             />
                             <View style={[
                                 styles.compactBadge, 
-                                item.type === 'offer' ? styles.compactBadgeOffer : styles.compactBadgeNeed
+                                isPulse ? { backgroundColor: '#fef3c7', borderColor: '#f59e0b', borderWidth: 1 } : (item.type === 'offer' ? styles.compactBadgeOffer : styles.compactBadgeNeed)
                             ]}>
                                 <Text style={[
                                     styles.compactBadgeText, 
-                                    { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }
+                                    { color: isPulse ? '#92400e' : (item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg), fontWeight: '800' }
                                 ]}>
-                                    {item.type.toUpperCase()}
+                                    {isPulse ? 'PULSE' : item.type.toUpperCase()}
                                 </Text>
                             </View>
                         </View>
@@ -1285,7 +1309,7 @@ export default function MarketScreen() {
         // List View
         return (
             <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${item.id}`)}>
-                <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard]}>
+                <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
                         <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
@@ -1301,6 +1325,11 @@ export default function MarketScreen() {
                                 <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
                                     <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
                                 </View>
+                                {isPulse && (
+                                    <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#f59e0b' }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '800', color: '#92400e' }}>🗞️ DAILY PULSE</Text>
+                                    </View>
+                                )}
                                 {isOwn && (
                                     <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>👤 YOU</Text>

@@ -13,7 +13,8 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
    is already keyboard- and screen-reader-operable; converting its inline styles to
    Tailwind or adding redundant `aria-label`s is not an accessibility fix and risks
    visual regressions (this is why #72 was closed without merging).
-4. **Record outcomes below** so the next run sees what's already done.
+4. **Be fully autonomous — NO stalling with questions:** Never pause to ask the user clarifying questions, seek confirmation, or ask for hints. If you find multiple potential improvements, autonomously select the single highest-impact one under 50 lines and open a PR. If no gap is found, exit immediately with zero changes and no questions. All feedback and code review happens on the GitHub PR.
+5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #112 / #113)
 - Marketplace post cards (grid + list): clickable `<div>`s made keyboard-operable

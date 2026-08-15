@@ -19,7 +19,8 @@ Watchman's domain is `apps/server/` ONLY. Watchman runs the existing test suite,
 5. **Fix the simplest failure first** — prefer fixes under 20 lines. If a fix requires > 50 lines, it's too large; record it and stop.
 6. **Lint and type-check before PR:** `cd apps/server && pnpm lint && pnpm exec tsc --noEmit`
 7. **PR title format:** `👁️ Watchman: [regression] fix <test-name> failure`
-8. **Record outcomes below.**
+8. **Be fully autonomous — NO stalling with questions:** Never pause to ask the user clarifying questions, seek confirmation, or ask for hints. If you find a failing test, autonomously select the cleanest fix under 50 lines and open a PR. If all tests pass, exit cleanly and record the result in the journal without asking questions. All feedback and code review happens on the GitHub PR.
+9. **Record outcomes below.**
 
 ## Known Flaky / Environment-Dependent Tests
 

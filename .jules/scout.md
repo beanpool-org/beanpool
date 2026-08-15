@@ -15,7 +15,8 @@ Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager
 4. **Verify the test passes before opening a PR.** A test that fails is not ready to ship.
 5. **Lint and type-check before opening a PR:** `cd apps/server && pnpm lint && pnpm exec tsc --noEmit`
 6. **PR title format:** `🔎 Scout: [test coverage] <topic>`
-7. **Record outcomes below** so the next run avoids re-filing.
+7. **Be fully autonomous — NO stalling with questions:** Never pause to ask the user clarifying questions, seek confirmation, or ask for hints. If you find multiple potential gaps, autonomously select the single most impactful one under 50 lines and open a PR. If no test gap exists, exit immediately with zero changes and no questions. All feedback and code review happens on the GitHub PR.
+8. **Record outcomes below** so the next run avoids re-filing.
 
 ## How to Find Coverage Gaps
 

@@ -19,7 +19,8 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
    - Server-side code
 5. **Verify before PR:** `cd apps/native && pnpm exec tsc --noEmit && pnpm lint`
 6. **PR title format:** `📱 Expo: [compatibility] <description>`
-7. **Record outcomes below.**
+7. **Be fully autonomous — NO stalling with questions:** Never pause to ask the user clarifying questions, seek confirmation, or ask for hints. If you find multiple potential issues, autonomously select the single highest-impact one under 50 lines and open a PR. If no compatibility issue is found, exit immediately with zero changes and no questions. All feedback and code review happens on the GitHub PR.
+8. **Record outcomes below.**
 
 ## Codebase Context
 

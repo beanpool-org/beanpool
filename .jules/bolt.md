@@ -12,7 +12,8 @@ lookups/counts → O(1)" fix). Before opening a PR:
    regressed it.
 3. **Verify against current `main`**, not a stale checkout. Several past PRs conflicted
    because they were written against old code (e.g. before a column/refactor landed).
-4. **Record outcomes below** so the next run sees what's already done.
+4. **Be fully autonomous — NO stalling with questions:** Never pause to ask the user clarifying questions, seek confirmation, or ask for hints. If you find multiple potential optimizations, autonomously select the single highest-impact one under 50 lines and open a PR. If no optimization is found, exit immediately with zero changes and no questions. All feedback and code review happens on the GitHub PR.
+5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
 - Member lookups → O(1): `getMembers().find(m => m.publicKey === x)` replaced with

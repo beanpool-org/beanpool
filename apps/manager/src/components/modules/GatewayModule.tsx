@@ -558,9 +558,10 @@ export function GatewayModule({
                 <button
                     onClick={onSaveGateway}
                     disabled={gatewaySaving}
-                    className="px-5 py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50"
+                    aria-busy={gatewaySaving}
+                    className="px-5 py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <span className={gatewaySaving ? 'animate-spin' : ''}>{gatewaySaving ? '🔄' : '💾'}</span>
+                    <span aria-hidden="true" className={gatewaySaving ? 'animate-spin' : ''}>{gatewaySaving ? '🔄' : '💾'}</span>
                     <span>{gatewaySaving ? 'Saving...' : 'Save Gateway Config'}</span>
                 </button>
             </div>

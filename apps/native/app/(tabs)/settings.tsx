@@ -31,6 +31,7 @@ import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
 import type { SsoProvider } from '../../utils/sso-signin';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
 import { RecoveryPinModal } from '../../components/RecoveryPinModal';
+import { IncomingRecoveryApprovalModal } from '../../components/IncomingRecoveryApprovalModal';
 import { getPinStatus } from '../../utils/pin';
 
 
@@ -287,6 +288,8 @@ export default function SettingsScreen() {
     const [showPinModal, setShowPinModal] = useState(false);
     const [pinSet, setPinSet] = useState<boolean | null>(null);
     const [showFriendSheet, setShowFriendSheet] = useState(false);
+    const [showApprovalModal, setShowApprovalModal] = useState(false);
+    const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
     const [revealWords, setRevealWords] = useState(false);
     const [revealLoading, setRevealLoading] = useState(false);
     const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
@@ -378,7 +381,14 @@ export default function SettingsScreen() {
     const [diagLoading, setDiagLoading] = useState(false);
     const [dbSize, setDbSize] = useState<string>('0.0 MB');
     const [remoteStats, setRemoteStats] = useState<{ members: number, posts: number, transactions: number } | null>(null);
-    const params = useLocalSearchParams<{ section?: string }>();
+    const params = useLocalSearchParams<{ section?: string; collectionId?: string }>();
+
+    useEffect(() => {
+        if (params.collectionId) {
+            setActiveCollectionId(params.collectionId);
+            setShowApprovalModal(true);
+        }
+    }, [params.collectionId]);
 
     // Location permission (relocated here from the global header)
     const [locationEnabled, setLocationEnabled] = useState(false);
@@ -1592,6 +1602,14 @@ export default function SettingsScreen() {
                     onSuccess={(newPinSet) => setPinSet(newPinSet)}
                 />
             )}
+            <IncomingRecoveryApprovalModal
+                visible={showApprovalModal}
+                collectionId={activeCollectionId}
+                onClose={() => {
+                    setShowApprovalModal(false);
+                    setActiveCollectionId(null);
+                }}
+            />
 
             {mode === 'recovery-requests' && (
                 <View style={styles.card}>

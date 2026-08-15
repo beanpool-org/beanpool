@@ -4,10 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, getTrustProfile, vouchMember } from '../utils/db';
+import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
 import { blockUser } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
+import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
+import { parseArchetype, calculateSynergy, type QuizResult } from '../utils/archetypes';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { buildSignedHeaders } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -117,6 +121,113 @@ export default function PublicProfileScreen() {
         vouchInviterName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
         vouchInviterSub: { fontSize: 12, color: colors.text.secondary, fontWeight: '600', marginTop: 1 },
         systemBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.brand.tint, alignItems: 'center', justifyContent: 'center' },
+
+        // Synergy & Collaboration
+        synergyCard: {
+            backgroundColor: colors.surface.card,
+            marginHorizontal: 16,
+            marginTop: 12,
+            padding: 16,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.03,
+            shadowRadius: 4,
+            elevation: 1,
+        },
+        synergyHeaderRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 8,
+        },
+        synergyEmoji: {
+            fontSize: 26,
+            marginRight: 10,
+        },
+        synergyTitle: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: colors.brand.primary,
+        },
+        synergyHeadline: {
+            fontSize: 15,
+            fontWeight: '800',
+            color: colors.text.heading,
+            marginTop: 1,
+        },
+        synergySummary: {
+            fontSize: 13,
+            lineHeight: 19,
+            color: colors.text.body,
+            marginBottom: 12,
+        },
+        synergyStrengthsWrap: {
+            gap: 6,
+            marginBottom: 12,
+        },
+        synergyStrengthRow: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+        },
+        synergyBullet: {
+            fontSize: 12,
+            fontWeight: '900',
+            color: colors.brand.primary,
+            marginRight: 6,
+            marginTop: 1,
+        },
+        synergyStrengthText: {
+            flex: 1,
+            fontSize: 12,
+            lineHeight: 17,
+            color: colors.text.secondary,
+        },
+        synergyTipBox: {
+            backgroundColor: colors.surface.subtle,
+            padding: 10,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+        },
+        synergyTipText: {
+            fontSize: 12,
+            lineHeight: 17,
+            color: colors.text.secondary,
+        },
+        synergyInviteCard: {
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50,
+            marginHorizontal: 16,
+            marginTop: 12,
+            padding: 16,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: theme === 'dark' ? colors.border.default : palette.green100,
+        },
+        synergyInviteTitle: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: colors.text.heading,
+        },
+        synergyInviteDesc: {
+            fontSize: 12,
+            lineHeight: 18,
+            color: colors.text.secondary,
+            marginBottom: 12,
+        },
+        synergyTakeQuizBtn: {
+            backgroundColor: colors.brand.dark,
+            paddingVertical: 10,
+            paddingHorizontal: 16,
+            borderRadius: 10,
+            alignSelf: 'flex-start',
+        },
+        synergyTakeQuizBtnText: {
+            color: colors.text.inverse,
+            fontSize: 13,
+            fontWeight: '800',
+        },
 
         // Stats
         statsGrid: { flexDirection: 'row', padding: 16, gap: 10, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default },
@@ -251,10 +362,53 @@ export default function PublicProfileScreen() {
     const [viewerBalance, setViewerBalance] = useState<any>(null);
     const [vouching, setVouching] = useState(false);
     const [editingReview, setEditingReview] = useState<any | null>(null);
+    const [viewerProfile, setViewerProfile] = useState<any>(null);
+    const [showQuizModal, setShowQuizModal] = useState(false);
 
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
     const isSelf = !!identity?.publicKey && identity.publicKey === pubKeyStr;
     const callsignStr = (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined);
+
+    useEffect(() => {
+        if (identity?.publicKey) {
+            getMemberProfile(identity.publicKey).then(vp => {
+                if (vp) setViewerProfile(vp);
+            }).catch(() => null);
+        }
+    }, [identity?.publicKey]);
+
+    const handleQuizComplete = async (quizResult: QuizResult) => {
+        if (!identity) return;
+        const jsonStr = JSON.stringify(quizResult);
+        setShowQuizModal(false);
+        setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
+
+        const localUpdate: any = {
+            callsign: identity.callsign || '',
+            archetype: jsonStr,
+        };
+        await updateMemberProfile(identity.publicKey, localUpdate);
+
+        try {
+            const url = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (url) {
+                const payloadObj: any = {
+                    publicKey: identity.publicKey,
+                    callsign: identity.callsign || '',
+                    archetype: jsonStr,
+                };
+                const bodyString = JSON.stringify(payloadObj);
+                const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
+                await fetch(`${url}/api/profile/update`, {
+                    method: 'POST',
+                    headers,
+                    body: bodyString,
+                });
+            }
+        } catch (e) {
+            console.warn('[Archetype] Profile push best effort:', e);
+        }
+    };
 
     useEffect(() => {
         if (!pubKeyStr) {
@@ -552,6 +706,70 @@ export default function PublicProfileScreen() {
                                     </View>
                                 </View>
                             </View>
+
+                            {/* ─── Collaboration Chemistry ─── */}
+                            {(() => {
+                                const viewerArchetype = parseArchetype(viewerProfile?.archetype);
+                                const targetArchetype = parseArchetype(profile?.archetype);
+                                const synergy = (viewerArchetype && targetArchetype)
+                                    ? calculateSynergy(viewerArchetype.primary, targetArchetype.primary)
+                                    : null;
+
+                                if (synergy) {
+                                    return (
+                                        <View style={styles.synergyCard}>
+                                            <View style={styles.synergyHeaderRow}>
+                                                <Text style={styles.synergyEmoji}>{synergy.emoji}</Text>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.synergyTitle}>{synergy.title}</Text>
+                                                    <Text style={styles.synergyHeadline}>{synergy.headline}</Text>
+                                                </View>
+                                            </View>
+                                            <Text style={styles.synergySummary}>{synergy.summary}</Text>
+
+                                            <View style={styles.synergyStrengthsWrap}>
+                                                {synergy.strengths.map((str, idx) => (
+                                                    <View key={idx} style={styles.synergyStrengthRow}>
+                                                        <Text style={styles.synergyBullet}>✓</Text>
+                                                        <Text style={styles.synergyStrengthText}>{str}</Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+
+                                            {synergy.collaborationTip && (
+                                                <View style={styles.synergyTipBox}>
+                                                    <Text style={styles.synergyTipText}>
+                                                        💡 <Text style={{ fontWeight: '700' }}>Collaboration tip:</Text> {synergy.collaborationTip}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    );
+                                }
+
+                                if (!viewerArchetype && targetArchetype) {
+                                    return (
+                                        <View style={styles.synergyInviteCard}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                                <Text style={{ fontSize: 20, marginRight: 8 }}>✨</Text>
+                                                <Text style={styles.synergyInviteTitle}>Collaboration Chemistry</Text>
+                                            </View>
+                                            <Text style={styles.synergyInviteDesc}>
+                                                Take the 60-second quiz to discover your working style alignment and project synergy with {callsignStr || 'this member'}.
+                                            </Text>
+                                            <Pressable
+                                                accessibilityRole="button"
+                                                style={styles.synergyTakeQuizBtn}
+                                                onPress={() => setShowQuizModal(true)}
+                                            >
+                                                <Text style={styles.synergyTakeQuizBtnText}>⚡ Take 60s Quiz</Text>
+                                            </Pressable>
+                                        </View>
+                                    );
+                                }
+
+                                return null;
+                            })()}
 
                             {/* Track record */}
                             <View style={styles.statStrip}>
@@ -960,6 +1178,13 @@ export default function PublicProfileScreen() {
                     }}
                 />
             )}
+
+            <ArchetypeQuizModal
+                visible={showQuizModal}
+                initialMode="quick"
+                onClose={() => setShowQuizModal(false)}
+                onComplete={handleQuizComplete}
+            />
         </SafeAreaView>
     );
 }

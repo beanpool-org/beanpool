@@ -216,6 +216,7 @@ export function updateProfile(
         bio?: string;
         contact?: { value: string; visibility: 'hidden' | 'trade_partners' | 'community' | 'friends' } | null;
         callsign?: string;
+        archetype?: string | null;
     }
 ): MemberProfile | null {
     if (!getMember(db, publicKey)) return null;
@@ -245,11 +246,12 @@ export function updateProfile(
         contact_value = update.contact?.value || null;
         contact_visibility = update.contact?.visibility || null;
     }
+    const archetype = update.archetype !== undefined ? update.archetype : (existing.archetype || null);
 
     const profileUpdatedAt = new Date().toISOString();
 
-    db.prepare(`UPDATE members SET avatar_url=?, bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=? WHERE public_key=?`)
-      .run(avatar, bio, contact_value, contact_visibility, callsign, profileUpdatedAt, publicKey);
+    db.prepare(`UPDATE members SET avatar_url=?, bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=?, archetype=? WHERE public_key=?`)
+      .run(avatar, bio, contact_value, contact_visibility, callsign, profileUpdatedAt, archetype, publicKey);
 
     broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt });
     return getProfile(db, publicKey);

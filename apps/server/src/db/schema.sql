@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS members (
     earned_credit REAL DEFAULT 0,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,
+    -- Community working style / archetype signature (JSON or archetype key)
+    archetype TEXT,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -539,7 +541,7 @@ CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
-    elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key
+    archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

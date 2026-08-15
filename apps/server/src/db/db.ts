@@ -196,6 +196,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
+    // Community Working Style / Archetype signature
+    try { db.prepare(`ALTER TABLE members ADD COLUMN archetype TEXT`).run(); } catch { }
 
     // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
     // column-whitelist form that excludes last_active_at heartbeats from cursor sync.

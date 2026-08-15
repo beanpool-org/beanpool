@@ -107,6 +107,7 @@ export function App() {
     const [gateway, setGateway] = useState<GatewayConfig | null>(null);
     const [gatewayLoading, setGatewayLoading] = useState(false);
     const [gatewaySuccess, setGatewaySuccess] = useState<string | null>(null);
+    const [gatewaySaving, setGatewaySaving] = useState(false);
 
     const [nodeData, setNodeData] = useState<any | null>(null);
     const [nodeDataLoading, setNodeDataLoading] = useState(false);
@@ -567,6 +568,7 @@ export function App() {
     const handleSaveGateway = async () => {
         if (!activeNode || !gateway) return;
         setGatewaySuccess(null);
+        setGatewaySaving(true);
         try {
             const updated = await updateGatewayConfig(activeNode.url, gateway, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setGateway(updated);
@@ -575,6 +577,8 @@ export function App() {
             setTimeout(() => setGatewaySuccess(null), 3000);
         } catch (e: any) {
             alert('Failed to update gateway: ' + e.message);
+        } finally {
+            setGatewaySaving(false);
         }
     };
 
@@ -765,6 +769,7 @@ export function App() {
                             gateway={gateway}
                             gatewayLoading={gatewayLoading}
                             gatewaySuccess={gatewaySuccess}
+                            gatewaySaving={gatewaySaving}
                             activeWsConnections={diag?.activeWsConnections || 3}
                             onChangeGateway={(updated) => setGateway(updated)}
                             onSaveGateway={handleSaveGateway}

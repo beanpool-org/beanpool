@@ -43,8 +43,6 @@ CREATE TABLE IF NOT EXISTS members (
     earned_credit REAL DEFAULT 0,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,
-    -- Community working style / archetype signature (JSON or archetype key)
-    archetype TEXT,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -56,11 +54,7 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     used_by TEXT REFERENCES members(public_key),
     used_at DATETIME,
-    intended_for TEXT,
-    -- Protocol v1 Admin Genesis Invites. Declared here as well as in db.ts's ALTER because the
-    -- ALTER now runs BEFORE this file is exec'd: on a fresh database the table does not exist yet,
-    -- the ALTER fails into its empty catch, and this line is the only thing that creates the column.
-    genesis_type TEXT DEFAULT 'standard'
+    intended_for TEXT
 );
 
 -- 3. Ledger Accounts & Transactions
@@ -195,11 +189,7 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     completed_at DATETIME,
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    -- Marketplace hygiene: when a lingering escrow deal was last nudged. Same reasoning as
-    -- invite_codes.genesis_type above — the ALTER runs pre-exec, so a fresh database gets the
-    -- column from here or not at all.
-    last_reminded_at DATETIME
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
@@ -375,124 +365,6 @@ CREATE TABLE IF NOT EXISTS recovery_approvals (
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_approvals_created_at ON recovery_approvals(created_at);
 
--- 14b. Keyholder model (docs/ONBOARDING.md Part 0) — one encrypted fragment per keeper.
---
--- Distinct from recovery_requests above, which is the guardian-quorum flow for migrating an
--- account to a NEW key. This table serves the other half: rebuilding the ORIGINAL phrase from
--- fragments, so the member keeps the key they had. Both exist, and the approve endpoint feeds
--- both — approving a request also releases that approver's fragment.
---
--- Nothing here is a secret on its own, and that is load-bearing rather than incidental. Member
--- fragments are ECDH-wrapped to the keeper's account key, so this table cannot read them. The
--- hub's own fragment and the sign-in fragment it effectively can: the hub piece carries no
--- node-side wrapping key (see ONBOARDING.md § Hub keeper — an env-held key was specified and
--- withdrawn, because losing it would silently kill every member's K2), and the sign-in piece is
--- derived from a provider subject claim the node may well be able to guess.
---
--- That is fine, and it is exactly why the threshold is 3 rather than 2: a stolen database yields
--- at most two fragments, and two are nothing. It is also why K1 must never be stored here — a
--- third readable piece would turn this table into a complete key. The margin is one human keeper.
-CREATE TABLE IF NOT EXISTS recovery_shares (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_pubkey TEXT NOT NULL REFERENCES members(public_key),
-    holder_type TEXT NOT NULL CHECK (holder_type IN ('hub', 'member', 'sso')),
-    holder_ref TEXT NOT NULL,        -- member pubkey | provider name | 'self'
-    share_index INTEGER NOT NULL,    -- Shamir evaluation point (the fragment's x-coordinate)
-    encrypted_share TEXT NOT NULL,
-    share_iv TEXT NOT NULL,
-    share_tag TEXT NOT NULL,
-    ephemeral_pubkey TEXT,           -- X25519 ephemeral, for 'member' holders
-    sso_lookup_hash TEXT,            -- SHA-256(sub || lookup_salt), for 'sso' holders
-    sso_lookup_salt TEXT,
-    kdf_params TEXT,
-    -- Bumped on every re-split. This is what makes removing a keeper real rather than cosmetic:
-    -- a removed keeper physically keeps whatever fragment they already had, so the only way to
-    -- revoke it is to make it useless. A re-split does that — fragments of different generations
-    -- describe different polynomials and cannot be mixed — and collection refuses any generation
-    -- but the current one.
-    generation INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    -- Watermark for delta backup. Rows are never updated in place (a re-split writes a new
-    -- generation and drops the old), so there is no touch trigger — created_at and updated_at
-    -- move together by construction. The column exists so the table can join the delta set
-    -- without a later migration; wiring it into engine/sync.ts is a separate, deliberate step.
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    -- Column order is deliberate: leading with (owner_pubkey, generation) means this constraint's
-    -- implicit index also serves every read in engine/recovery-shares.ts, all of which filter on
-    -- exactly that pair. A separate owner+generation index would duplicate it for no gain.
-    UNIQUE(owner_pubkey, generation, holder_type, holder_ref)
-);
--- UNIQUE rather than a plain index. `sso_lookup_hash` is SHA-256(sub ‖ per-split random salt), so
--- two owners colliding is not a realistic event — which is the point: if it ever happens it means
--- the salt is not doing its job, and that is a bug worth failing loudly on at write time rather
--- than discovering as findShareBySsoLookup serving one arbitrary row of two at recovery. Partial,
--- because the column is NULL for every keeper that is not a sign-in keeper.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_shares_sso
-    ON recovery_shares(sso_lookup_hash)
-    WHERE sso_lookup_hash IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_recovery_shares_updated_at ON recovery_shares(updated_at);
-
--- 14b. Recovery collection — one attempt to gather enough fragments to rebuild a phrase.
---
--- A device doing this has NO identity yet: that is the whole situation. It cannot sign as the
--- owner, because the owner's key is precisely what it is trying to rebuild. So the session id is
--- an unguessable bearer secret, handed to whoever opened the session and to nobody else, and
--- every fragment released into it is still gated by its own rule on top. Holding the id alone
--- yields nothing — member fragments are re-wrapped to `requester_ephemeral_pubkey` by the keeper
--- who approves, so the node never sees a plaintext piece and neither does anyone who guesses.
---
--- `generation` is pinned when the session opens and every release checks it. An owner who
--- re-splits mid-collection kills the session — which is not an edge case but the DEFENCE: if you
--- notice a recovery you did not start, re-splitting is how you stop it (R1).
-CREATE TABLE IF NOT EXISTS recovery_collections (
-    id TEXT PRIMARY KEY,                                   -- 32 random bytes, base64url
-    owner_pubkey TEXT NOT NULL REFERENCES members(public_key),
-    generation INTEGER NOT NULL,
-    -- X25519 public key of the recovering device. Keepers wrap their decrypted fragment to this,
-    -- so a released piece is readable only by the device that opened the session.
-    requester_ephemeral_pubkey TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'complete', 'cancelled', 'expired')),
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    expires_at TEXT NOT NULL,
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_recovery_collections_owner ON recovery_collections(owner_pubkey, status);
-CREATE INDEX IF NOT EXISTS idx_recovery_collections_updated_at ON recovery_collections(updated_at);
-
--- One fragment released into one collection. The unique constraint is what makes a release
--- idempotent rather than cumulative: a keeper tapping Approve twice, or a client retrying a
--- request that already succeeded, must not look like two of the three pieces.
-CREATE TABLE IF NOT EXISTS recovery_releases (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    collection_id TEXT NOT NULL REFERENCES recovery_collections(id),
-    -- NO foreign key to recovery_shares, deliberately. A release is a historical record of a
-    -- fragment that was handed over; the row it came from is DELETED by the next re-split, which
-    -- is the entire mechanism by which removing a keeper means anything. Declaring the reference
-    -- would assert a lifetime the design breaks on purpose — and while `foreign_keys` is OFF today
-    -- so nothing would enforce it, that makes it worse rather than better: correctness would be
-    -- resting on a pragma, and turning enforcement on later would break re-splitting for every
-    -- member who had ever started a recovery.
-    share_id INTEGER NOT NULL,
-    holder_type TEXT NOT NULL CHECK (holder_type IN ('hub', 'member', 'sso')),
-    share_index INTEGER NOT NULL,
-    -- The fragment as the recovering device will read it. For 'member' this is the keeper's
-    -- re-wrap to requester_ephemeral_pubkey; for 'hub' and 'sso' it is the stored ciphertext,
-    -- which that device can already open (it holds the hub release or has just proved the sub).
-    payload TEXT NOT NULL,
-    payload_iv TEXT NOT NULL,
-    payload_tag TEXT NOT NULL,
-    ephemeral_pubkey TEXT,
-    kdf_params TEXT,
-    -- The keeper who approved, for 'member' releases. NULL for machine-released pieces, which is
-    -- exactly the distinction D7 turns on.
-    released_by TEXT,
-    released_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    UNIQUE(collection_id, share_id)
-);
-CREATE INDEX IF NOT EXISTS idx_recovery_releases_collection ON recovery_releases(collection_id);
-CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases(updated_at);
-
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -541,7 +413,7 @@ CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
-    archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key
+    elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
@@ -876,29 +748,7 @@ CREATE TABLE IF NOT EXISTS sync_audit_log (
     marketplace_txns INTEGER NOT NULL DEFAULT 0,
     new_messages     INTEGER NOT NULL DEFAULT 0,
     tombstones_applied INTEGER NOT NULL DEFAULT 0,
-    conflicts_skipped  INTEGER NOT NULL DEFAULT 0,
-    recovery_shares_imported INTEGER NOT NULL DEFAULT 0
+    conflicts_skipped  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_peer ON sync_audit_log(origin_peer_id, synced_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_time ON sync_audit_log(synced_at DESC);
-
--- ===================== RECOVERY PIN =====================
--- Optional 6-digit numeric PIN for non-SSO recovery. When set, a correct PIN entry
--- reveals the member's keeper list (which friends hold their Shamir fragments) —
--- it does NOT gate release of fragment A itself.
---
--- Rate limited: 2 free attempts, then 1 attempt per 15 minutes. No hard lockout.
--- The response for "wrong PIN" and "no such callsign" is intentionally identical
--- to prevent member enumeration.
-CREATE TABLE IF NOT EXISTS recovery_pin (
-    owner_pubkey   TEXT PRIMARY KEY REFERENCES members(public_key),
-    pin_hash       TEXT NOT NULL,
-    pin_salt       TEXT NOT NULL,
-    attempts       INTEGER NOT NULL DEFAULT 0,
-    last_attempt_at DATETIME,
-    created_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_recovery_pin_updated_at ON recovery_pin(updated_at);
-

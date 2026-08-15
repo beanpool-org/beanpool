@@ -197,8 +197,7 @@ async function _doInitDB() {
             last_active_at DATETIME,
             profile_updated_at DATETIME,
             earned_credit REAL DEFAULT 0,
-            elder_vouched_by TEXT,
-            archetype TEXT
+            elder_vouched_by TEXT
         );
 
         -- 2. Ledger Accounts & Transactions
@@ -421,8 +420,6 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0;`); } catch (e) {}
         // Elder vouch: who endorsed this member (lifts the floor-gate for founding members)
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN elder_vouched_by TEXT;`); } catch (e) {}
-        // Community Working Style / Archetype signature
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN archetype TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_energy_cycled INTEGER DEFAULT 0;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_founding_needed INTEGER DEFAULT 1;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE transactions ADD COLUMN tax_fee REAL DEFAULT 0.0;`); } catch (e) {}
@@ -1336,21 +1333,20 @@ export async function sendTransfer(from: string, to: string, amount: number, mem
     return res;
 }
 
-export async function updateMemberProfile(pubkey: string, data: { callsign: string, avatar_url?: string | null, bio?: string, contact_value?: string, contact_visibility?: string, archetype?: string | null }) {
+export async function updateMemberProfile(pubkey: string, data: { callsign: string, avatar_url?: string | null, bio?: string, contact_value?: string, contact_visibility?: string }) {
     const database = await getDb();
     
     // UPSERT basically because they might not exist locally yet if they haven't synced their own genesis block
     await database.runAsync(`
-        INSERT INTO members (public_key, callsign, avatar_url, bio, contact_value, contact_visibility, archetype)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO members (public_key, callsign, avatar_url, bio, contact_value, contact_visibility)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(public_key) DO UPDATE SET
             callsign = excluded.callsign,
-            avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
-            bio = COALESCE(excluded.bio, members.bio),
-            contact_value = COALESCE(excluded.contact_value, members.contact_value),
-            contact_visibility = COALESCE(excluded.contact_visibility, members.contact_visibility),
-            archetype = excluded.archetype
-    `, [pubkey, data.callsign, data.avatar_url || null, data.bio || null, data.contact_value || null, data.contact_visibility || null, data.archetype !== undefined ? data.archetype : null]);
+            avatar_url = excluded.avatar_url,
+            bio = excluded.bio,
+            contact_value = excluded.contact_value,
+            contact_visibility = excluded.contact_visibility
+    `, [pubkey, data.callsign, data.avatar_url || null, data.bio || null, data.contact_value || null, data.contact_visibility || 'hidden']);
 
     // Mirror the user's OWN profile into the canonical (node-independent) store
     // so it can be re-published to any other node they join. Guarded to the
@@ -1364,7 +1360,6 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
                 bio: data.bio,
                 contactValue: data.contact_value,
                 contactVisibility: data.contact_visibility,
-                archetype: data.archetype,
             });
         }
     } catch { /* canonical mirror is best-effort */ }
@@ -1950,18 +1945,16 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             const profileUpdatedAt = m.profileUpdatedAt || m.profile_updated_at || null;
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
-            const arch = m.archetype || null;
             await txn.runAsync(
-                `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by) VALUES (?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
                    callsign = excluded.callsign,
                    avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
                    joined_at = COALESCE(excluded.joined_at, members.joined_at),
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
                    earned_credit = excluded.earned_credit,
-                   elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                   archetype = excluded.archetype`,
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch]
+                   elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by)`,
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb]
             );
         }
 
@@ -2272,15 +2265,13 @@ export async function syncMessages(publicKey: string) {
                                 const cs = m.callsign || '';
                                 const av = m.avatarUrl || m.avatar_url || null;
                                 const evb = m.elderVouchedBy || m.elder_vouched_by || null;
-                                const arch = m.archetype || null;
                                 await txn.runAsync(
-                                    `INSERT INTO members (public_key, callsign, avatar_url, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?)
+                                    `INSERT INTO members (public_key, callsign, avatar_url, elder_vouched_by) VALUES (?, ?, ?, ?)
                                      ON CONFLICT(public_key) DO UPDATE SET
                                        callsign = excluded.callsign,
                                        avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
-                                       elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                                       archetype = excluded.archetype`,
-                                    [pk, cs, av, evb, arch]
+                                       elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by)`,
+                                    [pk, cs, av, evb]
                                 );
                             }
                         });

@@ -1,6 +1,6 @@
 {
   "name": "@beanpool/manager",
-  "version": "1.1.43",
+  "version": "1.1.41",
   "description": "BeanPool Fleet Manager — Multi-Node Control Plane",
   "type": "module",
   "private": true,

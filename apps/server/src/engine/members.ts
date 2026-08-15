@@ -57,51 +57,6 @@ export function isCallsignAvailable(callsign: string, excludePublicKey?: string)
 }
 
 /**
- * Guardians needed before a member is worth offering as a recovery target. This is the
- * LEGACY guardian-vote path, not the keyholder split — it happens to share the number 3
- * with core's RECOVERY_THRESHOLD, so it is kept as its own constant rather than importing
- * that one and quietly coupling two unrelated schemes.
- */
-const RECOVERY_MIN_GUARDIANS = 3;
-
-/** A member offered as a social-recovery target. Deliberately public-safe fields only. */
-export interface RecoveryCandidate {
-    publicKey: string;
-    callsign: string;
-    joinedAt: string | null;
-    avatarUrl: string | null;
-}
-
-/**
- * Members on `callsign` who can actually be recovered: live, and holding enough guardians
- * to reach the threshold. Backs the public `/api/recovery/lookup/:callsign` endpoint.
- *
- * Lives here, next to isCallsignAvailable, because it shares that function's predicate and
- * the two must not drift — the endpoint is public and unauthenticated, so a mismatched
- * `status != 'migrated'` both leaks PRUNED members as recovery targets and loses the partial
- * index, turning a rate-limited lookup into a full table scan.
- *
- * The guardian count is pushed into SQL rather than calling getGuardiansOf() per matched
- * row, which was N+1 queries on that same public endpoint.
- */
-export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
-    const norm = callsign.trim().toLowerCase();
-    if (!norm) return [];
-    const rows = db.prepare(`
-        SELECT public_key, callsign, joined_at, avatar_url
-        FROM members
-        WHERE lower(callsign) = ? AND status NOT IN ('migrated', 'pruned')
-          AND (SELECT COUNT(*) FROM friends WHERE owner_pubkey = members.public_key AND is_guardian = 1) >= ?
-    `).all(norm, RECOVERY_MIN_GUARDIANS) as any[];
-    return rows.map(r => ({
-        publicKey: r.public_key,
-        callsign: r.callsign,
-        joinedAt: r.joined_at,
-        avatarUrl: r.avatar_url,
-    }));
-}
-
-/**
  * Return `callsign` if it's free, otherwise the first numbered variant that is
  * (Sarah → Sarah2 → Sarah3 …). Used at REGISTRATION so a name clash never blocks a
  * join — the member lands with a guaranteed-unique name and the wizard-on-join then
@@ -216,7 +171,6 @@ export function updateProfile(
         bio?: string;
         contact?: { value: string; visibility: 'hidden' | 'trade_partners' | 'community' | 'friends' } | null;
         callsign?: string;
-        archetype?: string | null;
     }
 ): MemberProfile | null {
     if (!getMember(db, publicKey)) return null;
@@ -246,17 +200,11 @@ export function updateProfile(
         contact_value = update.contact?.value || null;
         contact_visibility = update.contact?.visibility || null;
     }
-    let archetype = existing.archetype || null;
-    if (update.archetype === null) {
-        archetype = null;
-    } else if (typeof update.archetype === 'string') {
-        archetype = update.archetype.trim().slice(0, 4096);
-    }
 
     const profileUpdatedAt = new Date().toISOString();
 
-    db.prepare(`UPDATE members SET avatar_url=?, bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=?, archetype=? WHERE public_key=?`)
-      .run(avatar, bio, contact_value, contact_visibility, callsign, profileUpdatedAt, archetype, publicKey);
+    db.prepare(`UPDATE members SET avatar_url=?, bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=? WHERE public_key=?`)
+      .run(avatar, bio, contact_value, contact_visibility, callsign, profileUpdatedAt, publicKey);
 
     broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt });
     return getProfile(db, publicKey);

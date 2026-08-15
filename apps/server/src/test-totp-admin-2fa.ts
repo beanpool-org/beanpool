@@ -169,9 +169,4 @@ resetAdminAuthTarpit();
     console.log('  G. Disabling 2FA restores password-only access');
 
     console.log('✅ #135 TOTP 2FA admin authentication test PASSED!');
-
-    // Inside the IIFE deliberately: placed after it, this would run before the async body
-    // resolved and exit on a test that had not finished. See the note in the sibling suites —
-    // without it this process holds the engine's handles open and hangs the pipeline.
-    process.exit(0);
 })();

@@ -40,7 +40,3 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
 
 Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n**Learning:** [Why it existed]\n**Pattern:** [How to find similar issues]`
 ## 2026-08-05 - [Replace deprecated Constants.appOwnership]\n**Issue:** Constants.appOwnership was deprecated in expo-constants.\n**Learning:** Replaced with Constants.executionEnvironment === ExecutionEnvironment.StoreClient.\n**Pattern:** Search for deprecated Constants.appOwnership usages in expo apps.
-## 2026-08-05 - [Fix push notification response type]
-**Issue:** `Notifications.addNotificationResponseReceivedListener` used an `any` type for the response parameter.
-**Learning:** Replaced `any` with `import("expo-notifications").NotificationResponse` to provide proper typing for notification interactions.
-**Pattern:** Search for `any` types in Expo SDK callback definitions and replace them with the corresponding explicit type from the library.

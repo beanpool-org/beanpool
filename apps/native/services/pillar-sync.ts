@@ -653,11 +653,7 @@ async function parseIfChanged(res: { text(): Promise<string> }, anchorUrl: strin
 
 let syncPromise: Promise<SyncResult> | null = null;
 let needsAnotherSync = false;
-// `ReturnType<typeof setTimeout>` rather than `NodeJS.Timeout`: React Native's own types return
-// a number here, Node's return a Timeout object, and which one wins depends on whether anything
-// in the workspace has pulled @types/node into scope. Adding a test runner to this app did
-// exactly that. This spelling is correct under either.
-let debounceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+let debounceTimeoutId: NodeJS.Timeout | null = null;
 
 /**
  * Coordinated request wrapper. Ensures that only one performSync executes at a time,

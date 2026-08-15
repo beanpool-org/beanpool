@@ -87,19 +87,6 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
             return false;
         }
-
-        // TOTP validation succeeded — issue a 2FA session token so the caller can
-        // skip TOTP on subsequent requests. This is the same token issued by the
-        // /api/admin/login endpoint, but happens inline for headless clients (e.g.
-        // fleet manager) that authenticate via X-Admin-Password + X-Admin-TOTP
-        // headers directly rather than through the login endpoint.
-        const newSessionToken = issue2faSessionToken();
-        // Attach to the response so the caller can stash it for future requests.
-        // Only set if the body isn't already written (API endpoints may call
-        // checkAdminAuth early and write their own body later — we use a flag on
-        // ctx.state to hand off the token without fighting the response).
-        if (!ctx.state) ctx.state = {};
-        ctx.state.tfaSessionToken = newSessionToken;
         } // end of else block (no valid 2FA session token)
     }
 

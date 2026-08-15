@@ -74,21 +74,6 @@ export function hasMnemonic(identity: BeanPoolIdentity | null | undefined): iden
 }
 
 /**
- * Where we record that this member has actually seen their 12 words.
- *
- * Scoped to the public key, not global: wiping and creating a new identity in the same
- * browser must show the warning again, and a global key would silently mark the new
- * account as backed up because the old one was. Client-side only — the server cannot
- * read a PWA member's phrase and has no business knowing whether they saved it.
- *
- * Shared here rather than inlined so WelcomePage (which sets it at onboarding) and
- * SettingsPage (which reads it) cannot drift onto different keys.
- */
-export function seedViewedKey(publicKey: string): string {
-    return `bp_seed_viewed_${publicKey}`;
-}
-
-/**
  * Generate a new Ed25519 identity from a 12-word mnemonic.
  * Returns the identity AND the mnemonic (for one-time display).
  */

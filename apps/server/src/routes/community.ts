@@ -12,7 +12,7 @@ import {
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
     vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer,
-    updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
+    updateProfile, getProfile, getAllProfiles, isCallsignAvailable,
     getCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
@@ -24,7 +24,7 @@ import {
     registerPushToken, removePushToken,
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
-    getGuardiansOf, createRecoveryRequest, getRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery,
+    getGuardiansOf, createRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery,
     getNodeRole, exportSyncState,
     createTreasury,
 } from '../state-engine.js';
@@ -48,7 +48,6 @@ import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
-import { pendingKeeperActionsFor } from '../engine/recovery-release.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -814,7 +813,7 @@ router.get('/api/invite/mine/:publicKey', async (ctx) => {
 // ===================== PROFILE API (PUBLIC) =====================
 
 router.post('/api/profile/update', async (ctx) => {
-    const { avatar, bio, contact, callsign, archetype } = (ctx as any).requestBody || {};
+    const { avatar, bio, contact, callsign } = (ctx as any).requestBody || {};
     const activeKey = ctx.state.actor || (ctx as any).requestBody?.publicKey;
     if (!activeKey) {
         ctx.status = 400;
@@ -829,7 +828,7 @@ router.post('/api/profile/update', async (ctx) => {
 
     let profile;
     try {
-        profile = updateProfile(activeKey, { avatar, bio, contact, callsign, archetype });
+        profile = updateProfile(activeKey, { avatar, bio, contact, callsign });
     } catch (e: any) {
         if (e?.message === 'CALLSIGN_TAKEN') {
             ctx.status = 409;
@@ -1217,11 +1216,22 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
     const callsign = ctx.params.callsign.trim().toLowerCase();
     if (!callsign) { ctx.status = 400; ctx.body = { error: 'Missing callsign' }; return; }
 
-    // The query lives in engine/members.ts, beside isCallsignAvailable, so the two callsign
-    // predicates cannot drift apart — see the note there for why that matters on a public
-    // endpoint. It already returns public-safe fields only.
+    // ⚡ Push the "≥3 guardians" filter into SQL instead of calling getGuardiansOf()
+    // once per matched row (N+1 queries on a public, rate-limited lookup endpoint).
+    const eligible = db.prepare(`
+        SELECT public_key, callsign, joined_at, avatar_url
+        FROM members
+        WHERE LOWER(callsign) = ? AND status != 'migrated'
+          AND (SELECT COUNT(*) FROM friends WHERE owner_pubkey = members.public_key AND is_guardian = 1) >= 3
+    `).all(callsign) as any[];
+
     ctx.status = 200;
-    ctx.body = findRecoveryCandidates(callsign);
+    ctx.body = eligible.map(r => ({
+        publicKey: r.public_key,
+        callsign: r.callsign,
+        joinedAt: r.joined_at,
+        avatarUrl: r.avatar_url
+    }));
 });
 
 // Callsign availability — powers the wizard's live "✓ available / ✗ taken" hint and
@@ -1293,28 +1303,8 @@ router.get('/api/recovery/pending/:guardianPubkey', async (ctx) => {
     }
     try {
         const reqs = getPendingRecoveryRequests(guardianPubkey);
-
-        // The approve RESPONSE can only report an obligation that already exists at the moment of
-        // the vote — and the usual ordering is the other way round: the guardian votes first, the
-        // recovering device opens its collection afterwards. A keeper who approved early would
-        // otherwise never be told their fragment is still needed, which is the same silent stall
-        // in a different order (CR #239).
-        //
-        // This list is where a keeper's client already polls, and it keeps returning a request
-        // after that guardian has voted (status IN 'pending','approved'), so the obligation
-        // surfaces on the next poll whenever the collection opens. Attached per request rather
-        // than alongside the array, so the response stays an array and old clients are unaffected.
         ctx.status = 200;
-        ctx.body = reqs.map((r: any) => {
-            const pending = pendingKeeperActionsFor(guardianPubkey, r.oldPubkey);
-            return pending.length
-                ? { ...r, keeperActionRequired: pending.map(p => ({
-                    collectionId: p.collectionId,
-                    ownerPubkey: p.ownerPubkey,
-                    expiresAt: p.expiresAt,
-                })) }
-                : r;
-        });
+        ctx.body = reqs;
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message };
@@ -1329,39 +1319,7 @@ router.post('/api/recovery/approve', async (ctx) => {
 
     try {
         approveRecovery(body.requestId, guardianPubkey);
-
-        // ONBOARDING Part 5: "the approve endpoint gains a side effect: releasing that approver's
-        // piece." It cannot, quite — a member fragment is released only when it has been re-wrapped
-        // to the recovering device's ephemeral key, and that needs the keeper's PRIVATE key. The
-        // node has no plaintext and must not pretend otherwise.
-        //
-        // What it can do is refuse to let the approval read as finished when it is not. The old
-        // guardian vote and the keyholder split are two mechanisms wearing the same word on the
-        // same button: a guardian who is also a keeper taps Approve, is told it worked, and stops —
-        // while the fragment recovery actually needs has not moved. The owner then sees an approval
-        // and no piece, with nothing to explain the gap.
-        //
-        // So the response carries the outstanding obligation and the client finishes it against
-        // /api/recovery/approve-keeper, which stays the single path that releases anything.
-        const req = getRecoveryRequest(body.requestId);
-        const pending = req ? pendingKeeperActionsFor(guardianPubkey, req.oldPubkey) : [];
-
-        ctx.status = 200;
-        ctx.body = {
-            success: true,
-            // Absent rather than empty when there is nothing to do, so a client that ignores this
-            // field behaves exactly as before.
-            ...(pending.length ? {
-                keeperActionRequired: pending.map(p => ({
-                    collectionId: p.collectionId,
-                    // Whose account. Without it the client has a session id and no way to say who
-                    // it belongs to without a second lookup — and "someone needs your help" with
-                    // no name attached is exactly the prompt people dismiss (CR #239).
-                    ownerPubkey: p.ownerPubkey,
-                    expiresAt: p.expiresAt,
-                })),
-            } : {}),
-        };
+        ctx.status = 200; ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400; ctx.body = { error: e.message };
     }
@@ -1434,7 +1392,6 @@ router.get('/api/members', async (ctx) => {
         profileUpdatedAt: m.profileUpdatedAt,
         earnedCredit: m.earnedCredit ?? 0,
         elderVouchedBy: m.elderVouchedBy || null,
-        archetype: m.archetype || null,
     }));
 });
 

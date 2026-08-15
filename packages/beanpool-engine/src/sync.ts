@@ -157,47 +157,6 @@ export interface SyncSettlement {
     updatedAt: string;
 }
 
-/**
- * Replicated recovery key share (hub fragment, member fragment, or SSO fragment).
- *
- * Hub fragment A is XOR-mandatory — losing it means ALL keeper-based recovery breaks
- * for every member who has enrolled keepers. Replicating these rows to backup nodes
- * ensures a promoted secondary can still serve recovery without falling back to the
- * file-based VACUUM INTO snapshots (which may be stale by up to 24 hours).
- */
-export interface SyncRecoveryShare {
-    ownerPubkey: string;
-    holderType: string;       // 'hub' | 'member' | 'sso'
-    holderRef: string;
-    shareIndex: number;
-    encryptedShare: string;
-    shareIv: string;
-    shareTag: string;
-    ephemeralPubkey: string | null;
-    ssoLookupHash: string | null;
-    ssoLookupSalt: string | null;
-    kdfParams: string | null;
-    generation: number;
-    createdAt: string;
-    updatedAt: string;
-}
-
-/**
- * Replicated 6-digit Recovery PIN state.
- *
- * Protects the friend list from contact harvesting without locking the user out.
- * Replicated to backup mirror nodes so promoted secondaries can verify PINs.
- */
-export interface SyncRecoveryPin {
-    ownerPubkey: string;
-    pinHash: string;
-    pinSalt: string;
-    attempts?: number;
-    lastAttemptAt?: string | null;
-    createdAt: string;
-    updatedAt: string;
-}
-
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -217,8 +176,6 @@ export interface SyncPayload {
     abuseReports?: SyncAbuseReport[];
     recoveryRequests?: SyncRecoveryRequest[];
     recoveryApprovals?: SyncRecoveryApproval[];
-    recoveryShares?: SyncRecoveryShare[];
-    recoveryPins?: SyncRecoveryPin[];
     settlements?: SyncSettlement[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     nodeId: string;
@@ -421,40 +378,6 @@ export function exportSyncState(
         createdAt: row.created_at,
     }));
 
-    const recoveryShareRows = sel('recovery_shares', 'updated_at');
-    const recoveryShares: SyncRecoveryShare[] = recoveryShareRows.map((row: any) => ({
-        ownerPubkey: row.owner_pubkey,
-        holderType: row.holder_type,
-        holderRef: row.holder_ref,
-        shareIndex: row.share_index,
-        encryptedShare: row.encrypted_share,
-        shareIv: row.share_iv,
-        shareTag: row.share_tag,
-        ephemeralPubkey: row.ephemeral_pubkey ?? null,
-        ssoLookupHash: row.sso_lookup_hash ?? null,
-        ssoLookupSalt: row.sso_lookup_salt ?? null,
-        kdfParams: row.kdf_params ?? null,
-        generation: row.generation,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at || row.created_at,
-    }));
-
-    let recoveryPins: SyncRecoveryPin[] = [];
-    try {
-        const recoveryPinRows = sel('recovery_pin', 'updated_at');
-        recoveryPins = recoveryPinRows.map((row: any) => ({
-            ownerPubkey: row.owner_pubkey,
-            pinHash: row.pin_hash,
-            pinSalt: row.pin_salt,
-            attempts: row.attempts ?? 0,
-            lastAttemptAt: row.last_attempt_at ?? null,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at || row.created_at,
-        }));
-    } catch {
-        // recovery_pin table may not exist on older test fixtures
-    }
-
     // Settlements. Uses the same `sel` cursor helper as every other table, so delta sync picks up a row
     // whose state has moved without re-sending the whole outbox.
     const settlementRows = sel('settlements', 'updated_at');
@@ -505,8 +428,6 @@ export function exportSyncState(
         abuseReports,
         recoveryRequests,
         recoveryApprovals,
-        recoveryShares,
-        recoveryPins,
         settlements,
         tombstones,
     };

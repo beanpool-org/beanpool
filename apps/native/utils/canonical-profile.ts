@@ -20,7 +20,6 @@ export interface CanonicalProfile {
     bio?: string;
     contactValue?: string | null;
     contactVisibility?: string;
-    archetype?: string | null;
 }
 
 export async function getCanonicalProfile(): Promise<CanonicalProfile | null> {
@@ -48,7 +47,6 @@ export async function saveCanonicalProfile(partial: CanonicalProfile): Promise<v
         if (partial.bio !== undefined) merged.bio = partial.bio;
         if (partial.contactValue !== undefined) merged.contactValue = partial.contactValue;
         if (partial.contactVisibility !== undefined) merged.contactVisibility = partial.contactVisibility;
-        if (partial.archetype !== undefined) merged.archetype = partial.archetype;
         await AsyncStorage.setItem(KEY, JSON.stringify(merged));
     } catch {
         // Non-fatal: canonical is a convenience mirror, not the source of truth.

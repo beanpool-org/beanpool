@@ -5,49 +5,45 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { lookupRecoveryCallsign } from '../utils/db';
+import { lookupRecoveryCallsign, createRecoveryRequest, getRecoveryStatus } from '../utils/db';
+import { createIdentity, wipeIdentity } from '../utils/identity';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import { colors } from '../constants/colors';
 import { useIdentity } from './IdentityContext';
-import { verifyRecoveryPin } from '../utils/pin';
-import {
-    startFriendRecoverySession,
-    pollFriendRecovery,
-    completeFriendRecovery,
-} from '../utils/friend-recovery';
-import type { BeanPoolIdentity } from '../utils/identity';
 
 export default function RecoverIdentityScreen() {
-    const { setIdentity } = useIdentity();
-    const [step, setStep] = useState<'lookup' | 'select' | 'pin' | 'waiting' | 'reconstructing'>('lookup');
+    const { identity, setIdentity } = useIdentity();
+    const [step, setStep] = useState<'lookup' | 'select' | 'guess' | 'creating' | 'waiting'>('lookup');
     const [callsign, setCallsign] = useState('');
     const [anchorUrl, setAnchorUrl] = useState('');
     const [lookupResults, setLookupResults] = useState<any[]>([]);
     const [selectedProfile, setSelectedProfile] = useState<any>(null);
-    const [pin, setPin] = useState('');
-    const [pinVerified, setPinVerified] = useState(false);
+    const [guardianGuess, setGuardianGuess] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     
-    // Two-Layer Recovery tracking
-    const [collectionId, setCollectionId] = useState<string | null>(null);
-    const [ephIdentity, setEphIdentity] = useState<BeanPoolIdentity | null>(null);
-    const [progress, setProgress] = useState<{
-        collected: number;
-        threshold: number;
-        enough: boolean;
-        hubAvailable: boolean;
-    }>({ collected: 0, threshold: 3, enough: false, hubAvailable: false });
+    // Status tracking
+    const [statusData, setStatusData] = useState<any>(null);
 
-    const [isReconstructing, setIsReconstructing] = useState(false);
-    const isPollingRef = React.useRef(false);
-
-    // Pre-fill the node address if this device has ever been connected to one
+    // Pre-fill the node address if this device has ever been connected to one,
+    // so a returning user needn't retype it. On a genuinely fresh phone (the
+    // real recovery case) it starts empty and the user enters their node.
     useEffect(() => {
         AsyncStorage.getItem('beanpool_anchor_url').then((url) => {
             if (url) setAnchorUrl(url);
         }).catch(() => {});
     }, []);
+
+    useEffect(() => {
+        if (identity?.publicKey) {
+            getRecoveryStatus(identity.publicKey).then((st) => {
+                if (st && (st.status === 'pending' || st.status === 'approved')) {
+                    setStatusData({ ...st, newPubkey: identity.publicKey });
+                    setStep('waiting');
+                }
+            }).catch(console.warn);
+        }
+    }, [identity]);
 
     const handleLookup = async () => {
         if (!callsign.trim()) return;
@@ -68,6 +64,8 @@ export default function RecoverIdentityScreen() {
         setLoading(true);
         setError(null);
         try {
+            // lookupRecoveryCallsign (and every later recovery call) reads the
+            // node from storage, so commit it before we search.
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
             const results = await lookupRecoveryCallsign(callsign.trim());
             if (results.length === 0) {
@@ -85,121 +83,72 @@ export default function RecoverIdentityScreen() {
 
     const handleSelect = (profile: any) => {
         setSelectedProfile(profile);
-        setPin('');
-        setError(null);
-        setStep('pin');
+        setStep('guess');
     };
 
-    const handleVerifyPin = async () => {
-        if (!/^\d{6}$/.test(pin)) {
-            setError('PIN must be exactly 6 digits.');
-            return;
-        }
+    const handleSubmit = async () => {
+        if (!guardianGuess.trim()) return;
         setLoading(true);
         setError(null);
         try {
-            const rawAnchor = anchorUrl.trim();
-            const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
-            const res = await verifyRecoveryPin(finalAnchorUrl, selectedProfile.callsign, pin);
-            if (res.verified) {
-                setPinVerified(true);
-                setError(null);
-                await startRecoveryFlow();
-            } else if (res.error) {
-                setError(res.error);
-            } else {
-                setError("PIN didn't match. If you forgot your PIN, tap 'Skip PIN' to continue.");
-            }
-        } catch (e: any) {
-            setError(e.message || 'Verification failed. Try again or skip.');
-        } finally {
-            setLoading(false);
-        }
-    };
+            // 1. Generate new identity locally (which also saves it)
+            const newId = await createIdentity(selectedProfile.callsign);
 
-    const handleSkipPin = async () => {
-        setError(null);
-        await startRecoveryFlow();
-    };
+            // Guardian recovery supersedes any half-finished join wizard on this
+            // device — drop the rescue record so the gatekeeper doesn't bounce
+            // this user back into onboarding while they wait for approval.
+            const { clearPendingOnboarding } = await import('../utils/onboarding-state');
+            await clearPendingOnboarding();
 
-    const startRecoveryFlow = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const rawAnchor = anchorUrl.trim();
-            const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
-            const session = await startFriendRecoverySession({
-                callsign: selectedProfile.callsign,
-                anchorUrl: finalAnchorUrl,
-            });
+            // Update global identity context immediately so node status and layouts align
+            setIdentity(newId);
 
-            setCollectionId(session.collectionId);
-            setEphIdentity(session.ephIdentity);
-            setProgress({
-                collected: 0,
-                threshold: session.threshold,
-                enough: false,
-                hubAvailable: false,
-            });
-            setIsReconstructing(false);
+            // 2. Submit the request
+            const req = await createRecoveryRequest(selectedProfile.publicKey, guardianGuess.trim(), newId);
+
+            setStatusData(req);
             setStep('waiting');
         } catch (e: any) {
-            setError(e.message || 'Failed to start recovery session.');
+            setError(e.message || 'Failed to submit recovery request.');
         } finally {
             setLoading(false);
         }
     };
 
-    const pollStatus = async () => {
-        if (!collectionId || !ephIdentity || isPollingRef.current || isReconstructing) return;
-        isPollingRef.current = true;
+    const checkStatus = async () => {
+        const pubkey = statusData?.newPubkey || identity?.publicKey;
+        if (!pubkey) return;
         try {
-            const rawAnchor = anchorUrl.trim();
-            const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
-            const p = await pollFriendRecovery(finalAnchorUrl, collectionId, ephIdentity);
-            setProgress(p);
-
-            if (p.enough) {
-                setIsReconstructing(true);
-                setStep('reconstructing');
-                try {
-                    const restored = await completeFriendRecovery(
-                        finalAnchorUrl,
-                        collectionId,
-                        ephIdentity,
-                        selectedProfile?.callsign,
-                        selectedProfile?.publicKey,
-                    );
-                    setIdentity(restored);
+            const st = await getRecoveryStatus(pubkey);
+            if (st && st.status !== 'none') {
+                setStatusData({ ...st, newPubkey: pubkey });
+                if (st.status === 'executed') {
+                    // Force app reload to main UI
                     router.replace('/(tabs)');
-                } catch (recErr: any) {
-                    setIsReconstructing(false);
-                    setStep('waiting');
-                    setError(recErr.message || 'Failed to reconstruct account from shares.');
                 }
             }
-        } catch (e: any) {
-            console.warn('[recovery poll error]', e.message);
-        } finally {
-            isPollingRef.current = false;
-        }
+        } catch (e) {}
     };
 
     const handleCancel = () => {
         Alert.alert(
             'Cancel Recovery?',
-            'Are you sure you want to cancel? This will stop waiting for friend approvals on this device.',
+            'Are you sure you want to cancel? This will wipe the pending recovery state from this device and let you create or recover another identity.',
             [
-                { text: 'Keep Waiting', style: 'cancel' },
+                { text: 'No, Keep Waiting', style: 'cancel' },
                 {
                     text: 'Yes, Cancel',
                     style: 'destructive',
                     onPress: async () => {
-                        setCollectionId(null);
-                        setEphIdentity(null);
-                        setIsReconstructing(false);
-                        setStep('lookup');
-                        router.replace('/welcome');
+                        try {
+                            await wipeIdentity();
+                            setIdentity(null);
+                            setStatusData(null);
+                            setStep('lookup');
+                            router.replace('/welcome');
+                        } catch (e: any) {
+                            Alert.alert('Error', e.message || 'Failed to wipe identity');
+                        }
                     }
                 }
             ]
@@ -209,11 +158,10 @@ export default function RecoverIdentityScreen() {
     useEffect(() => {
         let interval: any;
         if (step === 'waiting') {
-            interval = setInterval(pollStatus, 4000);
-            pollStatus();
+            interval = setInterval(checkStatus, 5000);
         }
         return () => clearInterval(interval);
-    }, [step, collectionId, ephIdentity, isReconstructing]);
+    }, [step, statusData]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -282,105 +230,53 @@ export default function RecoverIdentityScreen() {
                         </>
                     )}
 
-                    {step === 'pin' && (
+                    {step === 'guess' && (
                         <>
-                            <Text style={styles.title} accessibilityRole="header">🔢 Recovery PIN</Text>
-                            <Text style={styles.subtitle}>
-                                If you set a 6-digit Recovery PIN, enter it below to verify your account. If you don't have a PIN or forgot it, tap 'Skip PIN' — forgetting your PIN never locks you out.
-                            </Text>
-
+                            <Text style={styles.title}>Guardian Knowledge Check</Text>
+                            <Text style={styles.subtitle}>To prevent spam, please enter the exact callsign of at least ONE of your Guardians.</Text>
                             <TextInput
-                                accessibilityLabel="6 digit recovery PIN"
-                                style={styles.pinInput}
-                                placeholder="••••••"
+                                accessibilityLabel="A guardian's callsign"
+                                style={styles.input}
+                                placeholder="A guardian's callsign"
                                 placeholderTextColor={colors.text.muted}
-                                value={pin}
-                                onChangeText={(text) => {
-                                    const clean = text.replace(/[^0-9]/g, '').slice(0, 6);
-                                    setPin(clean);
-                                    setError(null);
-                                }}
-                                keyboardType="number-pad"
-                                maxLength={6}
-                                secureTextEntry={true}
-                                autoFocus={true}
-                                autoComplete="off"
-                                textContentType="oneTimeCode"
-                                editable={!loading}
+                                value={guardianGuess}
+                                onChangeText={setGuardianGuess}
+                                autoCapitalize="none"
                             />
-
-                            {error && <Text style={styles.error} accessibilityLiveRegion="assertive">{error}</Text>}
-
-                            <Pressable
-                                style={[styles.primaryBtn, (loading || pin.length !== 6) && { opacity: 0.5 }]}
-                                onPress={handleVerifyPin}
-                                disabled={loading || pin.length !== 6}
-                                accessibilityRole="button"
-                                accessibilityState={{ disabled: loading || pin.length !== 6 }}
-                            >
-                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Verify PIN</Text>}
+                            {error && <Text style={styles.error}>{error}</Text>}
+                            <Pressable style={styles.primaryBtn} onPress={handleSubmit} disabled={loading} accessibilityRole="button">
+                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Submit Request</Text>}
                             </Pressable>
-
-                            <Pressable
-                                style={styles.secondaryBtn}
-                                onPress={handleSkipPin}
-                                disabled={loading}
-                                accessibilityRole="button"
-                            >
-                                <Text style={styles.secondaryBtnText}>Skip PIN / I Don't Have One</Text>
-                            </Pressable>
-
                             <Pressable style={styles.backBtn} onPress={() => setStep('select')} accessibilityRole="button">
                                 <Text style={styles.backBtnText}>← Back</Text>
                             </Pressable>
                         </>
                     )}
 
-                    {step === 'waiting' && (
+                    {step === 'waiting' && statusData && (
                         <View style={{ alignItems: 'center' }}>
-                            <Text style={styles.title} accessibilityRole="header">👥 Ask Your Friends</Text>
-                            <Text style={styles.subtitle}>
-                                Contact 2 of your trusted friends by phone or in person. Ask them to open BeanPool and approve your recovery request in Settings.
-                            </Text>
+                            <Text style={styles.title}>⏳ Waiting for Guardians</Text>
+                            <Text style={styles.subtitle}>Your request has been submitted! It will expire in 24 hours. Please contact your guardians directly and ask them to approve your request under Settings → Recovery Requests.</Text>
                             
-                            <View
-                                style={styles.statusBox}
-                                accessibilityRole="summary"
-                                accessibilityLiveRegion="polite"
-                                accessibilityLabel={`Pieces collected: ${progress.collected} of ${progress.threshold}. ${progress.hubAvailable ? 'Community hub piece unlocked' : 'Waiting for first friend approval to unlock hub'}`}
-                            >
-                                <Text style={styles.statusLabel}>Pieces Collected</Text>
-                                <Text style={styles.statusValue}>{progress.collected} / {progress.threshold}</Text>
-                                <Text style={[styles.fieldHint, { marginTop: 8, marginBottom: 0 }]}>
-                                    {progress.hubAvailable ? '✅ Community hub piece unlocked' : '⏳ Waiting for 1st friend approval to unlock hub'}
-                                </Text>
+                            <View style={styles.statusBox}>
+                                <Text style={styles.statusLabel}>Approvals</Text>
+                                <Text style={styles.statusValue}>{statusData.approvals || 0} / {statusData.quorumRequired}</Text>
                             </View>
 
-                            {error ? <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="assertive">{error}</Text> : null}
+                            {statusData.status === 'approved' && statusData.cooldownUntil && (
+                                <View style={styles.infoBanner}>
+                                    <Text style={styles.infoText}>
+                                        ✅ Quorum reached! Your identity will automatically migrate after the 24-hour security cooldown.
+                                    </Text>
+                                    <Text style={[styles.infoText, {marginTop: 8, fontWeight: 'bold'}]}>
+                                        Time remaining: {Math.max(0, Math.floor((new Date(statusData.cooldownUntil).getTime() - Date.now()) / 3600000))} hours
+                                    </Text>
+                                </View>
+                            )}
 
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 12 }}>
-                                <ActivityIndicator size="small" color={colors.brand.primary} style={{ marginRight: 8 }} />
-                                <Text style={{ color: colors.text.secondary, fontSize: 13 }}>Listening for approvals in real-time...</Text>
-                            </View>
-
-                            <Pressable
-                                style={[styles.backBtn, { minHeight: 44, justifyContent: 'center' }]}
-                                onPress={handleCancel}
-                                accessibilityRole="button"
-                                accessibilityLabel="Cancel recovery and return to start"
-                            >
-                                <Text style={[styles.backBtnText, { color: colors.feedback.danger.solid }]}>Cancel Recovery</Text>
+                            <Pressable style={styles.backBtn} onPress={handleCancel} accessibilityRole="button">
+                                <Text style={[styles.backBtnText, { color: colors.feedback.danger.solid }]}>Cancel Recovery & Start Fresh</Text>
                             </Pressable>
-                        </View>
-                    )}
-
-                    {step === 'reconstructing' && (
-                        <View style={{ alignItems: 'center', paddingVertical: 24 }} accessibilityRole="summary" accessibilityLiveRegion="polite">
-                            <ActivityIndicator size="large" color={colors.brand.primary} />
-                            <Text style={[styles.title, { marginTop: 16 }]} accessibilityRole="header">🔐 Restoring Your Account</Text>
-                            <Text style={styles.subtitle}>
-                                Unwrapping cryptographic pieces and restoring your original identity keypair...
-                            </Text>
                         </View>
                     )}
                 </View>
@@ -403,36 +299,6 @@ const styles = StyleSheet.create({
     backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
     backBtnText: { color: colors.text.secondary, fontSize: 14 },
     error: { color: colors.feedback.danger.solid, fontSize: 14, marginBottom: 16, textAlign: 'center' },
-
-    pinInput: {
-        backgroundColor: colors.surface.card,
-        borderWidth: 1,
-        borderColor: colors.border.strong,
-        borderRadius: 12,
-        paddingHorizontal: 20,
-        paddingVertical: 14,
-        fontSize: 24,
-        letterSpacing: 12,
-        textAlign: 'center',
-        color: colors.text.heading,
-        marginBottom: 16,
-        alignSelf: 'center',
-        width: 220,
-    },
-    secondaryBtn: {
-        backgroundColor: colors.surface.subtle,
-        borderWidth: 1,
-        borderColor: colors.border.default,
-        padding: 14,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginTop: 10,
-    },
-    secondaryBtnText: {
-        color: colors.text.body,
-        fontSize: 14,
-        fontWeight: '600',
-    },
 
     profileBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.subtle, padding: 12, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default },
     avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', marginRight: 12 },

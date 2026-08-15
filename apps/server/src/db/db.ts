@@ -133,11 +133,6 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE messages ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE friends ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    // Moderation status. MUST be before the schema.sql exec below: schema.sql declares
-    // idx_abuse_reports_status_created ON abuse_reports(status, ...), and on a node whose
-    // abuse_reports table predates this column the exec hits that index, fails, and the node does
-    // not boot. Adding the column afterwards is too late — the exec has already thrown.
-    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
 
     // #104 step 3b: the settlement exchange needs four more columns on `settlements`.
@@ -196,8 +191,6 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
-    // Community Working Style / Archetype signature
-    try { db.prepare(`ALTER TABLE members ADD COLUMN archetype TEXT`).run(); } catch { }
 
     // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
     // column-whitelist form that excludes last_active_at heartbeats from cursor sync.
@@ -222,59 +215,6 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN project_id TEXT REFERENCES projects(id)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id)`).run(); } catch { }
 
-    // ---------------------------------------------------------------------------------
-    // EVERY `ALTER TABLE ... ADD COLUMN` LIVES ABOVE THE schema.sql EXEC. DO NOT ADD ONE BELOW IT.
-    //
-    // schema.sql may define an index, view or trigger over any of these columns. CREATE INDEX
-    // against a missing column is a hard error, not a no-op — so an ALTER that runs after the
-    // exec cannot save a database that the exec has already refused to open. The node does not
-    // start, and the only symptom is `no such column: <x>` at boot.
-    //
-    // This has now happened twice: #127 (posts.updated_at, posts.search_keywords,
-    // members.earned_credit, members.profile_updated_at) and #172 (abuse_reports.status).
-    // Both times the fix was to move the one offending column. test-schema-alter-ordering.ts
-    // enforces the rule for all of them instead, and will fail the build if a new ALTER
-    // appears below this point or names a column that schema.sql does not also declare.
-    //
-    // On a FRESH database these ALTERs fail into their empty catch (the table does not exist
-    // yet) and schema.sql creates each column as part of the CREATE TABLE. That is why the
-    // schema.sql declaration is mandatory, not merely tidy.
-    // ---------------------------------------------------------------------------------
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN price_type TEXT DEFAULT 'fixed'`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN hours REAL`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE transactions ADD COLUMN tax_fee REAL DEFAULT 0.0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signer TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signature TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN genesis_type TEXT DEFAULT 'standard'`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
-    try {
-        db.prepare(`ALTER TABLE members ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE members SET updated_at = COALESCE(profile_updated_at, last_active_at, joined_at) WHERE updated_at IS NULL`).run();
-    } catch { }
-    try {
-        db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE post_photos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE updated_at IS NULL`).run();
-    } catch { }
-    try {
-        db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE marketplace_transactions SET updated_at = COALESCE(completed_at, created_at) WHERE updated_at IS NULL`).run();
-    } catch { }
-    try {
-        db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL`).run();
-    } catch { }
-    try {
-        db.prepare(`ALTER TABLE recovery_requests ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE recovery_requests SET updated_at = COALESCE(executed_at, cooldown_until, created_at) WHERE updated_at IS NULL`).run();
-    } catch { }
-
-    // Step 7: recovery share replication audit column
-    try { db.prepare(`ALTER TABLE sync_audit_log ADD COLUMN recovery_shares_imported INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN kdf_params TEXT`).run(); } catch { }
-
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
 
@@ -290,13 +230,21 @@ export function initSchema() {
         }
     }
 
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN price_type TEXT DEFAULT 'fixed'`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN hours REAL`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE transactions ADD COLUMN tax_fee REAL DEFAULT 0.0`).run(); } catch { }
     // SRV-20: cryptographic authorship columns on transactions (see schema.sql).
+    try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signer TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_signature TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
     // posts.updated_at, posts.search_keywords, members.earned_credit and members.profile_updated_at used to
     // be added HERE. They moved above the exec (#127) because schema.sql objects depend on them.
     //
     // Protocol v1: Admin Genesis Invites — store invite tier type
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN genesis_type TEXT DEFAULT 'standard'`).run(); } catch { }
     // #108: a listing may carry a real cash outlay (fuel/consumables). Flag only, no amount —
     // the app never touches the money, so it must not imply a figure it holds or settles.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     // Rule 4's per-member aggregate exposure read would otherwise full-scan `settlements`.
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_buyer ON settlements(buyer_pubkey, direction, state)`).run(); } catch { }
     // Reservation expiry runs every recovery cycle; without this it scans every reserved row.
@@ -313,11 +261,13 @@ export function initSchema() {
         db.prepare(`DROP INDEX IF EXISTS idx_settlements_unfinalised`).run();
         db.prepare(`CREATE INDEX IF NOT EXISTS idx_settlements_unfinalised ON settlements(created_at) WHERE state IN ('escrowed', 'reserved', 'committed', 'held')`).run();
     } catch { }
-    // Moderation status column moved ABOVE the schema.sql exec — see the note there. The index
-    // stays: it is idempotent, and it covers a node that somehow reached this point without it.
+    // Moderation: Add status tracking to abuse reports
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC)`).run(); } catch { }
     // Marketplace hygiene: track when a lingering escrow deal was last nudged
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
     // Edit-message window: timestamp of the most recent edit (null = never edited)
+    try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
     // Perf: Add index to conversation_participants
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_conversation_participants_pubkey ON conversation_participants(public_key)`).run(); } catch { }
     // Perf: Add index to marketplace_transactions for status and completed_at (PR 26 review fix)
@@ -326,6 +276,10 @@ export function initSchema() {
     // Phase 2 delta sync: add updated_at columns + indexes to mutable tables that
     // didn't previously track row-level mutation timestamps. Backfill from the
     // most recent existing timestamp so cursor scans don't miss pre-migration rows.
+    try {
+        db.prepare(`ALTER TABLE members ADD COLUMN updated_at DATETIME`).run();
+        db.prepare(`UPDATE members SET updated_at = COALESCE(profile_updated_at, last_active_at, joined_at) WHERE updated_at IS NULL`).run();
+    } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at)`).run(); } catch { }
 
     // Per-node callsign uniqueness: case-insensitive, excluding 'migrated' and 'pruned'
@@ -348,12 +302,28 @@ export function initSchema() {
         console.error(`[DB] ⚠️  Could not build unique callsign index — this node has duplicate callsigns. De-duplicate the members table and restart to enforce uniqueness at the DB level. App-level rename checks remain active.`, e);
     }
 
+    try {
+        db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run();
+        db.prepare(`UPDATE post_photos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE updated_at IS NULL`).run();
+    } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run(); } catch { }
 
+    try {
+        db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run();
+        db.prepare(`UPDATE marketplace_transactions SET updated_at = COALESCE(completed_at, created_at) WHERE updated_at IS NULL`).run();
+    } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at)`).run(); } catch { }
 
+    try {
+        db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run();
+        db.prepare(`UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL`).run();
+    } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
 
+    try {
+        db.prepare(`ALTER TABLE recovery_requests ADD COLUMN updated_at DATETIME`).run();
+        db.prepare(`UPDATE recovery_requests SET updated_at = COALESCE(executed_at, cooldown_until, created_at) WHERE updated_at IS NULL`).run();
+    } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_recovery_requests_updated_at ON recovery_requests(updated_at)`).run(); } catch { }
 
     // Phase 2 delta backup — backfill the four newly-watermarked mutable tables.

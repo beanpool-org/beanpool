@@ -13,8 +13,4 @@ export * from './config.js';
 export * from './merkle.js';
 export * from './crypto.js';
 export * from './ed25519-key.js';
-export * from './recovery-split.js';
-export * from './two-layer-split.js';
-export * from './keeper-crypto.js';
-export * from './recovery-self-check.js';
 export * from './protocol.js';

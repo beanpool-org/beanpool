@@ -64,10 +64,3 @@ try {
 assert.strictEqual(validateCsrfToken(makeCtx(token3)), false, 'Eagerly deleted expired token stays rejected after clock restore');
 
 console.log('✅ #133 CSRF protection test PASSED!');
-
-// Exit explicitly. This suite leaves the engine's timers and handles open, so returning normally
-// keeps the event loop alive and the process never terminates — it prints a pass and then hangs.
-// In CI that is indistinguishable from a slow run and blocks every suite after it (scripts/test-all.sh
-// runs them in sequence), which is how a single test burns hours of Actions time. Reaching here means
-// every assertion above held; a failure throws and exits non-zero long before this line.
-process.exit(0);

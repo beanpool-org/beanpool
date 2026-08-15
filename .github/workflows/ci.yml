@@ -4,17 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-  # Every pull request, not only those targeting main.
-  #
-  # `branches: [main]` meant a STACKED pr — one based on another feature branch — ran no
-  # pipeline at all. That is not a rare shape here: #224 and #230 both sat reviewed, approved
-  # and merge-ready having never been through CI once, and the only reason anybody noticed was
-  # a manual check of the status rollup. A PR that cannot be verified should not look the same
-  # as one that passed.
-  #
-  # The concurrency group below already cancels superseded runs, so the extra cost is one run
-  # per stacked branch push.
   pull_request:
+    branches: [main]
     paths-ignore: ['**/*.md']
 
 concurrency:

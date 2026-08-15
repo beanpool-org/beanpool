@@ -105,10 +105,6 @@ import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
-import { createAppleProbeRoutes } from './routes/apple-probe.js';
-import { createKeeperRoutes } from './routes/keepers.js';
-import { createPinRoutes } from './routes/pin.js';
-import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import type { RouteDeps } from './routes/types.js';
 
 
@@ -232,8 +228,6 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/treasuries',               // community transparency: list of treasuries
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
-    '/api/marketplace/posts',        // marketplace board (reach is a discovery filter, not access control)
-    '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -247,11 +241,6 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/treasury\/[^/]+$/,                             // community transparency: one treasury's detail
     /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up guardians by callsign
     /^\/api\/recovery\/status\/[^/]+$/,                     // pre-membership: recovering user polls status
-    // Keyholder restore screen (D8): a user on a new phone has no identity to sign with, and the
-    // screen cannot be drawn without knowing which keepers exist. Types and counts only, never
-    // identities, and rate-limited in the handler — it is a membership oracle by necessity, which
-    // ONBOARDING Part 9 accepts and records rather than pretends away.
-    /^\/api\/recovery\/keepers\/[^/]+$/,
     // A2-16: /api/recovery/pending/:guardian is deliberately NOT public — it lists a
     // guardian's wards' recovery requests. It is gated under ENFORCE_READ_AUTH and the
     // route additionally requires the verified signer to BE that guardian.
@@ -880,12 +869,6 @@ export async function startHttpsServer(port: number): Promise<void> {
         createTreasuryRoutes(deps),
         createPublicAddressRoutes(deps),
         createManagerBackupsRoutes(deps),
-        createKeeperRoutes(deps),
-        createPinRoutes(deps),
-        createRecoveryCollectRoutes(deps),
-        // Temporary Apple `sub` parity probe. Registers nothing unless APPLE_PROBE=1
-        // (the domain-association file aside) — see routes/apple-probe.ts.
-        createAppleProbeRoutes(),
     ];
     for (const mod of routeModules) {
         router.use(mod.routes());
@@ -894,18 +877,6 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // Mount federation routes
     mountFederationRoutes(router);
-
-    // 2FA session token injection middleware
-    // When checkAdminAuth validates a TOTP code, it issues a session token on
-    // ctx.state.tfaSessionToken. This middleware picks it up and delivers it
-    // via an X-Admin-2FA-Session response header, keeping the JSON body clean
-    // and avoiding accidental persistence into client state/configs.
-    app.use(async (ctx, next) => {
-        await next();
-        if (ctx.state?.tfaSessionToken) {
-            ctx.set('X-Admin-2FA-Session', ctx.state.tfaSessionToken);
-        }
-    });
 
     app.use(router.routes());
     app.use(router.allowedMethods());

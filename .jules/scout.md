@@ -39,10 +39,6 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning
 **Gap found:** /api/node/info in apps/server/src/federation-api.ts had no corresponding test file.
 **Learning:** Checking the metadata response based on active connections and posts is key.
 **Action:** Created test-federation-api.ts and verified.
-## 2024-05-30 - [apple-probe Route Coverage]
-**Gap found:** apps/server/src/routes/apple-probe.ts had no corresponding test file.
-**Learning:** Testing the diagnostics route requires setting APPLE_PROBE=1 before test execution to ensure routes register properly. Tests verify both safe cases and proper rejection limits for edge cases.
-**Action:** Created test-apple-probe.ts to assert the diagnostics route behaviour.
 ## 2024-05-30 - [Federation Receipt Utilities Coverage]
 **Gap found:** The pure utility functions `signReceipt` and `verifyReceipt` in `apps/server/src/federation-receipt.ts` had no isolated test file, specifically checking their edge cases (missing keys, undefined/NaN amounts, malformed signatures).
 **Learning:** Testing full libp2p networking setups in isolation (like `federatedVerifyMember`) is often too complex and fails due to missing subdependencies or module resolution issues within the test environment. It is much easier to focus on pure utility functions that require no network setup.

@@ -31,8 +31,7 @@ import {
     registerMember as registerMemberEngine,
     registerVisitor,
     updateProfile as updateProfileEngine,
-    isCallsignAvailable,
-    findRecoveryCandidates
+    isCallsignAvailable
 } from './engine/members.js';
 import {
     generateInvite,
@@ -821,8 +820,7 @@ export function updateProfile(publicKey: string, update: any): MemberProfile | n
 
 // Per-node callsign availability (case-insensitive). Pure read — re-exported as-is
 // for the /api/members/callsign-available endpoint and any caller that needs it.
-// findRecoveryCandidates backs /api/recovery/lookup and shares that status predicate.
-export { isCallsignAvailable, findRecoveryCandidates };
+export { isCallsignAvailable };
 
 // ===================== TRUST STATS =====================
 
@@ -982,42 +980,6 @@ export interface ViewerTrustProfile {
  * only mutual connections (people the viewer already knows) are named.
  * See docs/trust-profile-and-trade-safety.md §2.
  */
-/**
- * "Vouched in by" — who brought this member in.
- *
- * A peer inviter is returned by name, so invitations carry accountability: bringing someone in
- * puts your name on their profile and makes you a reachable reference if a trade goes wrong. When
- * the inviter is the system admin or a founder there is no peer to reach out to, so the kind says
- * so and `publicKey` is null — the UI shows a clear, non-actionable label rather than a dead link.
- *
- * Shared with the keyholder system (K3), where those null cases are not cosmetic: a member with no
- * human inviter has NOBODY to hold their inviter fragment, and lands at signup with two pieces
- * rather than three. Both callers must agree on who counts as an inviter, so there is one
- * implementation rather than two that drift.
- */
-export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vouchedInBy'] {
-    const member = getMember(targetPubkey);
-    const inviterKey = member?.invitedBy;
-    if (!inviterKey || inviterKey === targetPubkey) return null;
-
-    const adminKey = getAdminPubkey();
-    if (inviterKey === 'genesis') {
-        return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
-    }
-    if (inviterKey === 'SYSTEM' || inviterKey === adminKey) {
-        return { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
-    }
-    const inviter = getMember(inviterKey);
-    if (!inviter) return null;
-    return {
-        kind: 'member',
-        publicKey: inviterKey,
-        callsign: inviter.callsign,
-        avatarUrl: inviter.avatarUrl || null,
-        tier: getMemberTrustProfile(inviterKey).tier.name,
-    };
-}
-
 export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: string): ViewerTrustProfile | null {
     const member = getMember(targetPubkey);
     if (!member) return null;
@@ -1082,7 +1044,27 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     // reference if a trade goes wrong. When the inviter is the system admin or a
     // founder there's no peer to reach out to — show a clear, non-actionable
     // label instead (and never a dead-end tappable link).
-    const vouchedInBy = resolveVouchedInBy(targetPubkey);
+    let vouchedInBy: ViewerTrustProfile['vouchedInBy'] = null;
+    const inviterKey = member.invitedBy;
+    if (inviterKey && inviterKey !== targetPubkey) {
+        const adminKey = getAdminPubkey();
+        if (inviterKey === 'genesis') {
+            vouchedInBy = { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
+        } else if (inviterKey === 'SYSTEM' || inviterKey === adminKey) {
+            vouchedInBy = { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
+        } else {
+            const inviter = getMember(inviterKey);
+            if (inviter) {
+                vouchedInBy = {
+                    kind: 'member',
+                    publicKey: inviterKey,
+                    callsign: inviter.callsign,
+                    avatarUrl: inviter.avatarUrl || null,
+                    tier: getMemberTrustProfile(inviterKey).tier.name,
+                };
+            }
+        }
+    }
 
     const risk = assessTradeRisk({
         tier,
@@ -2659,26 +2641,18 @@ export function getCommunityHealth(): CommunityHealth {
     } catch (e) { console.error('Health flag check (sybil funnel) failed:', e); }
 
     // 4. Aggregate Credit Spike (Do Day-over-Day Growth check)
-    //
-    // Every read below orders by `timestamp DESC, id DESC`, never timestamp alone. system_metrics
-    // timestamps are millisecond-precision strftime defaults, so two writes in the same millisecond
-    // tie — and SQLite then returns an ARBITRARY one of them for `LIMIT 1`. "The latest metric"
-    // silently becomes "one of the latest metrics", which is how an alert fails to fire on exactly
-    // the busy node that most needs it. The table has an AUTOINCREMENT id; insertion order is the
-    // tiebreak. (Found via a 15%-flaky test-backend-monitors: audit.ts records the same metric key,
-    // and when its write landed in the same millisecond as the test's the spike went undetected.)
     try {
         const currentMetricRow = db.prepare(`
             SELECT metric_value FROM system_metrics 
             WHERE metric_key = 'total_negative_balance' 
-            ORDER BY timestamp DESC, id DESC LIMIT 1
+            ORDER BY timestamp DESC LIMIT 1
         `).get() as any;
 
         const previousMetricRow = db.prepare(`
             SELECT metric_value FROM system_metrics 
             WHERE metric_key = 'total_negative_balance' 
               AND datetime(timestamp) < datetime('now', '-23 hours')
-            ORDER BY timestamp DESC, id DESC LIMIT 1
+            ORDER BY timestamp DESC LIMIT 1
         `).get() as any;
 
         if (currentMetricRow && previousMetricRow) {
@@ -2704,7 +2678,7 @@ export function getCommunityHealth(): CommunityHealth {
         const cohortAnomalyRow = db.prepare(`
             SELECT metric_value FROM system_metrics 
             WHERE metric_key = 'cohort_anomalies' 
-            ORDER BY timestamp DESC, id DESC LIMIT 1
+            ORDER BY timestamp DESC LIMIT 1
         `).get() as any;
         if (cohortAnomalyRow && cohortAnomalyRow.metric_value > 0) {
             flags.push({
@@ -2721,7 +2695,7 @@ export function getCommunityHealth(): CommunityHealth {
         const delinquentRow = db.prepare(`
             SELECT metric_value FROM system_metrics 
             WHERE metric_key = 'delinquent_accounts' 
-            ORDER BY timestamp DESC, id DESC LIMIT 1
+            ORDER BY timestamp DESC LIMIT 1
         `).get() as any;
         if (delinquentRow && delinquentRow.metric_value > 0) {
             flags.push({
@@ -2892,11 +2866,7 @@ export function createTreasury(
     const trimmed = (name || '').trim();
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
     if (!avatar && !opts.systemCreated) throw new Error('Treasury needs an avatar image');
-    // Same predicate as idx_members_callsign_unique (`status NOT IN ('migrated', 'pruned')`),
-    // so this pre-check agrees with the index that will actually enforce it on INSERT. Under
-    // the old `status!='migrated'` a pruned member's callsign still read as taken here, while
-    // the index happily allowed it — a treasury name refused for a member the node has let go.
-    if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status NOT IN ('migrated', 'pruned')").get(trimmed)) {
+    if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status!='migrated'").get(trimmed)) {
         throw new Error('That name is already taken');
     }
     const line = Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.round(creditLine)));
@@ -3523,7 +3493,7 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports',
-        'recovery_requests', 'recovery_approvals', 'recovery_shares', 'recovery_pin', 'settlements', 'tombstones',
+        'recovery_requests', 'recovery_approvals', 'settlements', 'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {
@@ -3580,7 +3550,6 @@ export function getMemberPreferences(publicKey: string): Record<string, string> 
         notify_chat: 'true',
         notify_marketplace: 'true',
         notify_escrow: 'true',
-        notify_recovery: 'true',
     };
     for (const r of rows) prefs[r.pref_key] = r.pref_value;
     return prefs;
@@ -3662,7 +3631,7 @@ export function dispatchPushNotification(
     title: string,
     body: string,
     data: Record<string, any>,
-    categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery'
+    categoryId: 'chat' | 'marketplace' | 'escrow'
 ): void {
     // Filter out the actor and SYSTEM from targets
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM');
@@ -3675,7 +3644,6 @@ export function dispatchPushNotification(
         chat: 'chat',
         marketplace: 'marketplace',
         escrow: 'escrow',
-        recovery: 'recovery',
     };
 
     // Map categoryId to notification sound
@@ -3683,7 +3651,6 @@ export function dispatchPushNotification(
         chat: 'default',      // Softer sound for chat (uses system default for now)
         marketplace: 'default',
         escrow: 'default',
-        recovery: 'default',
     };
 
     const allMessages: any[] = [];

@@ -1,7 +1,6 @@
 import * as Device from 'expo-device';
 import { Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { signedRequest } from '../utils/db';
@@ -67,9 +66,10 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
             projectId: projectId || '17a2a61a-9cbe-457e-bb10-84d8a666e6eb',
         });
         const token = tokenData.data;
+        console.log('[Push] Expo push token:', token);
 
         // Store locally
-        await SecureStore.setItemAsync('bp_push_token', token);
+        await AsyncStorage.setItem('bp_push_token', token);
 
         // Register with the BeanPool server
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -114,16 +114,6 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
                 lightColor: '#8b5cf6',
                 description: 'Requests and offers on your marketplace posts',
             });
-
-            // Recovery alerts are high-priority and must not be silenced by muting
-            // deal/marketplace notifications. Separate channel means separate control.
-            await Notifications.setNotificationChannelAsync('recovery', {
-                name: 'Account Recovery Alerts',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 500, 500, 500],
-                lightColor: '#ef4444',
-                description: 'Urgent alerts when someone tries to recover your account',
-            });
         }
 
         return token;
@@ -140,7 +130,7 @@ export async function unregisterPushToken(publicKey: string): Promise<void> {
     if (isExpoGo || !Notifications) return;
 
     try {
-        const token = await SecureStore.getItemAsync('bp_push_token');
+        const token = await AsyncStorage.getItem('bp_push_token');
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         const identity = await loadIdentity();
 
@@ -157,7 +147,7 @@ export async function unregisterPushToken(publicKey: string): Promise<void> {
             });
         }
 
-        await SecureStore.deleteItemAsync('bp_push_token');
+        await AsyncStorage.removeItem('bp_push_token');
         console.log('[Push] Token unregistered');
     } catch (error) {
         console.warn('[Push] Error unregistering token:', error);
@@ -174,15 +164,10 @@ export function setupNotificationResponseHandler() {
         return { remove: () => {} };
     }
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((response: import("expo-notifications").NotificationResponse) => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
         const data = response.notification.request.content.data;
         
-        if (data?.kind === 'recovery_started') {
-            // Recovery alert: navigate to Settings so the owner can see the
-            // RecoveryAlertBanner and tap [Stop it]. The collectionId is passed
-            // through so the banner can target the specific session.
-            router.push('/(tabs)/settings');
-        } else if (data?.screen === 'post' && data?.postId) {
+        if (data?.screen === 'post' && data?.postId) {
             // Navigate directly to the post (escrow detail screen)
             router.push(`/post/${data.postId}`);
         } else if (data?.screen === 'chat' && data?.conversationId) {

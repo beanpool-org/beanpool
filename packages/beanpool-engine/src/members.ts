@@ -31,7 +31,6 @@ export interface Member {
     elderVouchedBy?: string | null;
     /** This account is a community treasury (the Commons' trading face), not a person. */
     isTreasury?: boolean;
-    archetype?: string | null;
 }
 
 export interface InviteCode {
@@ -56,7 +55,6 @@ export interface MemberProfile {
     status?: 'active' | 'disabled' | 'pruned';
     elderVouchedBy?: string | null;
     elderVouchedByCallsign?: string | null;
-    archetype?: string | null;
 }
 
 export interface InviteTreeNode {
@@ -95,7 +93,6 @@ export function rowToMember(row: any): Member {
         earnedCredit: row.earned_credit ?? 0,
         elderVouchedBy: row.elder_vouched_by || null,
         isTreasury: !!row.is_treasury,
-        archetype: row.archetype || null,
     };
 }
 
@@ -114,7 +111,6 @@ export function rowToProfile(row: any): MemberProfile {
         status: row.status || 'active',
         elderVouchedBy: row.elder_vouched_by || null,
         elderVouchedByCallsign: row.elder_vouched_by_callsign || null,
-        archetype: row.archetype || null,
     };
 }
 

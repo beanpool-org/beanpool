@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
+import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic } from '../lib/identity';
 import {
     getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getPendingRecoveryRequests,
@@ -91,13 +91,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         setPrivacyTier(next);
         localStorage.setItem('beanpool-privacy-tier', next);
     };
-
-    // Track whether the member has ever viewed their 12 words in Settings.
-    // This is deliberately stored in localStorage, not on the server — the server
-    // cannot see a PWA member's phrase and should not know whether they've saved it.
-    const [seedViewed, setSeedViewed] = useState(() => {
-        return localStorage.getItem(seedViewedKey(identity.publicKey)) === 'true';
-    });
 
     // Holiday mode
     const [holidayMode, setHolidayMode] = useState(false);
@@ -268,18 +261,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
             return;
         }
         let cancelled = false;
-        getMnemonic(identity).then(w => {
-            if (cancelled) return;
-            setSeedWords(w);
-            // Mark as viewed HERE — when the words are actually on screen — rather than on
-            // the button that navigates here. A mis-tap that bounces straight back out
-            // would otherwise permanently clear the one warning standing between the member
-            // and silent browser eviction.
-            if (w && w.length > 0) {
-                localStorage.setItem(seedViewedKey(identity.publicKey), 'true');
-                setSeedViewed(true);
-            }
-        });
+        getMnemonic(identity).then(w => { if (!cancelled) setSeedWords(w); });
         return () => { cancelled = true; };
     }, [identity, mode]);
 
@@ -442,25 +424,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 ACCOUNT & IDENTITY
                             </div>
                             <div className="space-y-2.5">
-
-                                {/* Sovereignty banner — shown until the member has viewed their 12 words */}
-                                {!seedViewed && (
-                                    <div role="alert" className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 space-y-2">
-                                        <p className="text-sm font-bold text-amber-900 dark:text-amber-300">
-                                            <span aria-hidden="true">⚠️</span> You haven't saved your recovery phrase yet
-                                        </p>
-                                        <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
-                                            Your 12 words are the <strong>only</strong> way to recover your account.
-                                            Browsers can clear site data without warning — Safari does it after 7 days of inactivity.
-                                        </p>
-                                        <button
-                                            onClick={() => setMode('seed')}
-                                            className="mt-1 min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-700 hover:bg-amber-800 text-white border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-                                        >
-                                            View & Save Recovery Phrase
-                                        </button>
-                                    </div>
-                                )}
                                 {onReRunSetup && (
                                     <button
                                         onClick={onReRunSetup}
@@ -699,21 +662,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                 {mode === 'seed' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
                         <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🔑 Recovery Phrase</h3>
-                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-relaxed">
+                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
                             Your 12-word recovery phrase allows you to restore your identity on any device. Anyone with these words can control your account. Keep them secret and offline.
                         </p>
-
-                        {/* Browser eviction warning */}
-                        <div className="bg-amber-50 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800 mb-5">
-                            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">
-                                ⚠️ Browser storage is not permanent
-                            </p>
-                            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-                                Safari clears site data after <strong>7 days of inactivity</strong>, and clearing browsing data
-                                erases your identity permanently. Write these words on paper — it's the only backup
-                                that can't be wiped by your browser.
-                            </p>
-                        </div>
 
                         {hasMnemonic(identity) ? (
                             <>

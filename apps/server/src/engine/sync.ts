@@ -47,7 +47,6 @@ export interface SyncAuditEntry {
     newMessages: number;
     tombstonesApplied: number;
     conflictsSkipped: number;
-    recoverySharesImported: number;
 }
 
 export function writeSyncAuditLog(entry: SyncAuditEntry): void {
@@ -57,16 +56,15 @@ export function writeSyncAuditLog(entry: SyncAuditEntry): void {
                 (origin_peer_id, origin_node_id,
                  new_members, updated_members, new_posts, updated_posts,
                  new_transactions, account_changes, marketplace_txns,
-                 new_messages, tombstones_applied, conflicts_skipped, recovery_shares_imported)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                 new_messages, tombstones_applied, conflicts_skipped)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
             entry.originPeerId, entry.originNodeId,
             entry.newMembers, entry.updatedMembers,
             entry.newPosts, entry.updatedPosts,
             entry.newTransactions, entry.accountChanges,
             entry.marketplaceTxns, entry.newMessages,
-            entry.tombstonesApplied, entry.conflictsSkipped,
-            entry.recoverySharesImported
+            entry.tombstonesApplied, entry.conflictsSkipped
         );
     } catch (auditErr: any) {
         console.error(`[Sync] ⚠️ Failed to write sync_audit_log row (import itself succeeded):`, auditErr?.message || auditErr);
@@ -111,7 +109,6 @@ export interface ImportResult {
     newMessages: number;
     tombstonesApplied: number;
     conflictsSkipped: number;
-    recoverySharesImported: number;
 }
 
 export interface SyncCallbacks {
@@ -284,7 +281,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'tombstones',
+        'messages', 'abuseReports', 'recoveryRequests', 'recoveryApprovals', 'settlements', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -296,7 +293,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     let newMembers = 0, newPosts = 0;
     let updatedMembers = 0, updatedPosts = 0;
     let newTransactions = 0, accountChanges = 0, marketplaceTxns = 0, newMessages = 0;
-    let tombstonesApplied = 0, conflictsSkipped = 0, recoverySharesImported = 0;
+    let tombstonesApplied = 0, conflictsSkipped = 0;
 
     currentImportOrigin = remote.nodeId;
     db.pragma('foreign_keys = OFF');
@@ -306,8 +303,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             for (const rm of remote.members ?? []) {
                 const existing = db.prepare("SELECT updated_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null } | undefined;
                 if (!existing) {
-                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
@@ -321,7 +318,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.status || 'active',
                         rm.lastActiveAt || null,
                         rm.elderVouchedBy || null,
-                        rm.archetype || null,
                         rm.updatedAt || rm.joinedAt
                     );
                     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(rm.publicKey);
@@ -340,7 +336,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         status = ?,
                         last_active_at = ?,
                         elder_vouched_by = COALESCE(elder_vouched_by, ?),
-                        archetype = ?,
                         updated_at = ?
                         WHERE public_key = ?`).run(
                         rm.callsign,
@@ -351,7 +346,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rm.status || 'active',
                         rm.lastActiveAt || null,
                         rm.elderVouchedBy || null,
-                        rm.archetype || null,
                         rm.updatedAt || existing.updated_at || new Date().toISOString(),
                         rm.publicKey
                     );
@@ -723,58 +717,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
-            // Recovery shares — hub fragment A (XOR-mandatory) and keeper fragments.
-            // INSERT OR REPLACE keyed on the UNIQUE(owner_pubkey, generation, holder_type, holder_ref) constraint,
-            // so the latest version from the primary always wins. This is the critical path that closes
-            // the live-replication gap: without it, a promoted backup node has an empty recovery_shares table.
-            if (remote.recoveryShares) {
-                const dropOlder = db.prepare(`DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?`);
-                const insertShare = db.prepare(`INSERT OR REPLACE INTO recovery_shares
-                    (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share,
-                     share_iv, share_tag, ephemeral_pubkey, sso_lookup_hash, sso_lookup_salt,
-                     kdf_params, generation, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-                for (const rs of remote.recoveryShares) {
-                    dropOlder.run(rs.ownerPubkey, rs.generation);
-                    const res = insertShare.run(
-                        rs.ownerPubkey, rs.holderType, rs.holderRef, rs.shareIndex,
-                        rs.encryptedShare, rs.shareIv, rs.shareTag,
-                        rs.ephemeralPubkey ?? null, rs.ssoLookupHash ?? null,
-                        rs.ssoLookupSalt ?? null, rs.kdfParams ?? null,
-                        rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt,
-                    );
-                    if (res.changes > 0) recoverySharesImported++;
-                }
-            }
-
-            // Recovery PINs — 6-digit PIN bcrypt hashes protecting friend lists.
-            // LWW on updated_at so newer PIN updates or attempts win on backup nodes.
-            if (remote.recoveryPins) {
-                try {
-                    const insertPin = db.prepare(`
-                        INSERT INTO recovery_pin
-                            (owner_pubkey, pin_hash, pin_salt, attempts, last_attempt_at, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(owner_pubkey) DO UPDATE SET
-                            pin_hash = excluded.pin_hash,
-                            pin_salt = excluded.pin_salt,
-                            attempts = excluded.attempts,
-                            last_attempt_at = excluded.last_attempt_at,
-                            updated_at = excluded.updated_at
-                        WHERE recovery_pin.updated_at IS NULL OR excluded.updated_at >= recovery_pin.updated_at
-                    `);
-                    for (const rp of remote.recoveryPins) {
-                        insertPin.run(
-                            rp.ownerPubkey, rp.pinHash, rp.pinSalt,
-                            rp.attempts ?? 0, rp.lastAttemptAt ?? null,
-                            rp.createdAt, rp.updatedAt || rp.createdAt,
-                        );
-                    }
-                } catch {
-                    // recovery_pin table may not exist on certain older migrations/mocks
-                }
-            }
-
             if (remote.tombstones) {
                 for (const ts of remote.tombstones) {
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
@@ -803,7 +745,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
         originNodeId: remote.nodeId,
         newMembers, updatedMembers, newPosts, updatedPosts,
         newTransactions, accountChanges, marketplaceTxns,
-        newMessages, tombstonesApplied, conflictsSkipped, recoverySharesImported,
+        newMessages, tombstonesApplied, conflictsSkipped,
     });
 
     return {
@@ -817,6 +759,5 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
         newMessages,
         tombstonesApplied,
         conflictsSkipped,
-        recoverySharesImported,
     };
 }

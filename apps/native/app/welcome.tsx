@@ -17,18 +17,9 @@ import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
-import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
-import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
-import { FriendPickerSheet } from '../components/FriendPickerSheet';
-import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from '../components/SsoButton';
-import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
-import { protectionFrom } from '../utils/protection-state';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
-import { recoverAccountWithSso } from '../utils/sso-recovery';
-import { type SsoProvider } from '../utils/sso-signin';
-
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
@@ -58,15 +49,13 @@ export default function WelcomeScreen() {
     const incomingUrl = Linking.useURL();
     const { setIdentity } = useIdentity();
     const { recheck: recheckNodeStatus } = useNodeStatus();
-    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>('home');
+    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>('home');
     const [callsign, setCallsign] = useState('');
     // Fun-name suggestions shown when the chosen first-join name is taken on the node.
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
-    const [ssoCallsign, setSsoCallsign] = useState('');
-    const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -80,14 +69,10 @@ export default function WelcomeScreen() {
     const [inviteRedeemed, setInviteRedeemed] = useState(false);
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
-    const [showSsoSheet, setShowSsoSheet] = useState(false);
-    const [ssoProvider, setSsoProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
-    const [showFriendSheet, setShowFriendSheet] = useState(false);
-    const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
+    const [seedCopied, setSeedCopied] = useState(false);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
-    const [seedCopied, setSeedCopied] = useState(false);
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone
     // that already holds one). Rare, but destructive: the phone can only hold one
@@ -128,56 +113,11 @@ export default function WelcomeScreen() {
     // left blank, so the day states A and B become reachable the dashboard already has the
     // shape to compare them against, instead of a cliff where the old rows have no variant.
     const protectionShownRef = useRef(false);
-
-    /** Whether a covered member has asked to see the words anyway. Never hides them once shown. */
-    const [revealWords, setRevealWords] = useState(false);
-    const protection = protectionFrom(enrolment);
-
-    /**
-     * Split the words and hand out the pieces, on the way into step 3.
-     *
-     * The design has this happening silently right after redemption so the screen can REPORT a
-     * result rather than ask for one. It runs here, on entering the step, rather than inside
-     * handleCompleteProfile: a member who quits mid-wizard and resumes lands straight on this
-     * screen without passing through that handler, and enrolling on arrival covers both routes.
-     *
-     * Nothing waits for it. `protectionFrom(null)` is the words screen, which is true whatever
-     * happens next — so a hung request or a dead node leaves a member reading their twelve
-     * words, not staring at a spinner to find out whether they are safe.
-     */
     useEffect(() => {
-        if (mode !== 'seedBackup' || !pendingIdentity || enrolment) return;
-        let cancelled = false;
-        enrolKeepers(pendingIdentity)
-            .then(r => { if (!cancelled) setEnrolment(r); })
-            .catch(e => {
-                // enrolKeepers is documented never to throw. Caught anyway, because the cost of
-                // being wrong is an unhandled rejection in the middle of somebody joining.
-                console.warn('[keepers] enrolment threw, which it should not:', e);
-                // Recorded as a failed result rather than left null (CR). Null is the "still
-                // working" state, so leaving it there means `protection_shown` never fires and
-                // this member is missing from the funnel entirely — the screen itself was always
-                // correct, since no result reads as the words screen either way.
-                if (!cancelled) {
-                    setEnrolment({
-                        enrolled: [], generation: null, skipped: [], available: 0,
-                        error: e instanceof Error ? e.message : String(e),
-                    });
-                }
-            });
-        return () => { cancelled = true; };
-    }, [mode, pendingIdentity, enrolment]);
-
-    // Count step 3 being drawn — once per join, not once per render, and only once the state it
-    // reports is settled. Reporting before enrolment answers would record every member as 'C'.
-    useEffect(() => {
-        if (mode !== 'seedBackup' || protectionShownRef.current || !enrolment) return;
+        if (mode !== 'seedBackup' || protectionShownRef.current) return;
         protectionShownRef.current = true;
-        recordOnboardingEvent(
-            'protection_shown',
-            protection.state === 'covered' ? 'A' : protection.state === 'almost' ? 'B' : 'C',
-        );
-    }, [mode, enrolment, protection.state]);
+        recordOnboardingEvent('protection_shown', 'C');
+    }, [mode]);
 
     // The web trampoline copies the invite link to the clipboard before sending
     // people to the app store, but nothing can read it for them automatically —
@@ -658,53 +598,6 @@ export default function WelcomeScreen() {
         }
     }
 
-    async function handleSsoRecover(provider: SsoProvider) {
-        const trimmedCallsign = ssoCallsign.trim();
-        if (!trimmedCallsign) {
-            setError('Please enter your callsign.');
-            return;
-        }
-        const rawAnchor = recoveryAnchorUrl.trim();
-        if (!rawAnchor) {
-            setError('Please enter your community node address.');
-            return;
-        }
-        const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
-        if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
-            return;
-        }
-        if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
-            setError('That node address is insecure (http on a public host). Use https:// instead.');
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
-        setSsoProgressMessage('Connecting to recovery session...');
-        try {
-            const result = await recoverAccountWithSso({
-                callsign: trimmedCallsign,
-                anchorUrl: finalAnchorUrl,
-                provider,
-                onProgress: (p) => setSsoProgressMessage(p.message),
-            });
-            await clearPendingOnboarding();
-            setIdentity(result.identity);
-            setMode('home');
-            router.replace('/');
-        } catch (e: any) {
-            if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
-                setError(null);
-            } else {
-                setError(e.message || `Recovery failed: ${String(e)}`);
-            }
-        } finally {
-            setLoading(false);
-            setSsoProgressMessage(null);
-        }
-    }
-
     // --- Copy the OUTGOING account's seed to the clipboard (confirm-replace) ---
     async function handleCopyOutgoingSeed() {
         const words = await getMnemonic(outgoingIdentity);
@@ -780,14 +673,6 @@ export default function WelcomeScreen() {
                     setPendingAvatar(null);
                     setSeedConfirmed(false);
                     setSeedCopied(false);
-                    // Keeper state belongs to the identity being discarded (CR). Left behind, a
-                    // member who backs out and starts again is shown the PREVIOUS identity's
-                    // keepers — and the effect's `|| enrolment` guard means the new identity
-                    // never enrols at all, so the screen would be describing an account that no
-                    // longer exists.
-                    setEnrolment(null);
-                    setRevealWords(false);
-                    protectionShownRef.current = false;
                     // Going back discards the identity, so what was redeemed no longer
                     // describes what is about to be submitted. Cleared in the persisted
                     // record too, or a kill-and-resume would restore the stale answer.
@@ -968,65 +853,10 @@ export default function WelcomeScreen() {
                 <ScrollView contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={3} />
                     <View style={styles.card}>
-                        <KeeperProtectionPanel
-                            protection={protection}
-                            onProtectSso={Platform.OS !== 'web' ? (prov) => {
-                                if (prov) setSsoProvider(prov);
-                                setShowSsoSheet(true);
-                            } : undefined}
-                            onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
-                        />
-
-                        {Platform.OS === 'web' && (
-                            <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                                <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
-                                    The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
-                                </Text>
-                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-                                    For Apple sign-in or friend-based recovery, use the BeanPool app on your phone.
-                                </Text>
-                            </View>
-                        )}
-
-                        <SsoEnrolSheet
-                            visible={showSsoSheet}
-                            provider={ssoProvider}
-                            identity={pendingIdentity}
-                            onClose={() => setShowSsoSheet(false)}
-                            onEnrolled={(result) => {
-                                setEnrolment(result);
-                                setShowSsoSheet(false);
-                            }}
-                        />
-                        <FriendPickerSheet
-                            visible={showFriendSheet}
-                            onClose={() => setShowFriendSheet(false)}
-                            onEnrolled={(result) => {
-                                setEnrolment(result);
-                                setShowFriendSheet(false);
-                            }}
-                        />
-
-                        {/*
-                          The words follow the panel rather than opening the screen.
-                          
-                          A covered member gets them offered, not pushed: keepers are convenience
-                          layered on top and the words remain the floor under all of it, but
-                          meeting somebody who is genuinely protected with a wall of twelve words
-                          to copy down teaches them the panel above was noise. Everyone else sees
-                          them expanded, because for them the words are the actual answer.
-                        */}
-                        {!protection.showWords && !revealWords ? (
-                            <Pressable
-                                style={[styles.secondaryBtn, { marginBottom: 4 }]}
-                                onPress={() => setRevealWords(true)}
-                                accessibilityRole="button"
-                                accessibilityHint="Shows the twelve words that can restore your account"
-                            >
-                                <Text style={styles.secondaryBtnText}>Rather write down 12 words?</Text>
-                            </Pressable>
-                        ) : (
-                        <>
+                        <Text style={styles.title}>🛡️ Your Safety Backup</Text>
+                        <Text style={styles.subtitle}>
+                            These 12 words are your personal recovery key. If you ever lose your phone, these words will bring your account back.
+                        </Text>
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
                             💡 Take a screenshot or write them down somewhere safe.
                         </Text>
@@ -1105,8 +935,6 @@ export default function WelcomeScreen() {
                                 {seedConfirmed ? '✅ ' : '⬜ '} I've saved these words
                             </Text>
                         </Pressable>
-                        </>
-                        )}
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
@@ -1433,43 +1261,10 @@ export default function WelcomeScreen() {
                 <StatusBar style="dark" />
                 <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
-                        <Text style={styles.title} accessibilityRole="header">🔑 Restore your account</Text>
-                        <Text style={styles.subtitle}>
-                            Your account isn't lost — bring it to this device with your {Platform.OS === 'ios' ? 'Apple or Google' : 'Google'} sign-in, 12 recovery words, or Guardians.
-                        </Text>
+                        <Text style={styles.title}>🔑 Restore your account</Text>
+                        <Text style={styles.subtitle}>Your account isn't lost — bring it to this device with your 12 recovery words, or with help from your Guardians.</Text>
 
-                        {Platform.OS === 'ios' ? (
-                            <>
-                                <AppleButton
-                                    title="Recover with Apple"
-                                    onPress={() => {
-                                        setSsoProvider('apple');
-                                        setMode('ssoRecover');
-                                        setError(null);
-                                    }}
-                                    style={{ marginBottom: 12, width: '100%' }}
-                                />
-                                <GoogleButton
-                                    title="Recover with Google"
-                                    onPress={() => {
-                                        setSsoProvider('google');
-                                        setMode('ssoRecover');
-                                        setError(null);
-                                    }}
-                                    style={{ marginBottom: 12, width: '100%' }}
-                                />
-                            </>
-                        ) : (
-                            <GoogleButton
-                                title="Recover with Google"
-                                onPress={() => {
-                                    setSsoProvider('google');
-                                    setMode('ssoRecover');
-                                    setError(null);
-                                }}
-                                style={{ marginBottom: 12, width: '100%' }}
-                            />
-                        )}
+
 
                         <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
                             <Text style={styles.recoverBtnText}>🔑 Recover with 12 Words</Text>
@@ -1697,106 +1492,6 @@ export default function WelcomeScreen() {
         );
     }
 
-    if (mode === 'ssoRecover') {
-        const isApple = ssoProvider === 'apple';
-        const providerName = isApple ? 'Apple' : 'Google';
-        return (
-            <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
-                <KeyboardAvoidingView
-                    behavior="padding"
-                    style={{ flex: 1 }}
-                >
-                    <ScrollView contentContainerStyle={styles.scroll}>
-                        <View style={styles.card}>
-                            <Text style={styles.title} accessibilityRole="header">
-                                Recover with {providerName}
-                            </Text>
-                            <Text style={styles.subtitle}>
-                                Enter your callsign and node address to restore your account with {providerName}.
-                            </Text>
-
-                            <TextInput
-                                accessibilityLabel="Callsign"
-                                style={styles.input}
-                                placeholder="Your Callsign (e.g. Monnunit)"
-                                placeholderTextColor={colors.text.muted}
-                                value={ssoCallsign}
-                                onChangeText={setSsoCallsign}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                editable={!loading}
-                            />
-
-                            <TextInput
-                                accessibilityLabel="Community Node URL"
-                                style={styles.input}
-                                placeholder="Community Node URL (e.g. https://test.beanpool.org)"
-                                placeholderTextColor={colors.text.muted}
-                                value={recoveryAnchorUrl}
-                                onChangeText={setRecoveryAnchorUrl}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                keyboardType="url"
-                                editable={!loading}
-                            />
-
-                            {loading && (
-                                <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    <ActivityIndicator size="large" color={palette.blue600} />
-                                    <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        {ssoProgressMessage || `Verifying with ${providerName}...`}
-                                    </Text>
-                                </View>
-                            )}
-
-                            {error && <Text style={styles.error}>{error}</Text>}
-
-                            {!loading && (
-                                <>
-                                    {isApple && (
-                                        <AppleButton
-                                            title="Recover with Apple"
-                                            onPress={() => handleSsoRecover('apple')}
-                                            style={{ marginBottom: 10, width: '100%' }}
-                                        />
-                                    )}
-                                    <GoogleButton
-                                        title="Recover with Google"
-                                        onPress={() => handleSsoRecover('google')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
-                                    <FacebookButton
-                                        title="Recover with Facebook"
-                                        onPress={() => handleSsoRecover('facebook')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
-                                    <GitHubButton
-                                        title="Recover with GitHub"
-                                        onPress={() => handleSsoRecover('github')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
-                                </>
-                            )}
-
-                            <Pressable
-                                style={styles.backBtn}
-                                onPress={() => { setMode('member'); setError(null); }}
-                                disabled={loading}
-                                accessibilityRole="button"
-                                accessibilityLabel="Back"
-                            >
-                                <Text style={styles.backBtnText}>← Back</Text>
-                            </Pressable>
-                        </View>
-                    </ScrollView>
-                </KeyboardAvoidingView>
-            </SafeAreaView>
-        );
-    }
-
-
-
     // --- MAIN WELCOME SCREEN (two choices like the PWA) ---
     return (
         <SafeAreaView style={styles.container}>
@@ -1890,8 +1585,7 @@ const styles = StyleSheet.create({
     secondaryBtnText: { color: palette.gray600, fontSize: 16, fontWeight: '600' },
 
     // Member sub-options
-    ssoRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#93C5FD', backgroundColor: '#EFF6FF', alignItems: 'center', marginBottom: 10 },
-    ssoRecoverBtnText: { color: '#1D4ED8', fontSize: 16, fontWeight: '700' },
+
     recoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.recoverBorder, backgroundColor: colors.onboarding.recoverBg, alignItems: 'center', marginBottom: 10 },
     recoverBtnText: { color: palette.amber800, fontSize: 16, fontWeight: '700' },
     socialRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.socialRecoverBorder, backgroundColor: colors.onboarding.socialRecoverBg, alignItems: 'center', marginBottom: 10 },

@@ -42,7 +42,6 @@ writeSyncAuditLog({
     newMessages: 8,
     tombstonesApplied: 1,
     conflictsSkipped: 0,
-    recoverySharesImported: 0,
 });
 
 const row = db.prepare(`SELECT * FROM sync_audit_log WHERE origin_peer_id = ?`).get(testPeerId) as any;
@@ -68,7 +67,6 @@ writeSyncAuditLog({
     newMessages: 0,
     tombstonesApplied: 0,
     conflictsSkipped: 5,
-    recoverySharesImported: 0,
 });
 
 const count = (db.prepare(`SELECT COUNT(*) as c FROM sync_audit_log WHERE origin_peer_id = ?`).get(testPeerId) as any).c;
@@ -85,7 +83,6 @@ try {
         newMembers: 0, updatedMembers: 0, newPosts: 0, updatedPosts: 0,
         newTransactions: 0, accountChanges: 0, marketplaceTxns: 0,
         newMessages: 0, tombstonesApplied: 0, conflictsSkipped: 0,
-        recoverySharesImported: 0,
     });
 } catch {
     threw = true;
@@ -108,7 +105,6 @@ for (let i = 0; i < 5; i++) {
         newMembers: i, updatedMembers: 0, newPosts: 0, updatedPosts: 0,
         newTransactions: 0, accountChanges: 0, marketplaceTxns: 0,
         newMessages: 0, tombstonesApplied: 0, conflictsSkipped: 0,
-        recoverySharesImported: 0,
     });
 }
 const totalCount = (db.prepare(`SELECT COUNT(*) as c FROM sync_audit_log`).get() as any).c;
@@ -122,10 +118,3 @@ assert.strictEqual(filtered.length, 2, 'G. Peer-filtered query returns exactly 2
 console.log(`  G. Peer-filtered query: ${filtered.length} rows`);
 
 console.log('✅ #134 mirror sync audit log test PASSED!');
-
-// Exit explicitly. This suite leaves the engine's timers and handles open, so returning normally
-// keeps the event loop alive and the process never terminates — it prints a pass and then hangs.
-// In CI that is indistinguishable from a slow run and blocks every suite after it (scripts/test-all.sh
-// runs them in sequence), which is how a single test burns hours of Actions time. Reaching here means
-// every assertion above held; a failure throws and exits non-zero long before this line.
-process.exit(0);

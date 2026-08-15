@@ -71,10 +71,3 @@ assert.ok(Math.abs(result3.baseline - newBaseline) < 0.01, `E. Baseline must equ
 console.log(`  E. Post-rebaseline audit ok: drift=${result3.drift.toFixed(4)}`);
 
 console.log('✅ #129 ledger conservation audit startup test PASSED!');
-
-// Exit explicitly. This suite leaves the engine's timers and handles open, so returning normally
-// keeps the event loop alive and the process never terminates — it prints a pass and then hangs.
-// In CI that is indistinguishable from a slow run and blocks every suite after it (scripts/test-all.sh
-// runs them in sequence), which is how a single test burns hours of Actions time. Reaching here means
-// every assertion above held; a failure throws and exits non-zero long before this line.
-process.exit(0);

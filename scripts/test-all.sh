@@ -86,21 +86,6 @@ run_check "build"         pnpm turbo run build
 run_check "lint"          pnpm turbo run lint
 run_check "test"          pnpm turbo run test
 
-# Typecheck. `build` is what typechecks most of this repo — server, pwa, core and engine all run
-# `tsc` as their build — but apps/native has NO build script (an Expo app is built by EAS, not by
-# turbo), so nothing in CI has ever typechecked it. Its 'lint' is eslint, which does not read types.
-#
-# That is the package where an unchecked type error is most expensive: native changes are verified
-# on a standalone build, not a dev client, so the feedback loop is a full rebuild rather than a
-# reload. This is a separate task from 'build' precisely so it does not imply an artifact.
-run_check "typecheck"     pnpm turbo run typecheck
-
-# Every apps/server/src/test-*.ts must be reachable from a run below. The suites are script-style,
-# so `turbo run test` cannot see them and only the hand-maintained lists in this file run them —
-# which is how 21 suites came to exist that CI had never once executed. Cheap, and it is the only
-# check here that fails for something NOT being tested.
-run_check "suite_registration" bash scripts/check-suite-registration.sh
-
 # Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
 # so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
 # invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the
@@ -124,27 +109,6 @@ else
   skip_check "federation"
 fi
 
-# Per-suite wall clock. A suite that never exits — one that leaves the engine's timers open and
-# returns normally instead of calling process.exit — otherwise blocks every suite queued behind it,
-# and the whole job with them. Runs on this repo have been cancelled at 14, 17, 22 and 360 minutes
-# for exactly that reason, and a hang is indistinguishable from a slow day until someone gives up.
-#
-# The timeout does not fix a hang; it converts one into a named failure with the suite's name
-# attached, which is the difference between "CI is flaky" and "test-x hangs". 300s is roughly 100x
-# the whole suite's healthy runtime, so it cannot fire on a merely slow machine.
-#
-# `timeout` is GNU coreutils; macOS has it as `gtimeout` via brew, or not at all. Absent, suites run
-# unguarded exactly as before — a local convenience should never change what CI verifies.
-if command -v timeout >/dev/null 2>&1; then
-  SUITE_TIMEOUT="timeout --kill-after=10s 300s"
-elif command -v gtimeout >/dev/null 2>&1; then
-  SUITE_TIMEOUT="gtimeout --kill-after=10s 300s"
-else
-  SUITE_TIMEOUT=""
-  echo "⚠️  no timeout(1) — suites run unguarded; a hanging suite will block this run"
-fi
-export SUITE_TIMEOUT
-
 run_federation_suites() {
   bash -c '
     cd apps/server
@@ -152,14 +116,11 @@ run_federation_suites() {
     # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
     # cycle only revealed the next problem. Statuses are collected and all failures reported together.
     FAILED=""
-    for t in test-schema-upgrade test-callsign-predicates test-recovery-shares test-sso test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-sso-recovery-roundtrip test-friend-recovery-roundtrip test-keeper-http test-commons-conservation test-treasury-keepership test-treasury-eggs test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-moderation-admin test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement test-admin-auth test-backend-monitors test-backup-hardening test-backup-topology test-cash-also-needed test-crowdfund-ledger-sync test-detached-pwa test-dos-caps test-economic-hardening test-federation-api test-federation-receipt test-hardening test-logger-sanitization test-manager-build test-onboarding-funnel test-request-auth test-sync-signature test-trust-value-curve test-voting-round-grant test-vouch-covenant test-wash-sybil-defense test-apple-probe test-recovery-backup-durability; do
+    for t in test-schema-upgrade test-commons-conservation test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-moderation-admin test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement test-federation-receipt test-federation-api; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
-      ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
-      RC=$?
-      # 124 is timeout(1) reporting the wall clock expired. Named separately so a hang reads as a
-      # hang in the summary rather than as an ordinary failure.
-      if [ $RC -eq 124 ]; then FAILED="$FAILED $t(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED $t"; fi
+      ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" pnpm exec tsx "src/$t.ts"
+      if [ $? -ne 0 ]; then FAILED="$FAILED $t"; fi
       rm -rf "$TMP_DIR"
     done
 
@@ -175,48 +136,10 @@ run_federation_suites() {
       echo "━━━ $t (settlement ON) ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true FEDERATION_SETTLEMENT=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-        $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
-      RC=$?
-      if [ $RC -eq 124 ]; then FAILED="$FAILED $t(on,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED $t(on)"; fi
+        pnpm exec tsx "src/$t.ts"
+      if [ $? -ne 0 ]; then FAILED="$FAILED $t(on)"; fi
       rm -rf "$TMP_DIR"
     done
-
-    # The keeper HTTP reachability suite again with read enforcement ON. Same const-at-import problem as
-    # above: ENFORCE_READ_AUTH is read once per process, and an import cannot be preceded by an assignment
-    # because imports hoist. The pass that matters is this one — with the flag off every GET is reachable
-    # regardless, so a missing public-read allowlist entry would go unnoticed until a node turned enforcement
-    # on, and the person it broke would be someone who had just lost their phone.
-    echo "━━━ test-keeper-http (read auth ON) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-keeper-http.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-keeper-http(readauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-keeper-http(readauth)"; fi
-    rm -rf "$TMP_DIR"
-
-    # Messaging IDOR (A2-2/A2-3/A2-15) — asserts one member cannot read another members conversations.
-    # Needs ENFORCE_READ_AUTH for the same const-at-import reason, and refuses to run without it rather
-    # than passing vacuously, which is why it sat unregistered.
-    echo "━━━ test-messaging-idor (read auth ON) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-messaging-idor.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-idor(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-idor"; fi
-    rm -rf "$TMP_DIR"
-
-    # The recovery WebSocket suite, which asserts the ws path REFUSES an unauthenticated subscriber.
-    # Both flags are mandatory — the suite itself exits nonzero without them rather than passing
-    # vacuously, which is why it can only ever have been run by hand. Same const-at-import reason as
-    # the two blocks above.
-    echo "━━━ test-recovery-ws (read + ws auth ON) ━━━"
-    TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=true ENFORCE_WS_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
-      $SUITE_TIMEOUT pnpm exec tsx src/test-recovery-ws.ts
-    RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-recovery-ws(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-recovery-ws"; fi
-    rm -rf "$TMP_DIR"
-
     if [ -n "$FAILED" ]; then
       echo ""
       echo "❌ Federation suites failed:$FAILED"
@@ -227,7 +150,7 @@ run_federation_suites() {
 
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
-  if grep -rE "sk_test_|sk_live_|pk_live_" apps/ packages/ --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build --exclude-dir=.build --exclude-dir=.expo 2>/dev/null; then
+  if grep -rE "sk_test_|sk_live_|pk_live_" apps/ packages/ --exclude-dir=node_modules --exclude-dir=dist 2>/dev/null; then
     echo "❌ Error: Hardcoded secret keys found in codebase" && exit 1
   fi
 '

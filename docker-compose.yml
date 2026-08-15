@@ -30,15 +30,6 @@ services:
       - ENFORCE_READ_AUTH=${ENFORCE_READ_AUTH:-}
       - ENFORCE_WS_AUTH=${ENFORCE_WS_AUTH:-}
       - ENFORCE_LEDGER_AUTH=${ENFORCE_LEDGER_AUTH:-}
-      # Apple `sub` parity probe (temporary — see routes/apple-probe.ts). Empty
-      # default = the probe pages are not registered at all, which is what every
-      # node except the one being tested should have. APPLE_DOMAIN_ASSOCIATION is
-      # separate on purpose: Apple re-verifies domains on its own schedule, so the
-      # association file must keep serving after the probe flag is switched off.
-      - APPLE_PROBE=${APPLE_PROBE:-}
-      - APPLE_SERVICES_ID=${APPLE_SERVICES_ID:-}
-      - APPLE_DOMAIN_ASSOCIATION=${APPLE_DOMAIN_ASSOCIATION:-}
-      - APPLE_PROBE_REDIRECT_URI=${APPLE_PROBE_REDIRECT_URI:-}
       # Federation (#143). Both EMPTY by default, which is off — the state every node ships in and stays in
       # until an operator opts that node in through its own preserved .env. Neither was passed through here
       # before, so the flags existed in the code and could not be set on a deployed node at all: federation

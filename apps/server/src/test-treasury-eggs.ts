@@ -62,11 +62,7 @@ async function main() {
     approvePostRequest(req.id, T);                        // treasury approves → funds escrow (T → escrow 20)
     assert(bal(T) === -20, '3. treasury funds tending from 0 → -20 (bounded overdraft in action)');
     completePostTransaction(req.id, T);                   // treasury releases → tender paid
-    // 20 − 1.5% = 19.7. The tender is the SELLER here (selling labour), and #165 charges the
-    // community fee on the escrow payout, so they net the same as any other seller. This test
-    // was written 2026-07-26, while escrow payouts were still wrongly passing isFeeExempt=true,
-    // and so encoded that bug as its expectation until b0c1063 flipped the flag.
-    assert(bal(F) === 19.7, '3. tender receives 19.7 — 20 less the 1.5% community fee, same as any seller');
+    assert(bal(F) === 20, '3. tender receives exactly 20 (escrow settlement is fee-exempt)');
     assert(bal(T) === -20, '3. treasury sits at -20 (a real deficit, repaid below by income)');
 
     // ---- 4. Egg sales repay the deficit and return the enterprise to surplus -------------
@@ -83,11 +79,7 @@ async function main() {
         assert(still.status === 'active', `4. recurring eggs offer stays live after sale #${i}`);
     }
     assert(bal(B) === 26, '4. buyer paid 24 for two dozen (50 → 26)');
-    // The treasury is the seller of the eggs, so its income is fee-bearing too: 2 × 12 = 24 gross,
-    // less 1.5% each (0.36), nets 23.64. −20 + 23.64 = 3.64. The buyer still pays 24 GROSS (line
-    // above) — the fee comes off the seller's side, which is the whole shape of it: a treasury pays
-    // the community fee on what it earns, exactly like a person does.
-    assert(bal(T) === 3.64, '4. treasury −20 + 23.64 net income = +3.64: deficit repaid, back in surplus');
+    assert(bal(T) === 4, '4. treasury -20 + 24 income = +4: deficit repaid, back in surplus (and no fee skimmed)');
 
     // ---- 5. Operator capability (the client role signal) --------------------------------
     const OP = 'operator-otto-00000000000000000000000000000000';

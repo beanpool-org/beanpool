@@ -22,7 +22,6 @@ db.prepare(`INSERT INTO members (public_key, callsign) VALUES (?, ?)`).run(backe
 const nowEpoch = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
 db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`).run(creator, INITIAL_BALANCE, nowEpoch);
 db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`).run(backer, INITIAL_BALANCE, nowEpoch);
-db.prepare(`UPDATE node_config SET value = '1000' WHERE key = 'ledger_audit_baseline'`).run();
 reconcileLedgerFromDb();
 
 // 2. Create crowdfund project
@@ -74,10 +73,3 @@ assert.strictEqual(refundTx.to_pubkey, backer, 'Refund to_pubkey is backer');
 assert.strictEqual(refundTx.amount, PLEDGE_AMOUNT, 'Refund amount matches pledge amount');
 
 console.log('✅ #139 crowdfund project deletion refund test PASSED successfully!');
-
-// Exit explicitly. This suite leaves the engine's timers and handles open, so returning normally
-// keeps the event loop alive and the process never terminates — it prints a pass and then hangs.
-// In CI that is indistinguishable from a slow run and blocks every suite after it (scripts/test-all.sh
-// runs them in sequence), which is how a single test burns hours of Actions time. Reaching here means
-// every assertion above held; a failure throws and exits non-zero long before this line.
-process.exit(0);

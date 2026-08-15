@@ -677,8 +677,15 @@ const BEANPOOL_GOOGLE_CLIENT_IDS = [
  */
 const BEANPOOL_APPLE_BUNDLE_ID = 'org.beanpool.pillar';
 const BEANPOOL_APPLE_SERVICES_ID = 'org.beanpool.web';
-const BEANPOOL_FACEBOOK_APP_IDS = [process.env.FACEBOOK_APP_ID?.trim() || 'beanpool_fb_app'];
-const BEANPOOL_GITHUB_CLIENT_IDS = [process.env.GITHUB_CLIENT_ID?.trim() || 'beanpool_gh_client'];
+const BEANPOOL_FACEBOOK_APP_IDS = [
+    '818892721251369',
+    process.env.FACEBOOK_APP_ID?.trim() || '',
+].filter(Boolean);
+
+const BEANPOOL_GITHUB_CLIENT_IDS = [
+    'Ov23liilgPHDo8VujObM',
+    process.env.GITHUB_CLIENT_ID?.trim() || '',
+].filter(Boolean);
 
 /** Env var whose value REPLACES the baked-in list for that provider. */
 const CLIENT_ID_ENV: Record<SsoProvider, string> = {

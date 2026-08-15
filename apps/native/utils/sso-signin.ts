@@ -58,6 +58,8 @@ try {
  * The web client ID is what makes the SDK return an `idToken` rather than just an access token.
  */
 export const GOOGLE_WEB_CLIENT_ID = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
+export const FACEBOOK_APP_ID = '818892721251369';
+export const GITHUB_CLIENT_ID = 'Ov23liilgPHDo8VujObM';
 
 export type SsoProvider = 'apple' | 'google' | 'facebook' | 'github';
 

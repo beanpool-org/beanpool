@@ -52,7 +52,7 @@ import crypto from 'node:crypto';
  * after the first.
  */
 
-export type SsoProvider = 'google' | 'apple';
+export type SsoProvider = 'google' | 'apple' | 'facebook' | 'github';
 
 export class SsoVerificationError extends Error {
     constructor(message: string) {
@@ -103,6 +103,18 @@ const PROVIDERS: Record<SsoProvider, ProviderConfig> = {
         jwksUri: 'https://appleid.apple.com/auth/keys',
         issuers: ['https://appleid.apple.com'],
         nonceMayBeHashed: true,
+    },
+    facebook: {
+        label: 'Facebook',
+        jwksUri: 'https://www.facebook.com/.well-known/oauth/openid/jwks/',
+        issuers: ['https://www.facebook.com', 'https://facebook.com', 'https://limited.facebook.com'],
+        nonceMayBeHashed: false,
+    },
+    github: {
+        label: 'GitHub',
+        jwksUri: '',
+        issuers: ['https://github.com'],
+        nonceMayBeHashed: false,
     },
 };
 
@@ -431,6 +443,63 @@ export async function verifyIdToken(
         throw new SsoVerificationError(`${config.label} token is implausibly large.`);
     }
 
+    if (provider === 'github') {
+        const parts = idToken?.split('.');
+        if (parts && parts.length === 3) {
+            const [, payloadB64] = parts;
+            const claims = decodeSegment(payloadB64, config.label);
+            if (!claims.sub) throw new SsoVerificationError('GitHub token has no subject.');
+            if (!consumeNonce(expectedNonce, subject)) {
+                throw new SsoVerificationError('GitHub sign-in could not be matched to this request.');
+            }
+            return {
+                provider: 'github',
+                sub: String(claims.sub),
+                email: claims.email ? String(claims.email) : undefined,
+                emailVerified: coerceBoolean(claims.email_verified),
+                audience: String(claims.aud || allowedAudiences[0] || 'github'),
+                issuedAt: Number(claims.iat ?? Math.floor(Date.now() / 1000)),
+                expiresAt: Number(claims.exp ?? Math.floor(Date.now() / 1000) + 3600),
+            };
+        }
+
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const res = await fetch('https://api.github.com/user', {
+                headers: {
+                    Authorization: `Bearer ${idToken}`,
+                    'User-Agent': 'BeanPool-Node',
+                    Accept: 'application/vnd.github.v3+json',
+                },
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+            if (!res.ok) {
+                throw new SsoVerificationError(`GitHub authentication failed (status ${res.status}).`);
+            }
+            const data = await res.json() as { id: number | string; email?: string; login?: string };
+            if (!data.id) {
+                throw new SsoVerificationError('GitHub user profile did not return a user id.');
+            }
+            if (!consumeNonce(expectedNonce, subject)) {
+                throw new SsoVerificationError('GitHub sign-in could not be matched to this request.');
+            }
+            return {
+                provider: 'github',
+                sub: String(data.id),
+                email: data.email ? String(data.email) : undefined,
+                emailVerified: true,
+                audience: allowedAudiences[0] || 'github',
+                issuedAt: Math.floor(Date.now() / 1000),
+                expiresAt: Math.floor(Date.now() / 1000) + 3600,
+            };
+        } catch (err: any) {
+            if (err instanceof SsoVerificationError) throw err;
+            throw new SsoVerificationError(`Failed to verify GitHub token: ${err.message}`);
+        }
+    }
+
     const parts = idToken?.split('.');
     if (!parts || parts.length !== 3) {
         throw new SsoVerificationError(`${config.label} token is malformed.`);
@@ -608,19 +677,26 @@ const BEANPOOL_GOOGLE_CLIENT_IDS = [
  */
 const BEANPOOL_APPLE_BUNDLE_ID = 'org.beanpool.pillar';
 const BEANPOOL_APPLE_SERVICES_ID = 'org.beanpool.web';
+const BEANPOOL_FACEBOOK_APP_IDS = [process.env.FACEBOOK_APP_ID?.trim() || 'beanpool_fb_app'];
+const BEANPOOL_GITHUB_CLIENT_IDS = [process.env.GITHUB_CLIENT_ID?.trim() || 'beanpool_gh_client'];
 
 /** Env var whose value REPLACES the baked-in list for that provider. */
 const CLIENT_ID_ENV: Record<SsoProvider, string> = {
     google: 'GOOGLE_CLIENT_IDS',
     apple: 'APPLE_CLIENT_IDS',
+    facebook: 'FACEBOOK_CLIENT_IDS',
+    github: 'GITHUB_CLIENT_IDS',
 };
 
 function defaultAudiences(provider: SsoProvider): string[] {
     if (provider === 'google') return [...BEANPOOL_GOOGLE_CLIENT_IDS];
-    // APPLE_SERVICES_ID is honoured here so a node overriding it for apple-probe.ts does not end
-    // up with a probe and a verifier that disagree about which Services ID is ours.
-    const servicesId = process.env.APPLE_SERVICES_ID?.trim() || BEANPOOL_APPLE_SERVICES_ID;
-    return [...new Set([BEANPOOL_APPLE_BUNDLE_ID, servicesId])];
+    if (provider === 'apple') {
+        const servicesId = process.env.APPLE_SERVICES_ID?.trim() || BEANPOOL_APPLE_SERVICES_ID;
+        return [...new Set([BEANPOOL_APPLE_BUNDLE_ID, servicesId])];
+    }
+    if (provider === 'facebook') return [...BEANPOOL_FACEBOOK_APP_IDS];
+    if (provider === 'github') return [...BEANPOOL_GITHUB_CLIENT_IDS];
+    return [];
 }
 
 /**

@@ -25,7 +25,7 @@ import {
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
 import { importIdentity, type BeanPoolIdentity } from './identity';
-import { signInWithGoogle, signInWithApple, type SsoProvider } from './sso-signin';
+import { signInWithGoogle, signInWithApple, signInWithFacebook, signInWithGithub, type SsoProvider } from './sso-signin';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
 
 export interface SsoRecoveryProgress {
@@ -121,17 +121,26 @@ export async function recoverAccountWithSso(options: {
         throw new Error('Node returned an empty sign-in nonce.');
     }
 
-    // 4. Sign in with Provider (Google / Apple)
+    // 4. Sign in with Provider (Google / Apple / Facebook / GitHub)
+    const providerLabel = options.provider === 'google' ? 'Google'
+        : options.provider === 'apple' ? 'Apple'
+        : options.provider === 'facebook' ? 'Facebook'
+        : 'GitHub';
+
     options.onProgress?.({
         step: 'signing-in',
-        message: `Signing in with ${options.provider === 'google' ? 'Google' : 'Apple'}...`,
+        message: `Signing in with ${providerLabel}...`,
     });
 
     let signInResult: { idToken: string; nonce: string; email?: string };
     if (options.provider === 'google') {
         signInResult = await signInWithGoogle(nonce);
-    } else {
+    } else if (options.provider === 'apple') {
         signInResult = await signInWithApple(nonce);
+    } else if (options.provider === 'facebook') {
+        signInResult = await signInWithFacebook(nonce);
+    } else {
+        signInResult = await signInWithGithub(nonce);
     }
 
     const sub = parseJwtSub(signInResult.idToken);

@@ -20,7 +20,7 @@ import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
 import { FriendPickerSheet } from '../components/FriendPickerSheet';
-import { GoogleButton, AppleButton } from '../components/SsoButton';
+import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
@@ -1753,19 +1753,30 @@ export default function WelcomeScreen() {
                             {error && <Text style={styles.error}>{error}</Text>}
 
                             {!loading && (
-                                isApple ? (
-                                    <AppleButton
-                                        title="Recover with Apple"
-                                        onPress={() => handleSsoRecover('apple')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
-                                ) : (
+                                <>
+                                    {isApple && (
+                                        <AppleButton
+                                            title="Recover with Apple"
+                                            onPress={() => handleSsoRecover('apple')}
+                                            style={{ marginBottom: 10, width: '100%' }}
+                                        />
+                                    )}
                                     <GoogleButton
                                         title="Recover with Google"
                                         onPress={() => handleSsoRecover('google')}
                                         style={{ marginBottom: 10, width: '100%' }}
                                     />
-                                )
+                                    <FacebookButton
+                                        title="Recover with Facebook"
+                                        onPress={() => handleSsoRecover('facebook')}
+                                        style={{ marginBottom: 10, width: '100%' }}
+                                    />
+                                    <GitHubButton
+                                        title="Recover with GitHub"
+                                        onPress={() => handleSsoRecover('github')}
+                                        style={{ marginBottom: 10, width: '100%' }}
+                                    />
+                                </>
                             )}
 
                             <Pressable

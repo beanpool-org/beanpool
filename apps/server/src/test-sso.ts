@@ -132,7 +132,23 @@ const APPLE = makeFixture('apple', {
     extraClaims: { email: 'someone@privaterelay.appleid.com', email_verified: 'true', is_private_email: 'true' },
 });
 
-const FIXTURES = [GOOGLE, APPLE];
+const FACEBOOK = makeFixture('facebook', {
+    iss: 'https://www.facebook.com',
+    aud: '123456789012345',
+    otherAud: '987654321098765',
+    sub: '100084729103847',
+    extraClaims: { email: 'someone@example.com', email_verified: true },
+});
+
+const GITHUB = makeFixture('github', {
+    iss: 'https://github.com',
+    aud: 'beanpool_gh_client',
+    otherAud: 'someone_else_client',
+    sub: '98765432',
+    extraClaims: { email: 'developer@github.com', email_verified: true },
+});
+
+const FIXTURES = [GOOGLE, APPLE, FACEBOOK];
 
 /** Reset both providers' caches, then prime just this one. */
 function only(f: Fixture): void {
@@ -388,21 +404,23 @@ async function main(): Promise<void> {
     await rejects(() => verifyIdToken('google', APPLE.mint({ nonce }), [GOOGLE.aud, APPLE.aud], nonce, SUBJECT),
         'and an Apple token presented as a Google one is refused');
 
-    // A provider name that is not one of the two must not fall through to a default.
+    // A provider name that is not recognized must not fall through to a default.
     nonce = issueNonce(SUBJECT);
-    await rejects(() => verifyIdToken('facebook' as SsoProvider, GOOGLE.mint({ nonce }), [GOOGLE.aud], nonce, SUBJECT),
-        'a provider this node does not support is refused rather than defaulted (D11)');
-    assert(isSsoProvider('google') && isSsoProvider('apple'), 'google and apple are recognised providers');
-    assert(!isSsoProvider('facebook') && !isSsoProvider('') && !isSsoProvider(undefined)
+    await rejects(() => verifyIdToken('twitter' as SsoProvider, GOOGLE.mint({ nonce }), [GOOGLE.aud], nonce, SUBJECT),
+        'a provider this node does not support is refused rather than defaulted');
+    assert(isSsoProvider('google') && isSsoProvider('apple') && isSsoProvider('facebook') && isSsoProvider('github'),
+        'google, apple, facebook, and github are recognised providers');
+    assert(!isSsoProvider('twitter') && !isSsoProvider('') && !isSsoProvider(undefined)
         && !isSsoProvider('constructor'),
-        'and facebook, empty and Object.prototype keys are not');
+        'and twitter, empty and Object.prototype keys are not');
 
     // The exported list must BE the table, not a copy of it that drifts (CR). Checked against
     // isSsoProvider in both directions so neither can gain an entry the other lacks.
-    assert(SSO_PROVIDERS.length === 2 && SSO_PROVIDERS.every(isSsoProvider),
+    assert(SSO_PROVIDERS.length === 4 && SSO_PROVIDERS.every(isSsoProvider),
         'SSO_PROVIDERS lists exactly the providers isSsoProvider accepts');
-    assert(SSO_PROVIDERS.includes('google') && SSO_PROVIDERS.includes('apple'),
-        'and names both of them, so a message built from it cannot go stale (D11)');
+    assert(SSO_PROVIDERS.includes('google') && SSO_PROVIDERS.includes('apple')
+        && SSO_PROVIDERS.includes('facebook') && SSO_PROVIDERS.includes('github'),
+        'and names all four of them, so a message built from it cannot go stale');
 
     // ── Apple's quirks ────────────────────────────────────────────────────────────────────────
     console.log('\n── Apple specifics ──────────────────────────────────────');

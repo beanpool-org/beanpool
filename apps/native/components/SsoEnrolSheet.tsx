@@ -41,7 +41,10 @@ export function SsoEnrolSheet({
     /** Identity to use for enrolment. Defaults to useIdentity().identity if omitted. */
     identity?: BeanPoolIdentity | null;
 }): React.JSX.Element | null {
-    const PROVIDER_NAME = provider === 'apple' ? 'Apple' : 'Google';
+    const PROVIDER_NAME = provider === 'apple' ? 'Apple'
+        : provider === 'google' ? 'Google'
+        : provider === 'facebook' ? 'Facebook'
+        : 'GitHub';
     const { identity: contextIdentity } = useIdentity();
     const identity = passedIdentity ?? contextIdentity;
     const [step, setStep] = useState<'processing' | 'success' | 'error'>('processing');

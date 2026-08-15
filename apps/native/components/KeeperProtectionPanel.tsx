@@ -14,7 +14,8 @@ import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native
 import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 import { colors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
-import { GoogleButton, AppleButton } from './SsoButton';
+import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from './SsoButton';
+import type { SsoProvider } from '../utils/sso-signin';
 
 export function KeeperProtectionPanel({ 
     protection,
@@ -22,7 +23,7 @@ export function KeeperProtectionPanel({
     onProtectFriends,
 }: { 
     protection: Protection;
-    onProtectSso?: (provider?: 'google' | 'apple') => void;
+    onProtectSso?: (provider?: SsoProvider) => void;
     onProtectFriends?: () => void;
 }): React.JSX.Element {
     if (protection.state === 'covered') {
@@ -101,24 +102,27 @@ export function KeeperProtectionPanel({
             <View style={styles.buttonContainer}>
                 {Platform.OS !== 'web' && onProtectSso && (
                     <View style={styles.actionBlock}>
-                        {Platform.OS === 'ios' ? (
-                            <>
-                                <AppleButton
-                                    title="Protect with Apple"
-                                    onPress={() => onProtectSso('apple')}
-                                />
-                                <GoogleButton
-                                    title="Protect with Google"
-                                    onPress={() => onProtectSso('google')}
-                                    style={{ marginTop: 10 }}
-                                />
-                            </>
-                        ) : (
-                            <GoogleButton
-                                title="Protect with Google"
-                                onPress={() => onProtectSso('google')}
+                        {Platform.OS === 'ios' && (
+                            <AppleButton
+                                title="Protect with Apple"
+                                onPress={() => onProtectSso('apple')}
                             />
                         )}
+                        <GoogleButton
+                            title="Protect with Google"
+                            onPress={() => onProtectSso('google')}
+                            style={{ marginTop: Platform.OS === 'ios' ? 10 : 0 }}
+                        />
+                        <FacebookButton
+                            title="Protect with Facebook"
+                            onPress={() => onProtectSso('facebook')}
+                            style={{ marginTop: 10 }}
+                        />
+                        <GitHubButton
+                            title="Protect with GitHub"
+                            onPress={() => onProtectSso('github')}
+                            style={{ marginTop: 10 }}
+                        />
                         <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
                     </View>
                 )}

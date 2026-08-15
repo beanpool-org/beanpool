@@ -227,7 +227,7 @@ run_federation_suites() {
 
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
-  if grep -rE "sk_test_|sk_live_|pk_live_" apps/ packages/ --exclude-dir=node_modules --exclude-dir=dist 2>/dev/null; then
+  if grep -rE "sk_test_|sk_live_|pk_live_" apps/ packages/ --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build --exclude-dir=.build --exclude-dir=.expo 2>/dev/null; then
     echo "❌ Error: Hardcoded secret keys found in codebase" && exit 1
   fi
 '

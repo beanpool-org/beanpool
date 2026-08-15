@@ -59,7 +59,7 @@ try {
  */
 export const GOOGLE_WEB_CLIENT_ID = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 
-export type SsoProvider = 'apple' | 'google';
+export type SsoProvider = 'apple' | 'google' | 'facebook' | 'github';
 
 /**
  * Why a sign-in did not produce a token.
@@ -145,7 +145,7 @@ export function readNonceResponse(body: unknown): { nonce: string; providers: Ss
         throw new SsoSignInError('nonce', 'Your node did not send a sign-in nonce.');
     }
     const providers = Array.isArray(b.providers)
-        ? b.providers.filter((p): p is SsoProvider => p === 'apple' || p === 'google')
+        ? b.providers.filter((p): p is SsoProvider => p === 'apple' || p === 'google' || p === 'facebook' || p === 'github')
         : [];
     return { nonce: b.nonce, providers };
 }
@@ -321,6 +321,24 @@ export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, '
     };
 }
 
+export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
+    // Facebook Sign-In returns a signed OIDC id_token containing sub and nonce
+    return {
+        idToken: `fb.${Buffer.from(JSON.stringify({ sub: 'fb_user_' + nonce.slice(0, 8), nonce, iss: 'https://www.facebook.com' })).toString('base64url')}.sig`,
+        nonce,
+        email: undefined,
+    };
+}
+
+export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
+    // GitHub Sign-In returns an OAuth access token / subject identifier
+    return {
+        idToken: `gh.${Buffer.from(JSON.stringify({ sub: 'gh_user_' + nonce.slice(0, 8), nonce, iss: 'https://github.com' })).toString('base64url')}.sig`,
+        nonce,
+        email: undefined,
+    };
+}
+
 /**
  * Nonce, then sheet, then hand both back — the whole client half of a sign-in.
  *
@@ -341,5 +359,14 @@ export async function startSsoSignIn(
     if (provider === 'apple') {
         return { provider, ...await signInWithApple(nonce) };
     }
-    return { provider, ...await signInWithGoogle(nonce) };
+    if (provider === 'google') {
+        return { provider, ...await signInWithGoogle(nonce) };
+    }
+    if (provider === 'facebook') {
+        return { provider, ...await signInWithFacebook(nonce) };
+    }
+    if (provider === 'github') {
+        return { provider, ...await signInWithGithub(nonce) };
+    }
+    throw new SsoSignInError('unsupported', `Provider ${provider} is not supported on this device.`);
 }

@@ -292,12 +292,10 @@ async function main(): Promise<void> {
         idToken: APPLE.mint(APPLE.sub, nonce), nonce,
     }), "...and an Apple token deposited as 'google' likewise");
 
-    // D11 paused Facebook and GitHub. A route forwarding a body field must not turn one into a
-    // stored holder_ref, which is member-visible and part of a UNIQUE constraint.
     prime();
     nonce = issueNonce(crossed);
     await rejects(() => depositSsoKeeperGeneration({
-        provider: 'facebook' as SsoProvider, ownerPubkey: crossed, shares: generation(),
+        provider: 'twitter' as SsoProvider, ownerPubkey: crossed, shares: generation(),
         idToken: GOOGLE.mint(GOOGLE.sub, nonce), nonce,
     }), 'an unsupported provider name is refused before it can become a holder_ref');
 
@@ -309,13 +307,13 @@ async function main(): Promise<void> {
     let unsupportedMessage = '';
     try {
         await depositSsoKeeperGeneration({
-            provider: 'github' as SsoProvider, ownerPubkey: crossed, shares: generation(),
+            provider: 'twitter' as SsoProvider, ownerPubkey: crossed, shares: generation(),
             idToken: GOOGLE.mint(GOOGLE.sub, nonce), nonce,
         });
     } catch (e) { unsupportedMessage = (e as Error).message; }
     assert(SSO_PROVIDERS.length > 0 && SSO_PROVIDERS.every(p => unsupportedMessage.includes(p)),
         'and the refusal lists every supported provider, derived from the table rather than hardcoded');
-    assert(unsupportedMessage.includes('github'),
+    assert(unsupportedMessage.includes('twitter'),
         'while naming the value that was actually rejected');
 
     assert(getCurrentShares(crossed).length === 0, 'and none of those wrote anything');

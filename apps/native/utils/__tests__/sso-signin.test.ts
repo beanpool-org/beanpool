@@ -61,7 +61,7 @@ describe('the nonce the node sends back', () => {
     });
 
     it('drops provider names it does not recognise instead of offering them', () => {
-        expect(readNonceResponse({ nonce: 'n', providers: ['apple', 'facebook', 7, null] }).providers)
+        expect(readNonceResponse({ nonce: 'n', providers: ['apple', 'twitter', 7, null] }).providers)
             .toEqual(['apple']);
     });
 

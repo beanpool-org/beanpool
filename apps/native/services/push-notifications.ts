@@ -174,7 +174,7 @@ export function setupNotificationResponseHandler() {
         return { remove: () => {} };
     }
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response: import("expo-notifications").NotificationResponse) => {
         const data = response.notification.request.content.data;
         
         if (data?.kind === 'recovery_started') {

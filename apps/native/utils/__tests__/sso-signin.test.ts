@@ -33,9 +33,8 @@ vi.mock('@react-native-google-signin/google-signin', () => ({
         IN_PROGRESS: 'IN_PROGRESS',
     },
 }));
-vi.mock('expo-crypto', () => ({
-    digestStringAsync: vi.fn(async (_alg: string, input: string) => 'sha256_' + input),
-    CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+vi.mock('expo-web-browser', () => ({
+    openAuthSessionAsync: vi.fn(),
 }));
 vi.mock('../node-post', () => ({ signedPost: vi.fn(), anchorUrl: vi.fn() }));
 
@@ -45,7 +44,10 @@ import {
     describeGoogleError,
     readAppleCredential,
     readNonceResponse,
+    signInWithFacebook,
+    signInWithGithub,
 } from '../sso-signin';
+import * as WebBrowser from 'expo-web-browser';
 
 describe('the nonce the node sends back', () => {
     it('accepts a well-formed answer and keeps the providers it named', () => {
@@ -126,5 +128,37 @@ describe('SsoSignInError', () => {
         expect(e.reason).toBe('cancelled');
         expect(e).toBeInstanceOf(Error);
         expect(e.name).toBe('SsoSignInError');
+    });
+});
+
+describe('Facebook and GitHub WebBrowser OAuth flows', () => {
+    it('handles Facebook OAuth token redirect', async () => {
+        vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
+            type: 'success',
+            url: 'beanpool://auth/facebook#id_token=fb.fake.jwt&access_token=fb_token_123',
+        });
+        const res = await signInWithFacebook('test-nonce-fb');
+        expect(res.idToken).toBe('fb.fake.jwt');
+        expect(res.nonce).toBe('test-nonce-fb');
+    });
+
+    it('handles Facebook cancel', async () => {
+        vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'cancel' as any });
+        await expect(signInWithFacebook('test-nonce-fb')).rejects.toThrow('Sign-in was cancelled.');
+    });
+
+    it('handles GitHub OAuth code redirect', async () => {
+        vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
+            type: 'success',
+            url: 'beanpool://auth/github?code=gh_auth_code_123&state=test-nonce-gh',
+        });
+        const res = await signInWithGithub('test-nonce-gh');
+        expect(res.idToken).toBe('gh_auth_code_123');
+        expect(res.nonce).toBe('test-nonce-gh');
+    });
+
+    it('handles GitHub cancel', async () => {
+        vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'cancel' as any });
+        await expect(signInWithGithub('test-nonce-gh')).rejects.toThrow('Sign-in was cancelled.');
     });
 });

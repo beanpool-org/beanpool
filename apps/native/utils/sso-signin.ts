@@ -40,6 +40,7 @@
 
 import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as WebBrowser from 'expo-web-browser';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 
@@ -324,18 +325,74 @@ export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, '
 }
 
 export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
-    // Facebook Sign-In returns a signed OIDC id_token containing sub and nonce
+    const redirectUri = 'beanpool://auth/facebook';
+    const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${encodeURIComponent(FACEBOOK_APP_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token,id_token&scope=openid,email&nonce=${encodeURIComponent(nonce)}`;
+
+    let result;
+    try {
+        result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+    } catch (e) {
+        throw new SsoSignInError('provider', `Facebook sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    if (result.type === 'cancel' || result.type === 'dismiss') {
+        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    }
+
+    if (result.type !== 'success' || !result.url) {
+        throw new SsoSignInError('no-token', 'Facebook completed the sign-in but returned no response.');
+    }
+
+    const url = result.url;
+    const hashIndex = url.indexOf('#');
+    const queryIndex = url.indexOf('?');
+    const paramStr = hashIndex !== -1 ? url.slice(hashIndex + 1) : (queryIndex !== -1 ? url.slice(queryIndex + 1) : '');
+    const params = new URLSearchParams(paramStr);
+    const idToken = params.get('id_token') || params.get('access_token');
+
+    if (!idToken) {
+        throw new SsoSignInError('no-token', 'Facebook returned no authentication token.');
+    }
+
     return {
-        idToken: `fb.${Buffer.from(JSON.stringify({ sub: 'fb_user_' + nonce.slice(0, 8), nonce, iss: 'https://www.facebook.com' })).toString('base64url')}.sig`,
+        idToken,
         nonce,
         email: undefined,
     };
 }
 
 export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
-    // GitHub Sign-In returns an OAuth access token / subject identifier
+    const redirectUri = 'beanpool://auth/github';
+    const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,user:email&state=${encodeURIComponent(nonce)}`;
+
+    let result;
+    try {
+        result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+    } catch (e) {
+        throw new SsoSignInError('provider', `GitHub sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    if (result.type === 'cancel' || result.type === 'dismiss') {
+        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    }
+
+    if (result.type !== 'success' || !result.url) {
+        throw new SsoSignInError('no-token', 'GitHub completed the sign-in but returned no response.');
+    }
+
+    const url = result.url;
+    const queryIndex = url.indexOf('?');
+    const hashIndex = url.indexOf('#');
+    const paramStr = queryIndex !== -1 ? url.slice(queryIndex + 1) : (hashIndex !== -1 ? url.slice(hashIndex + 1) : '');
+    const params = new URLSearchParams(paramStr);
+    const token = params.get('code') || params.get('access_token') || params.get('token');
+
+    if (!token) {
+        throw new SsoSignInError('no-token', 'GitHub returned no authorization token.');
+    }
+
     return {
-        idToken: `gh.${Buffer.from(JSON.stringify({ sub: 'gh_user_' + nonce.slice(0, 8), nonce, iss: 'https://github.com' })).toString('base64url')}.sig`,
+        idToken: token,
         nonce,
         email: undefined,
     };

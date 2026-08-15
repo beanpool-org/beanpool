@@ -5,6 +5,7 @@ interface GatewayModuleProps {
     gateway: GatewayConfig | null;
     gatewayLoading: boolean;
     gatewaySuccess: string | null;
+    gatewaySaving?: boolean;
     activeWsConnections?: number;
     onChangeGateway: (updated: GatewayConfig) => void;
     onSaveGateway: () => void;
@@ -15,6 +16,7 @@ export function GatewayModule({
     gateway,
     gatewayLoading,
     gatewaySuccess,
+    gatewaySaving = false,
     activeWsConnections = 3,
     onChangeGateway,
     onSaveGateway,
@@ -555,10 +557,11 @@ export function GatewayModule({
                 </div>
                 <button
                     onClick={onSaveGateway}
-                    className="px-5 py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all shadow-lg active:scale-95 flex items-center gap-2"
+                    disabled={gatewaySaving}
+                    className="px-5 py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50"
                 >
-                    <span>💾</span>
-                    <span>Save Gateway Config</span>
+                    <span className={gatewaySaving ? 'animate-spin' : ''}>{gatewaySaving ? '🔄' : '💾'}</span>
+                    <span>{gatewaySaving ? 'Saving...' : 'Save Gateway Config'}</span>
                 </button>
             </div>
         </div>

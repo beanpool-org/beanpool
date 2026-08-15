@@ -1,6 +1,6 @@
 {
   "name": "@beanpool/server",
-  "version": "1.1.43",
+  "version": "1.1.44",
   "description": "BeanPool Node — Local-First Independent Gateway",
   "type": "module",
   "main": "dist/index.js",

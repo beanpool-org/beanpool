@@ -247,16 +247,26 @@ describe('Friend Recovery Service', () => {
             return { ok: true, status: 200, json: async () => ({}) };
         });
 
-        // 8. Alice completes recovery
+        // 8. Alice completes recovery with expected public key check
         const restored = await completeFriendRecovery(
             session.finalAnchorUrl,
             session.collectionId,
             session.ephIdentity,
             aliceCallsign,
+            aliceKeypair.publicKeyHex,
         );
 
         expect(restored.publicKey).toBe(aliceKeypair.publicKeyHex);
         expect(restored.privateKey).toBe(aliceKeypair.privateKeyHex);
         expect(restored.callsign).toBe('Alice');
+
+        // Mismatched expected public key must be rejected
+        await expect(completeFriendRecovery(
+            session.finalAnchorUrl,
+            session.collectionId,
+            session.ephIdentity,
+            aliceCallsign,
+            '0000000000000000000000000000000000000000000000000000000000000000',
+        )).rejects.toThrow(/does not match expected public key/i);
     });
 });

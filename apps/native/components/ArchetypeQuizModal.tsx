@@ -329,7 +329,7 @@ export function ArchetypeQuizModal({
                                         color:
                                             theme === 'dark'
                                                 ? colors.text.secondary
-                                                : palette.green900,
+                                                : palette.green800,
                                     },
                                 ]}
                             >

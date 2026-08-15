@@ -561,6 +561,7 @@ export default function SettingsScreen() {
         if (params.collectionId) {
             setActiveCollectionId(params.collectionId);
             setShowApprovalModal(true);
+            router.setParams({ collectionId: undefined });
         }
     }, [params.collectionId]);
 
@@ -2666,6 +2667,7 @@ export default function SettingsScreen() {
                             </>
                         )}
                     </View>
+                </View>
             </Modal>
 
             {/* Archetype Quiz Modal */}

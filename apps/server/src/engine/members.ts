@@ -245,6 +245,7 @@ export function updateProfile(
     if (update.contact !== undefined) {
         contact_value = update.contact?.value || null;
         contact_visibility = update.contact?.visibility || null;
+    }
     let archetype = existing.archetype || null;
     if (update.archetype === null) {
         archetype = null;

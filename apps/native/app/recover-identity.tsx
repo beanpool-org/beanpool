@@ -338,7 +338,7 @@ export default function RecoverIdentityScreen() {
 
                     {step === 'waiting' && (
                         <View style={{ alignItems: 'center' }}>
-                            <Text style={styles.title}>👥 Ask Your Friends</Text>
+                            <Text style={styles.title} accessibilityRole="header">👥 Ask Your Friends</Text>
                             <Text style={styles.subtitle}>
                                 Contact 2 of your trusted friends by phone or in person. Ask them to open BeanPool and approve your recovery request in Settings.
                             </Text>
@@ -363,16 +363,21 @@ export default function RecoverIdentityScreen() {
                                 <Text style={{ color: colors.text.secondary, fontSize: 13 }}>Listening for approvals in real-time...</Text>
                             </View>
 
-                            <Pressable style={styles.backBtn} onPress={handleCancel} accessibilityRole="button">
+                            <Pressable
+                                style={[styles.backBtn, { minHeight: 44, justifyContent: 'center' }]}
+                                onPress={handleCancel}
+                                accessibilityRole="button"
+                                accessibilityLabel="Cancel recovery and return to start"
+                            >
                                 <Text style={[styles.backBtnText, { color: colors.feedback.danger.solid }]}>Cancel Recovery</Text>
                             </Pressable>
                         </View>
                     )}
 
                     {step === 'reconstructing' && (
-                        <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+                        <View style={{ alignItems: 'center', paddingVertical: 24 }} accessibilityRole="summary" accessibilityLiveRegion="polite">
                             <ActivityIndicator size="large" color={colors.brand.primary} />
-                            <Text style={[styles.title, { marginTop: 16 }]}>🔐 Restoring Your Account</Text>
+                            <Text style={[styles.title, { marginTop: 16 }]} accessibilityRole="header">🔐 Restoring Your Account</Text>
                             <Text style={styles.subtitle}>
                                 Unwrapping cryptographic pieces and restoring your original identity keypair...
                             </Text>

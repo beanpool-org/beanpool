@@ -98,7 +98,7 @@ export function IncomingRecoveryApprovalModal({
                             ) : errorMsg && !context ? (
                                 <View style={styles.centerContainer}>
                                     <Text style={{ fontSize: 40, marginBottom: 12 }}>⚠️</Text>
-                                    <Text style={styles.sectionTitle}>Unable to Load Request</Text>
+                                    <Text style={styles.sectionTitle} accessibilityRole="header">Unable to Load Request</Text>
                                     <Text style={[styles.bodyText, { color: colors.feedback.danger.solid }]} accessibilityRole="alert" accessibilityLiveRegion="assertive">
                                         {errorMsg}
                                     </Text>
@@ -109,7 +109,7 @@ export function IncomingRecoveryApprovalModal({
                             ) : approved ? (
                                 <View style={styles.centerContainer}>
                                     <Text style={styles.successIcon}>✅</Text>
-                                    <Text style={styles.sectionTitle}>Recovery Approved!</Text>
+                                    <Text style={styles.sectionTitle} accessibilityRole="header">Recovery Approved!</Text>
                                     <Text style={styles.bodyText}>
                                         You safely released your recovery piece for <Text style={styles.bold}>{context?.callsign}</Text>. Once they collect their remaining pieces, they will be back in their account.
                                     </Text>
@@ -262,6 +262,7 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
         color: colors.text.heading,
+        textAlign: 'center',
         marginBottom: 4,
     },
     memberSubtext: {

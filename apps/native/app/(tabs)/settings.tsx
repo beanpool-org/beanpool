@@ -2667,6 +2667,7 @@ export default function SettingsScreen() {
                             </>
                         )}
                     </View>
+                </View>
             </Modal>
 
             {/* Archetype Quiz Modal */}

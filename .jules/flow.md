@@ -29,7 +29,8 @@ Flow's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native`
 5. **Verify before PR:** `cd apps/manager && pnpm exec tsc --noEmit && pnpm build`
 6. **PR title format:** `✨ Flow: [manager UX] <description>` or `✨ Flow: [manager DX] <description>`
 7. **Follow existing Tailwind patterns** — do not introduce new CSS or styling approaches.
-8. **Record outcomes below.**
+8. **Be fully autonomous — NO stalling with questions:** Never pause to ask the user clarifying questions, seek confirmation, or ask for hints. If you find multiple potential improvements, autonomously select the single highest-impact one under 50 lines and open a PR. If no improvement is found, exit immediately with zero changes and no questions. All feedback and code review happens on the GitHub PR.
+9. **Record outcomes below.**
 
 ## ✅ Resolved — do NOT re-file
 

@@ -23,7 +23,8 @@ Atlas's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native
    - `apps/manager/src/lib/` — utility functions and helpers
    - Prefer testing pure logic functions first, then components
 6. **PR title format:** `🗺️ Atlas: [manager tests] <description>`
-7. **Record outcomes below.**
+7. **Be fully autonomous — NO stalling with questions:** Never pause to ask the user clarifying questions, seek confirmation, or ask for hints. If you find multiple potential gaps, autonomously select the single most impactful one under 50 lines and open a PR. If no test gap exists, exit immediately with zero changes and no questions. All feedback and code review happens on the GitHub PR.
+8. **Record outcomes below.**
 
 ## Codebase Context
 

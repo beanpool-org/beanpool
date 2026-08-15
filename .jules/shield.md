@@ -20,7 +20,8 @@ Shield's domain is `apps/native/` ONLY. Do NOT touch `apps/server` (that's Senti
 5. **Do NOT expose vulnerability details in public PRs.** Use general language.
 6. **Verify before PR:** `cd apps/native && pnpm lint`
 7. **PR title format:** `🛡️ Shield: [native security] <description>`
-8. **Record outcomes below.**
+8. **Be fully autonomous — NO stalling with questions:** Never pause to ask the user clarifying questions, seek confirmation, or ask for hints. If you find multiple potential issues, autonomously select the single highest-impact one under 50 lines and open a PR. If no security issue is found, exit immediately with zero changes and no questions. All feedback and code review happens on the GitHub PR.
+9. **Record outcomes below.**
 
 ## Codebase Context
 

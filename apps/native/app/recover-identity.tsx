@@ -11,42 +11,41 @@ import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } f
 import { colors } from '../constants/colors';
 import { useIdentity } from './IdentityContext';
 import { verifyRecoveryPin } from '../utils/pin';
+import {
+    startFriendRecoverySession,
+    pollFriendRecovery,
+    completeFriendRecovery,
+} from '../utils/friend-recovery';
+import type { BeanPoolIdentity } from '../utils/identity';
 
 export default function RecoverIdentityScreen() {
     const { identity, setIdentity } = useIdentity();
-    const [step, setStep] = useState<'lookup' | 'select' | 'pin' | 'guess' | 'creating' | 'waiting'>('lookup');
+    const [step, setStep] = useState<'lookup' | 'select' | 'pin' | 'waiting' | 'reconstructing'>('lookup');
     const [callsign, setCallsign] = useState('');
     const [anchorUrl, setAnchorUrl] = useState('');
     const [lookupResults, setLookupResults] = useState<any[]>([]);
     const [selectedProfile, setSelectedProfile] = useState<any>(null);
     const [pin, setPin] = useState('');
     const [pinVerified, setPinVerified] = useState(false);
-    const [guardianGuess, setGuardianGuess] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     
-    // Status tracking
-    const [statusData, setStatusData] = useState<any>(null);
+    // Two-Layer Recovery tracking
+    const [collectionId, setCollectionId] = useState<string | null>(null);
+    const [ephIdentity, setEphIdentity] = useState<BeanPoolIdentity | null>(null);
+    const [progress, setProgress] = useState<{
+        collected: number;
+        threshold: number;
+        enough: boolean;
+        hubAvailable: boolean;
+    }>({ collected: 0, threshold: 3, enough: false, hubAvailable: false });
 
-    // Pre-fill the node address if this device has ever been connected to one,
-    // so a returning user needn't retype it. On a genuinely fresh phone (the
-    // real recovery case) it starts empty and the user enters their node.
+    // Pre-fill the node address if this device has ever been connected to one
     useEffect(() => {
         AsyncStorage.getItem('beanpool_anchor_url').then((url) => {
             if (url) setAnchorUrl(url);
         }).catch(() => {});
     }, []);
-
-    useEffect(() => {
-        if (identity?.publicKey) {
-            getRecoveryStatus(identity.publicKey).then((st) => {
-                if (st && (st.status === 'pending' || st.status === 'approved')) {
-                    setStatusData({ ...st, newPubkey: identity.publicKey });
-                    setStep('waiting');
-                }
-            }).catch(console.warn);
-        }
-    }, [identity]);
 
     const handleLookup = async () => {
         if (!callsign.trim()) return;
@@ -67,8 +66,6 @@ export default function RecoverIdentityScreen() {
         setLoading(true);
         setError(null);
         try {
-            // lookupRecoveryCallsign (and every later recovery call) reads the
-            // node from storage, so commit it before we search.
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
             const results = await lookupRecoveryCallsign(callsign.trim());
             if (results.length === 0) {
@@ -105,7 +102,7 @@ export default function RecoverIdentityScreen() {
             if (res.verified) {
                 setPinVerified(true);
                 setError(null);
-                setStep('guess');
+                await startRecoveryFlow();
             } else if (res.error) {
                 setError(res.error);
             } else {
@@ -118,74 +115,76 @@ export default function RecoverIdentityScreen() {
         }
     };
 
-    const handleSkipPin = () => {
+    const handleSkipPin = async () => {
         setError(null);
-        setStep('guess');
+        await startRecoveryFlow();
     };
 
-    const handleSubmit = async () => {
-        if (!guardianGuess.trim()) return;
+    const startRecoveryFlow = async () => {
         setLoading(true);
         setError(null);
         try {
-            // 1. Generate new identity locally (which also saves it)
-            const newId = await createIdentity(selectedProfile.callsign);
+            const rawAnchor = anchorUrl.trim();
+            const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
+            const session = await startFriendRecoverySession({
+                callsign: selectedProfile.callsign,
+                anchorUrl: finalAnchorUrl,
+            });
 
-            // Guardian recovery supersedes any half-finished join wizard on this
-            // device — drop the rescue record so the gatekeeper doesn't bounce
-            // this user back into onboarding while they wait for approval.
-            const { clearPendingOnboarding } = await import('../utils/onboarding-state');
-            await clearPendingOnboarding();
-
-            // Update global identity context immediately so node status and layouts align
-            setIdentity(newId);
-            
-            // 2. Submit the request
-            const req = await createRecoveryRequest(selectedProfile.publicKey, guardianGuess.trim(), newId);
-            
-            setStatusData(req);
+            setCollectionId(session.collectionId);
+            setEphIdentity(session.ephIdentity);
+            setProgress({
+                collected: 0,
+                threshold: session.threshold,
+                enough: false,
+                hubAvailable: false,
+            });
             setStep('waiting');
         } catch (e: any) {
-            setError(e.message || 'Failed to submit recovery request.');
+            setError(e.message || 'Failed to start recovery session.');
         } finally {
             setLoading(false);
         }
     };
 
-    const checkStatus = async () => {
-        const pubkey = statusData?.newPubkey || identity?.publicKey;
-        if (!pubkey) return;
+    const pollStatus = async () => {
+        if (!collectionId || !ephIdentity) return;
         try {
-            const st = await getRecoveryStatus(pubkey);
-            if (st && st.status !== 'none') {
-                setStatusData({ ...st, newPubkey: pubkey });
-                if (st.status === 'executed') {
-                    // Force app reload to main UI
-                    router.replace('/(tabs)');
-                }
+            const rawAnchor = anchorUrl.trim();
+            const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
+            const p = await pollFriendRecovery(finalAnchorUrl, collectionId, ephIdentity);
+            setProgress(p);
+
+            if (p.enough) {
+                setStep('reconstructing');
+                const restored = await completeFriendRecovery(
+                    finalAnchorUrl,
+                    collectionId,
+                    ephIdentity,
+                    selectedProfile.callsign,
+                );
+                setIdentity(restored);
+                router.replace('/(tabs)');
             }
-        } catch (e) {}
+        } catch (e: any) {
+            console.warn('[recovery poll error]', e.message);
+        }
     };
 
     const handleCancel = () => {
         Alert.alert(
             'Cancel Recovery?',
-            'Are you sure you want to cancel? This will wipe the pending recovery state from this device and let you create or recover another identity.',
+            'Are you sure you want to cancel? This will stop waiting for friend approvals on this device.',
             [
-                { text: 'No, Keep Waiting', style: 'cancel' },
+                { text: 'Keep Waiting', style: 'cancel' },
                 {
                     text: 'Yes, Cancel',
                     style: 'destructive',
                     onPress: async () => {
-                        try {
-                            await wipeIdentity();
-                            setIdentity(null);
-                            setStatusData(null);
-                            setStep('lookup');
-                            router.replace('/welcome');
-                        } catch (e: any) {
-                            Alert.alert('Error', e.message || 'Failed to wipe identity');
-                        }
+                        setCollectionId(null);
+                        setEphIdentity(null);
+                        setStep('lookup');
+                        router.replace('/welcome');
                     }
                 }
             ]
@@ -195,10 +194,11 @@ export default function RecoverIdentityScreen() {
     useEffect(() => {
         let interval: any;
         if (step === 'waiting') {
-            interval = setInterval(checkStatus, 5000);
+            interval = setInterval(pollStatus, 4000);
+            pollStatus();
         }
         return () => clearInterval(interval);
-    }, [step, statusData]);
+    }, [step, collectionId, ephIdentity]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -321,53 +321,39 @@ export default function RecoverIdentityScreen() {
                         </>
                     )}
 
-                    {step === 'guess' && (
-                        <>
-                            <Text style={styles.title}>Guardian Knowledge Check</Text>
-                            <Text style={styles.subtitle}>To prevent spam, please enter the exact callsign of at least ONE of your Guardians.</Text>
-                            <TextInput
-                                accessibilityLabel="A guardian's callsign"
-                                style={styles.input}
-                                placeholder="A guardian's callsign"
-                                placeholderTextColor={colors.text.muted}
-                                value={guardianGuess}
-                                onChangeText={setGuardianGuess}
-                                autoCapitalize="none"
-                            />
-                            {error && <Text style={styles.error}>{error}</Text>}
-                            <Pressable style={styles.primaryBtn} onPress={handleSubmit} disabled={loading} accessibilityRole="button">
-                                {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Submit Request</Text>}
-                            </Pressable>
-                            <Pressable style={styles.backBtn} onPress={() => setStep('select')} accessibilityRole="button">
-                                <Text style={styles.backBtnText}>← Back</Text>
-                            </Pressable>
-                        </>
-                    )}
-
-                    {step === 'waiting' && statusData && (
+                    {step === 'waiting' && (
                         <View style={{ alignItems: 'center' }}>
-                            <Text style={styles.title}>⏳ Waiting for Guardians</Text>
-                            <Text style={styles.subtitle}>Your request has been submitted! It will expire in 24 hours. Please contact your guardians directly and ask them to approve your request under Settings → Recovery Requests.</Text>
+                            <Text style={styles.title}>👥 Ask Your Friends</Text>
+                            <Text style={styles.subtitle}>
+                                Contact 2 of your trusted friends by phone or in person. Ask them to open BeanPool and approve your recovery request in Settings.
+                            </Text>
                             
                             <View style={styles.statusBox}>
-                                <Text style={styles.statusLabel}>Approvals</Text>
-                                <Text style={styles.statusValue}>{statusData.approvals || 0} / {statusData.quorumRequired}</Text>
+                                <Text style={styles.statusLabel}>Pieces Collected</Text>
+                                <Text style={styles.statusValue}>{progress.collected} / {progress.threshold}</Text>
+                                <Text style={[styles.fieldHint, { marginTop: 8, marginBottom: 0 }]}>
+                                    {progress.hubAvailable ? '✅ Community hub piece unlocked' : '⏳ Waiting for 1st friend approval to unlock hub'}
+                                </Text>
                             </View>
 
-                            {statusData.status === 'approved' && statusData.cooldownUntil && (
-                                <View style={styles.infoBanner}>
-                                    <Text style={styles.infoText}>
-                                        ✅ Quorum reached! Your identity will automatically migrate after the 24-hour security cooldown.
-                                    </Text>
-                                    <Text style={[styles.infoText, {marginTop: 8, fontWeight: 'bold'}]}>
-                                        Time remaining: {Math.max(0, Math.floor((new Date(statusData.cooldownUntil).getTime() - Date.now()) / 3600000))} hours
-                                    </Text>
-                                </View>
-                            )}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 12 }}>
+                                <ActivityIndicator size="small" color={colors.brand.primary} style={{ marginRight: 8 }} />
+                                <Text style={{ color: colors.text.secondary, fontSize: 13 }}>Listening for approvals in real-time...</Text>
+                            </View>
 
                             <Pressable style={styles.backBtn} onPress={handleCancel} accessibilityRole="button">
-                                <Text style={[styles.backBtnText, { color: colors.feedback.danger.solid }]}>Cancel Recovery & Start Fresh</Text>
+                                <Text style={[styles.backBtnText, { color: colors.feedback.danger.solid }]}>Cancel Recovery</Text>
                             </Pressable>
+                        </View>
+                    )}
+
+                    {step === 'reconstructing' && (
+                        <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+                            <ActivityIndicator size="large" color={colors.brand.primary} />
+                            <Text style={[styles.title, { marginTop: 16 }]}>🔐 Restoring Your Account</Text>
+                            <Text style={styles.subtitle}>
+                                Unwrapping cryptographic pieces and restoring your original identity keypair...
+                            </Text>
                         </View>
                     )}
                 </View>

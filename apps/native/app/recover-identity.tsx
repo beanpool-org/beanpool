@@ -40,6 +40,9 @@ export default function RecoverIdentityScreen() {
         hubAvailable: boolean;
     }>({ collected: 0, threshold: 3, enough: false, hubAvailable: false });
 
+    const [isReconstructing, setIsReconstructing] = useState(false);
+    const isPollingRef = React.useRef(false);
+
     // Pre-fill the node address if this device has ever been connected to one
     useEffect(() => {
         AsyncStorage.getItem('beanpool_anchor_url').then((url) => {
@@ -139,6 +142,7 @@ export default function RecoverIdentityScreen() {
                 enough: false,
                 hubAvailable: false,
             });
+            setIsReconstructing(false);
             setStep('waiting');
         } catch (e: any) {
             setError(e.message || 'Failed to start recovery session.');
@@ -148,7 +152,8 @@ export default function RecoverIdentityScreen() {
     };
 
     const pollStatus = async () => {
-        if (!collectionId || !ephIdentity) return;
+        if (!collectionId || !ephIdentity || isPollingRef.current || isReconstructing) return;
+        isPollingRef.current = true;
         try {
             const rawAnchor = anchorUrl.trim();
             const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
@@ -156,18 +161,28 @@ export default function RecoverIdentityScreen() {
             setProgress(p);
 
             if (p.enough) {
+                setIsReconstructing(true);
                 setStep('reconstructing');
-                const restored = await completeFriendRecovery(
-                    finalAnchorUrl,
-                    collectionId,
-                    ephIdentity,
-                    selectedProfile.callsign,
-                );
-                setIdentity(restored);
-                router.replace('/(tabs)');
+                try {
+                    const restored = await completeFriendRecovery(
+                        finalAnchorUrl,
+                        collectionId,
+                        ephIdentity,
+                        selectedProfile?.callsign,
+                        selectedProfile?.publicKey,
+                    );
+                    setIdentity(restored);
+                    router.replace('/(tabs)');
+                } catch (recErr: any) {
+                    setIsReconstructing(false);
+                    setStep('waiting');
+                    setError(recErr.message || 'Failed to reconstruct account from shares.');
+                }
             }
         } catch (e: any) {
             console.warn('[recovery poll error]', e.message);
+        } finally {
+            isPollingRef.current = false;
         }
     };
 
@@ -183,6 +198,7 @@ export default function RecoverIdentityScreen() {
                     onPress: async () => {
                         setCollectionId(null);
                         setEphIdentity(null);
+                        setIsReconstructing(false);
                         setStep('lookup');
                         router.replace('/welcome');
                     }
@@ -198,7 +214,7 @@ export default function RecoverIdentityScreen() {
             pollStatus();
         }
         return () => clearInterval(interval);
-    }, [step, collectionId, ephIdentity]);
+    }, [step, collectionId, ephIdentity, isReconstructing]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -328,13 +344,20 @@ export default function RecoverIdentityScreen() {
                                 Contact 2 of your trusted friends by phone or in person. Ask them to open BeanPool and approve your recovery request in Settings.
                             </Text>
                             
-                            <View style={styles.statusBox}>
+                            <View
+                                style={styles.statusBox}
+                                accessibilityRole="summary"
+                                accessibilityLiveRegion="polite"
+                                accessibilityLabel={`Pieces collected: ${progress.collected} of ${progress.threshold}. ${progress.hubAvailable ? 'Community hub piece unlocked' : 'Waiting for first friend approval to unlock hub'}`}
+                            >
                                 <Text style={styles.statusLabel}>Pieces Collected</Text>
                                 <Text style={styles.statusValue}>{progress.collected} / {progress.threshold}</Text>
                                 <Text style={[styles.fieldHint, { marginTop: 8, marginBottom: 0 }]}>
                                     {progress.hubAvailable ? '✅ Community hub piece unlocked' : '⏳ Waiting for 1st friend approval to unlock hub'}
                                 </Text>
                             </View>
+
+                            {error ? <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="assertive">{error}</Text> : null}
 
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 12 }}>
                                 <ActivityIndicator size="small" color={colors.brand.primary} style={{ marginRight: 8 }} />

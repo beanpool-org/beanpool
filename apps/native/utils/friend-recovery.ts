@@ -170,6 +170,15 @@ export async function pollFriendRecovery(
     };
 }
 
+async function fetchRecoveryFragments(anchorUrl: string, collectionId: string, ephIdentity: BeanPoolIdentity) {
+    const fragRes = await signedPost(anchorUrl, '/api/recovery/collect/fragments', { collectionId }, ephIdentity);
+    if (!fragRes.ok) {
+        const err = await fragRes.json().catch(() => ({}));
+        throw new Error(err.error || `Could not fetch recovery fragments (${fragRes.status})`);
+    }
+    return await fragRes.json();
+}
+
 /**
  * Fetches all released fragments, decrypts, and reconstructs the original identity keypair.
  */
@@ -178,24 +187,18 @@ export async function completeFriendRecovery(
     collectionId: string,
     ephIdentity: BeanPoolIdentity,
     expectedCallsign?: string,
+    expectedPublicKey?: string,
 ): Promise<BeanPoolIdentity> {
-    const fragRes = await signedPost(anchorUrl, '/api/recovery/collect/fragments', {
-        collectionId,
-    }, ephIdentity);
-
-    if (!fragRes.ok) {
-        const err = await fragRes.json().catch(() => ({}));
-        throw new Error(err.error || `Could not fetch recovery fragments (${fragRes.status})`);
+    const rawFragments = await fetchRecoveryFragments(anchorUrl, collectionId, ephIdentity);
+    if (!rawFragments.enough) {
+        throw new Error('Not enough recovery fragments released yet.');
     }
 
-    const fragBody = await fragRes.json();
-    const fragments: any[] = fragBody.fragments || [];
-
-    const hubFragment = fragments.find((f: any) => f.holderType === 'hub');
-    const memberFragments = fragments.filter((f: any) => f.holderType === 'member');
+    const hubFragment = rawFragments.fragments.find((f: any) => f.holderType === 'hub');
+    const memberFragments = rawFragments.fragments.filter((f: any) => f.holderType === 'member');
 
     if (!hubFragment) {
-        throw new Error('Hub recovery fragment is not yet available. Waiting for keeper approvals.');
+        throw new Error('Hub recovery fragment is missing from response.');
     }
     if (memberFragments.length < TWO_LAYER_THRESHOLD) {
         throw new Error(`Need at least ${TWO_LAYER_THRESHOLD} friend approvals, received ${memberFragments.length}.`);
@@ -206,7 +209,7 @@ export async function completeFriendRecovery(
         encryptedShare: hubFragment.payload,
         shareIv: hubFragment.payloadIv,
         shareTag: hubFragment.payloadTag,
-        kdfParams: hubFragment.kdfParams || JSON.stringify({ alg: 'plaintext' }),
+        kdfParams: hubFragment.kdfParams || JSON.stringify({ alg: 'plaintext-v1' }),
     });
 
     // 2. Open rewrapped friend shares B_i with ephemeral key
@@ -227,6 +230,11 @@ export async function completeFriendRecovery(
 
     // 5. Derive original Ed25519 identity keypair
     const restoredKeypair = await seedToKeypair(restoredSeed);
+
+    if (expectedPublicKey && restoredKeypair.publicKeyHex.toLowerCase() !== expectedPublicKey.toLowerCase()) {
+        throw new Error('Reconstructed keypair does not match expected public key. Recovery shares may be corrupt or mismatched.');
+    }
+
     const callsign = expectedCallsign || 'restored-member';
 
     const restoredIdentity: BeanPoolIdentity = {
@@ -286,6 +294,12 @@ export async function approveInboundRecovery(
 ): Promise<{ success: boolean; released: string }> {
     if (!context.live) {
         throw new Error(`This recovery session is no longer active (${context.reason || 'expired'}).`);
+    }
+    if (!context.fragment) {
+        throw new Error('Recovery fragment data is missing for this account.');
+    }
+    if (!context.recipientEphemeralPubkey) {
+        throw new Error('Recipient ephemeral public key is missing from the recovery session.');
     }
 
     // 1. Unseal the held fragment using keeper's identity private key

@@ -95,6 +95,17 @@ export function IncomingRecoveryApprovalModal({
                                     <ActivityIndicator size="large" color={colors.brand.primary} />
                                     <Text style={styles.subtext}>Loading recovery request...</Text>
                                 </View>
+                            ) : errorMsg && !context ? (
+                                <View style={styles.centerContainer}>
+                                    <Text style={{ fontSize: 40, marginBottom: 12 }}>⚠️</Text>
+                                    <Text style={styles.sectionTitle}>Unable to Load Request</Text>
+                                    <Text style={[styles.bodyText, { color: colors.feedback.danger.solid }]} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+                                        {errorMsg}
+                                    </Text>
+                                    <TouchableOpacity style={[styles.primaryBtn, { minWidth: 140 }]} onPress={onClose} accessibilityRole="button">
+                                        <Text style={styles.primaryBtnText}>Close</Text>
+                                    </TouchableOpacity>
+                                </View>
                             ) : approved ? (
                                 <View style={styles.centerContainer}>
                                     <Text style={styles.successIcon}>✅</Text>
@@ -102,7 +113,7 @@ export function IncomingRecoveryApprovalModal({
                                     <Text style={styles.bodyText}>
                                         You safely released your recovery piece for <Text style={styles.bold}>{context?.callsign}</Text>. Once they collect their remaining pieces, they will be back in their account.
                                     </Text>
-                                    <TouchableOpacity style={styles.primaryBtn} onPress={onClose}>
+                                    <TouchableOpacity style={[styles.primaryBtn, { minWidth: 140 }]} onPress={onClose} accessibilityRole="button">
                                         <Text style={styles.primaryBtnText}>Done</Text>
                                     </TouchableOpacity>
                                 </View>
@@ -127,14 +138,16 @@ export function IncomingRecoveryApprovalModal({
                                         </Text>
                                     </View>
 
-                                    {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
+                                    {errorMsg ? <Text style={styles.errorText} accessibilityRole="alert">{errorMsg}</Text> : null}
 
                                     <View style={styles.buttonStack}>
                                         <TouchableOpacity
-                                            style={[styles.primaryBtn, approving && styles.btnDisabled]}
+                                            style={[styles.primaryBtn, (approving || !context || !context.live) && styles.btnDisabled]}
                                             onPress={handleApprove}
-                                            disabled={approving}
+                                            disabled={approving || !context || !context.live}
                                             accessibilityRole="button"
+                                            accessibilityLabel={approving ? "Approving recovery, please wait..." : "Approve Recovery"}
+                                            accessibilityState={{ disabled: approving || !context || !context.live, busy: approving }}
                                         >
                                             {approving ? (
                                                 <ActivityIndicator color={colors.text.inverse} />
@@ -293,6 +306,8 @@ const styles = StyleSheet.create({
     },
     cancelBtn: {
         paddingVertical: 12,
+        minHeight: 44,
+        justifyContent: 'center',
         alignItems: 'center',
     },
     cancelBtnText: {

@@ -561,6 +561,7 @@ export default function SettingsScreen() {
         if (params.collectionId) {
             setActiveCollectionId(params.collectionId);
             setShowApprovalModal(true);
+            router.setParams({ collectionId: undefined });
         }
     }, [params.collectionId]);
 

@@ -17,7 +17,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && mkdir -p dist/data && cp src/data/synonyms.json dist/data/synonyms.json",
+    "build": "tsc",
     "dev": "tsc --watch",
     "lint": "eslint src/",
     "test": "vitest run"

@@ -10,7 +10,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
-import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership, recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi } from '../lib/api';
+import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership, recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
@@ -266,11 +266,14 @@ export function WelcomePage({ onComplete }: Props) {
 
         const timer = setInterval(() => {
             setPairingSecondsLeft((prev) => {
-                if (prev <= 1) {
+                const next = prev - 1;
+                if (next <= 0) {
+                    clearInterval(timer);
+                    clearInterval(poller);
                     setPairingStatus('expired');
                     return 0;
                 }
-                return prev - 1;
+                return next;
             });
         }, 1000);
 
@@ -282,23 +285,29 @@ export function WelcomePage({ onComplete }: Props) {
                     clearInterval(poller);
                     setPairingStatus('decrypting');
 
-                    const decrypted = decryptPairingPayload<BeanPoolIdentity>(
-                        res.payload.ciphertextHex,
-                        res.payload.nonceHex,
-                        res.payload.mobilePubHex,
-                        pairingSession.privateKeyHex,
-                        pairingSession.sessionId
-                    );
+                    try {
+                        const decrypted = decryptPairingPayload<BeanPoolIdentity>(
+                            res.payload.ciphertextHex,
+                            res.payload.nonceHex,
+                            res.payload.mobilePubHex,
+                            pairingSession.privateKeyHex,
+                            pairingSession.sessionId
+                        );
 
-                    if (!decrypted.publicKey || !decrypted.privateKey || !decrypted.callsign) {
-                        throw new Error('Received incomplete identity payload');
+                        if (!decrypted.publicKey || !decrypted.privateKey || !decrypted.callsign) {
+                            throw new Error('Received incomplete identity payload');
+                        }
+
+                        await importIdentity(decrypted);
+                        setPairingStatus('success');
+                        setTimeout(() => {
+                            onComplete(decrypted);
+                        }, 600);
+                    } catch (decryptErr: any) {
+                        console.error('[Pairing] Decryption/import failure:', decryptErr);
+                        setError(decryptErr.message || 'Failed to decrypt paired identity');
+                        setPairingStatus('expired');
                     }
-
-                    await importIdentity(decrypted);
-                    setPairingStatus('success');
-                    setTimeout(() => {
-                        onComplete(decrypted);
-                    }, 600);
                 } else if (res.status === 'expired') {
                     clearInterval(timer);
                     clearInterval(poller);
@@ -1482,36 +1491,43 @@ export function WelcomePage({ onComplete }: Props) {
                                 </p>
                             </div>
 
-                            <div style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '1.25rem',
-                                background: '#ffffff',
-                                borderRadius: '18px',
-                                boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                                margin: '0 auto 1.25rem',
-                                width: 'fit-content',
-                                position: 'relative',
-                            }}>
+                            <div
+                                role="status"
+                                aria-live="polite"
+                                aria-atomic="true"
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '1.25rem',
+                                    background: '#ffffff',
+                                    borderRadius: '18px',
+                                    boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+                                    margin: '0 auto 1.25rem',
+                                    width: 'fit-content',
+                                    position: 'relative',
+                                }}
+                            >
                                 {pairingStatus === 'waiting' && pairingSession ? (
                                     <>
-                                        <QRCodeSVGComponent
-                                            value={`beanpool://pair?session=${pairingSession.sessionId}&pub=${pairingSession.publicKeyHex}&node=${encodeURIComponent(window.location.origin)}`}
-                                            size={210}
-                                            level="M"
-                                            marginSize={2}
-                                        />
+                                        <div role="img" aria-label="QR code to scan with BeanPool mobile app">
+                                            <QRCodeSVGComponent
+                                                value={`beanpool://pair?session=${pairingSession.sessionId}&pub=${pairingSession.publicKeyHex}&node=${encodeURIComponent(getNodeApiUrl() || window.location.origin)}`}
+                                                size={210}
+                                                level="M"
+                                                marginSize={2}
+                                            />
+                                        </div>
                                         <div style={{
                                             marginTop: '0.75rem',
                                             fontSize: '0.8rem',
                                             fontWeight: 700,
-                                            color: pairingSecondsLeft < 20 ? '#ef4444' : '#059669',
+                                            color: pairingSecondsLeft < 20 ? '#dc2626' : '#047857',
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: '0.35rem',
-                                        }}>
+                                        }} aria-label={`Expires in ${pairingSecondsLeft} seconds`}>
                                             <span>⏱️ Expires in {pairingSecondsLeft}s</span>
                                         </div>
                                     </>
@@ -1523,7 +1539,7 @@ export function WelcomePage({ onComplete }: Props) {
                                 ) : pairingStatus === 'success' ? (
                                     <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
                                         <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>✨</div>
-                                        <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#059669' }}>Device Linked Successfully!</div>
+                                        <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#047857' }}>Device Linked Successfully!</div>
                                     </div>
                                 ) : (
                                     <div style={{ padding: '2rem 1.5rem', textAlign: 'center', color: '#374151' }}>
@@ -1531,18 +1547,20 @@ export function WelcomePage({ onComplete }: Props) {
                                         <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.75rem' }}>Pairing code expired</div>
                                         <button
                                             onClick={handleStartQrPairing}
+                                            disabled={loading}
                                             style={{
-                                                padding: '0.6rem 1.2rem',
+                                                padding: '0.65rem 1.3rem',
                                                 borderRadius: '10px',
-                                                background: '#2563eb',
-                                                color: '#fff',
+                                                background: '#059669',
+                                                color: '#ffffff',
                                                 border: 'none',
                                                 fontWeight: 700,
                                                 fontSize: '0.85rem',
-                                                cursor: 'pointer',
+                                                cursor: loading ? 'not-allowed' : 'pointer',
+                                                opacity: loading ? 0.7 : 1,
                                             }}
                                         >
-                                            🔄 Generate New Code
+                                            {loading ? '🔄 Generating...' : '🔄 Generate New Code'}
                                         </button>
                                     </div>
                                 )}

@@ -13,10 +13,10 @@ import {
     StyleSheet,
     Pressable,
     ActivityIndicator,
-    Alert,
     SafeAreaView,
     Platform,
     Modal,
+    Linking,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router } from 'expo-router';
@@ -44,6 +44,15 @@ export default function PairDeviceScreen() {
     const [transferSuccess, setTransferSuccess] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const isScanningLocked = useRef(false);
+    const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (navTimerRef.current) {
+                clearTimeout(navTimerRef.current);
+            }
+        };
+    }, []);
 
     const styles = useStyles(({ theme, colors }) =>
         StyleSheet.create({
@@ -266,8 +275,6 @@ export default function PairDeviceScreen() {
 
     function parsePairingUri(raw: string): ParsedPairingData | null {
         try {
-            // Supports beanpool://pair?session=...&pub=...&node=...
-            // or https://.../?pair=...
             let session = '';
             let pub = '';
             let node = '';
@@ -314,7 +321,7 @@ export default function PairDeviceScreen() {
         setErrorMessage(null);
 
         try {
-            // Determine target node URL
+            // Determine and sanitize target node URL
             let targetNode = scannedData.nodeUrl;
             if (!targetNode) {
                 const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -324,6 +331,13 @@ export default function PairDeviceScreen() {
             if (!targetNode) {
                 throw new Error('Unable to determine target node address');
             }
+
+            const parsed = new URL(targetNode);
+            const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+            if (parsed.protocol !== 'https:' && !isLocal) {
+                throw new Error('Insecure pairing relay URL. HTTPS required.');
+            }
+            const normalizedTargetNode = targetNode.trim().replace(/\/+$/, '');
 
             // Retrieve full mnemonic recovery words if available
             const mnemonic = await getMnemonic(identity);
@@ -344,7 +358,7 @@ export default function PairDeviceScreen() {
             );
 
             // POST to target node relay
-            const res = await fetch(`${targetNode}/api/pair/transfer`, {
+            const res = await fetch(`${normalizedTargetNode}/api/pair/transfer`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -365,7 +379,7 @@ export default function PairDeviceScreen() {
             setTransferSuccess(true);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-            setTimeout(() => {
+            navTimerRef.current = setTimeout(() => {
                 router.back();
             }, 1200);
         } catch (err: any) {
@@ -398,13 +412,27 @@ export default function PairDeviceScreen() {
     if (!permission.granted) {
         return (
             <SafeAreaView style={styles.permissionCard}>
+                <Pressable
+                    style={[styles.closeBtn, { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, left: 20 }]}
+                    onPress={() => router.back()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Go back"
+                >
+                    <Text style={styles.closeBtnText}>✕</Text>
+                </Pressable>
                 <Text style={styles.permissionTitle}>📷 Camera Permission Needed</Text>
                 <Text style={styles.permissionDesc}>
                     BeanPool requires camera access to scan the pairing QR code displayed on your computer.
                 </Text>
-                <Pressable style={styles.permissionBtn} onPress={requestPermission} accessibilityRole="button">
-                    <Text style={styles.permissionBtnText}>Enable Camera Access</Text>
-                </Pressable>
+                {permission.canAskAgain ? (
+                    <Pressable style={styles.permissionBtn} onPress={requestPermission} accessibilityRole="button">
+                        <Text style={styles.permissionBtnText}>Enable Camera Access</Text>
+                    </Pressable>
+                ) : (
+                    <Pressable style={styles.permissionBtn} onPress={() => Linking.openSettings()} accessibilityRole="button">
+                        <Text style={styles.permissionBtnText}>Open Device Settings</Text>
+                    </Pressable>
+                )}
             </SafeAreaView>
         );
     }
@@ -476,6 +504,12 @@ export default function PairDeviceScreen() {
                                         <Text style={styles.infoLabel}>Account</Text>
                                         <Text style={styles.infoValue}>{identity?.callsign}</Text>
                                     </View>
+                                    <View style={styles.infoRow}>
+                                        <Text style={styles.infoLabel}>Target Host</Text>
+                                        <Text style={styles.infoValue}>
+                                            {scannedData?.nodeUrl ? (() => { try { return new URL(scannedData.nodeUrl).host; } catch { return scannedData.nodeUrl; } })() : 'Local Node'}
+                                        </Text>
+                                    </View>
                                     <View style={[styles.infoRow, { marginBottom: 0 }]}>
                                         <Text style={styles.infoLabel}>Public Key</Text>
                                         <Text style={styles.infoValue}>
@@ -485,7 +519,10 @@ export default function PairDeviceScreen() {
                                 </View>
 
                                 {errorMessage && (
-                                    <Text style={{ color: palette.red500, fontSize: 13, textAlign: 'center', marginBottom: 16 }}>
+                                    <Text
+                                        style={{ color: palette.red500, fontSize: 13, textAlign: 'center', marginBottom: 16 }}
+                                        accessibilityRole="alert"
+                                    >
                                         {errorMessage}
                                     </Text>
                                 )}
@@ -495,6 +532,8 @@ export default function PairDeviceScreen() {
                                     onPress={handleConfirmLink}
                                     disabled={isTransferring}
                                     accessibilityRole="button"
+                                    accessibilityLabel={isTransferring ? 'Linking device, please wait...' : 'Confirm & Link Device'}
+                                    accessibilityState={{ busy: isTransferring, disabled: isTransferring }}
                                 >
                                     {isTransferring ? (
                                         <ActivityIndicator color="#ffffff" />

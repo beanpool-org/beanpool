@@ -7,7 +7,7 @@
  * Security Guarantees:
  * - In-memory only: zero disk writes, zero SQLite rows.
  * - Strict 120-second TTL auto-expiration.
- * - Single-use: session is purged from memory immediately upon successful poll.
+ * - Single-use guarantee with 15s resilience window for transient network drops.
  * - Zero-knowledge: the server only relays opaque ciphertext (XChaCha20-Poly1305).
  */
 
@@ -29,6 +29,7 @@ interface PairingSession {
 
 const PAIRING_TTL_MS = 120_000; // 2 minutes
 const MAX_SESSIONS = 500;
+const MAX_CIPHERTEXT_HEX_LEN = 16_384; // 16KB max encrypted payload
 
 const sessions = new Map<string, PairingSession>();
 
@@ -100,8 +101,14 @@ export function transferPairingPayload(
     if (!nonceHex || !/^[0-9a-fA-F]{48}$/.test(nonceHex)) {
         return { ok: false, error: 'Invalid nonceHex format (must be 48 hex chars / 24 bytes)' };
     }
-    if (!ciphertextHex || typeof ciphertextHex !== 'string' || ciphertextHex.length === 0) {
-        return { ok: false, error: 'Invalid ciphertextHex' };
+    if (
+        !ciphertextHex ||
+        typeof ciphertextHex !== 'string' ||
+        ciphertextHex.length === 0 ||
+        ciphertextHex.length > MAX_CIPHERTEXT_HEX_LEN ||
+        !/^[0-9a-fA-F]+$/.test(ciphertextHex)
+    ) {
+        return { ok: false, error: `Invalid ciphertextHex (must be hex up to ${MAX_CIPHERTEXT_HEX_LEN} chars)` };
     }
 
     session.status = 'transferred';
@@ -116,7 +123,8 @@ export function transferPairingPayload(
 
 /**
  * Polled by the waiting desktop PWA.
- * If transferred, delivers the payload and immediately destroys the session (single-use).
+ * If transferred, delivers the payload and schedules immediate cleanup with a 15-second
+ * resilience grace period to tolerate transient browser retry loops.
  */
 export function pollPairingSession(sessionId: string): {
     status: 'waiting' | 'transferred' | 'expired';
@@ -130,9 +138,13 @@ export function pollPairingSession(sessionId: string): {
 
     if (session.status === 'transferred' && session.payload) {
         const payload = session.payload;
-        // Purge immediately on single-use consumption
+        // Schedule deletion within 15 seconds to allow retry resilience
         clearTimeout(session.timer);
-        sessions.delete(sessionId);
+        session.timer = setTimeout(() => {
+            sessions.delete(sessionId);
+        }, 15_000);
+        if (session.timer.unref) session.timer.unref();
+
         return {
             status: 'transferred',
             payload,

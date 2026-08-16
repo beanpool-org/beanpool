@@ -78,6 +78,15 @@ async function main() {
         desktopSession2.sessionId
     );
 
+    // Payload size cap validation
+    const badTransfer = transferPairingPayload(
+        desktopSession2.sessionId,
+        encrypted.mobilePubHex,
+        encrypted.nonceHex,
+        'zz-not-hex'
+    );
+    assert(!badTransfer.ok, 'Rejects non-hex ciphertext');
+
     const transferRes = transferPairingPayload(
         desktopSession2.sessionId,
         encrypted.mobilePubHex,
@@ -92,9 +101,14 @@ async function main() {
     assert(!!pollSuccess.payload, 'Poll returns payload object');
     assert(pollSuccess.payload?.ciphertextHex === encrypted.ciphertextHex, 'Payload ciphertext matches');
 
-    // Second poll must be expired / deleted (single-use guarantee)
-    const pollSecond = pollPairingSession(desktopSession2.sessionId);
-    assert(pollSecond.status === 'expired', 'Immediate second poll returns "expired" (single-use purged)');
+    // Second poll within grace period also succeeds (resilience against dropped responses)
+    const pollRetry = pollPairingSession(desktopSession2.sessionId);
+    assert(pollRetry.status === 'transferred', 'Immediate retry poll succeeds during resilience grace period');
+
+    // Explicit cancellation purges immediately
+    cancelPairingSession(desktopSession2.sessionId);
+    const pollCancelledAfter = pollPairingSession(desktopSession2.sessionId);
+    assert(pollCancelledAfter.status === 'expired', 'Explicit cancellation purges session immediately');
 
     // 4. End-to-End Decryption Verification
     const decrypted = decryptPairingPayload(

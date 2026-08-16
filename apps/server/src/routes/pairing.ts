@@ -19,6 +19,8 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      * Initiated by unauthenticated desktop PWA.
      */
     router.post('/api/pair/init', async (ctx) => {
+        if (!deps.rateLimit(ctx)) return;
+
         const { sessionId, desktopPubHex } = (ctx.request as any).body || {};
 
         if (!sessionId || !desktopPubHex) {
@@ -45,6 +47,8 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      * Polled by waiting desktop PWA.
      */
     router.get('/api/pair/poll', async (ctx) => {
+        if (!deps.rateLimit(ctx)) return;
+
         const sessionId = ctx.query.session as string;
         if (!sessionId) {
             ctx.status = 400;
@@ -61,6 +65,8 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      * Submitted by authenticated mobile app with encrypted payload.
      */
     router.post('/api/pair/transfer', async (ctx) => {
+        if (!deps.rateLimit(ctx)) return;
+
         const { sessionId, mobilePubHex, nonceHex, ciphertextHex } = (ctx.request as any).body || {};
 
         if (!sessionId || !mobilePubHex || !nonceHex || !ciphertextHex) {
@@ -84,6 +90,8 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      * Cancels an active pairing session.
      */
     router.post('/api/pair/cancel', async (ctx) => {
+        if (!deps.rateLimit(ctx)) return;
+
         const { sessionId } = (ctx.request as any).body || {};
         if (sessionId) {
             cancelPairingSession(sessionId);

@@ -309,7 +309,7 @@ export default function PostDetailModal() {
             marginBottom: 16,
         },
         pulsePostOfferBtn: {
-            backgroundColor: palette.amber500,
+            backgroundColor: palette.amber600,
             paddingVertical: 12,
             paddingHorizontal: 20,
             borderRadius: 12,
@@ -613,7 +613,7 @@ export default function PostDetailModal() {
     }
 
     const isOwnPost = identity?.publicKey === post.author_pubkey;
-    const isPulsePost = (post.author_callsign || post.authorCallsign) === 'Daily Pulse' || post.title?.includes('Daily Pulse') || (post.credits === 0 && (post.author_callsign || post.authorCallsign)?.toLowerCase().includes('pulse'));
+    const isPulsePost = (post.author_callsign || post.authorCallsign) === 'Daily Pulse';
     
     // --- Escrow Roles ---
     const isAcceptedByMe = activeTx 
@@ -1213,8 +1213,7 @@ export default function PostDetailModal() {
                             accessibilityLabel="Post your own offer"
                             style={styles.pulsePostOfferBtn}
                             onPress={() => {
-                                router.back();
-                                router.push('/create-post');
+                                router.push({ pathname: '/(tabs)/map', params: { newPost: 'true' } });
                             }}
                         >
                             <Text style={styles.pulsePostOfferBtnText}>💡 Post Your Own Offer →</Text>

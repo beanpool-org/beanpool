@@ -72,7 +72,7 @@ async function main() {
     assert(postDay1.title === entryDay1.headline, `Pulse post title matches headline: "${postDay1.title}"`);
     assert(postDay1.description === entryDay1.body, 'Pulse post description matches body');
     assert(postDay1.authorPublicKey === pulsePubkey, 'Pulse post author is the Daily Pulse Treasury');
-    assert(postDay1.reach === 'everywhere', 'Pulse post reach is "everywhere"');
+    assert(postDay1.reach === 'local', 'Pulse post reach is "local"');
 
     // Check active pulse in marketplace
     const activePostsDay1 = getPosts({ type: 'offer' });

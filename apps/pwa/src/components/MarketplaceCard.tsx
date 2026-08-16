@@ -26,7 +26,7 @@ interface Props {
 
 export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES.find((c) => c.id === post.category);
-    const isPulse = post.authorCallsign === 'Daily Pulse' || post.title.includes('Daily Pulse') || (post.credits === 0 && post.authorCallsign?.toLowerCase().includes('pulse'));
+    const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
 
     const nodeBadge = formatNodeName(
@@ -85,7 +85,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4 ml-3 flex-shrink-0">
+                <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                     {/* Compact Price */}
                     <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
                         {post.credits !== undefined ? post.credits : '?'}
@@ -95,13 +95,15 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         </span>
                     </span>
 
-                    {/* Needs / Offers pill */}
-                    <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
-                        post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
-                        : 'bg-orange-100 text-orange-850 dark:bg-orange-900/40 dark:text-orange-400'
-                    }`}>
-                        {post.type}
-                    </span>
+                    {/* Daily Pulse or Needs/Offers pill */}
+                    {isPulse ? pulsePill : (
+                        <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                            post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
+                            : 'bg-orange-100 text-orange-850 dark:bg-orange-900/40 dark:text-orange-400'
+                        }`}>
+                            {post.type}
+                        </span>
+                    )}
                 </div>
             </div>
         );

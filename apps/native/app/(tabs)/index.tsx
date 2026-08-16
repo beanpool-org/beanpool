@@ -813,8 +813,8 @@ export default function MarketScreen() {
 
     // Pin Daily Pulse to the top of the feed
     filteredPosts.sort((a, b) => {
-        const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse' || a.title?.includes('Daily Pulse');
-        const isPulseB = (b.author_callsign || b.authorCallsign) === 'Daily Pulse' || b.title?.includes('Daily Pulse');
+        const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse';
+        const isPulseB = (b.author_callsign || b.authorCallsign) === 'Daily Pulse';
         if (isPulseA && !isPulseB) return -1;
         if (!isPulseA && isPulseB) return 1;
         return 0;
@@ -1197,7 +1197,7 @@ export default function MarketScreen() {
         }
 
         const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || 'Unknown';
-        const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse' || item.title?.includes('Daily Pulse') || (item.credits === 0 && (item.author_callsign || item.authorCallsign)?.toLowerCase().includes('pulse'));
+        const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
         const elderCard = !isPulse && isElder(item.author_energy_cycled);
         const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
         
@@ -1239,8 +1239,8 @@ export default function MarketScreen() {
                             />
                         </View>
                         {isPulse && (
-                            <View style={[styles.gridPriceBadge, { left: 8, right: undefined, backgroundColor: '#f59e0b' }]}>
-                                <Text style={[styles.gridPriceText, { color: '#78350f', fontWeight: '900' }]}>🗞️ PULSE</Text>
+                            <View style={[styles.gridPriceBadge, { left: 8, right: undefined, backgroundColor: palette.amber500 }]}>
+                                <Text style={[styles.gridPriceText, { color: '#ffffff', fontWeight: '900' }]}>🗞️ PULSE</Text>
                             </View>
                         )}
                         {!!item.repeatable && !isPulse && (
@@ -1291,11 +1291,18 @@ export default function MarketScreen() {
                             />
                             <View style={[
                                 styles.compactBadge, 
-                                isPulse ? { backgroundColor: '#fef3c7', borderColor: '#f59e0b', borderWidth: 1 } : (item.type === 'offer' ? styles.compactBadgeOffer : styles.compactBadgeNeed)
+                                isPulse ? {
+                                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
+                                    borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b',
+                                    borderWidth: 1,
+                                } : (item.type === 'offer' ? styles.compactBadgeOffer : styles.compactBadgeNeed)
                             ]}>
                                 <Text style={[
                                     styles.compactBadgeText, 
-                                    { color: isPulse ? '#92400e' : (item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg), fontWeight: '800' }
+                                    {
+                                        color: isPulse ? (theme === 'dark' ? colors.feedback.warning.fg : '#92400e') : (item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg),
+                                        fontWeight: '800',
+                                    }
                                 ]}>
                                     {isPulse ? 'PULSE' : item.type.toUpperCase()}
                                 </Text>
@@ -1326,8 +1333,19 @@ export default function MarketScreen() {
                                     <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
                                 </View>
                                 {isPulse && (
-                                    <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#f59e0b' }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '800', color: '#92400e' }}>🗞️ DAILY PULSE</Text>
+                                    <View style={{
+                                        backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
+                                        paddingHorizontal: 6,
+                                        paddingVertical: 2,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b'
+                                    }}>
+                                        <Text style={{
+                                            fontSize: 10,
+                                            fontWeight: '800',
+                                            color: theme === 'dark' ? colors.feedback.warning.fg : '#92400e'
+                                        }}>🗞️ DAILY PULSE</Text>
                                     </View>
                                 )}
                                 {isOwn && (

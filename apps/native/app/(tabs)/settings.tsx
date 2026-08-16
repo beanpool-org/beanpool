@@ -1549,6 +1549,15 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/pair-device')} accessibilityRole="button" accessibilityLabel="Link another device or computer">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📲</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Link Another Device</Text>
+                            <Text style={styles.menuSub}>Scan QR code on desktop browser to sign in</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+
                     <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => { setMode('seed'); setSeedConfirm(''); setSeedVisible(false); }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔑</Text></View>
                         <View style={{ flex: 1 }}>

@@ -10,9 +10,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
-import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership, recordOnboardingEvent} from '../lib/api';
+import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership, recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { QRCodeSVG } from 'qrcode.react';
+import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
 
+const QRCodeSVGComponent: React.FC<any> = QRCodeSVG as any;
 
 interface Props {
     onComplete: (identity: BeanPoolIdentity) => void;
@@ -233,6 +236,93 @@ export function WelcomePage({ onComplete }: Props) {
     const [openFaq, setOpenFaq] = useState<number | null>(null);
 
     const [showAvatarSetup, setShowAvatarSetup] = useState(false);
+
+    // QR Device Pairing states (#89)
+    const [showQrPairing, setShowQrPairing] = useState(false);
+    const [pairingSession, setPairingSession] = useState<{ sessionId: string; privateKeyHex: string; publicKeyHex: string } | null>(null);
+    const [pairingSecondsLeft, setPairingSecondsLeft] = useState(120);
+    const [pairingStatus, setPairingStatus] = useState<'idle' | 'waiting' | 'decrypting' | 'success' | 'expired'>('idle');
+
+    async function handleStartQrPairing() {
+        setLoading(true);
+        setError(null);
+        setPairingStatus('waiting');
+        try {
+            const session = createPairingSession();
+            setPairingSession(session);
+            await initPairingApi(session.sessionId, session.publicKeyHex);
+            setPairingSecondsLeft(120);
+            setShowQrPairing(true);
+        } catch (err: any) {
+            setError(err.message || 'Failed to initialize device pairing');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    // QR pairing countdown & response poller
+    useEffect(() => {
+        if (!showQrPairing || !pairingSession || pairingStatus !== 'waiting') return;
+
+        const timer = setInterval(() => {
+            setPairingSecondsLeft((prev) => {
+                const next = prev - 1;
+                if (next <= 0) {
+                    clearInterval(timer);
+                    clearInterval(poller);
+                    setPairingStatus('expired');
+                    return 0;
+                }
+                return next;
+            });
+        }, 1000);
+
+        const poller = setInterval(async () => {
+            try {
+                const res = await pollPairingApi(pairingSession.sessionId);
+                if (res.status === 'transferred' && res.payload) {
+                    clearInterval(timer);
+                    clearInterval(poller);
+                    setPairingStatus('decrypting');
+
+                    try {
+                        const decrypted = decryptPairingPayload<BeanPoolIdentity>(
+                            res.payload.ciphertextHex,
+                            res.payload.nonceHex,
+                            res.payload.mobilePubHex,
+                            pairingSession.privateKeyHex,
+                            pairingSession.sessionId
+                        );
+
+                        if (!decrypted.publicKey || !decrypted.privateKey || !decrypted.callsign) {
+                            throw new Error('Received incomplete identity payload');
+                        }
+
+                        await importIdentity(decrypted);
+                        setPairingStatus('success');
+                        setTimeout(() => {
+                            onComplete(decrypted);
+                        }, 600);
+                    } catch (decryptErr: any) {
+                        console.error('[Pairing] Decryption/import failure:', decryptErr);
+                        setError(decryptErr.message || 'Failed to decrypt paired identity');
+                        setPairingStatus('expired');
+                    }
+                } else if (res.status === 'expired') {
+                    clearInterval(timer);
+                    clearInterval(poller);
+                    setPairingStatus('expired');
+                }
+            } catch (err: any) {
+                console.error('[Pairing] Error during poll:', err);
+            }
+        }, 1500);
+
+        return () => {
+            clearInterval(timer);
+            clearInterval(poller);
+        };
+    }, [showQrPairing, pairingSession, pairingStatus, onComplete]);
 
     // Count the backup step being drawn — once per join, not once per render. The variant is
     // the keeper-count state from the design doc; in Phase A it is always 'C', the user's
@@ -1389,6 +1479,129 @@ export function WelcomePage({ onComplete }: Props) {
                                 </button>
                             </>
                         )
+                    ) : showQrPairing ? (
+                        /* ===== QR DEVICE PAIRING (#89) ===== */
+                        <>
+                            <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+                                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.35rem', color: 'var(--text-primary)' }}>
+                                    📲 Link with Mobile App
+                                </h3>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.5, margin: 0 }}>
+                                    Scan this QR code with the BeanPool app on your phone to instantly unlock your account on this computer.
+                                </p>
+                            </div>
+
+                            <div
+                                role="status"
+                                aria-live="polite"
+                                aria-atomic="true"
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '1.25rem',
+                                    background: '#ffffff',
+                                    borderRadius: '18px',
+                                    boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+                                    margin: '0 auto 1.25rem',
+                                    width: 'fit-content',
+                                    position: 'relative',
+                                }}
+                            >
+                                {pairingStatus === 'waiting' && pairingSession ? (
+                                    <>
+                                        <div role="img" aria-label="QR code to scan with BeanPool mobile app">
+                                            <QRCodeSVGComponent
+                                                value={`beanpool://pair?session=${pairingSession.sessionId}&pub=${pairingSession.publicKeyHex}&node=${encodeURIComponent(getNodeApiUrl() || window.location.origin)}`}
+                                                size={210}
+                                                level="M"
+                                                marginSize={2}
+                                            />
+                                        </div>
+                                        <div style={{
+                                            marginTop: '0.75rem',
+                                            fontSize: '0.8rem',
+                                            fontWeight: 700,
+                                            color: pairingSecondsLeft < 20 ? '#dc2626' : '#047857',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.35rem',
+                                        }} aria-label={`Expires in ${pairingSecondsLeft} seconds`}>
+                                            <span>⏱️ Expires in {pairingSecondsLeft}s</span>
+                                        </div>
+                                    </>
+                                ) : pairingStatus === 'decrypting' ? (
+                                    <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem', animation: 'spin 1s infinite linear' }}>🔐</div>
+                                        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>Decrypting & Unlocking...</div>
+                                    </div>
+                                ) : pairingStatus === 'success' ? (
+                                    <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>✨</div>
+                                        <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#047857' }}>Device Linked Successfully!</div>
+                                    </div>
+                                ) : (
+                                    <div style={{ padding: '2rem 1.5rem', textAlign: 'center', color: '#374151' }}>
+                                        <div style={{ fontSize: '2.2rem', marginBottom: '0.5rem' }}>⌛</div>
+                                        <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.75rem' }}>Pairing code expired</div>
+                                        <button
+                                            onClick={handleStartQrPairing}
+                                            disabled={loading}
+                                            style={{
+                                                padding: '0.65rem 1.3rem',
+                                                borderRadius: '10px',
+                                                background: '#059669',
+                                                color: '#ffffff',
+                                                border: 'none',
+                                                fontWeight: 700,
+                                                fontSize: '0.85rem',
+                                                cursor: loading ? 'not-allowed' : 'pointer',
+                                                opacity: loading ? 0.7 : 1,
+                                            }}
+                                        >
+                                            {loading ? '🔄 Generating...' : '🔄 Generate New Code'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 3 Step Guide */}
+                            <div style={{
+                                background: 'var(--surface-subtle, rgba(255,255,255,0.05))',
+                                borderRadius: '12px',
+                                padding: '0.85rem 1rem',
+                                marginBottom: '1.25rem',
+                                textAlign: 'left',
+                                fontSize: '0.8rem',
+                                color: 'var(--text-secondary)',
+                                border: '1px solid var(--border-primary, rgba(255,255,255,0.1))',
+                            }}>
+                                <div style={{ fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-primary)' }}>How to scan:</div>
+                                <ol style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                    <li>Open <strong>BeanPool</strong> on your mobile phone</li>
+                                    <li>Go to <strong>Settings → Link Another Device</strong></li>
+                                    <li>Point camera at this screen</li>
+                                </ol>
+                            </div>
+
+                            <button
+                                onClick={() => {
+                                    setShowQrPairing(false);
+                                    if (pairingSession) cancelPairingApi(pairingSession.sessionId);
+                                }}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--text-muted)',
+                                    fontSize: '0.85rem',
+                                    cursor: 'pointer',
+                                    fontFamily: 'inherit',
+                                }}
+                            >
+                                ← Back to Options
+                            </button>
+                        </>
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */
                         <>
@@ -1575,6 +1788,36 @@ export function WelcomePage({ onComplete }: Props) {
                                     <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
                                         Choose how to restore your identity on this device:
                                     </p>
+
+                                    <button
+                                        onClick={handleStartQrPairing}
+                                        disabled={loading}
+                                        style={{
+                                            width: '100%', padding: '0.95rem 1rem', borderRadius: '14px',
+                                            border: '1px solid #10b98166',
+                                            background: 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(16,185,129,0.06))',
+                                            color: '#6ee7b7', fontSize: '1rem', fontWeight: 700,
+                                            cursor: 'pointer', fontFamily: 'inherit',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
+                                            marginBottom: '0.68rem', transition: 'transform 0.15s',
+                                        }}
+                                        onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
+                                        onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                    >
+                                        📲 Link with Mobile App (Scan QR)
+                                        <span style={{
+                                            fontSize: '0.65rem',
+                                            fontWeight: 800,
+                                            background: '#10b981',
+                                            color: '#ffffff',
+                                            padding: '0.15rem 0.45rem',
+                                            borderRadius: '999px',
+                                            marginLeft: '0.2rem',
+                                        }}>
+                                            FASTEST
+                                        </span>
+                                    </button>
 
                                     <button
                                         onClick={() => { setShowRecovery(true); setRecoveryMode('words'); setError(null); }}

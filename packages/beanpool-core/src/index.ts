@@ -18,3 +18,4 @@ export * from './two-layer-split.js';
 export * from './keeper-crypto.js';
 export * from './recovery-self-check.js';
 export * from './protocol.js';
+export * from './pairing-crypto.js';

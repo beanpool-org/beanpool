@@ -1099,3 +1099,43 @@ export async function getNodeStats(): Promise<{ members: number; posts: number; 
     }
 }
 
+// ===================== QR DEVICE PAIRING (#89) =====================
+
+export async function initPairingApi(sessionId: string, desktopPubHex: string): Promise<{ success: boolean; expiresAt: number }> {
+    return request<{ success: boolean; expiresAt: number }>('POST', '/api/pair/init', { sessionId, desktopPubHex });
+}
+
+export async function pollPairingApi(sessionId: string): Promise<{
+    status: 'waiting' | 'transferred' | 'expired';
+    desktopPubHex?: string;
+    payload?: {
+        mobilePubHex: string;
+        nonceHex: string;
+        ciphertextHex: string;
+    };
+}> {
+    return request<any>('GET', `/api/pair/poll?session=${encodeURIComponent(sessionId)}`);
+}
+
+export async function transferPairingApi(
+    sessionId: string,
+    mobilePubHex: string,
+    nonceHex: string,
+    ciphertextHex: string
+): Promise<{ success: boolean }> {
+    return request<{ success: boolean }>('POST', '/api/pair/transfer', {
+        sessionId,
+        mobilePubHex,
+        nonceHex,
+        ciphertextHex,
+    });
+}
+
+export async function cancelPairingApi(sessionId: string): Promise<void> {
+    try {
+        await request<void>('POST', '/api/pair/cancel', { sessionId });
+    } catch {
+        // Best effort cancellation
+    }
+}
+

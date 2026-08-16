@@ -1725,15 +1725,60 @@ export function WelcomePage({ onComplete }: Props) {
                                 ))}
                             </div>
 
+                            {/* ===== RESTORE IDENTITY ACTION FOR RETURNING USERS (#98) ===== */}
+                            <div style={{
+                                marginTop: '1.25rem',
+                                padding: '1rem',
+                                borderRadius: '12px',
+                                background: 'rgba(59, 130, 246, 0.08)',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
+                                textAlign: 'center',
+                            }}>
+                                <p style={{
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '0.85rem',
+                                    margin: '0 0 0.65rem',
+                                    fontWeight: 500,
+                                }}>
+                                    Already a member or switching devices?
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        setShowNewUser(false);
+                                        setShowMemberOptions(true);
+                                        setError(null);
+                                    }}
+                                    aria-label="Restore existing identity"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem 1rem',
+                                        borderRadius: '10px',
+                                        border: '1px solid #2563eb',
+                                        background: 'transparent',
+                                        color: '#2563eb',
+                                        fontSize: '0.9rem',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        fontFamily: 'inherit',
+                                        transition: 'background 0.2s, transform 0.15s',
+                                    }}
+                                    onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
+                                    onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                >
+                                    🔑 Restore Existing Identity →
+                                </button>
+                            </div>
+
                             <button
-                                onClick={() => { setShowNewUser(false); setError(null); }}
+                                onClick={() => { setShowNewUser(false); setShowMemberOptions(false); setError(null); }}
                                 style={{
                                     background: 'none', border: 'none',
                                     color: 'var(--text-muted)', fontSize: '0.8rem',
                                     cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit',
                                 }}
                             >
-                                ← Back
+                                ← Back to Home
                             </button>
                         </>
                     ) : (

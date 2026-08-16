@@ -1857,7 +1857,7 @@ export default function WelcomeScreen() {
                     style={styles.restoreSecondaryBtn}
                     onPress={() => setMode('member')}
                     accessibilityRole="button"
-                    accessibilityLabel="Restore existing identity"
+                    accessibilityLabel="Already a Member? Restore Account"
                 >
                     <Text style={styles.restoreSecondaryBtnText}>🔑 Already a Member? Restore Account →</Text>
                 </Pressable>

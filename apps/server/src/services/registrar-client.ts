@@ -9,7 +9,7 @@
 import { getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
 
-const REGISTRAR_URL = (process.env.REGISTRAR_URL || 'https://beanpool.org').replace(/\/$/, '');
+const getRegistrarUrl = () => (process.env.REGISTRAR_URL || 'https://beanpool.org').replace(/\/$/, '');
 
 function key(): any {
     const k = getPrivateKey();
@@ -49,7 +49,8 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
-        const res = await fetch(`${REGISTRAR_URL}${path}`, { method, headers, body: bodyText || undefined, signal: controller.signal });
+        const baseUrl = getRegistrarUrl();
+        const res = await fetch(`${baseUrl}${path}`, { method, headers, body: bodyText || undefined, signal: controller.signal });
         clearTimeout(timer);
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok) throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`));

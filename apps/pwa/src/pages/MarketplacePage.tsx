@@ -502,7 +502,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // stayed enabled and called the ordinary accept on it — which the server now refuses, but a member
         // meeting that as a raw error alert is a worse version of the same bug.
         const isRemotePost = !!((selectedPost as any)._remoteNode ?? (selectedPost as any).originNode);
-        const isPulsePost = selectedPost.authorCallsign === 'Daily Pulse';
+        const isPulsePost = (selectedPost.authorCallsign || (selectedPost as any).author_callsign) === 'Daily Pulse';
 
         // #143 step 5 — the link this member keeps for the community this listing actually came from, or
         // undefined. Keyed on `originNode` ONLY, never on `_remoteNode`: a client-side peer browse is not a
@@ -1924,10 +1924,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => p.authorFoundingNeeded);
                 }
 
-                // Pin Daily Pulse post to the top of the feed
+                // Pin Daily Pulse post to the top of the feed (local only)
                 filtered.sort((a, b) => {
-                    const isPulseA = a.authorCallsign === 'Daily Pulse';
-                    const isPulseB = b.authorCallsign === 'Daily Pulse';
+                    const isPulseA = ((a as any).author_callsign === 'Daily Pulse' || a.authorCallsign === 'Daily Pulse') && !(a as any).originNode && !(a as any)._remoteNode;
+                    const isPulseB = ((b as any).author_callsign === 'Daily Pulse' || b.authorCallsign === 'Daily Pulse') && !(b as any).originNode && !(b as any)._remoteNode;
                     if (isPulseA && !isPulseB) return -1;
                     if (!isPulseA && isPulseB) return 1;
                     return 0;

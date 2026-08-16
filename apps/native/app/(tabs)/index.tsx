@@ -811,10 +811,10 @@ export default function MarketScreen() {
         return true;
     });
 
-    // Pin Daily Pulse to the top of the feed
+    // Pin Daily Pulse to the top of the feed (local only)
     filteredPosts.sort((a, b) => {
-        const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse';
-        const isPulseB = (b.author_callsign || b.authorCallsign) === 'Daily Pulse';
+        const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse' && !a.origin_node && !a.originNode;
+        const isPulseB = (b.author_callsign || b.authorCallsign) === 'Daily Pulse' && !b.origin_node && !b.originNode;
         if (isPulseA && !isPulseB) return -1;
         if (!isPulseA && isPulseB) return 1;
         return 0;

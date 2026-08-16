@@ -52,10 +52,11 @@ export function getPulseEntry(dayIndex: number): DailyPulseEntry {
 }
 
 /**
- * Returns today's Daily Pulse entry based on UTC day timestamp.
+ * Returns today's Daily Pulse entry based on local calendar day (advances in sync with 5:00 AM local rotation).
  */
 export function getTodaysPulseEntry(now: Date = new Date()): DailyPulseEntry {
-    const dayIndex = Math.floor(now.getTime() / 86400000);
+    const localEpochMs = now.getTime() - (now.getTimezoneOffset() * 60 * 1000);
+    const dayIndex = Math.floor(localEpochMs / 86400000);
     return getPulseEntry(dayIndex);
 }
 `;

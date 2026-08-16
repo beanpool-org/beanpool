@@ -41,7 +41,7 @@ export async function purgeAccountOnNode(identity: BeanPoolIdentity): Promise<{ 
         throw new Error('No community node connection found.');
     }
     const res = await signedPost(nodeUrl, '/api/member/purge', { action: 'purge_account' }, identity);
-    const json = await res.json() as any;
+    const json = await res.json().catch(() => ({})) as any;
     if (!res.ok) {
         throw new Error(json.error || json.message || `Server returned ${res.status}`);
     }

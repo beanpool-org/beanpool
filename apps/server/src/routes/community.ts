@@ -854,10 +854,10 @@ router.post('/api/profile/update', async (ctx) => {
 });
 
 router.post('/api/member/purge', async (ctx) => {
-    const activeKey = ctx.state.actor || (ctx as any).requestBody?.publicKey;
+    const activeKey = ctx.state.actor;
     if (!activeKey) {
-        ctx.status = 400;
-        ctx.body = { error: 'Cryptographically signed publicKey is required' };
+        ctx.status = 401;
+        ctx.body = { error: 'Cryptographically signed session or header is required' };
         return;
     }
 

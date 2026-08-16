@@ -731,82 +731,100 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <div className="flex gap-3 pt-2">
                                         <button
                                             onClick={() => setDeletionMode('options')}
-                                            className="flex-1 py-2.5 rounded-xl bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold border-none cursor-pointer text-xs"
+                                            disabled={isPurging}
+                                            className="flex-1 py-2.5 rounded-xl bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold border-none cursor-pointer disabled:cursor-not-allowed text-xs"
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             onClick={async () => {
-                                                await wipeIdentity();
-                                                localStorage.clear();
-                                                setDeletionMode('purged');
-                                                setTimeout(() => window.location.reload(), 1500);
+                                                setIsPurging(true);
+                                                try {
+                                                    await wipeIdentity();
+                                                    localStorage.clear();
+                                                    setDeletionMode('purged');
+                                                    setTimeout(() => window.location.reload(), 1500);
+                                                } finally {
+                                                    setIsPurging(false);
+                                                }
                                             }}
-                                            className="flex-1 py-2.5 rounded-xl bg-nature-900 dark:bg-white text-white dark:text-nature-900 font-bold border-none cursor-pointer text-xs"
+                                            disabled={isPurging}
+                                            className="flex-1 py-2.5 rounded-xl bg-nature-900 dark:bg-white text-white dark:text-nature-900 font-bold border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-xs"
                                         >
-                                            Confirm Sign Out
+                                            {isPurging ? 'Signing Out...' : 'Confirm Sign Out'}
                                         </button>
                                     </div>
                                 </div>
                             )}
 
-                            {deletionMode === 'confirm_purge' && (
-                                <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-5 border-2 border-red-300 dark:border-red-700 space-y-3">
-                                    <h4 className="text-red-900 dark:text-red-300 font-bold text-sm m-0">
-                                        ⚠️ Irreversible Node Purge
-                                    </h4>
-                                    <p className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
-                                        Type your callsign <strong>{identity.callsign}</strong> to confirm permanent deletion of your account from this community node:
-                                    </p>
-                                    <input
-                                        type="text"
-                                        value={purgeCallsignInput}
-                                        onChange={(e) => setPurgeCallsignInput(e.target.value)}
-                                        placeholder={`Type "${identity.callsign}"`}
-                                        className="w-full py-2.5 px-3 rounded-xl border border-red-300 dark:border-red-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white font-mono text-xs"
-                                        autoCapitalize="none"
-                                    />
-                                    {purgeError && (
-                                        <div role="alert" className="p-3 rounded-xl bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 text-xs font-semibold">
-                                            {purgeError}
-                                        </div>
-                                    )}
-                                    <div className="flex gap-3 pt-2">
-                                        <button
-                                            onClick={() => setDeletionMode('options')}
+                            {deletionMode === 'confirm_purge' && (() => {
+                                const isPurgeConfirmed =
+                                    purgeCallsignInput.trim().toUpperCase() === 'DELETE' ||
+                                    purgeCallsignInput.trim().toLowerCase() === (identity?.callsign || '').trim().toLowerCase();
+
+                                return (
+                                    <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-5 border-2 border-red-300 dark:border-red-700 space-y-3">
+                                        <h4 className="text-red-900 dark:text-red-300 font-bold text-sm m-0">
+                                            ⚠️ Irreversible Node Purge
+                                        </h4>
+                                        <p className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
+                                            Type your callsign <strong>{identity?.callsign || 'CALLSIGN'}</strong> or <strong>DELETE</strong> to confirm permanent deletion of your account from this community node:
+                                        </p>
+                                        <input
+                                            id="purge-callsign-input"
+                                            type="text"
+                                            value={purgeCallsignInput}
+                                            onChange={(e) => setPurgeCallsignInput(e.target.value)}
+                                            placeholder={`Type "${identity?.callsign || ''}" or "DELETE"`}
+                                            aria-label={`Type callsign ${identity?.callsign || ''} or DELETE to confirm permanent deletion`}
+                                            aria-invalid={Boolean(purgeError)}
+                                            aria-describedby={purgeError ? 'purge-error-alert' : undefined}
                                             disabled={isPurging}
-                                            className="flex-1 py-2.5 rounded-xl bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold border border-nature-200 dark:border-nature-700 cursor-pointer text-xs"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={async () => {
-                                                if (purgeCallsignInput.trim().toLowerCase() !== identity.callsign.trim().toLowerCase()) {
-                                                    setPurgeError(`Please type "${identity.callsign}" exactly to confirm.`);
-                                                    return;
-                                                }
-                                                setIsPurging(true);
-                                                setPurgeError(null);
-                                                try {
-                                                    await purgeAccountApi();
-                                                    await wipeIdentity();
-                                                    localStorage.clear();
-                                                    setDeletionMode('purged');
-                                                    setTimeout(() => window.location.reload(), 1500);
-                                                } catch (e: any) {
-                                                    setPurgeError(e.message || 'Failed to purge account from node. Active escrow deals may need to be resolved first.');
-                                                } finally {
-                                                    setIsPurging(false);
-                                                }
-                                            }}
-                                            disabled={isPurging || purgeCallsignInput.trim().toLowerCase() !== identity.callsign.trim().toLowerCase()}
-                                            className="flex-1 py-2.5 rounded-xl bg-red-600 disabled:opacity-50 text-white font-bold border-none cursor-pointer hover:bg-red-700 text-xs shadow-sm"
-                                        >
-                                            {isPurging ? 'Purging...' : '🔥 Purge Account'}
-                                        </button>
+                                            className="w-full py-2.5 px-3 rounded-xl border border-red-300 dark:border-red-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white font-mono text-xs disabled:opacity-50"
+                                            autoCapitalize="none"
+                                        />
+                                        {purgeError && (
+                                            <div id="purge-error-alert" role="alert" className="p-3 rounded-xl bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 text-xs font-semibold">
+                                                {purgeError}
+                                            </div>
+                                        )}
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                onClick={() => setDeletionMode('options')}
+                                                disabled={isPurging}
+                                                className="flex-1 py-2.5 rounded-xl bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold border border-nature-200 dark:border-nature-700 cursor-pointer disabled:cursor-not-allowed text-xs"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    if (!isPurgeConfirmed) {
+                                                        setPurgeError(`Please type "${identity?.callsign || ''}" or "DELETE" exactly to confirm.`);
+                                                        return;
+                                                    }
+                                                    setIsPurging(true);
+                                                    setPurgeError(null);
+                                                    try {
+                                                        await purgeAccountApi();
+                                                        await wipeIdentity();
+                                                        localStorage.clear();
+                                                        setDeletionMode('purged');
+                                                        setTimeout(() => window.location.reload(), 1500);
+                                                    } catch (e: any) {
+                                                        setPurgeError(e.message || 'Failed to purge account from node. Active escrow deals may need to be resolved first.');
+                                                    } finally {
+                                                        setIsPurging(false);
+                                                    }
+                                                }}
+                                                disabled={isPurging || !isPurgeConfirmed}
+                                                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold border-none transition-colors text-xs shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 hover:bg-red-700"
+                                            >
+                                                {isPurging ? 'Purging...' : '🔥 Purge Account'}
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                );
+                            })()}
 
                             {deletionMode === 'purged' && (
                                 <div className="bg-red-100 dark:bg-red-900/30 rounded-2xl p-4 text-center border border-red-200 dark:border-red-800">

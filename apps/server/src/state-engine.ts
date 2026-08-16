@@ -3005,19 +3005,31 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         return { ok: true, message: 'Account is already pruned' };
     }
 
-    // 1. Guard against active or pending escrows (as buyer or seller)
-    const activeEscrows = db.prepare(`
-        SELECT COUNT(*) as c FROM marketplace_transactions 
-        WHERE (buyer_pubkey = ? OR seller_pubkey = ?) 
-          AND status IN ('requested', 'pending')
-    `).get(publicKey, publicKey) as any;
-
-    if (activeEscrows && activeEscrows.c > 0) {
-        throw new Error('Cannot delete account while you have active deals in escrow. Please complete or cancel pending trades first.');
-    }
-
-    // 2. Atomically settle balance, anonymize profile, cancel listings, and purge personal records
+    // Atomically check escrows, settle balance, anonymize profile, cancel listings, and purge personal records
     conservingTransaction(() => {
+        // 1. Guard against active or pending escrows (as buyer or seller)
+        const activeEscrows = db.prepare(`
+            SELECT COUNT(*) as c FROM marketplace_transactions 
+            WHERE (buyer_pubkey = ? OR seller_pubkey = ?) 
+              AND status IN ('requested', 'pending')
+        `).get(publicKey, publicKey) as any;
+
+        if (activeEscrows && activeEscrows.c > 0) {
+            throw new Error('Cannot delete account while you have active deals in escrow. Please complete or cancel pending trades first.');
+        }
+
+        // 2. Guard against in-flight cross-node settlements
+        const activeSettlements = db.prepare(`
+            SELECT COUNT(*) as c FROM settlements
+            WHERE (buyer_pubkey = ? OR seller_pubkey = ?)
+              AND state IN ('escrowed', 'reserved', 'committed', 'held')
+        `).get(publicKey, publicKey) as any;
+
+        if (activeSettlements && activeSettlements.c > 0) {
+            throw new Error('Cannot delete account while you have cross-node settlements in flight. Please wait for pending settlements to finalize.');
+        }
+
+        // 3. Settle balance with Commons Pool
         const account = ledger.getAccount(publicKey);
         const balance = account.balance;
         const who = publicKey.slice(0, 8);
@@ -3031,7 +3043,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
 
         const now = new Date().toISOString();
 
-        // Anonymize member record and free callsign for reuse
+        // 4. Anonymize member record and reset privileges
         db.prepare(`
             UPDATE members 
             SET status = 'pruned',
@@ -3041,12 +3053,17 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 contact_value = NULL,
                 contact_visibility = NULL,
                 archetype = NULL,
+                can_vouch = 0,
+                vouch_credit = 0,
+                can_operate = 0,
+                credit_frozen = 0,
+                elder_vouched_by = NULL,
                 profile_updated_at = ?,
                 updated_at = ?
             WHERE public_key = ?
         `).run(now, now, publicKey);
 
-        // Cancel active/pending listings
+        // 5. Cancel active/pending listings
         db.prepare(`
             UPDATE posts 
             SET status = 'cancelled', 
@@ -3055,19 +3072,31 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE author_pubkey = ? AND status IN ('active', 'pending')
         `).run(now, publicKey);
 
-        // Purge private device tokens, communication links, and recovery metadata
+        // 6. Purge private device tokens, communication links, and recovery metadata
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
-        try { db.prepare("DELETE FROM recovery_shares WHERE target_pubkey = ? OR guardian_pubkey = ?").run(publicKey, publicKey); } catch { }
-        try { db.prepare("DELETE FROM recovery_requests WHERE target_pubkey = ?").run(publicKey); } catch { }
-        try { db.prepare("DELETE FROM recovery_approvals WHERE target_pubkey = ? OR guardian_pubkey = ?").run(publicKey, publicKey); } catch { }
-        try { db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey); } catch { }
-        try { db.prepare("DELETE FROM recovery_pin WHERE public_key = ?").run(publicKey); } catch { }
-        try { db.prepare("DELETE FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").run(publicKey, publicKey); } catch { }
-        try { db.prepare("DELETE FROM treasury_operators WHERE operator_pubkey = ?").run(publicKey); } catch { }
-
-        // Write tombstone for delta-sync replication
-        try { writeTombstone('members', publicKey); } catch { }
+        try {
+            db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)").run(publicKey, publicKey);
+        } catch { }
+        try {
+            db.prepare("DELETE FROM recovery_approvals WHERE guardian_pubkey = ? OR request_id IN (SELECT id FROM recovery_requests WHERE old_pubkey = ? OR new_pubkey = ?)").run(publicKey, publicKey, publicKey);
+        } catch { }
+        try {
+            db.prepare("DELETE FROM recovery_requests WHERE old_pubkey = ? OR new_pubkey = ?").run(publicKey, publicKey);
+        } catch { }
+        try {
+            db.prepare("DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)").run(publicKey);
+            db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
+        } catch { }
+        try { db.prepare("DELETE FROM recovery_pin WHERE owner_pubkey = ?").run(publicKey); } catch { }
+        try {
+            const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
+            for (const f of existingFriends) {
+                try { writeTombstone('friends', `${f.owner_pubkey}|${f.friend_pubkey}`); } catch { }
+            }
+            db.prepare("DELETE FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").run(publicKey, publicKey);
+        } catch { }
+        try { db.prepare("DELETE FROM treasury_operators WHERE member_pubkey = ? OR treasury_pubkey = ?").run(publicKey, publicKey); } catch { }
     });
 
     broadcast({ type: 'profile_updated', publicKey });

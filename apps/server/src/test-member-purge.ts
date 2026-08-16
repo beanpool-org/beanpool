@@ -170,6 +170,14 @@ async function runTests() {
     const inv5 = generateInvite(admin.pubKeyHex)!;
     redeemInvite(inv5.code, dave.pubKeyHex, 'DaveTester');
 
+    // Test 401 on unsigned purge request
+    const unauthRes = await fetch(`https://localhost:${port}/api/member/purge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'purge_account' }),
+    });
+    assert(unauthRes.status === 401, 'Unsigned POST /api/member/purge is rejected with 401');
+
     function signPayload(method: string, path: string, ts: number, nonce: string, bodyStr: string, privKey: crypto.KeyObject): string {
         const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyStr}`;
         return crypto.sign(null, Buffer.from(canonical), privKey).toString('base64');
@@ -197,8 +205,9 @@ async function runTests() {
     const json = await res.json() as any;
     assert(json.ok === true, 'Response payload contains ok: true');
 
-    const daveMember = getMember(dave.pubKeyHex);
-    assert(daveMember?.status === 'pruned', 'Dave account was pruned via HTTP endpoint');
+    const daveRow = db.prepare("SELECT * FROM members WHERE public_key = ?").get(dave.pubKeyHex) as any;
+    assert(daveRow?.status === 'pruned', 'Dave account was pruned via HTTP endpoint');
+    assert(daveRow?.can_vouch === 0 && daveRow?.vouch_credit === 0, 'Privileges were revoked upon purge');
 
     console.log(`\n========================================`);
     console.log(`Test Results: ${passed}/${run} assertions passed`);

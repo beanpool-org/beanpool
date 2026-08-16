@@ -68,7 +68,9 @@ without re-opening the decision with Marty.
 - **The PWA is excluded from the keeper system entirely** — cannot enrol, approve, or
   recover. PWA users are **12-word sovereign only**. Confirmed again by Marty 2026-08-11:
   *"PWA is an edge case — the far greater % of users will be native."* This means **native is
-  the entire SSO surface**.
+  the entire SSO surface**. (Note: Apple's non-wildcard redirect constraint only affects browser-based
+  OAuth redirects; Native iOS uses `expo-apple-authentication` in-process directly with Apple without
+  central web redirects. See `docs/recovery-model.md` §240).
 - **Keepers get no push notification.** The member rings 2 of their 5 friends by phone and
   asks. Silence is the signal — an unexpected notification would train friends to tap
   "release" without thinking, and would tell an attacker who to target.

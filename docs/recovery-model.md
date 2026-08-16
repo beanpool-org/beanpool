@@ -492,3 +492,19 @@ no capability that exists. Worth revisiting if a real community ever folds.
 and no token has ever arrived, because nothing in any client can produce one. Every claim
 about the SSO tier stays theoretical until that exists, and nothing decided here changes
 it.
+
+---
+
+## Sign in with Apple & `auth.beanpool.org` Architecture (#240)
+
+### 1. The Wildcard Constraint (Web / PWA Only)
+Apple does **not** allow wildcard domains (`*.beanpool.org` or `*.<community-domain>`) for web-based Sign in with Apple (*Services IDs*). In standard OAuth web redirects, every target domain must be verified individually with Apple by serving a domain association file (`/.well-known/apple-developer-domain-association.txt`).
+
+Because federated BeanPool nodes run on dynamic, self-hosted domains that cannot be allowlisted in advance in Apple's Developer Console, **browser-based OAuth redirects cannot land directly on arbitrary community nodes**.
+
+### 2. Resolution & PWA Scope
+- **Native iOS (`expo-apple-authentication`)**: Runs in-process via Apple's native ASAuthorization framework. Apple signs the OIDC `id_token` on-device and delivers it directly to the native app, which posts it to the community node (`/api/recovery/shares/sso`). **Native iOS SSO is completely unblocked and does not use or require `auth.beanpool.org` or web redirects.**
+- **Web PWA (Sovereign Only)**: As settled in the recovery architecture, PWA members operate in sovereign mode with 12-word recovery phrases. The web-based OAuth redirect flow is therefore not required in production today.
+- **Central Domain Reservation (`auth.beanpool.org`)**: `auth.beanpool.org` with callback `https://auth.beanpool.org/apple/callback` remains registered under Services ID `org.beanpool.web` in Apple's Developer Console as the designated central callback router if browser-based Apple authentication is ever introduced for web clients in the future.
+- **No `.p8` Private Key Required**: Tokens are verified on nodes against Apple's public JWKS keys without client secrets. No long-lived server `.p8` private keys are used or maintained.
+

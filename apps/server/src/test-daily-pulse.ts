@@ -132,6 +132,18 @@ async function main() {
     const messages = db.prepare("SELECT COUNT(*) as c FROM messages WHERE author_pubkey = ?").get(pulsePubkey) as any;
     assert((messages?.c || 0) === 0, 'No outbound direct messages sent by Daily Pulse author');
 
+    // 9. Test Callsign Collision with Regular Member
+    // Remove treasury first to simulate a scenario where a regular member took 'Daily Pulse'
+    db.prepare("DELETE FROM members WHERE public_key = ?").run(pulsePubkey);
+    const collideePubkey = 'collidee_pubkey_1234567890123456';
+    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, is_treasury) VALUES (?, 'Daily Pulse', 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(collideePubkey);
+
+    const newPulsePubkey = ensurePulseTreasury();
+    assert(newPulsePubkey !== collideePubkey, 'Treasury creation does not hijack regular member account');
+    const collideeAfter = db.prepare("SELECT callsign, is_treasury FROM members WHERE public_key = ?").get(collideePubkey) as any;
+    assert(collideeAfter.is_treasury === 0, 'Colliding member was not escalated to is_treasury=1');
+    assert(collideeAfter.callsign.startsWith('Daily Pulse '), `Colliding member callsign safely renamed: "${collideeAfter.callsign}"`);
+
     console.log(`\nDaily Pulse Test Summary: ${passed}/${run} assertions passed.`);
     if (passed < run) {
         process.exit(1);

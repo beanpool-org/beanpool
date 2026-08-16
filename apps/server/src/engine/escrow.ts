@@ -78,7 +78,7 @@ export function requestPost(
     if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
     const author = getMember(db, post.author_pubkey);
-    if (author?.callsign?.toLowerCase() === 'daily pulse') {
+    if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');
     }
 
@@ -295,7 +295,7 @@ export function acceptPost(
     if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
     const author = getMember(db, post.authorPublicKey);
-    if (author?.callsign?.toLowerCase() === 'daily pulse') {
+    if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');
     }
 

@@ -35,16 +35,19 @@ function getStmtGetActivePulse() {
 
 /**
  * Ensures the system Treasury identity for "Daily Pulse" exists.
- * If a regular member already registered "Daily Pulse", it promotes it to is_treasury = 1.
+ * If a regular member already registered "Daily Pulse", it safely renames that member
+ * and creates the official system treasury with private keys.
  */
 export function ensurePulseTreasury(): string {
     const existing = getStmtFindPulseMember().get(PULSE_CALLSIGN) as { public_key: string; is_treasury: number } | undefined;
 
     if (existing?.public_key) {
-        if (!existing.is_treasury) {
-            db.prepare("UPDATE members SET is_treasury = 1 WHERE public_key = ?").run(existing.public_key);
+        if (existing.is_treasury === 1) {
+            return existing.public_key;
         }
-        return existing.public_key;
+        // Non-treasury member collided with the reserved callsign — rename to free it
+        const newCallsign = `Daily Pulse ${existing.public_key.substring(0, 6)}`;
+        db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(newCallsign, existing.public_key);
     }
 
     const created = createTreasury(PULSE_CALLSIGN, PULSE_AVATAR, 0, { systemCreated: true });
@@ -61,7 +64,9 @@ export function ensurePulseTreasury(): string {
 export function rotateDailyPulse(now: Date = new Date()): { post: any; entry: DailyPulseEntry } {
     const pulsePubkey = ensurePulseTreasury();
     const entry = getTodaysPulseEntry(now);
-    const pulseId = `pulse_${now.toISOString().split('T')[0]}`;
+    const localEpochMs = now.getTime() - (now.getTimezoneOffset() * 60 * 1000);
+    const localDateStr = new Date(localEpochMs).toISOString().split('T')[0];
+    const pulseId = `pulse_${localDateStr}`;
 
     return db.transaction(() => {
         // 1. Clean up any previous pulse offers that are NOT today's deterministic pulse ID
@@ -69,17 +74,15 @@ export function rotateDailyPulse(now: Date = new Date()): { post: any; entry: Da
             "UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey = ? AND id != ? AND active = 1 AND status = 'active'"
         ).run(pulsePubkey, pulseId);
 
-        // 2. Check if today's pulse post already exists in the database
-        const existingToday = db.prepare("SELECT * FROM posts WHERE id = ?").get(pulseId) as any;
+        // 2. Check if today's pulse post already exists in the database for the Daily Pulse treasury
+        const existingToday = db.prepare("SELECT * FROM posts WHERE id = ? AND author_pubkey = ?").get(pulseId, pulsePubkey) as any;
         if (existingToday) {
-            if (existingToday.active !== 1 || existingToday.status !== 'active') {
-                db.prepare(
-                    "UPDATE posts SET active = 1, status = 'active', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
-                ).run(pulseId);
-            }
+            db.prepare(
+                "UPDATE posts SET active = 1, status = 'active', title = ?, description = ?, category = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ?"
+            ).run(entry.headline, entry.body, entry.category || 'general', pulseId, pulsePubkey);
             const activePosts = getPosts({ id: pulseId });
             const post = activePosts[0] || existingToday;
-            console.log(`[DailyPulse] Retained existing Daily Pulse for ${now.toISOString().split('T')[0]}: "${entry.headline}" (ID: ${post.id})`);
+            console.log(`[DailyPulse] Retained existing Daily Pulse for ${localDateStr}: "${entry.headline}" (ID: ${post.id})`);
             return { post, entry };
         }
 

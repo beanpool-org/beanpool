@@ -109,6 +109,7 @@ import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createPinRoutes } from './routes/pin.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
+import { createPairingRoutes } from './routes/pairing.js';
 import type { RouteDeps } from './routes/types.js';
 
 
@@ -883,6 +884,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createKeeperRoutes(deps),
         createPinRoutes(deps),
         createRecoveryCollectRoutes(deps),
+        createPairingRoutes(deps),
         // Temporary Apple `sub` parity probe. Registers nothing unless APPLE_PROBE=1
         // (the domain-association file aside) — see routes/apple-probe.ts.
         createAppleProbeRoutes(),

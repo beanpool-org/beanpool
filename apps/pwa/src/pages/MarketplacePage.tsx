@@ -904,7 +904,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* 2. Unaccepted Posts Displayed to Browsers */}
                 {isPulsePost ? (
                     <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-2xl p-5 text-center my-4 shadow-sm">
-                        <span className="text-3xl mb-2 block">🗞️</span>
+                        <span className="text-3xl mb-2 block" aria-hidden="true">🗞️</span>
                         <h4 className="font-bold text-amber-950 dark:text-amber-100 text-base mb-1">Feeling Inspired?</h4>
                         <p className="text-sm text-amber-900/90 dark:text-amber-200/90 mb-4 leading-relaxed max-w-md mx-auto">
                             The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.
@@ -914,12 +914,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 setSelectedPost(null);
                                 onNavigate?.('map-post');
                             }}
-                            className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-sm transition-colors shadow-md inline-flex items-center gap-2"
+                            className="px-6 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl text-sm transition-colors shadow-md inline-flex items-center gap-2"
                         >
-                            <span>💡</span> Post Your Own Offer →
+                            <span aria-hidden="true">💡</span> Post Your Own Offer →
                         </button>
                         <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-3 font-medium">
-                            🗞️ Daily Pulse — a daily thought for the post-extraction economy
+                            <span aria-hidden="true">🗞️ </span>Daily Pulse — a daily thought for the post-extraction economy
                         </p>
                     </div>
                 ) : !isOwnPost && selectedPost.status === 'active' && !isAcceptedByMe && (

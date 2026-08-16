@@ -96,7 +96,11 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </span>
 
                     {/* Daily Pulse or Needs/Offers pill */}
-                    {isPulse ? pulsePill : (
+                    {isPulse ? (
+                        <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 shadow-sm">
+                            PULSE
+                        </span>
+                    ) : (
                         <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
                             post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
                             : 'bg-orange-100 text-orange-850 dark:bg-orange-900/40 dark:text-orange-400'

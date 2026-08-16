@@ -1409,8 +1409,21 @@ export default function WelcomeScreen() {
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Next →</Text>}
                         </Pressable>
 
-                        <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back">
-                            <Text style={styles.backBtnText}>← Back</Text>
+                        {/* Restore Existing Identity CTA for returning members (#98) */}
+                        <View style={styles.restorePromptBox}>
+                            <Text style={styles.restorePromptLabel}>Already have an account or switching phones?</Text>
+                            <Pressable
+                                style={styles.restorePromptBtn}
+                                onPress={() => { setMode('member'); setError(null); }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Restore existing identity"
+                            >
+                                <Text style={styles.restorePromptBtnText}>🔑 Restore Existing Identity →</Text>
+                            </Pressable>
+                        </View>
+
+                        <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back to Home">
+                            <Text style={styles.backBtnText}>← Back to Home</Text>
                         </Pressable>
 
                         <Text style={styles.tosText}>
@@ -1479,8 +1492,8 @@ export default function WelcomeScreen() {
                             <Text style={styles.socialRecoverBtnText}>🛡️ Recover via Guardians</Text>
                         </Pressable>
 
-                        <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back">
-                            <Text style={styles.backBtnText}>← Back</Text>
+                        <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back to Home">
+                            <Text style={styles.backBtnText}>← Back to Home</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
@@ -1687,8 +1700,8 @@ export default function WelcomeScreen() {
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Recover Identity</Text>}
                         </Pressable>
 
-                        <Pressable style={styles.backBtn} onPress={() => { setMode('member'); setError(null); }} accessibilityRole="button" accessibilityLabel="Back">
-                            <Text style={styles.backBtnText}>← Back</Text>
+                        <Pressable style={styles.backBtn} onPress={() => { setMode('member'); setError(null); }} accessibilityRole="button" accessibilityLabel="Back to Restore Options">
+                            <Text style={styles.backBtnText}>← Back to Restore Options</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
@@ -1784,9 +1797,9 @@ export default function WelcomeScreen() {
                                 onPress={() => { setMode('member'); setError(null); }}
                                 disabled={loading}
                                 accessibilityRole="button"
-                                accessibilityLabel="Back"
+                                accessibilityLabel="Back to Restore Options"
                             >
-                                <Text style={styles.backBtnText}>← Back</Text>
+                                <Text style={styles.backBtnText}>← Back to Restore Options</Text>
                             </Pressable>
                         </View>
                     </ScrollView>
@@ -1840,8 +1853,13 @@ export default function WelcomeScreen() {
                     </Pressable>
                 ))}
 
-                <Pressable style={styles.restoreLink} onPress={() => setMode('member')} accessibilityRole="button">
-                    <Text style={styles.restoreLinkText}>New phone, or reinstalled the app? Restore my account →</Text>
+                <Pressable
+                    style={styles.restoreSecondaryBtn}
+                    onPress={() => setMode('member')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Restore existing identity"
+                >
+                    <Text style={styles.restoreSecondaryBtnText}>🔑 Already a Member? Restore Account →</Text>
                 </Pressable>
             </View>
         </SafeAreaView>
@@ -1863,8 +1881,63 @@ const styles = StyleSheet.create({
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
     tosLink: { color: palette.blue600, textDecorationLine: 'underline' },
     inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
-    restoreLink: { marginTop: 28, padding: 8 },
-    restoreLinkText: { color: palette.gray600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    restoreSecondaryBtn: {
+        marginTop: 20,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderRadius: 14,
+        backgroundColor: colors.surface.card,
+        borderWidth: 1,
+        borderColor: colors.border.default,
+        alignItems: 'center',
+        width: '100%',
+        minHeight: 48,
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+        elevation: 1,
+    },
+    restoreSecondaryBtnText: {
+        color: palette.blue600,
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    restorePromptBox: {
+        marginTop: 16,
+        padding: 14,
+        borderRadius: 14,
+        backgroundColor: 'rgba(59, 130, 246, 0.08)',
+        borderWidth: 1,
+        borderColor: 'rgba(59, 130, 246, 0.25)',
+        alignItems: 'center',
+        width: '100%',
+    },
+    restorePromptLabel: {
+        color: colors.text.secondary,
+        fontSize: 13,
+        marginBottom: 8,
+        fontWeight: '500',
+        textAlign: 'center',
+    },
+    restorePromptBtn: {
+        width: '100%',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: palette.blue600,
+        backgroundColor: 'transparent',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 44,
+    },
+    restorePromptBtnText: {
+        color: palette.blue600,
+        fontSize: 14,
+        fontWeight: '700',
+    },
     title: { fontSize: 20, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 },
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },

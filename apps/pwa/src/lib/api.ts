@@ -1167,3 +1167,22 @@ export async function submitPricingReportApi(
     });
 }
 
+// ===================== LIVING ACTIVITY WATERFALL (#208) =====================
+
+export interface ActivityFeedItem {
+    id: number;
+    eventType: 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created';
+    actorPubkey: string;
+    actorCallsign?: string;
+    targetPubkey?: string;
+    targetCallsign?: string;
+    metadata?: Record<string, any>;
+    createdAt: string;
+}
+
+export async function getActivityFeedApi(limit: number = 50, offset: number = 0): Promise<{
+    feed: ActivityFeedItem[];
+}> {
+    return request<any>('GET', `/api/activity/feed?limit=${limit}&offset=${offset}`);
+}
+

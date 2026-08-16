@@ -5,6 +5,7 @@
 import { db } from '../db/db.js';
 import { ledger } from './ledger.js';
 import { getMember, getProfile, type Member, type MemberProfile } from '@beanpool/engine';
+import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 
 /**
  * Record activity timestamp for a member.
@@ -170,6 +171,11 @@ export function registerMemberInternal(
     ledger.initializeGenesisAccount(publicKey);
     const member = getMember(db, publicKey)!;
     broadcast({ type: 'member_joined', member });
+    try {
+        recordFeedActivity('member_joined', publicKey, null, { callsign });
+    } catch (e) {
+        console.warn('[ActivityFeed] Could not record member_joined:', e);
+    }
     console.log(`👤 New member: ${callsign} invited by ${invitedBy ? invitedBy.substring(0, 12) : 'system'}...`);
     return member;
 }

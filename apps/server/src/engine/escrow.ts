@@ -4,6 +4,7 @@
 
 import { isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { recordActivity } from '../db/activity-feed-db.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
 import crypto from 'node:crypto';
 import {
@@ -444,6 +445,15 @@ export function completePostTransaction(
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_completed', transaction: tx });
+    try {
+        recordActivity('trade_completed', row.seller_pubkey, row.buyer_pubkey, {
+            postId: row.post_id,
+            postTitle: post?.title,
+            credits: releaseCredits,
+        });
+    } catch (e) {
+        console.warn('[ActivityFeed] Could not record trade_completed:', e);
+    }
 
     const netPayout = releaseCredits - (releaseResult?.taxFee ?? 0);
     try {

@@ -13,6 +13,7 @@ import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
+import { ActivityWaterfall } from '../components/ActivityWaterfall';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
@@ -2021,18 +2022,26 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </div>
                         )}
 
+                        {filtered.length > 0 && (
+                            <ActivityWaterfall isFullView={false} />
+                        )}
+
                         {filtered.length === 0 ? (
-                            <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-3xl p-10 mt-2 text-center shadow-soft">
-                                <div className="text-5xl opacity-30 mb-4">
-                                    {searchQuery.trim() ? '🔍' : radiusSettings ? '📍' : '🛒'}
+                            (searchQuery.trim() || radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all' || beansOnly || foundingOnly || posts.length > 0) ? (
+                                <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-3xl p-10 mt-2 text-center shadow-soft">
+                                    <div className="text-5xl opacity-30 mb-4" aria-hidden="true">
+                                        {searchQuery.trim() ? '🔍' : radiusSettings ? '📍' : '🛒'}
+                                    </div>
+                                    <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">No items found</h4>
+                                    <p className="text-nature-500 dark:text-nature-400 text-sm">
+                                        {searchQuery.trim()
+                                            ? `No matches for "${searchQuery}".`
+                                            : 'Try adjusting your filters or expanding your search to see more results.'}
+                                    </p>
                                 </div>
-                                <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">No items found</h4>
-                                <p className="text-nature-500 dark:text-nature-400 text-sm">
-                                    {searchQuery.trim() ? `No matches for "${searchQuery}".`
-                                        : radiusSettings ? 'Expand your radius to see more posts.'
-                                        : 'The market is quiet right now. Post an offer!'}
-                                </p>
-                            </div>
+                            ) : (
+                                <ActivityWaterfall isFullView={true} />
+                            )
                         ) : (() => {
                             if (viewMode === 'grid') {
                                 return (

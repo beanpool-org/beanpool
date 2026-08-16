@@ -938,3 +938,17 @@ CREATE TABLE IF NOT EXISTS pricing_reports (
 CREATE INDEX IF NOT EXISTS idx_pricing_reports_status ON pricing_reports(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_pricing_reports_item ON pricing_reports(item_id);
 
+-- ===================== LIVING ACTIVITY WATERFALL (#208) =====================
+-- Real-time ambient community activity feed (joins, completed trades, ratings, new posts).
+CREATE TABLE IF NOT EXISTS activity_feed (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type    TEXT NOT NULL CHECK (event_type IN ('member_joined', 'trade_completed', 'rating_given', 'post_created')),
+    actor_pubkey  TEXT NOT NULL,
+    target_pubkey TEXT,
+    metadata      TEXT,
+    created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_feed_event ON activity_feed(event_type, created_at DESC);
+

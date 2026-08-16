@@ -15,6 +15,7 @@ import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
+import { pruneOldActivity } from './db/activity-feed-db.js';
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
@@ -639,6 +640,14 @@ export function runMarketplaceHygiene(): void {
         db.prepare(`UPDATE marketplace_transactions SET last_reminded_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(row.id);
     }
     if (lingering.length > 0) console.log(`⏳ Nudged ${lingering.length} lingering escrow deal(s)`);
+
+    // 3. Prune old activity feed entries past 30-day retention
+    try {
+        const pruned = pruneOldActivity(30);
+        if (pruned > 0) console.log(`🌊 Pruned ${pruned} activity feed event(s) older than 30 days`);
+    } catch (e) {
+        console.warn('[ActivityFeed] Hygiene prune failed:', e);
+    }
 }
 
 function sweepSettledEscrowAccounts(): void {

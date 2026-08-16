@@ -4,6 +4,7 @@
 
 import { isSyntheticAccount, parseReachPeers, type PostReach } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -132,6 +133,11 @@ export function createPost(
 
     const post = getPosts(db, { id: finalId }).find(p => p.id === finalId)!;
     broadcast({ type: 'new_post', post });
+    try {
+        recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, credits });
+    } catch (e) {
+        console.warn('[ActivityFeed] Could not record post_created:', e);
+    }
     return post;
 }
 

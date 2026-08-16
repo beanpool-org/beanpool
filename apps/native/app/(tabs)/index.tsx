@@ -14,6 +14,7 @@ import { MyDealsSheet, usePendingDealsCount } from '../../components/MyDealsShee
 import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
 import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
+import { ActivityWaterfall } from '../../components/ActivityWaterfall';
 import { categoryEmoji, categoryLabel } from '../../constants/categories';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -822,7 +823,7 @@ export default function MarketScreen() {
 
     const selectedCategory = MARKETPLACE_CATEGORIES.find(c => c.id === categoryFilter);
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
-    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly;
+    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly || searchQuery.trim().length > 0;
 
     const freshTodayCount = posts.filter(post => {
         if (post.status !== 'active') return false;
@@ -1462,6 +1463,8 @@ export default function MarketScreen() {
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>Retry</Text>
                             </Pressable>
                         </View>
+                    ) : !hasActiveFilters ? (
+                        <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })} />
                     ) : (
                     <View style={{ padding: 32, alignItems: 'center' }}>
                         <Text style={{ fontSize: 40, opacity: 0.3, marginBottom: 16 }}>🛒</Text>
@@ -1469,19 +1472,15 @@ export default function MarketScreen() {
                             No items found
                         </Text>
                         <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', marginBottom: 20 }}>
-                            {hasActiveFilters
-                                ? 'Try adjusting your filters to see more results.'
-                                : 'The market is quiet right now.'}
+                            Try adjusting your filters to see more results.
                         </Text>
-                        {hasActiveFilters && (
-                            <Pressable
-                                accessibilityRole="button"
-                                style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 12 }}
-                                onPress={() => { setFilter('all'); setCategoryFilter('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); }}
-                            >
-                                <Text style={{ fontWeight: '700', color: palette.gray600, fontSize: 14 }}>Clear All Filters</Text>
-                            </Pressable>
-                        )}
+                        <Pressable
+                            accessibilityRole="button"
+                            style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 12 }}
+                            onPress={() => { setFilter('all'); setCategoryFilter('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); }}
+                        >
+                            <Text style={{ fontWeight: '700', color: palette.gray600, fontSize: 14 }}>Clear All Filters</Text>
+                        </Pressable>
                         <Pressable
                             accessibilityRole="button"
                             style={{ backgroundColor: palette.gray900, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}

@@ -1139,3 +1139,31 @@ export async function cancelPairingApi(sessionId: string): Promise<void> {
     }
 }
 
+// ===================== PRICING GUIDE (#206) =====================
+
+export async function getPricingGuideApi(category?: string, query?: string): Promise<{
+    items: import('@beanpool/core').PricingGuideItem[];
+    config: import('@beanpool/core').PricingConfig;
+    categories: import('@beanpool/core').PricingCategoryMeta[];
+}> {
+    const params = new URLSearchParams();
+    if (category && category !== 'all') params.set('category', category);
+    if (query) params.set('q', query);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return request<any>('GET', `/api/pricing-guide${qs}`);
+}
+
+export async function submitPricingReportApi(
+    itemId: string,
+    reportType: 'too_high' | 'too_low' | 'other',
+    comment?: string,
+    reporterPubkey?: string
+): Promise<{ success: boolean; reportId?: string }> {
+    return request<any>('POST', '/api/pricing-guide/report', {
+        itemId,
+        reportType,
+        comment,
+        reporterPubkey,
+    });
+}
+

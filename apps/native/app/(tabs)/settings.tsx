@@ -35,6 +35,7 @@ import { IncomingRecoveryApprovalModal } from '../../components/IncomingRecovery
 import { getPinStatus } from '../../utils/pin';
 import { ArchetypeQuizModal } from '../../components/ArchetypeQuizModal';
 import { parseArchetype, ARCHETYPES, type QuizResult } from '../../utils/archetypes';
+import { PricingGuideModal } from '../../components/PricingGuideModal';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -468,6 +469,7 @@ export default function SettingsScreen() {
     const [revealLoading, setRevealLoading] = useState(false);
     const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
     const [copiedWords, setCopiedWords] = useState(false);
+    const [showPricingGuide, setShowPricingGuide] = useState(false);
 
     const handleRevealWords = async () => {
         if (revealWords) {
@@ -1563,6 +1565,19 @@ export default function SettingsScreen() {
                         <View style={{ flex: 1 }}>
                             <Text style={styles.menuText}>View Recovery Phrase</Text>
                             <Text style={styles.menuSub}>View your 12-word backup seed</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+                </View>
+
+                {/* ─── Community Pricing Guide ─── */}
+                <Text style={styles.sectionHeader}>COMMUNITY PRICING GUIDE</Text>
+                <View style={styles.menuGroup}>
+                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => setShowPricingGuide(true)} accessibilityRole="button" accessibilityLabel="Open Community Pricing Guide">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💡</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Browse 500+ Item Estimates</Text>
+                            <Text style={styles.menuSub}>Search benchmark community prices & report feedback</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -2685,6 +2700,12 @@ export default function SettingsScreen() {
                 initialMode={quizInitialMode}
                 onClose={() => setShowQuizModal(false)}
                 onComplete={handleQuizComplete}
+            />
+
+            {/* Community Pricing Guide Modal */}
+            <PricingGuideModal
+                isOpen={showPricingGuide}
+                onClose={() => setShowPricingGuide(false)}
             />
             </ScrollView>
         </KeyboardAvoidingView>

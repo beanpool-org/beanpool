@@ -19,3 +19,4 @@ export * from './keeper-crypto.js';
 export * from './recovery-self-check.js';
 export * from './protocol.js';
 export * from './pairing-crypto.js';
+export * from './pricing-catalog.js';

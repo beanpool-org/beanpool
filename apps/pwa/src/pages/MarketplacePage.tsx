@@ -12,6 +12,7 @@ import { MarketplaceCard } from '../components/MarketplaceCard';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
+import { PricingGuideModal } from '../components/PricingGuideModal';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
@@ -163,6 +164,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('list');
     const [showFilters, setShowFilters] = useState(false);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+    const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [showDealsModal, setShowDealsModal] = useState(false);
     const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
 
@@ -1776,6 +1778,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     🌱 New members{foundingOnly ? ' ✓' : ''}
                 </button>
 
+                {/* Pricing Guide Button */}
+                <button
+                    onClick={() => setShowPricingGuide(true)}
+                    className="self-center mt-1 px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-400 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                    title="Browse benchmark community prices"
+                >
+                    💡 Pricing Guide
+                </button>
+
                 {/* Row 3: Symmetrical Filter Dropdowns (50% / 50% split) */}
                 <div className="grid grid-cols-2 gap-2 mt-0.5 mb-2.5">
                     {/* Category Dropdown Button */}
@@ -2240,6 +2251,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     setReviewStars(5);
                     setReviewComment('');
                     setPromptReviewForTx(review);
+                }}
+            />
+
+            <PricingGuideModal
+                isOpen={showPricingGuide}
+                onClose={() => setShowPricingGuide(false)}
+                reporterPubkey={identity?.publicKey}
+                onSelectOfferItem={() => {
+                    setShowPricingGuide(false);
+                    onNavigate?.('map-post');
                 }}
             />
 

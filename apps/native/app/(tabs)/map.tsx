@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CategoryPickerSheet } from '../../components/CategoryPickerSheet';
 import { PricingInfoModal } from '../../components/info-content/PricingInfoModal';
+import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
@@ -484,6 +485,7 @@ export default function MapScreen() {
     const [validationToast, setValidationToast] = useState('');
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [showPricingModal, setShowPricingModal] = useState(false);
+    const [showPricingGuideModal, setShowPricingGuideModal] = useState(false);
     const [pricingModalTab, setPricingModalTab] = useState<'guide' | 'tax'>('guide');
     const scrollViewRef = useRef<ScrollView>(null);
     const pickerRef = useRef<any>(null);
@@ -1486,7 +1488,24 @@ export default function MapScreen() {
                 </KeyboardAvoidingView>
             )}
 
-            <PricingInfoModal isOpen={showPricingModal} onClose={() => setShowPricingModal(false)} initialTab={pricingModalTab} />
+            <PricingInfoModal
+                isOpen={showPricingModal}
+                onClose={() => setShowPricingModal(false)}
+                initialTab={pricingModalTab}
+                onOpenFullCatalog={() => setShowPricingGuideModal(true)}
+            />
+
+            <PricingGuideModal
+                isOpen={showPricingGuideModal}
+                onClose={() => setShowPricingGuideModal(false)}
+                onSelectOfferItem={(item, effectivePrice) => {
+                    setPostType('offer');
+                    setPostTitle(item.name);
+                    setPostDescription(item.description);
+                    setPostCredits(String(effectivePrice));
+                    setShowNewPost(true);
+                }}
+            />
         </View>
     );
 }

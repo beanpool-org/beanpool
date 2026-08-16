@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -413,6 +414,12 @@ export function seedTreasuryOperatorsFromLegacyFlag(): number {
     } catch (e) {
         console.error('[DB] ⚠️  Could not seed treasury_operators from can_operate. Existing keepers may need re-assigning per enterprise.', e);
         return 0;
+    } finally {
+        try {
+            seedPricingGuideIfEmpty(false, db);
+        } catch (err) {
+            console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
+        }
     }
 }
 

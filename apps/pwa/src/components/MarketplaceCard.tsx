@@ -26,8 +26,8 @@ interface Props {
 
 export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES.find((c) => c.id === post.category);
-    const typeColor = POST_TYPE_COLORS[post.type];
-    const emoji = categoryConfig?.emoji ?? '📦';
+    const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
+    const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
 
     const nodeBadge = formatNodeName(
         remoteNode || (post as any)?._remoteNode || (post as any)?.originNode,
@@ -47,10 +47,17 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const youPill = isOwnPost ? (
         <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-300/50">👤 You</span>
     ) : null;
+    const pulsePill = isPulse ? (
+        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 shadow-sm">🗞️ Daily Pulse</span>
+    ) : null;
 
     const elderCard = isElder(authorEnergy);
-    const elderStyleGrid = elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.15)]' : '';
-    const elderStyleList = elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]' : '';
+    const elderStyleGrid = isPulse
+        ? 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.18)] bg-gradient-to-b from-amber-50/30 to-transparent dark:from-amber-950/20'
+        : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.15)]' : '';
+    const elderStyleList = isPulse
+        ? 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.15)] bg-amber-50/20 dark:bg-amber-950/20'
+        : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]' : '';
 
     if (viewMode === 'compact') {
         // Super Condensed row layout (doubles listings shown)
@@ -78,7 +85,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4 ml-3 flex-shrink-0">
+                <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                     {/* Compact Price */}
                     <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
                         {post.credits !== undefined ? post.credits : '?'}
@@ -88,13 +95,15 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         </span>
                     </span>
 
-                    {/* Needs / Offers pill */}
-                    <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
-                        post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
-                        : 'bg-orange-100 text-orange-850 dark:bg-orange-900/40 dark:text-orange-400'
-                    }`}>
-                        {post.type}
-                    </span>
+                    {/* Daily Pulse or Needs/Offers pill */}
+                    {isPulse ? pulsePill : (
+                        <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                            post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
+                            : 'bg-orange-100 text-orange-850 dark:bg-orange-900/40 dark:text-orange-400'
+                        }`}>
+                            {post.type}
+                        </span>
+                    )}
                 </div>
             </div>
         );
@@ -127,6 +136,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             }`}>
                                 {post.type}
                             </span>
+                            {pulsePill}
                             {youPill}
                             {pausedPill}
                             {categoryConfig && (
@@ -215,6 +225,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <span className={`font-bold text-nature-950 dark:text-white truncate text-xs mt-0.5`}>
                         {post.title}
                     </span>
+                    {pulsePill && <div className="mt-1">{pulsePill}</div>}
                     {youPill && <div className="mt-1">{youPill}</div>}
                     {pausedPill && <div className="mt-1">{pausedPill}</div>}
                 </div>

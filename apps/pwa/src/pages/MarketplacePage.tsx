@@ -500,6 +500,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // stayed enabled and called the ordinary accept on it — which the server now refuses, but a member
         // meeting that as a raw error alert is a worse version of the same bug.
         const isRemotePost = !!((selectedPost as any)._remoteNode ?? (selectedPost as any).originNode);
+        const isPulsePost = selectedPost.authorCallsign === 'Daily Pulse';
 
         // #143 step 5 — the link this member keeps for the community this listing actually came from, or
         // undefined. Keyed on `originNode` ONLY, never on `_remoteNode`: a client-side peer browse is not a
@@ -899,7 +900,27 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 )}
 
                 {/* 2. Unaccepted Posts Displayed to Browsers */}
-                {!isOwnPost && selectedPost.status === 'active' && !isAcceptedByMe && (
+                {isPulsePost ? (
+                    <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 rounded-2xl p-5 text-center my-4 shadow-sm">
+                        <span className="text-3xl mb-2 block">🗞️</span>
+                        <h4 className="font-bold text-amber-950 dark:text-amber-100 text-base mb-1">Feeling Inspired?</h4>
+                        <p className="text-sm text-amber-900/90 dark:text-amber-200/90 mb-4 leading-relaxed max-w-md mx-auto">
+                            The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.
+                        </p>
+                        <button
+                            onClick={() => {
+                                setSelectedPost(null);
+                                onNavigate?.('map-post');
+                            }}
+                            className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-sm transition-colors shadow-md inline-flex items-center gap-2"
+                        >
+                            <span>💡</span> Post Your Own Offer →
+                        </button>
+                        <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-3 font-medium">
+                            🗞️ Daily Pulse — a daily thought for the post-extraction economy
+                        </p>
+                    </div>
+                ) : !isOwnPost && selectedPost.status === 'active' && !isAcceptedByMe && (
                     <div style={{
                         display: 'flex', flexDirection: 'column', gap: '0.5rem',
                         marginTop: '0.75rem',
@@ -1207,7 +1228,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 )}
                 
                 {/* 3. Global Message Button (Visible to Non-Authors) */}
-                {!isOwnPost && (
+                {!isOwnPost && !isPulsePost && (
                     <div className="mt-2">
                         <button
                             onClick={handleMessageAuthor}
@@ -1891,6 +1912,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (foundingOnly) {
                     filtered = filtered.filter(p => p.authorFoundingNeeded);
                 }
+
+                // Pin Daily Pulse post to the top of the feed
+                filtered.sort((a, b) => {
+                    const isPulseA = a.authorCallsign === 'Daily Pulse';
+                    const isPulseB = b.authorCallsign === 'Daily Pulse';
+                    if (isPulseA && !isPulseB) return -1;
+                    if (!isPulseA && isPulseB) return 1;
+                    return 0;
+                });
 
                 // Compute fresh today count
                 const freshTodayCount = posts.filter(post => {

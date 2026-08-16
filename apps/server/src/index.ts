@@ -48,6 +48,7 @@ import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
+import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
@@ -186,6 +187,9 @@ async function main() {
 
     // Step 8.6: Automated Fleet Harvester (drift-triggered backups + 30-day archiving)
     initHarvester();
+
+    // Step 8.7: Daily Pulse scheduler (auto-rotates daily 0-Bean inspirational offer at 5 AM)
+    scheduleDailyPulse();
 
     // Step 9: Start cert renewal scheduler (checks every 24h)
     startRenewalScheduler();

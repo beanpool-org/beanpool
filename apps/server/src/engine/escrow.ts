@@ -77,6 +77,11 @@ export function requestPost(
     if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
     if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
+    const author = getMember(db, post.author_pubkey);
+    if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
+        throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');
+    }
+
     const isOffer = post.type === 'offer';
     if (isOffer) {
         if (!hasListedOffer(db, requesterPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
@@ -87,7 +92,6 @@ export function requestPost(
     }
 
     const requester = getMember(db, requesterPublicKey);
-    const author = getMember(db, post.author_pubkey);
     const finalCredits = post.price_type !== 'fixed' ? post.credits * hours! : post.credits;
 
     const payerPubkey = isOffer ? requesterPublicKey : post.author_pubkey;
@@ -289,6 +293,11 @@ export function acceptPost(
     if (!post) throw new Error('Post not found or not active');
     if (post.authorPublicKey === buyerPublicKey) throw new Error('Cannot accept your own post');
     if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');
+
+    const author = getMember(db, post.authorPublicKey);
+    if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
+        throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');
+    }
 
     if (post.type !== 'offer') {
         throw new Error('Only Offers can be 1-step accepted');

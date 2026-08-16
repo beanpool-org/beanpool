@@ -811,10 +811,10 @@ export default function MarketScreen() {
         return true;
     });
 
-    // Pin Daily Pulse to the top of the feed
+    // Pin Daily Pulse to the top of the feed (local only)
     filteredPosts.sort((a, b) => {
-        const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse';
-        const isPulseB = (b.author_callsign || b.authorCallsign) === 'Daily Pulse';
+        const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse' && !a.origin_node && !a.originNode;
+        const isPulseB = (b.author_callsign || b.authorCallsign) === 'Daily Pulse' && !b.origin_node && !b.originNode;
         if (isPulseA && !isPulseB) return -1;
         if (!isPulseA && isPulseB) return 1;
         return 0;
@@ -1200,14 +1200,14 @@ export default function MarketScreen() {
         const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
         const elderCard = !isPulse && isElder(item.author_energy_cycled);
         const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
-        
+
         const priceLabel = item.price_type === 'hourly' ? '/Hr' :
                            item.price_type === 'daily' ? '/Dy' :
                            item.price_type === 'weekly' ? '/Wk' :
                            item.price_type === 'monthly' ? '/Mo' : '';
 
-        const catEmoji = isPulse ? '🗞️' : categoryEmoji(item.category);
-        const catLabel = isPulse ? 'Daily Pulse' : categoryLabel(item.category);
+        const catEmoji = categoryEmoji(item.category);
+        const catLabel = categoryLabel(item.category);
 
         if (viewMode === 'grid') {
             return (
@@ -1227,7 +1227,7 @@ export default function MarketScreen() {
                         ) : (
                             <View style={[styles.gridImage, styles.gridFallback]}>
                                 <Text style={styles.gridFallbackEmoji}>
-                                    {catEmoji}
+                                    {isPulse ? '🗞️' : catEmoji}
                                 </Text>
                             </View>
                         )}

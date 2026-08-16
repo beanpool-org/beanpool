@@ -309,7 +309,7 @@ export default function PostDetailModal() {
             marginBottom: 16,
         },
         pulsePostOfferBtn: {
-            backgroundColor: palette.amber600,
+            backgroundColor: palette.amber700,
             paddingVertical: 12,
             paddingHorizontal: 20,
             borderRadius: 12,
@@ -1203,7 +1203,7 @@ export default function PostDetailModal() {
                 {/* 3. Unaccepted Posts Displayed to Browsers */}
                 {isPulsePost ? (
                     <View style={styles.pulseInspirationBox}>
-                        <Text style={styles.pulseIcon}>🗞️</Text>
+                        <Text style={styles.pulseIcon} aria-hidden={true} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants">🗞️</Text>
                         <Text style={styles.pulseInspirationTitle}>Feeling Inspired?</Text>
                         <Text style={styles.pulseInspirationText}>
                             The best way to participate in BeanPool is by offering your skills, surplus produce, or lending tools to your neighbors.
@@ -1216,7 +1216,9 @@ export default function PostDetailModal() {
                                 router.push({ pathname: '/(tabs)/map', params: { newPost: 'true' } });
                             }}
                         >
-                            <Text style={styles.pulsePostOfferBtnText}>💡 Post Your Own Offer →</Text>
+                            <Text style={styles.pulsePostOfferBtnText}>
+                                <Text aria-hidden={true} accessibilityElementsHidden={true}>💡 </Text>Post Your Own Offer →
+                            </Text>
                         </Pressable>
                         <Text style={styles.pulseFooterText}>
                             Daily Pulse — a daily thought for the post-extraction economy

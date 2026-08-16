@@ -440,8 +440,7 @@ export function completePostTransaction(
         recordActivity('trade_completed', row.seller_pubkey, row.buyer_pubkey, {
             postId: row.post_id,
             postTitle: post?.title,
-            credits: row.credits,
-            transactionId
+            credits: releaseCredits,
         });
     } catch (e) {
         console.warn('[ActivityFeed] Could not record trade_completed:', e);

@@ -98,7 +98,7 @@ export function getActivityFeed(limit: number = 50, offset: number = 0): Activit
 export function pruneOldActivity(days: number = 30): number {
     const res = db.prepare(`
         DELETE FROM activity_feed 
-        WHERE created_at < datetime('now', '-' || ? || ' days')
+        WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' days')
     `).run(Math.max(1, days));
 
     return res.changes;

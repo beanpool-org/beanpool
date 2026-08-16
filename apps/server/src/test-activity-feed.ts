@@ -118,7 +118,7 @@ async function main() {
     // Insert an artificially aged event (60 days old)
     db.prepare(`
         INSERT INTO activity_feed (event_type, actor_pubkey, created_at)
-        VALUES ('member_joined', 'pubkey-old', datetime('now', '-60 days'))
+        VALUES ('member_joined', 'pubkey-old', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'))
     `).run();
 
     const pruned = pruneOldActivity(30);

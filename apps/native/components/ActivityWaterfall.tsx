@@ -48,33 +48,38 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
     const [feed, setFeed] = useState<ActivityFeedItem[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const loadFeed = useCallback(async () => {
-        try {
-            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-            if (!anchorUrl) {
-                setLoading(false);
-                return;
-            }
-            const cleanUrl = anchorUrl.replace(/\/$/, '');
-            const res = await fetch(`${cleanUrl}/api/activity/feed?limit=25`);
-            if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data?.feed)) {
-                    setFeed(data.feed);
-                }
-            }
-        } catch (e) {
-            console.warn('[ActivityWaterfall] Error loading feed:', e);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
     useEffect(() => {
+        let isMounted = true;
+
+        async function loadFeed() {
+            try {
+                const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+                if (!anchorUrl) {
+                    if (isMounted) setLoading(false);
+                    return;
+                }
+                const cleanUrl = anchorUrl.replace(/\/$/, '');
+                const res = await fetch(`${cleanUrl}/api/activity/feed?limit=25`);
+                if (res.ok && isMounted) {
+                    const data = await res.json();
+                    if (Array.isArray(data?.feed)) {
+                        setFeed(data.feed);
+                    }
+                }
+            } catch (e) {
+                console.warn('[ActivityWaterfall] Error loading feed:', e);
+            } finally {
+                if (isMounted) setLoading(false);
+            }
+        }
+
         loadFeed();
         const interval = setInterval(loadFeed, 30_000);
-        return () => clearInterval(interval);
-    }, [loadFeed]);
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
+    }, []);
 
     if (loading && feed.length === 0) {
         return (
@@ -150,18 +155,23 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                                 </Text>
                             );
                             break;
-                        case 'rating_given':
+                        case 'rating_given': {
+                            const starCount = Math.max(1, Math.min(5, Math.round(Number(item.metadata?.stars) || 5)));
                             emoji = '⭐️';
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
                                     <Text style={styles.bold}>{actorName}</Text> rated{' '}
                                     <Text style={styles.bold}>{targetName}</Text>{' '}
-                                    <Text style={{ color: '#f59e0b', fontWeight: 'bold' }}>
-                                        {'★'.repeat(item.metadata?.stars || 5)}
+                                    <Text
+                                        style={{ color: '#f59e0b', fontWeight: 'bold' }}
+                                        accessibilityLabel={`${starCount} out of 5 stars`}
+                                    >
+                                        {'★'.repeat(starCount)}
                                     </Text>
                                 </Text>
                             );
                             break;
+                        }
                         case 'post_created':
                             emoji = '📍';
                             content = (
@@ -305,6 +315,9 @@ const styles = StyleSheet.create({
     primaryButton: {
         paddingHorizontal: 20,
         paddingVertical: 10,
+        minHeight: 44,
+        justifyContent: 'center',
+        alignItems: 'center',
         borderRadius: 12,
     },
     primaryButtonText: {

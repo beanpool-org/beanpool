@@ -17,10 +17,8 @@ export function createActivityRouter(deps: RouteDeps): Router {
      * Public endpoint to fetch recent community pulse activity.
      */
     router.get('/api/activity/feed', async (ctx) => {
-        if (!deps.rateLimit(ctx)) return;
-
-        const limit = Math.min(Number(ctx.query.limit) || 50, 100);
-        const offset = Math.max(0, Number(ctx.query.offset) || 0);
+        const limit = deps.clampLimit(ctx.query.limit, 50);
+        const offset = deps.clampOffset(ctx.query.offset);
 
         const feed = getActivityFeed(limit, offset);
         ctx.body = { feed };

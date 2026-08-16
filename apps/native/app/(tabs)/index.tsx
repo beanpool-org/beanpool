@@ -823,7 +823,7 @@ export default function MarketScreen() {
 
     const selectedCategory = MARKETPLACE_CATEGORIES.find(c => c.id === categoryFilter);
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
-    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly;
+    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly || searchQuery.trim().length > 0;
 
     const freshTodayCount = posts.filter(post => {
         if (post.status !== 'active') return false;

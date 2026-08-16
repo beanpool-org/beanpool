@@ -10,8 +10,6 @@ import { getActivityFeedApi, type ActivityFeedItem } from '../lib/api';
 
 interface Props {
     isFullView?: boolean;
-    onSelectMember?: (publicKey: string) => void;
-    onSelectCategory?: (category: string) => void;
 }
 
 function formatRelativeTime(isoDate: string): string {
@@ -25,10 +23,9 @@ function formatRelativeTime(isoDate: string): string {
     return `${diffDays}d ago`;
 }
 
-export function ActivityWaterfall({ isFullView = false, onSelectMember, onSelectCategory }: Props) {
+export function ActivityWaterfall({ isFullView = false }: Props) {
     const [feed, setFeed] = useState<ActivityFeedItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {
         let isMounted = true;
@@ -126,14 +123,21 @@ export function ActivityWaterfall({ isFullView = false, onSelectMember, onSelect
                                     </p>
                                 );
                                 break;
-                            case 'rating_given':
+                            case 'rating_given': {
+                                const starCount = Math.max(1, Math.min(5, Math.round(Number(item.metadata?.stars) || 5)));
                                 emoji = '⭐️';
                                 badgeBg = 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
                                 content = (
                                     <p className="text-xs text-zinc-800 dark:text-zinc-200">
                                         <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> rated{' '}
                                         <span className="font-bold text-zinc-900 dark:text-zinc-100">{targetName}</span>{' '}
-                                        <span className="font-bold text-amber-500">{'★'.repeat(item.metadata?.stars || 5)}</span>
+                                        <span
+                                            className="font-bold text-amber-500"
+                                            role="img"
+                                            aria-label={`${starCount} out of 5 stars`}
+                                        >
+                                            {'★'.repeat(starCount)}
+                                        </span>
                                         {item.metadata?.comment && (
                                             <span className="italic text-zinc-500 dark:text-zinc-400 block text-[11px] mt-0.5">
                                                 "{item.metadata.comment}"
@@ -142,6 +146,7 @@ export function ActivityWaterfall({ isFullView = false, onSelectMember, onSelect
                                     </p>
                                 );
                                 break;
+                            }
                             case 'post_created':
                                 emoji = '📍';
                                 badgeBg = 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800';
@@ -162,7 +167,10 @@ export function ActivityWaterfall({ isFullView = false, onSelectMember, onSelect
                                 key={item.id}
                                 className="flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
                             >
-                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 border ${badgeBg}`}>
+                                <div
+                                    className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 border ${badgeBg}`}
+                                    aria-hidden="true"
+                                >
                                     {emoji}
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -203,7 +211,7 @@ export function ActivityWaterfall({ isFullView = false, onSelectMember, onSelect
                                 key={item.id}
                                 className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium"
                             >
-                                <span>{item.eventType === 'member_joined' ? '🎉' : item.eventType === 'trade_completed' ? '✅' : item.eventType === 'rating_given' ? '⭐️' : '📍'}</span>
+                                <span aria-hidden="true">{item.eventType === 'member_joined' ? '🎉' : item.eventType === 'trade_completed' ? '✅' : item.eventType === 'rating_given' ? '⭐️' : '📍'}</span>
                                 {label}
                                 <span className="text-zinc-400 text-[10px] ml-0.5">{formatRelativeTime(item.createdAt)}</span>
                             </span>

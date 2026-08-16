@@ -4,6 +4,7 @@
 
 import { isSyntheticAccount } from '@beanpool/core';
 import { db, writeTombstone } from '../db/db.js';
+import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -50,6 +51,11 @@ export function addRating(
     }
 
     db.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, stars, comment, role, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, targetPubkey, raterPubkey, stars, comment.slice(0, 200), targetRole, transactionId, createdAt);
+    try {
+        recordActivity('rating_given', raterPubkey, targetPubkey, { stars, comment: comment.slice(0, 100), transactionId });
+    } catch (e) {
+        console.warn('[ActivityFeed] Could not record rating_given:', e);
+    }
     return { id, targetPubkey, raterPubkey, stars, comment: comment.slice(0, 200), role: targetRole, transactionId, createdAt };
 }
 

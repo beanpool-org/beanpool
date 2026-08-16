@@ -111,6 +111,7 @@ import { createPinRoutes } from './routes/pin.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
+import { createActivityRouter } from './routes/activity.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 
@@ -238,6 +239,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/marketplace/posts',        // marketplace board (reach is a discovery filter, not access control)
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
+    '/api/activity/feed',            // living activity waterfall community pulse feed (#208)
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -892,6 +894,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),
+        createActivityRouter(deps),
         // Temporary Apple `sub` parity probe. Registers nothing unless APPLE_PROBE=1
         // (the domain-association file aside) — see routes/apple-probe.ts.
         createAppleProbeRoutes(),

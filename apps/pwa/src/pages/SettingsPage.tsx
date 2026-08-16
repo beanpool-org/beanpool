@@ -9,7 +9,7 @@ import {
     getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getPendingRecoveryRequests,
     approveRecoveryRequest, rejectRecoveryRequest, getNotificationPreferences,
-    updateNotificationPreferences, getNodeStats
+    updateNotificationPreferences, getNodeStats, purgeAccountApi
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
@@ -300,7 +300,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
     const [copied, setCopied] = useState(false);
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [showPrivateKey, setShowPrivateKey] = useState(false);
-    const [wipeConfirmStep, setWipeConfirmStep] = useState(0);
+    const [deletionMode, setDeletionMode] = useState<'none' | 'options' | 'confirm_local' | 'confirm_purge' | 'purged'>('none');
+    const [purgeError, setPurgeError] = useState<string | null>(null);
+    const [purgeCallsignInput, setPurgeCallsignInput] = useState('');
+    const [isPurging, setIsPurging] = useState(false);
 
     const [customNodeUrl, setCustomNodeUrl] = useState(() => getNodeApiUrl());
     const [testingNode, setTestingNode] = useState(false);
@@ -645,50 +648,189 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                             </div>
                         </div>
 
-                        {/* ─── DANGER ZONE ─── */}
+                        {/* ─── DANGER ZONE: GRANULAR ACCOUNT DELETION (#99) ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-red-500 dark:text-red-400 mb-2 px-1">
                                 DANGER ZONE
                             </div>
-                            {wipeConfirmStep === 0 && (
+
+                            {deletionMode === 'none' && (
                                 <button
-                                    onClick={() => setWipeConfirmStep(1)}
-                                    className="w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 font-bold border border-red-200 dark:border-red-800 shadow-sm hover:bg-red-100 transition-colors text-left flex items-center justify-between cursor-pointer"
+                                    onClick={() => {
+                                        setDeletionMode('options');
+                                        setPurgeError(null);
+                                        setPurgeCallsignInput('');
+                                    }}
+                                    className="w-full p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 font-bold border border-red-200 dark:border-red-800 shadow-sm hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-left flex items-center justify-between cursor-pointer"
                                 >
-                                    <span className="flex items-center gap-3">⚠️ Delete Account</span>
+                                    <span className="flex items-center gap-3">⚠️ Account Deletion & Sign Out</span>
                                     <span>→</span>
                                 </button>
                             )}
-                            {wipeConfirmStep === 1 && (
-                                <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-5 border-2 border-red-300 dark:border-red-700 shadow-md">
-                                    <h4 className="text-red-800 dark:text-red-400 font-bold text-sm mb-2">⚠️ Are you absolutely sure?</h4>
-                                    <p className="text-red-700 dark:text-red-300 text-xs mb-4 leading-relaxed">
-                                        This will permanently delete your identity from this browser. You will lose access to your callsign and community balance unless you have saved your 12-word recovery phrase.
-                                    </p>
-                                    <div className="flex gap-3">
+
+                            {deletionMode === 'options' && (
+                                <div className="bg-red-50/70 dark:bg-red-950/30 rounded-2xl p-5 border-2 border-red-200 dark:border-red-900 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-red-900 dark:text-red-300 font-bold text-sm m-0">
+                                            Choose an Action
+                                        </h4>
                                         <button
-                                            onClick={() => setWipeConfirmStep(0)}
-                                            className="flex-1 py-2.5 rounded-xl bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold border border-nature-200 dark:border-nature-700 cursor-pointer text-xs"
+                                            onClick={() => setDeletionMode('none')}
+                                            className="text-xs text-nature-500 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer"
+                                        >
+                                            ✕ Cancel
+                                        </button>
+                                    </div>
+
+                                    {/* Option 1: Device Wipe Only */}
+                                    <div className="bg-white dark:bg-nature-900 p-4 rounded-xl border border-nature-200 dark:border-nature-800 space-y-2">
+                                        <div className="font-bold text-sm text-nature-900 dark:text-white flex items-center gap-2">
+                                            <span>🚪</span> Remove from This Device Only
+                                        </div>
+                                        <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                            Signs out and clears local browser storage. Your account and listings remain safely stored on the community node and can be restored anytime with your 12-word recovery phrase.
+                                        </p>
+                                        <button
+                                            onClick={() => setDeletionMode('confirm_local')}
+                                            className="mt-2 w-full py-2.5 rounded-xl bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 font-bold text-xs border-none cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors"
+                                        >
+                                            Sign Out (Device Only)
+                                        </button>
+                                    </div>
+
+                                    {/* Option 2: Full Node Data Purge */}
+                                    <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-300 dark:border-red-800 space-y-2">
+                                        <div className="font-bold text-sm text-red-900 dark:text-red-300 flex items-center gap-2">
+                                            <span>🗑️</span> Permanently Delete Account & Node Data
+                                        </div>
+                                        <p className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
+                                            Permanently purges your account from this community node and clears this device. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. <strong>Cannot be undone, even with your 12-word phrase.</strong>
+                                        </p>
+                                        <button
+                                            onClick={() => {
+                                                setDeletionMode('confirm_purge');
+                                                setPurgeError(null);
+                                                setPurgeCallsignInput('');
+                                            }}
+                                            className="mt-2 w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs border-none cursor-pointer transition-colors shadow-sm"
+                                        >
+                                            Permanently Delete Account
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {deletionMode === 'confirm_local' && (
+                                <div className="bg-white dark:bg-nature-900 rounded-2xl p-5 border-2 border-nature-200 dark:border-nature-700 space-y-3">
+                                    <h4 className="text-nature-900 dark:text-white font-bold text-sm m-0">
+                                        🚪 Confirm Device Sign Out
+                                    </h4>
+                                    <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                        Are you sure you want to remove your account from this device? Ensure you have written down your 12-word recovery phrase if you plan to sign in again later.
+                                    </p>
+                                    <div className="flex gap-3 pt-2">
+                                        <button
+                                            onClick={() => setDeletionMode('options')}
+                                            disabled={isPurging}
+                                            className="flex-1 py-2.5 rounded-xl bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold border-none cursor-pointer disabled:cursor-not-allowed text-xs"
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             onClick={async () => {
-                                                await wipeIdentity();
-                                                localStorage.clear();
-                                                setWipeConfirmStep(2);
-                                                setTimeout(() => window.location.reload(), 1500);
+                                                setIsPurging(true);
+                                                try {
+                                                    await wipeIdentity();
+                                                    localStorage.clear();
+                                                    setDeletionMode('purged');
+                                                    setTimeout(() => window.location.reload(), 1500);
+                                                } finally {
+                                                    setIsPurging(false);
+                                                }
                                             }}
-                                            className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold border-none cursor-pointer hover:bg-red-700 text-xs"
+                                            disabled={isPurging}
+                                            className="flex-1 py-2.5 rounded-xl bg-nature-900 dark:bg-white text-white dark:text-nature-900 font-bold border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-xs"
                                         >
-                                            🗑️ Wipe Forever
+                                            {isPurging ? 'Signing Out...' : 'Confirm Sign Out'}
                                         </button>
                                     </div>
                                 </div>
                             )}
-                            {wipeConfirmStep === 2 && (
+
+                            {deletionMode === 'confirm_purge' && (() => {
+                                const isPurgeConfirmed =
+                                    purgeCallsignInput.trim().toUpperCase() === 'DELETE' ||
+                                    purgeCallsignInput.trim().toLowerCase() === (identity?.callsign || '').trim().toLowerCase();
+
+                                return (
+                                    <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-5 border-2 border-red-300 dark:border-red-700 space-y-3">
+                                        <h4 className="text-red-900 dark:text-red-300 font-bold text-sm m-0">
+                                            ⚠️ Irreversible Node Purge
+                                        </h4>
+                                        <p className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
+                                            Type your callsign <strong>{identity?.callsign || 'CALLSIGN'}</strong> or <strong>DELETE</strong> to confirm permanent deletion of your account from this community node:
+                                        </p>
+                                        <input
+                                            id="purge-callsign-input"
+                                            type="text"
+                                            value={purgeCallsignInput}
+                                            onChange={(e) => setPurgeCallsignInput(e.target.value)}
+                                            placeholder={`Type "${identity?.callsign || ''}" or "DELETE"`}
+                                            aria-label={`Type callsign ${identity?.callsign || ''} or DELETE to confirm permanent deletion`}
+                                            aria-invalid={Boolean(purgeError)}
+                                            aria-describedby={purgeError ? 'purge-error-alert' : undefined}
+                                            disabled={isPurging}
+                                            className="w-full py-2.5 px-3 rounded-xl border border-red-300 dark:border-red-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white font-mono text-xs disabled:opacity-50"
+                                            autoCapitalize="none"
+                                        />
+                                        {purgeError && (
+                                            <div id="purge-error-alert" role="alert" className="p-3 rounded-xl bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 text-xs font-semibold">
+                                                {purgeError}
+                                            </div>
+                                        )}
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                onClick={() => setDeletionMode('options')}
+                                                disabled={isPurging}
+                                                className="flex-1 py-2.5 rounded-xl bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold border border-nature-200 dark:border-nature-700 cursor-pointer disabled:cursor-not-allowed text-xs"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    if (!isPurgeConfirmed) {
+                                                        setPurgeError(`Please type "${identity?.callsign || ''}" or "DELETE" exactly to confirm.`);
+                                                        return;
+                                                    }
+                                                    setIsPurging(true);
+                                                    setPurgeError(null);
+                                                    try {
+                                                        await purgeAccountApi();
+                                                        await wipeIdentity();
+                                                        localStorage.clear();
+                                                        setDeletionMode('purged');
+                                                        setTimeout(() => window.location.reload(), 1500);
+                                                    } catch (e: any) {
+                                                        setPurgeError(e.message || 'Failed to purge account from node. Active escrow deals may need to be resolved first.');
+                                                    } finally {
+                                                        setIsPurging(false);
+                                                    }
+                                                }}
+                                                disabled={isPurging || !isPurgeConfirmed}
+                                                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold border-none transition-colors text-xs shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 hover:bg-red-700"
+                                            >
+                                                {isPurging ? 'Purging...' : '🔥 Purge Account'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {deletionMode === 'purged' && (
                                 <div className="bg-red-100 dark:bg-red-900/30 rounded-2xl p-4 text-center border border-red-200 dark:border-red-800">
-                                    <p className="text-red-800 dark:text-red-400 font-bold text-xs m-0">Identity wiped. Reloading...</p>
+                                    <p className="text-red-800 dark:text-red-400 font-bold text-xs m-0">
+                                        Account data purged. Reloading app...
+                                    </p>
                                 </div>
                             )}
                         </div>

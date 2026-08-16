@@ -1186,3 +1186,12 @@ export async function getActivityFeedApi(limit: number = 50, offset: number = 0)
     return request<any>('GET', `/api/activity/feed?limit=${limit}&offset=${offset}`);
 }
 
+// ===================== ACCOUNT DELETION & PURGE (#99) =====================
+
+export async function purgeAccountApi(): Promise<{ ok: boolean; message: string }> {
+    return request<{ ok: boolean; message: string }>('POST', '/api/member/purge', {
+        action: 'purge_account',
+    });
+}
+
+

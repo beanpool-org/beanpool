@@ -29,7 +29,7 @@ import { FriendPickerSheet } from '../../components/FriendPickerSheet';
 import { protectionFrom } from '../../utils/protection-state';
 import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
 import type { SsoProvider } from '../../utils/sso-signin';
-import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
+import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../../utils/node-post';
 import { RecoveryPinModal } from '../../components/RecoveryPinModal';
 import { IncomingRecoveryApprovalModal } from '../../components/IncomingRecoveryApprovalModal';
 import { getPinStatus } from '../../utils/pin';
@@ -806,6 +806,8 @@ export default function SettingsScreen() {
     const [newAnchorInput, setNewAnchorInput] = useState('');
     const [changeConfirm, setChangeConfirm] = useState('');
     const [wipeConfirm, setWipeConfirm] = useState('');
+    const [wipeType, setWipeType] = useState<'options' | 'local' | 'purge'>('options');
+    const [purgeConfirm, setPurgeConfirm] = useState('');
     const [seedConfirm, setSeedConfirm] = useState('');
     const [seedVisible, setSeedVisible] = useState(false);
     const [seedCopied, setSeedCopied] = useState(false);
@@ -1306,49 +1308,114 @@ export default function SettingsScreen() {
         }
     }
 
-    async function handleWipe() {
+    async function handleLocalWipe() {
         if (wipeConfirm !== 'WIPE') {
-            Alert.alert("Warning", "You must type exactly 'WIPE' to delete your mathematical identity.");
+            Alert.alert("Warning", "You must type exactly 'WIPE' to remove your account from this device.");
             return;
         }
-        const success = await authenticateUser('Confirm your security to permanently wipe your identity.');
+        const success = await authenticateUser('Confirm authentication to sign out of this device.');
         if (!success) return;
 
         Alert.alert(
-            "Wipe Everything",
-            "This permanently erases your Ed25519 private key AND every saved community and its local data from this phone. You will lose access to all communities and ledger balances everywhere. This cannot be undone unless you have your 12-word recovery phrase.",
+            "Sign Out (Device Only)",
+            "This removes your private key and local database from this phone. Your account remains safely stored on the community node and can be restored anytime with your 12-word recovery phrase.",
             [
                 { text: "Cancel", style: "cancel" },
                 { 
-                    text: "Destroy Key", 
+                    text: "Sign Out", 
                     style: "destructive",
                     onPress: async () => {
                         setAdvancedLoading(true);
-                        const { clearDB } = await import('../../utils/db');
-                        await clearDB();
-                        
-                        // Purge sync engine cursors and the saved node matrix to force a clean slate
-                        const allKeys = await AsyncStorage.getAllKeys();
-                        const pillarKeys = allKeys.filter(k => k.startsWith('pillar_sync_') || k.startsWith('pillar:'));
-                        await AsyncStorage.multiRemove([
-                            'beanpool_anchor_url',
-                            'beanpool_saved_nodes',
-                            ...pillarKeys
-                        ]);
+                        try {
+                            const { clearDB } = await import('../../utils/db');
+                            await clearDB();
+                            
+                            // Purge sync engine cursors and the saved node matrix to force a clean slate
+                            const allKeys = await AsyncStorage.getAllKeys();
+                            const pillarKeys = allKeys.filter(k => k.startsWith('pillar_sync_') || k.startsWith('pillar:'));
+                            await AsyncStorage.multiRemove([
+                                'beanpool_anchor_url',
+                                'beanpool_saved_nodes',
+                                ...pillarKeys
+                            ]);
 
-                        // Physically delete dormant DB files for all saved nodes to reclaim disk space
-                        for (const node of savedNodes) {
-                            try {
-                                const filename = getDatabaseFilenameForNode(node.url);
-                                const paths = getDatabaseFilePaths(filename);
-                                for (const p of paths) {
-                                    await FileSystem.deleteAsync(p, { idempotent: true });
-                                }
-                            } catch (e) {}
+                            // Physically delete dormant DB files for all saved nodes to reclaim disk space
+                            for (const node of savedNodes) {
+                                try {
+                                    const filename = getDatabaseFilenameForNode(node.url);
+                                    const paths = getDatabaseFilePaths(filename);
+                                    for (const p of paths) {
+                                        await FileSystem.deleteAsync(p, { idempotent: true });
+                                    }
+                                } catch (e) {}
+                            }
+                            
+                            await wipeIdentity();
+                            setIdentity(null);
+                        } catch (e: any) {
+                            Alert.alert("Sign Out Failed", e.message || "Failed to sign out.");
+                        } finally {
+                            setAdvancedLoading(false);
                         }
-                        
-                        await wipeIdentity();
-                        setIdentity(null);
+                    }
+                }
+            ]
+        );
+    }
+
+    async function handleNodePurge() {
+        if (!identity) return;
+        if (purgeConfirm !== 'DELETE' && purgeConfirm.trim().toLowerCase() !== identity.callsign.trim().toLowerCase()) {
+            Alert.alert("Warning", `You must type exactly 'DELETE' or '${identity.callsign}' to permanently purge your account.`);
+            return;
+        }
+        const success = await authenticateUser('Confirm authentication to permanently purge your account from the node.');
+        if (!success) return;
+
+        Alert.alert(
+            "Permanent Node Purge",
+            "This will permanently delete your profile, listings, and data from the community node and wipe this phone. Your Bean balance will be settled with the Commons Pool. This CANNOT be undone, even with your 12-word phrase.",
+            [
+                { text: "Cancel", style: "cancel" },
+                { 
+                    text: "Permanently Purge", 
+                    style: "destructive",
+                    onPress: async () => {
+                        setAdvancedLoading(true);
+                        try {
+                            // 1. Send signed purge request to community node
+                            await purgeAccountOnNode(identity);
+
+                            // 2. Wipe local database and keys
+                            const { clearDB } = await import('../../utils/db');
+                            await clearDB();
+                            
+                            const allKeys = await AsyncStorage.getAllKeys();
+                            const pillarKeys = allKeys.filter(k => k.startsWith('pillar_sync_') || k.startsWith('pillar:'));
+                            await AsyncStorage.multiRemove([
+                                'beanpool_anchor_url',
+                                'beanpool_saved_nodes',
+                                ...pillarKeys
+                            ]);
+
+                            for (const node of savedNodes) {
+                                try {
+                                    const filename = getDatabaseFilenameForNode(node.url);
+                                    const paths = getDatabaseFilePaths(filename);
+                                    for (const p of paths) {
+                                        await FileSystem.deleteAsync(p, { idempotent: true });
+                                    }
+                                } catch (e) {}
+                            }
+                            
+                            await wipeIdentity();
+                            setIdentity(null);
+                            Alert.alert("Account Purged", "Your account and profile have been permanently purged from the community node.");
+                        } catch (e: any) {
+                            Alert.alert("Purge Failed", e.message || "Failed to purge account from node. Active escrow trades may need to be completed or cancelled first.");
+                        } finally {
+                            setAdvancedLoading(false);
+                        }
                     }
                 }
             ]
@@ -1783,9 +1850,19 @@ export default function SettingsScreen() {
                 {/* ─── Danger Zone ─── */}
                 <View style={{ marginTop: 24 }}>
                     <View style={styles.dangerGroup}>
-                        <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => { setMode('wipe'); setWipeConfirm(''); }} accessibilityRole="button" accessibilityHint="Permanently deletes your identity and all local community data">
+                        <Pressable 
+                            style={[styles.menuBtn, styles.menuBtnLast]} 
+                            onPress={() => { 
+                                setMode('wipe'); 
+                                setWipeType('options'); 
+                                setWipeConfirm(''); 
+                                setPurgeConfirm(''); 
+                            }} 
+                            accessibilityRole="button" 
+                            accessibilityHint="Choose to remove account from device or permanently delete from node"
+                        >
                             <View style={[styles.menuIconWrap, { backgroundColor: palette.red50 }]}><Text style={styles.menuIcon}>⚠️</Text></View>
-                            <Text style={[styles.menuText, { flex: 1, color: palette.red600 }]}>Delete Account</Text>
+                            <Text style={[styles.menuText, { flex: 1, color: palette.red600 }]}>Account Deletion & Sign Out</Text>
                             <Text style={[styles.menuChevron, { color: palette.red300 }]}>›</Text>
                         </Pressable>
                     </View>
@@ -2540,49 +2617,216 @@ export default function SettingsScreen() {
 
             {mode === 'wipe' && (
                 <View style={styles.card}>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.feedback.danger.solid, marginBottom: 8 }}>Danger Zone</Text>
-                    <Text style={styles.infoText}>This is a total nuke. It permanently destroys your private key from this phone AND removes every saved community, all of their local data, and all sync state.{'\n\n'}Your identity is one key shared across every community — without your 12-word recovery phrase (or an identity export) you will lose access to all communities and all ledger balances, everywhere. This cannot be undone.</Text>
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.feedback.danger.solid, marginBottom: 8 }}>
+                        Account Deletion & Sign Out
+                    </Text>
 
-                    {hasMnemonic(identity) ? (
-                        <View style={{ backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 14, marginTop: 4, marginBottom: 16 }}>
-                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 14, lineHeight: 20, marginBottom: 12 }}>
-                                Might you want this account back later — say, to switch to a different one and return to this one? Save your 12 recovery words first. They're the only way back.
+                    {wipeType === 'options' && (
+                        <View style={{ gap: 14, marginTop: 4 }}>
+                            <Text style={styles.infoText}>
+                                Choose whether to sign out of this device or permanently purge your account from the community node.
                             </Text>
-                            <Pressable
-                                style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.feedback.warning.border, padding: 14, borderRadius: 12, alignItems: 'center' }}
-                                onPress={() => { setSeedConfirm(''); setSeedVisible(false); setMode('seed'); }}
-                                accessibilityRole="button"
-                            >
-                                <Text style={{ color: colors.feedback.warning.fg, fontSize: 15, fontWeight: '700' }}>🔑 Back up my 12 words first</Text>
+
+                            {/* Option 1: Device Sign Out */}
+                            <View style={{ backgroundColor: theme === 'dark' ? colors.surface.subtle : '#f8fafc', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, gap: 8 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <Text style={{ fontSize: 18 }}>🚪</Text>
+                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.text.heading }}>
+                                        Remove from This Device Only
+                                    </Text>
+                                </View>
+                                <Text style={{ fontSize: 13, color: colors.text.secondary, lineHeight: 18 }}>
+                                    Clears your private key and local database from this phone. Your account and listings remain active on the community node and can be restored anytime with your 12-word recovery phrase.
+                                </Text>
+                                <Pressable
+                                    style={{
+                                        backgroundColor: colors.surface.card,
+                                        borderWidth: 1,
+                                        borderColor: colors.border.default,
+                                        minHeight: 44,
+                                        paddingVertical: 12,
+                                        paddingHorizontal: 14,
+                                        borderRadius: 10,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginTop: 4,
+                                    }}
+                                    onPress={() => {
+                                        setWipeConfirm('');
+                                        setWipeType('local');
+                                    }}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Sign out of this device only"
+                                >
+                                    <Text style={{ color: colors.text.heading, fontSize: 13, fontWeight: 'bold' }}>
+                                        Sign Out (Device Only) →
+                                    </Text>
+                                </Pressable>
+                            </View>
+
+                            {/* Option 2: Permanent Node Purge */}
+                            <View style={{ backgroundColor: colors.feedback.danger.bg, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.feedback.danger.border, gap: 8 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <Text style={{ fontSize: 18 }}>🗑️</Text>
+                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: colors.feedback.danger.fg }}>
+                                        Permanently Delete Account & Node Data
+                                    </Text>
+                                </View>
+                                <Text style={{ fontSize: 13, color: colors.feedback.danger.fg, lineHeight: 18 }}>
+                                    Permanently purges your account from this community node and clears this phone. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. <Text style={{ fontWeight: 'bold' }}>Cannot be undone, even with your 12-word phrase.</Text>
+                                </Text>
+                                <Pressable
+                                    style={{
+                                        backgroundColor: colors.feedback.danger.solid,
+                                        minHeight: 44,
+                                        paddingVertical: 12,
+                                        paddingHorizontal: 14,
+                                        borderRadius: 10,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginTop: 4,
+                                    }}
+                                    onPress={() => {
+                                        setPurgeConfirm('');
+                                        setWipeType('purge');
+                                    }}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Permanently delete account and node data"
+                                >
+                                    <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: 'bold' }}>
+                                        Permanently Delete Account →
+                                    </Text>
+                                </Pressable>
+                            </View>
+
+                            <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button" accessibilityLabel="Back to Settings">
+                                <Text style={styles.backBtnText}>← Back to Settings</Text>
                             </Pressable>
-                        </View>
-                    ) : (
-                        <View style={{ backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, borderRadius: 12, padding: 14, marginTop: 4, marginBottom: 16 }}>
-                            <Text style={{ color: colors.feedback.danger.fg, fontSize: 14, lineHeight: 20 }}>
-                                ⚠️ This account has no recovery words saved on it, so deleting it here is permanent — there is no way to bring it back. Only continue if you're certain.
-                            </Text>
                         </View>
                     )}
 
-                    <Text style={styles.label}>TYPE 'WIPE' TO VERIFY</Text>
-                    <TextInput
-                        style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.feedback.danger.solid, borderColor: colors.feedback.danger.border }]}
-                        value={wipeConfirm}
-                        onChangeText={setWipeConfirm}
-                        placeholder="WIPE"
-                        placeholderTextColor={colors.text.secondary}
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                        accessibilityLabel="Type WIPE to confirm deletion"
-                    />
+                    {wipeType === 'local' && (
+                        <View style={{ gap: 12, marginTop: 4 }}>
+                            <Text style={styles.infoText}>
+                                This will remove your private key and local database from this phone. You will need your 12-word recovery phrase to restore access later.
+                            </Text>
 
-                    <Pressable style={[styles.dangerBtn, (advancedLoading || wipeConfirm !== 'WIPE') && { opacity: 0.5 }]} onPress={handleWipe} disabled={advancedLoading || wipeConfirm !== 'WIPE'} accessibilityRole="button" accessibilityHint="Permanently destroys your private key and all local community data">
-                        <Text style={styles.dangerBtnText}>Permanently Delete Identity</Text>
-                    </Pressable>
+                            {hasMnemonic(identity) ? (
+                                <View style={{ backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 12, gap: 8 }}>
+                                    <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, lineHeight: 18 }}>
+                                        Have you backed up your 12 words? They are the only way back into your account.
+                                    </Text>
+                                    <Pressable
+                                        style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.feedback.warning.border, padding: 10, borderRadius: 8, alignItems: 'center', minHeight: 44, justifyContent: 'center' }}
+                                        onPress={() => { setSeedConfirm(''); setSeedVisible(false); setMode('seed'); }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="View recovery words first"
+                                    >
+                                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>🔑 View Recovery Words First</Text>
+                                    </Pressable>
+                                </View>
+                            ) : (
+                                <View style={{ backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, borderRadius: 12, padding: 12 }}>
+                                    <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, lineHeight: 18, fontWeight: 'bold' }}>
+                                        ⚠️ No Recovery Words Saved
+                                    </Text>
+                                    <Text style={{ color: colors.feedback.danger.fg, fontSize: 12, lineHeight: 17, marginTop: 4 }}>
+                                        This account has no recovery phrase saved on this phone. Signing out will permanently erase your private key from this device.
+                                    </Text>
+                                </View>
+                            )}
 
-                    <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
-                        <Text style={styles.backBtnText}>← Back</Text>
-                    </Pressable>
+                            <Text style={styles.label}>TYPE 'WIPE' TO CONFIRM DEVICE SIGN OUT</Text>
+                            <TextInput
+                                style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.text.heading, borderColor: colors.border.default }]}
+                                value={wipeConfirm}
+                                onChangeText={setWipeConfirm}
+                                placeholder="WIPE"
+                                placeholderTextColor={colors.text.secondary}
+                                autoCapitalize="characters"
+                                autoCorrect={false}
+                                accessibilityLabel="Type WIPE to confirm sign out"
+                            />
+
+                            <Pressable 
+                                style={[
+                                    styles.dangerBtn, 
+                                    { 
+                                        backgroundColor: colors.text.heading,
+                                        borderColor: colors.border.default,
+                                        minHeight: 48,
+                                        justifyContent: 'center',
+                                    }, 
+                                    (advancedLoading || wipeConfirm !== 'WIPE') && { opacity: 0.5 }
+                                ]} 
+                                onPress={handleLocalWipe} 
+                                disabled={advancedLoading || wipeConfirm !== 'WIPE'} 
+                                accessibilityRole="button"
+                                accessibilityLabel="Confirm sign out of this device"
+                                accessibilityState={{ disabled: advancedLoading || wipeConfirm !== 'WIPE' }}
+                            >
+                                <Text style={[styles.dangerBtnText, { color: theme === 'dark' ? '#000000' : '#ffffff' }]}>
+                                    {advancedLoading ? 'Signing Out...' : '🚪 Confirm Sign Out'}
+                                </Text>
+                            </Pressable>
+
+                            <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel="Choose another option">
+                                <Text style={styles.backBtnText}>← Choose Another Option</Text>
+                            </Pressable>
+                        </View>
+                    )}
+
+                    {wipeType === 'purge' && (() => {
+                        const callsignToMatch = (identity?.callsign || '').trim().toLowerCase();
+                        const isPurgeInputValid = purgeConfirm === 'DELETE' || (callsignToMatch.length > 0 && purgeConfirm.trim().toLowerCase() === callsignToMatch);
+
+                        return (
+                            <View style={{ gap: 12, marginTop: 4 }}>
+                                <View style={{ backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, borderRadius: 12, padding: 12 }}>
+                                    <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, lineHeight: 18, fontWeight: 'bold' }}>
+                                        ⚠️ Warning: Irreversible Node Purge
+                                    </Text>
+                                    <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, lineHeight: 18, marginTop: 4 }}>
+                                        This will permanently delete your identity, profile, listings, and messages from the community node.
+                                    </Text>
+                                </View>
+
+                                <Text style={styles.label}>TYPE 'DELETE' OR '{identity?.callsign || 'CALLSIGN'}' TO CONFIRM</Text>
+                                <TextInput
+                                    style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.feedback.danger.solid, borderColor: colors.feedback.danger.border }]}
+                                    value={purgeConfirm}
+                                    onChangeText={setPurgeConfirm}
+                                    placeholder="DELETE"
+                                    placeholderTextColor={colors.text.secondary}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    accessibilityLabel="Type DELETE or your callsign to confirm permanent node purge"
+                                />
+
+                                <Pressable 
+                                    style={[
+                                        styles.dangerBtn, 
+                                        { minHeight: 48, justifyContent: 'center' },
+                                        (advancedLoading || !isPurgeInputValid) && { opacity: 0.5 }
+                                    ]} 
+                                    onPress={handleNodePurge} 
+                                    disabled={advancedLoading || !isPurgeInputValid} 
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Permanently purge account from node"
+                                    accessibilityHint="Irreversibly deletes account data from the community node and wipes this phone"
+                                    accessibilityState={{ disabled: advancedLoading || !isPurgeInputValid }}
+                                >
+                                    <Text style={styles.dangerBtnText}>
+                                        {advancedLoading ? 'Purging Account...' : '🔥 Permanently Purge Account'}
+                                    </Text>
+                                </Pressable>
+
+                                <Pressable style={styles.backBtn} onPress={() => setWipeType('options')} accessibilityRole="button" accessibilityLabel="Choose another option">
+                                    <Text style={styles.backBtnText}>← Choose Another Option</Text>
+                                </Pressable>
+                            </View>
+                        );
+                    })()}
                 </View>
             )}
 

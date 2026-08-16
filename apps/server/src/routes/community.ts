@@ -27,6 +27,7 @@ import {
     getGuardiansOf, createRecoveryRequest, getRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery,
     getNodeRole, exportSyncState,
     createTreasury,
+    purgeMemberSelf,
 } from '../state-engine.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword,
@@ -850,6 +851,23 @@ router.post('/api/profile/update', async (ctx) => {
     }
     if (isFirstAvatar) recordFunnelEvent('avatar_published');
     ctx.body = { success: true, profile };
+});
+
+router.post('/api/member/purge', async (ctx) => {
+    const activeKey = ctx.state.actor;
+    if (!activeKey) {
+        ctx.status = 401;
+        ctx.body = { error: 'Cryptographically signed session or header is required' };
+        return;
+    }
+
+    try {
+        const result = purgeMemberSelf(activeKey);
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to purge account' };
+    }
 });
 
 router.get('/api/profile/:publicKey', async (ctx) => {

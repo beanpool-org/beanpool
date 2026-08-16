@@ -34,7 +34,7 @@ import { RecoveryPinModal } from '../../components/RecoveryPinModal';
 import { IncomingRecoveryApprovalModal } from '../../components/IncomingRecoveryApprovalModal';
 import { getPinStatus } from '../../utils/pin';
 import { ArchetypeQuizModal } from '../../components/ArchetypeQuizModal';
-import { parseArchetype, ARCHETYPES, type QuizResult } from '../../utils/archetypes';
+import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 
 

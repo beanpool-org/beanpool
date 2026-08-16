@@ -31,3 +31,20 @@ export async function signedPost(
         method: 'POST', headers, body: bodyString,
     });
 }
+
+/**
+ * Permanently purge the member's account and data from their community node (#99).
+ */
+export async function purgeAccountOnNode(identity: BeanPoolIdentity): Promise<{ ok: boolean; message: string }> {
+    const nodeUrl = await anchorUrl();
+    if (!nodeUrl) {
+        throw new Error('No community node connection found.');
+    }
+    const res = await signedPost(nodeUrl, '/api/member/purge', { action: 'purge_account' }, identity);
+    const json = await res.json() as any;
+    if (!res.ok) {
+        throw new Error(json.error || json.message || `Server returned ${res.status}`);
+    }
+    return json;
+}
+

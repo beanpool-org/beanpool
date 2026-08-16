@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
 import { InfoModal, InfoModalTab } from '../InfoModal';
 import { useStyles, useTheme } from '../../app/ThemeContext';
 
@@ -7,9 +7,10 @@ interface Props {
     isOpen: boolean;
     onClose: () => void;
     initialTab?: 'guide' | 'tax';
+    onOpenFullCatalog?: () => void;
 }
 
-export function PricingInfoModal({ isOpen, onClose, initialTab }: Props) {
+export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalog }: Props) {
     const { colors } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create({
         tabContent: {
@@ -154,6 +155,31 @@ export function PricingInfoModal({ isOpen, onClose, initialTab }: Props) {
                             </View>
                         </View>
                     </View>
+
+                    <Pressable
+                        style={{
+                            backgroundColor: colors.brand.primary,
+                            borderRadius: 12,
+                            paddingVertical: 14,
+                            paddingHorizontal: 16,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginBottom: 20,
+                            gap: 8,
+                        }}
+                        onPress={() => {
+                            onClose();
+                            if (onOpenFullCatalog) onOpenFullCatalog();
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Browse 500+ community price estimates"
+                    >
+                        <Text style={{ fontSize: 16 }}>🔍</Text>
+                        <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 14 }}>
+                            Browse 500+ Community Estimates →
+                        </Text>
+                    </Pressable>
 
                     <View style={styles.infoBox}>
                         <Text style={styles.infoBoxIcon}>🤝</Text>

@@ -902,3 +902,39 @@ CREATE TABLE IF NOT EXISTS recovery_pin (
 
 CREATE INDEX IF NOT EXISTS idx_recovery_pin_updated_at ON recovery_pin(updated_at);
 
+-- ===================== COMMUNITY PRICING GUIDE (#206) =====================
+-- Searchable, auto-adjusting community pricing guide for goods & services.
+CREATE TABLE IF NOT EXISTS pricing_guide_items (
+    id               TEXT PRIMARY KEY,
+    category         TEXT NOT NULL,
+    emoji            TEXT NOT NULL,
+    name             TEXT NOT NULL,
+    description      TEXT NOT NULL,
+    price_beans      INTEGER NOT NULL CHECK (price_beans >= 0),
+    unit             TEXT,
+    is_pinned        INTEGER NOT NULL DEFAULT 0,
+    confidence_count INTEGER NOT NULL DEFAULT 0,
+    trend            TEXT NOT NULL DEFAULT 'stable',
+    seasonality_hint TEXT,
+    thumbnail_url    TEXT,
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pricing_guide_category ON pricing_guide_items(category);
+CREATE INDEX IF NOT EXISTS idx_pricing_guide_category_name ON pricing_guide_items(category, name);
+CREATE INDEX IF NOT EXISTS idx_pricing_guide_updated_at ON pricing_guide_items(updated_at DESC);
+
+-- Community moderation queue for price feedback ("too high", "too low", "other").
+CREATE TABLE IF NOT EXISTS pricing_reports (
+    id              TEXT PRIMARY KEY,
+    item_id         TEXT NOT NULL REFERENCES pricing_guide_items(id) ON DELETE CASCADE,
+    reporter_pubkey TEXT,
+    report_type     TEXT NOT NULL CHECK (report_type IN ('too_high', 'too_low', 'other')),
+    comment         TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'dismissed')),
+    created_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pricing_reports_status ON pricing_reports(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pricing_reports_item ON pricing_reports(item_id);
+

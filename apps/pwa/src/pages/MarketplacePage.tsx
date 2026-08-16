@@ -12,6 +12,7 @@ import { MarketplaceCard } from '../components/MarketplaceCard';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
+import { PricingGuideModal } from '../components/PricingGuideModal';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
@@ -163,6 +164,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('list');
     const [showFilters, setShowFilters] = useState(false);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+    const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [showDealsModal, setShowDealsModal] = useState(false);
     const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
 
@@ -1745,36 +1747,45 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     })}
                 </div>
 
-                {/* #108: beans-only browse. Orthogonal to offer/need, so it sits outside the segmented
-                    control rather than competing for a slot in it. */}
-                <button
-                    onClick={() => {
-                        const next = !beansOnly;
-                        setBeansOnly(next);
-                        localStorage.setItem('bp_beans_only', String(next));
-                    }}
-                    aria-pressed={beansOnly}
-                    className={`self-start mb-1 px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
-                        beansOnly
-                            ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
-                            : 'bg-transparent text-nature-500 dark:text-nature-400 border-nature-200 dark:border-nature-800 hover:text-nature-800 dark:hover:text-nature-200'
-                    }`}
-                    title="Hide listings that also need cash for fuel or materials"
-                >
-                    🫘 Beans only{beansOnly ? ' ✓' : ''}
-                </button>
+                {/* Row 2.5: Secondary Action & Filter Chips */}
+                <div className="flex flex-wrap items-center gap-2 my-1.5">
+                    <button
+                        onClick={() => {
+                            const next = !beansOnly;
+                            setBeansOnly(next);
+                            localStorage.setItem('bp_beans_only', String(next));
+                        }}
+                        aria-pressed={beansOnly}
+                        className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
+                            beansOnly
+                                ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
+                                : 'bg-transparent text-nature-500 dark:text-nature-400 border-nature-200 dark:border-nature-800 hover:text-nature-800 dark:hover:text-nature-200'
+                        }`}
+                        title="Hide listings that also need cash for fuel or materials"
+                    >
+                        🫘 Beans only{beansOnly ? ' ✓' : ''}
+                    </button>
 
-                {/* Founding-trade filter: surface newcomers whose first trade unlocks their account */}
-                <button
-                    onClick={() => setFoundingOnly(v => !v)}
-                    className={`self-center mt-1 px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer ${
-                        foundingOnly
-                            ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-400'
-                            : 'bg-white dark:bg-nature-900 text-emerald-700 dark:text-emerald-400 border-emerald-300/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
-                    }`}
-                >
-                    🌱 New members{foundingOnly ? ' ✓' : ''}
-                </button>
+                    <button
+                        onClick={() => setFoundingOnly(v => !v)}
+                        aria-pressed={foundingOnly}
+                        className={`px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer ${
+                            foundingOnly
+                                ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border-emerald-400'
+                                : 'bg-white dark:bg-nature-900 text-emerald-700 dark:text-emerald-400 border-emerald-300/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+                        }`}
+                    >
+                        🌱 New members{foundingOnly ? ' ✓' : ''}
+                    </button>
+
+                    <button
+                        onClick={() => setShowPricingGuide(true)}
+                        className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-400 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                        title="Browse benchmark community prices"
+                    >
+                        💡 Pricing Guide
+                    </button>
+                </div>
 
                 {/* Row 3: Symmetrical Filter Dropdowns (50% / 50% split) */}
                 <div className="grid grid-cols-2 gap-2 mt-0.5 mb-2.5">
@@ -2240,6 +2251,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     setReviewStars(5);
                     setReviewComment('');
                     setPromptReviewForTx(review);
+                }}
+            />
+
+            <PricingGuideModal
+                isOpen={showPricingGuide}
+                onClose={() => setShowPricingGuide(false)}
+                reporterPubkey={identity?.publicKey}
+                onSelectOfferItem={() => {
+                    setShowPricingGuide(false);
+                    onNavigate?.('map-post');
                 }}
             />
 

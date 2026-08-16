@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -374,6 +375,12 @@ export function initSchema() {
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
 
     seedTreasuryOperatorsFromLegacyFlag();
+
+    try {
+        seedPricingGuideIfEmpty(false, db);
+    } catch (err) {
+        console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
+    }
 }
 
 /**

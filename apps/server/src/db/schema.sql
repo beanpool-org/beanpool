@@ -921,12 +921,13 @@ CREATE TABLE IF NOT EXISTS pricing_guide_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pricing_guide_category ON pricing_guide_items(category);
+CREATE INDEX IF NOT EXISTS idx_pricing_guide_category_name ON pricing_guide_items(category, name);
 CREATE INDEX IF NOT EXISTS idx_pricing_guide_updated_at ON pricing_guide_items(updated_at DESC);
 
 -- Community moderation queue for price feedback ("too high", "too low", "other").
 CREATE TABLE IF NOT EXISTS pricing_reports (
     id              TEXT PRIMARY KEY,
-    item_id         TEXT NOT NULL REFERENCES pricing_guide_items(id),
+    item_id         TEXT NOT NULL REFERENCES pricing_guide_items(id) ON DELETE CASCADE,
     reporter_pubkey TEXT,
     report_type     TEXT NOT NULL CHECK (report_type IN ('too_high', 'too_low', 'other')),
     comment         TEXT,

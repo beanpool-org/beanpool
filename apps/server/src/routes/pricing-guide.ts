@@ -43,18 +43,28 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
         };
     });
 
-    /**
-     * POST /api/pricing-guide/report
-     * Public endpoint to submit price feedback (too high, too low, other).
-     */
     router.post('/api/pricing-guide/report', async (ctx) => {
         if (!deps.rateLimit(ctx)) return;
 
-        const { itemId, reportType, comment, reporterPubkey } = (ctx.request as any).body || {};
+        const body = (ctx.request as any).body || {};
+        const itemId = typeof body.itemId === 'string' ? body.itemId.trim() : '';
+        const reportType = body.reportType;
+        const rawComment = typeof body.comment === 'string' ? body.comment.trim() : '';
+        const comment = rawComment ? rawComment.slice(0, 500) : undefined;
+        const reporterPubkey = typeof body.reporterPubkey === 'string' && /^[0-9a-fA-F]{64}$/.test(body.reporterPubkey)
+            ? body.reporterPubkey
+            : undefined;
 
         if (!itemId || !reportType || !['too_high', 'too_low', 'other'].includes(reportType)) {
             ctx.status = 400;
             ctx.body = { error: 'Invalid report parameters. itemId and valid reportType required.' };
+            return;
+        }
+
+        const existingItem = getPricingGuideItem(itemId);
+        if (!existingItem) {
+            ctx.status = 404;
+            ctx.body = { error: 'Pricing guide item not found' };
             return;
         }
 

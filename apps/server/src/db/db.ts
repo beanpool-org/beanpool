@@ -375,6 +375,12 @@ export function initSchema() {
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
 
     seedTreasuryOperatorsFromLegacyFlag();
+
+    try {
+        seedPricingGuideIfEmpty(false, db);
+    } catch (err) {
+        console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
+    }
 }
 
 /**
@@ -414,12 +420,6 @@ export function seedTreasuryOperatorsFromLegacyFlag(): number {
     } catch (e) {
         console.error('[DB] ⚠️  Could not seed treasury_operators from can_operate. Existing keepers may need re-assigning per enterprise.', e);
         return 0;
-    } finally {
-        try {
-            seedPricingGuideIfEmpty(false, db);
-        } catch (err) {
-            console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
-        }
     }
 }
 

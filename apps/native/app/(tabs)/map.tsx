@@ -1500,6 +1500,7 @@ export default function MapScreen() {
                 onClose={() => setShowPricingGuideModal(false)}
                 onSelectOfferItem={(item, effectivePrice) => {
                     setPostType('offer');
+                    setPostCategory(item.category);
                     setPostTitle(item.name);
                     setPostDescription(item.description);
                     setPostCredits(String(effectivePrice));

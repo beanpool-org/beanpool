@@ -32,18 +32,28 @@ export function runPricingAggregationCycle(): {
     const items = db.prepare('SELECT * FROM pricing_guide_items').all() as any[];
     if (!items.length) return { updatedCount: 0, totalEvaluated: 0 };
 
-    // Query active marketplace posts (and recent completed transactions within 90 days)
+    // Query active marketplace posts without loading heavy photo blobs into memory
     const postsQuery = config.dataSource === 'local'
-        ? `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at, ph.photo_data
+        ? `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
+                  (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) AS has_photo
            FROM posts p
-           LEFT JOIN post_photos ph ON p.id = ph.post_id AND ph.order_num = 0
            WHERE p.active = 1 AND p.origin_node IS NULL AND p.credits > 0`
-        : `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at, ph.photo_data
+        : `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
+                  (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) AS has_photo
            FROM posts p
-           LEFT JOIN post_photos ph ON p.id = ph.post_id AND ph.order_num = 0
            WHERE p.active = 1 AND p.credits > 0`;
 
     const posts = db.prepare(postsQuery).all() as any[];
+
+    // Pre-tokenize and normalize active posts once outside the item loop (O(posts) instead of O(items × posts))
+    const parsedPosts = posts.map(p => ({
+        id: p.id,
+        category: p.category,
+        credits: p.credits,
+        hasPhoto: Boolean(p.has_photo),
+        tokens: new Set(tokenize(`${p.title} ${p.description}`)),
+        text: `${p.title} ${p.description}`.toLowerCase(),
+    }));
 
     let updatedCount = 0;
 
@@ -59,26 +69,24 @@ export function runPricingAggregationCycle(): {
 
     const updateTx = db.transaction(() => {
         for (const item of items) {
-            const nameTokens = tokenize(item.name).filter(t => !['per', 'the', 'and', 'for', 'with', 'set', 'lot', 'pack'].includes(t));
+            const nameTokens = tokenize(item.name).filter(t => !['per', 'the', 'and', 'for', 'with', 'set', 'lot', 'pack', 'free'].includes(t));
             const itemTokens = tokenize(`${item.name} ${item.description}`);
             if (!itemTokens.length) continue;
 
             const matchedPrices: number[] = [];
-            let latestPhoto: string | null = null;
+            let latestPhotoUrl: string | null = null;
+            const nameLower = item.name.toLowerCase();
 
-            for (const post of posts) {
-                const postTokens = new Set(tokenize(`${post.title} ${post.description}`));
-                const matchScore = itemTokens.filter(t => postTokens.has(t)).length;
+            for (const post of parsedPosts) {
+                // Category match requirement or exact name substring / high token overlap
+                const categoryMatch = !post.category || post.category === item.category;
+                const matchScore = itemTokens.filter(t => post.tokens.has(t)).length;
+                const titleTokenMatch = categoryMatch && nameTokens.some(t => t.length >= 4 && post.tokens.has(t));
 
-                // Match if key title token matches, or matchScore >= 2, or exact name substring
-                const postText = `${post.title} ${post.description}`.toLowerCase();
-                const nameLower = item.name.toLowerCase();
-                const titleTokenMatch = nameTokens.some(t => t.length >= 4 && postTokens.has(t));
-
-                if (titleTokenMatch || matchScore >= 2 || postText.includes(nameLower)) {
+                if (post.text.includes(nameLower) || (categoryMatch && matchScore >= 2) || titleTokenMatch) {
                     matchedPrices.push(post.credits);
-                    if (post.photo_data && !latestPhoto) {
-                        latestPhoto = post.photo_data;
+                    if (post.hasPhoto && !latestPhotoUrl) {
+                        latestPhotoUrl = `/api/marketplace/posts/${post.id}/photos/0`;
                     }
                 }
             }
@@ -100,15 +108,23 @@ export function runPricingAggregationCycle(): {
             // Do not override price on pinned items, but update confidence and photo
             const newPrice = item.is_pinned ? item.price_beans : agg.price;
 
-            updateStmt.run(
-                newPrice,
-                agg.count,
-                trend,
-                latestPhoto || null,
-                item.id
-            );
-
-            updatedCount++;
+            // Only execute SQLite UPDATE if values actually changed to avoid WAL write churn
+            const photoChanged = latestPhotoUrl && latestPhotoUrl !== item.thumbnail_url;
+            if (
+                newPrice !== item.price_beans ||
+                agg.count !== item.confidence_count ||
+                trend !== item.trend ||
+                photoChanged
+            ) {
+                updateStmt.run(
+                    newPrice,
+                    agg.count,
+                    trend,
+                    latestPhotoUrl || null,
+                    item.id
+                );
+                updatedCount++;
+            }
         }
     });
 
@@ -117,15 +133,17 @@ export function runPricingAggregationCycle(): {
 }
 
 let aggregatorInterval: NodeJS.Timeout | null = null;
+let initialTimer: NodeJS.Timeout | null = null;
 
 /**
  * Starts the hourly pricing aggregator worker.
  */
 export function startPricingAggregatorWorker(intervalMs: number = 3600_000): void {
-    if (aggregatorInterval) return;
+    if (aggregatorInterval || initialTimer) return;
 
     // Run initial cycle shortly after boot (unref to avoid hanging tests)
-    const initialTimer = setTimeout(() => {
+    initialTimer = setTimeout(() => {
+        initialTimer = null;
         try {
             runPricingAggregationCycle();
         } catch (e) {
@@ -149,6 +167,10 @@ export function startPricingAggregatorWorker(intervalMs: number = 3600_000): voi
  * Stops the aggregator worker (for testing / server shutdown).
  */
 export function stopPricingAggregatorWorker(): void {
+    if (initialTimer) {
+        clearTimeout(initialTimer);
+        initialTimer = null;
+    }
     if (aggregatorInterval) {
         clearInterval(aggregatorInterval);
         aggregatorInterval = null;

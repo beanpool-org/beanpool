@@ -31,7 +31,7 @@ import {
     updatePricingConfig,
 } from './db/pricing-guide-db.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
-import { calculateEffectivePrice, DEFAULT_PRICING_CATALOG } from '@beanpool/core';
+import { DEFAULT_PRICING_CATALOG } from '@beanpool/core';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -95,17 +95,14 @@ async function main() {
     const pendingAfter = getPricingReports('pending');
     assert(!pendingAfter.some(r => r.id === reportId), 'Report removed from pending queue');
 
-    // 5. Pricing Configuration & Multipliers
+    // 5. Pricing Configuration (Data Source & Seasonality)
     const initialConfig = getPricingConfig();
-    assert(initialConfig.multiplier === 1.0, 'Default multiplier is 1.0x');
+    assert(initialConfig.dataSource === 'local', 'Default data source is local');
+    assert(initialConfig.showSeasonality === true, 'Default seasonality toggle is true');
 
-    const updatedConfig = updatePricingConfig({ multiplier: 1.3, dataSource: 'federation', showSeasonality: false });
-    assert(updatedConfig.multiplier === 1.3, 'Updates community multiplier to 1.3x');
-    assert(updatedConfig.dataSource === 'federation', 'Updates data source');
-    assert(updatedConfig.showSeasonality === false, 'Updates seasonality toggle');
-
-    const effective = calculateEffectivePrice(10, updatedConfig.multiplier);
-    assert(effective === 13, 'Calculates effective price with 1.3x multiplier (10 -> 13)');
+    const updatedConfig = updatePricingConfig({ dataSource: 'federation', showSeasonality: false });
+    assert(updatedConfig.dataSource === 'federation', 'Updates data source to federation');
+    assert(updatedConfig.showSeasonality === false, 'Updates seasonality toggle to false');
 
     // 6. Marketplace Feedback Loop & Outlier Filtering
     // Insert mock marketplace posts matching 'babysitting'

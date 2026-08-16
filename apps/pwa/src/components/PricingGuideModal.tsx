@@ -7,7 +7,6 @@ import {
     PRICING_CATEGORIES,
     DEFAULT_PRICING_CATALOG,
     DEFAULT_PRICING_CONFIG,
-    calculateEffectivePrice,
     type PricingGuideItem,
     type PricingCategory,
     type PricingConfig,
@@ -34,6 +33,22 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
     const [reportComment, setReportComment] = useState('');
     const [reportSubmitting, setReportSubmitting] = useState(false);
     const [reportSuccess, setReportSuccess] = useState(false);
+
+    // Keyboard (Escape) & Modal Accessibility
+    useEffect(() => {
+        if (!isOpen) return;
+        function handleKeyDown(e: KeyboardEvent) {
+            if (e.key === 'Escape') {
+                if (reportingItem) {
+                    setReportingItem(null);
+                } else {
+                    onClose();
+                }
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, reportingItem, onClose]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -100,20 +115,28 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto" role="dialog" aria-modal="true">
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pricing-guide-title"
+            onClick={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
+        >
             <div className="relative w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
                     <div>
-                        <h2 className="text-lg sm:text-xl font-extrabold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                        <h2 id="pricing-guide-title" className="text-lg sm:text-xl font-extrabold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
                             <span>💡</span> Community Pricing Guide
                         </h2>
                         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                            {config.multiplier !== 1.0 && `${config.multiplier}x community multiplier • `}
                             {items.length} items & services benchmarked
                         </p>
                     </div>
                     <button
+                        type="button"
                         onClick={onClose}
                         className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
                         aria-label="Close pricing guide"
@@ -125,9 +148,10 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                 {/* Search Bar */}
                 <div className="p-3 sm:p-4 border-b border-zinc-200 dark:border-zinc-800">
                     <div className="relative flex items-center">
-                        <span className="absolute left-3 text-zinc-400 text-sm">🔍</span>
+                        <span className="absolute left-3 text-zinc-400 text-sm" aria-hidden="true">🔍</span>
                         <input
                             type="text"
+                            aria-label="Search community price catalog"
                             placeholder="Search produce, services, trades, gear..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -135,6 +159,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                         />
                         {searchQuery && (
                             <button
+                                type="button"
+                                aria-label="Clear search"
                                 onClick={() => setSearchQuery('')}
                                 className="absolute right-3 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
                             >
@@ -147,6 +173,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                 {/* Categories Pills */}
                 <div className="flex gap-2 p-2 sm:px-4 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800 scrollbar-none bg-zinc-50/50 dark:bg-zinc-900/30">
                     <button
+                        type="button"
+                        aria-pressed={selectedCategory === 'all'}
                         onClick={() => setSelectedCategory('all')}
                         className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                             selectedCategory === 'all'
@@ -161,6 +189,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                         return (
                             <button
                                 key={cat.id}
+                                type="button"
+                                aria-pressed={active}
                                 onClick={() => setSelectedCategory(cat.id)}
                                 className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
                                     active
@@ -168,7 +198,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                                 }`}
                             >
-                                <span>{cat.emoji}</span> {cat.label}
+                                <span aria-hidden="true">{cat.emoji}</span> {cat.label}
                             </button>
                         );
                     })}
@@ -178,16 +208,16 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                 <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
                     {loading ? (
                         <div className="flex items-center justify-center py-12 text-zinc-400 text-sm">
-                            <span className="animate-spin mr-2">⏳</span> Loading community estimates...
+                            <span className="animate-spin mr-2" aria-hidden="true">⏳</span> Loading community estimates...
                         </div>
                     ) : filteredItems.length === 0 ? (
                         <div className="py-12 text-center text-zinc-400">
-                            <p className="text-3xl mb-2">🔍</p>
+                            <p className="text-3xl mb-2" aria-hidden="true">🔍</p>
                             <p className="text-sm font-medium">No items found matching "{searchQuery}"</p>
                         </div>
                     ) : (
                         filteredItems.map((item) => {
-                            const effectivePrice = calculateEffectivePrice(item.priceBeans, config.multiplier);
+                            const effectivePrice = item.priceBeans;
                             const confidenceDot =
                                 (item.confidenceCount || 0) >= 3 ? 'bg-emerald-500' : (item.confidenceCount || 0) >= 1 ? 'bg-amber-500' : 'bg-rose-400';
 
@@ -231,6 +261,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         <div className="flex items-center gap-1 mt-1.5">
                                             {onSelectOfferItem && (
                                                 <button
+                                                    type="button"
                                                     onClick={() => {
                                                         onSelectOfferItem(item, effectivePrice);
                                                         onClose();
@@ -241,6 +272,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                                 </button>
                                             )}
                                             <button
+                                                type="button"
                                                 onClick={() => setReportingItem(item)}
                                                 className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs transition-colors"
                                                 title="Report price feedback"
@@ -258,24 +290,34 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
 
                 {/* Report Feedback Modal */}
                 {reportingItem && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="report-modal-title"
+                        onClick={(e) => {
+                            if (e.target === e.currentTarget) setReportingItem(null);
+                        }}
+                    >
                         <div className="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-150">
                             {reportSuccess ? (
-                                <div className="text-center py-6">
-                                    <div className="text-4xl mb-2">✨</div>
+                                <div className="text-center py-6" role="status" aria-live="polite">
+                                    <div className="text-4xl mb-2" aria-hidden="true">✨</div>
                                     <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Feedback Submitted</h3>
                                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Thank you for helping keep community prices fair.</p>
                                 </div>
                             ) : (
                                 <form onSubmit={handleSubmitReport}>
-                                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">🚩 Report Price</h3>
+                                    <h3 id="report-modal-title" className="text-base font-bold text-zinc-900 dark:text-zinc-100">🚩 Report Price</h3>
                                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 mb-4">
-                                        {reportingItem.name} • Current: 🫘 {calculateEffectivePrice(reportingItem.priceBeans, config.multiplier)}
+                                        {reportingItem.name} • Current: 🫘 {reportingItem.priceBeans}
                                     </p>
 
-                                    <div className="grid grid-cols-3 gap-2 mb-3">
+                                    <div className="grid grid-cols-3 gap-2 mb-3" role="radiogroup" aria-label="Feedback reason">
                                         <button
                                             type="button"
+                                            role="radio"
+                                            aria-checked={reportType === 'too_high'}
                                             onClick={() => setReportType('too_high')}
                                             className={`py-2 px-1 text-xs font-semibold rounded-xl border text-center transition-colors ${
                                                 reportType === 'too_high'
@@ -287,6 +329,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         </button>
                                         <button
                                             type="button"
+                                            role="radio"
+                                            aria-checked={reportType === 'too_low'}
                                             onClick={() => setReportType('too_low')}
                                             className={`py-2 px-1 text-xs font-semibold rounded-xl border text-center transition-colors ${
                                                 reportType === 'too_low'
@@ -298,6 +342,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         </button>
                                         <button
                                             type="button"
+                                            role="radio"
+                                            aria-checked={reportType === 'other'}
                                             onClick={() => setReportType('other')}
                                             className={`py-2 px-1 text-xs font-semibold rounded-xl border text-center transition-colors ${
                                                 reportType === 'other'
@@ -311,6 +357,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
 
                                     <textarea
                                         rows={3}
+                                        aria-label="Additional feedback notes"
                                         placeholder="Optional: Why is this estimate wrong?"
                                         value={reportComment}
                                         onChange={(e) => setReportComment(e.target.value)}

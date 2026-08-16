@@ -77,27 +77,15 @@ export interface PricingReport {
 }
 
 export interface PricingConfig {
-    multiplier: number;           // 0.5 to 2.0 (default: 1.0)
     dataSource: 'local' | 'federation' | 'all';
     showSeasonality: boolean;     // default: true
 }
 
 export const DEFAULT_PRICING_CONFIG: PricingConfig = {
-    multiplier: 1.0,
     dataSource: 'local',
     showSeasonality: true,
 };
 
-/**
- * Calculates effective price in Beans after applying community multiplier.
- * Result is rounded to nearest integer (min 1 Bean unless originally 0).
- */
-export function calculateEffectivePrice(basePriceBeans: number, multiplier: number = 1.0): number {
-    if (basePriceBeans <= 0) return 0;
-    const clampedMultiplier = Math.max(0.5, Math.min(2.0, multiplier));
-    const effective = Math.round(basePriceBeans * clampedMultiplier);
-    return Math.max(1, effective);
-}
 
 /**
  * Filters out joke or outlier prices:
@@ -105,8 +93,9 @@ export function calculateEffectivePrice(basePriceBeans: number, multiplier: numb
  */
 export function filterPriceOutliers(prices: number[], baselinePrice: number): number[] {
     if (prices.length === 0) return [];
-    const maxAllowed = Math.max(baselinePrice * 5, 50);
-    return prices.filter(p => p > 0 && p <= maxAllowed);
+    const maxAllowed = Math.max(baselinePrice * 5, 10);
+    const minAllowed = Math.max(1, Math.round(baselinePrice * 0.1));
+    return prices.filter(p => p >= minAllowed && p <= maxAllowed);
 }
 
 /**
@@ -128,7 +117,8 @@ export function aggregateObservedPrice(prices: number[], baselinePrice: number):
 
     let aggregate: number;
     if (count === 1) {
-        aggregate = valid[0];
+        // Blend single observation with baseline to prevent 1 listing from swinging price excessively
+        aggregate = Math.round((valid[0] + baselinePrice) / 2);
     } else if (count === 2) {
         aggregate = Math.round((valid[0] + valid[1]) / 2);
     } else {

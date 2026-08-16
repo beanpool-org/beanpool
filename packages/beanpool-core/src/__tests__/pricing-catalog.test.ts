@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-    calculateEffectivePrice,
     filterPriceOutliers,
     aggregateObservedPrice,
     DEFAULT_PRICING_CATALOG,
@@ -32,23 +31,6 @@ describe('Pricing Catalog & Utilities (#206)', () => {
         }
     });
 
-    it('calculates effective prices correctly with multipliers and clamping', () => {
-        // Standard 1.0x
-        expect(calculateEffectivePrice(10, 1.0)).toBe(10);
-        // Rural high cost 1.3x
-        expect(calculateEffectivePrice(10, 1.3)).toBe(13);
-        // Affordable 0.8x
-        expect(calculateEffectivePrice(15, 0.8)).toBe(12);
-        // Clamp min 0.5x
-        expect(calculateEffectivePrice(10, 0.1)).toBe(5);
-        // Clamp max 2.0x
-        expect(calculateEffectivePrice(10, 5.0)).toBe(20);
-        // Zero remains zero
-        expect(calculateEffectivePrice(0, 1.5)).toBe(0);
-        // Minimum non-zero is 1
-        expect(calculateEffectivePrice(1, 0.5)).toBe(1);
-    });
-
     it('filters out joke prices and unrealistic outliers (>5x baseline)', () => {
         const baseline = 10;
         const prices = [10, 12, 8, 999, -5, 0, 48, 55]; // 999 and 55 (>50) should be dropped
@@ -65,9 +47,9 @@ describe('Pricing Catalog & Utilities (#206)', () => {
         expect(empty.count).toBe(0);
         expect(empty.confidence).toBe('low');
 
-        // 1 observation -> medium confidence
+        // 1 observation -> blended with baseline ((24 + 20) / 2 = 22) + medium confidence
         const single = aggregateObservedPrice([24], baseline);
-        expect(single.price).toBe(24);
+        expect(single.price).toBe(22);
         expect(single.count).toBe(1);
         expect(single.confidence).toBe('medium');
 

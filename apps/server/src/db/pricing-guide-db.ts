@@ -20,17 +20,13 @@ import crypto from 'node:crypto';
 export function seedPricingGuideIfEmpty(forceReset: boolean = false, dbHandle?: import('better-sqlite3').Database): void {
     const activeDb = dbHandle || db;
     if (forceReset) {
-        activeDb.prepare('DELETE FROM pricing_guide_items').run();
+        // Delete child reports before parent items to preserve FK constraints
         activeDb.prepare('DELETE FROM pricing_reports').run();
-    }
-
-    const count = activeDb.prepare('SELECT COUNT(*) as count FROM pricing_guide_items').get() as { count: number };
-    if (count.count > 0 && !forceReset) {
-        return;
+        activeDb.prepare('DELETE FROM pricing_guide_items').run();
     }
 
     const insert = activeDb.prepare(`
-        INSERT OR REPLACE INTO pricing_guide_items (
+        INSERT OR IGNORE INTO pricing_guide_items (
             id, category, emoji, name, description, price_beans, unit,
             is_pinned, confidence_count, trend, seasonality_hint, thumbnail_url, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -178,8 +174,12 @@ export function savePricingGuideItem(item: {
 }
 
 export function deletePricingGuideItem(id: string): boolean {
-    const res = db.prepare('DELETE FROM pricing_guide_items WHERE id = ?').run(id);
-    return res.changes > 0;
+    const tx = db.transaction(() => {
+        db.prepare('DELETE FROM pricing_reports WHERE item_id = ?').run(id);
+        const res = db.prepare('DELETE FROM pricing_guide_items WHERE id = ?').run(id);
+        return res.changes > 0;
+    });
+    return tx();
 }
 
 export function pinPricingGuideItem(id: string, isPinned: boolean): boolean {
@@ -236,12 +236,10 @@ export function getPricingConfig(): PricingConfig {
     const rows = db.prepare("SELECT key, value FROM node_config WHERE key LIKE 'pricing_%'").all() as any[];
     const map = new Map(rows.map(r => [r.key, r.value]));
 
-    const multiplier = parseFloat(map.get('pricing_multiplier') || '1.0');
     const dataSource = (map.get('pricing_data_source') || 'local') as PricingConfig['dataSource'];
     const showSeasonality = map.get('pricing_show_seasonality') !== 'false';
 
     return {
-        multiplier: isNaN(multiplier) ? 1.0 : Math.max(0.5, Math.min(2.0, multiplier)),
         dataSource: ['local', 'federation', 'all'].includes(dataSource) ? dataSource : 'local',
         showSeasonality,
     };
@@ -249,10 +247,6 @@ export function getPricingConfig(): PricingConfig {
 
 export function updatePricingConfig(config: Partial<PricingConfig>): PricingConfig {
     const tx = db.transaction(() => {
-        if (config.multiplier !== undefined) {
-            const m = Math.max(0.5, Math.min(2.0, config.multiplier));
-            db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('pricing_multiplier', String(m));
-        }
         if (config.dataSource !== undefined) {
             db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('pricing_data_source', config.dataSource);
         }

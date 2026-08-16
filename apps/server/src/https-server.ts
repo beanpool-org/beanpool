@@ -717,6 +717,9 @@ export async function startHttpsServer(port: number): Promise<void> {
             ctx.path.startsWith('/api/local/') ||
             ctx.path.startsWith('/api/admin/') ||
             ctx.path.startsWith('/api/manager/') ||
+            ctx.path.startsWith('/api/pricing-guide/admin/') ||
+            ctx.path.startsWith('/api/pricing-guide/reports') ||
+            ctx.path === '/api/pricing-guide/report' ||
             ctx.path === '/api/invite/redeem' ||
             ctx.path === '/api/invite/redeem-offline';
 

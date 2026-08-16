@@ -23,7 +23,6 @@ import {
     PRICING_CATEGORIES,
     DEFAULT_PRICING_CATALOG,
     DEFAULT_PRICING_CONFIG,
-    calculateEffectivePrice,
     type PricingGuideItem,
     type PricingCategory,
     type PricingConfig,
@@ -457,7 +456,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
     );
 
     function renderItem({ item }: { item: PricingGuideItem }) {
-        const effectivePrice = calculateEffectivePrice(item.priceBeans, config.multiplier);
+        const effectivePrice = item.priceBeans;
         const confidenceColor =
             (item.confidenceCount || 0) >= 3 ? palette.emerald500 : (item.confidenceCount || 0) >= 1 ? palette.amber500 : palette.red500;
 
@@ -506,9 +505,10 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                         )}
                         <Pressable
                             style={styles.reportBtn}
+                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                             onPress={() => setReportingItem(item)}
                             accessibilityRole="button"
-                            accessibilityLabel="Report bad price"
+                            accessibilityLabel={`Report price estimate for ${item.name}`}
                         >
                             <Text style={styles.reportBtnText}>🚩</Text>
                         </Pressable>
@@ -526,8 +526,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                     <View style={styles.headerTitleWrap}>
                         <Text style={styles.headerTitle}>💡 Community Pricing Guide</Text>
                         <Text style={styles.headerSubtitle}>
-                            {config.multiplier !== 1.0 ? `Adjusted by ${config.multiplier}x community rate • ` : ''}
-                            {items.length} items & services
+                            {items.length} items & services benchmarked
                         </Text>
                     </View>
                     <Pressable style={styles.closeBtn} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close pricing guide">
@@ -556,7 +555,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                 </View>
 
                 {/* Horizontal Category Filter Pills */}
-                <View style={{ height: 48 }}>
+                <View style={{ minHeight: 56 }}>
                     <FlatList
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -615,7 +614,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                 <>
                                     <Text style={styles.sheetTitle}>🚩 Report Price: {reportingItem?.name}</Text>
                                     <Text style={styles.sheetSubtitle}>
-                                        Current estimate: 🫘 {reportingItem ? calculateEffectivePrice(reportingItem.priceBeans, config.multiplier) : ''}
+                                        Current estimate: 🫘 {reportingItem ? reportingItem.priceBeans : ''}
                                     </Text>
 
                                     <View style={styles.reportOptions}>

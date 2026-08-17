@@ -20,7 +20,7 @@ import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
 import { FriendPickerSheet } from '../components/FriendPickerSheet';
-import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from '../components/SsoButton';
+import { GoogleButton, AppleButton, FacebookButton, GitHubButton, GoogleLogo, AppleLogo, FacebookLogo, GitHubLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
@@ -1448,41 +1448,28 @@ export default function WelcomeScreen() {
                     <View style={styles.card}>
                         <Text style={styles.title} accessibilityRole="header">🔑 Restore your account</Text>
                         <Text style={styles.subtitle}>
-                            Your account isn't lost — bring it to this device with your {Platform.OS === 'ios' ? 'Apple or Google' : 'Google'} sign-in, 12 recovery words, or Guardians.
+                            Your account isn't lost — bring it to this device with your social sign-in, 12 recovery words, or Guardians.
                         </Text>
 
-                        {Platform.OS === 'ios' ? (
-                            <>
-                                <AppleButton
-                                    title="Recover with Apple"
-                                    onPress={() => {
-                                        setSsoProvider('apple');
-                                        setMode('ssoRecover');
-                                        setError(null);
-                                    }}
-                                    style={{ marginBottom: 12, width: '100%' }}
-                                />
-                                <GoogleButton
-                                    title="Recover with Google"
-                                    onPress={() => {
-                                        setSsoProvider('google');
-                                        setMode('ssoRecover');
-                                        setError(null);
-                                    }}
-                                    style={{ marginBottom: 12, width: '100%' }}
-                                />
-                            </>
-                        ) : (
-                            <GoogleButton
-                                title="Recover with Google"
-                                onPress={() => {
-                                    setSsoProvider('google');
-                                    setMode('ssoRecover');
-                                    setError(null);
-                                }}
-                                style={{ marginBottom: 12, width: '100%' }}
-                            />
-                        )}
+                        <Pressable
+                            style={styles.ssoRecoverBtn}
+                            onPress={() => {
+                                setMode('ssoRecover');
+                                setError(null);
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Recover with Social Sign-In"
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                                <Text style={styles.ssoRecoverBtnText}>🌐 Recover with Social</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 2 }}>
+                                    {Platform.OS === 'ios' && <AppleLogo size={16} color="#1D4ED8" />}
+                                    <GoogleLogo size={16} />
+                                    <FacebookLogo size={16} />
+                                    <GitHubLogo size={16} color="#24292F" />
+                                </View>
+                            </View>
+                        </Pressable>
 
                         <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
                             <Text style={styles.recoverBtnText}>🔑 Recover with 12 Words</Text>
@@ -1711,8 +1698,6 @@ export default function WelcomeScreen() {
     }
 
     if (mode === 'ssoRecover') {
-        const isApple = ssoProvider === 'apple';
-        const providerName = isApple ? 'Apple' : 'Google';
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
@@ -1723,10 +1708,10 @@ export default function WelcomeScreen() {
                     <ScrollView contentContainerStyle={styles.scroll}>
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
-                                Recover with {providerName}
+                                🌐 Recover with Social Sign-In
                             </Text>
                             <Text style={styles.subtitle}>
-                                Enter your callsign and node address to restore your account with {providerName}.
+                                Enter your callsign and node address to restore your account with any linked sign-in.
                             </Text>
 
                             <TextInput
@@ -1744,7 +1729,7 @@ export default function WelcomeScreen() {
                             <TextInput
                                 accessibilityLabel="Community Node URL"
                                 style={styles.input}
-                                placeholder="Community Node URL (e.g. https://test.beanpool.org)"
+                                placeholder="Community Node (e.g. test.beanpool.org)"
                                 placeholderTextColor={colors.text.muted}
                                 value={recoveryAnchorUrl}
                                 onChangeText={setRecoveryAnchorUrl}
@@ -1758,7 +1743,7 @@ export default function WelcomeScreen() {
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={palette.blue600} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        {ssoProgressMessage || `Verifying with ${providerName}...`}
+                                        {ssoProgressMessage || 'Verifying sign-in...'}
                                     </Text>
                                 </View>
                             )}
@@ -1767,7 +1752,7 @@ export default function WelcomeScreen() {
 
                             {!loading && (
                                 <>
-                                    {isApple && (
+                                    {Platform.OS === 'ios' && (
                                         <AppleButton
                                             title="Recover with Apple"
                                             onPress={() => handleSsoRecover('apple')}

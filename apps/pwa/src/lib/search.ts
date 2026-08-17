@@ -5,9 +5,9 @@
  * "fruit", "citrus", "produce" etc., improving marketplace discovery.
  */
 
-import synonymMap from './synonyms.json';
+import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
 
-const SYNONYMS: Record<string, string[]> = synonymMap as any;
+const SYNONYMS: Record<string, string[]> = { ...synonymMap };
 delete (SYNONYMS as any)._meta;
 
 /**

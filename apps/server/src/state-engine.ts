@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, SYNONYM_MAP } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
@@ -9,8 +9,7 @@ import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationH
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
@@ -156,20 +155,9 @@ import {
 
 
 
-// Load synonym map for FTS5 search keyword expansion
-const __filename_se = fileURLToPath(import.meta.url);
-const __dirname_se = dirname(__filename_se);
-const synonymMap: Record<string, string[]> = (() => {
-    try {
-        const raw = readFileSync(join(__dirname_se, 'db', 'synonyms.json'), 'utf-8');
-        const parsed = JSON.parse(raw);
-        delete parsed._meta;
-        return parsed;
-    } catch (e) {
-        console.warn('[FTS] Failed to load synonyms.json, search keywords will be minimal:', e);
-        return {};
-    }
-})();
+// Load synonym map for FTS5 search keyword expansion from @beanpool/core
+const synonymMap: Record<string, string[]> = { ...SYNONYM_MAP };
+delete (synonymMap as any)._meta;
 
 /**
  * Run a SELECT whose only large dynamic input is a single `IN (...)` array, splitting that

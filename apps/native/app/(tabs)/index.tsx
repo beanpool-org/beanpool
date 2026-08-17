@@ -19,7 +19,7 @@ import { categoryEmoji, categoryLabel } from '../../constants/categories';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import synonymMap from '../../utils/synonyms.json';
+import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
 
 // Build reverse synonym index: given a category/synonym, find all words that map to it
 // e.g. "fruit" → ["lemon", "lime", "orange", "apple", ...]

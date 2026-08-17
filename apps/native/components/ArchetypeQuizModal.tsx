@@ -19,7 +19,7 @@ import {
     type ArchetypeKey,
     type QuizQuestion,
     type QuizResult,
-} from '../utils/archetypes';
+} from '@beanpool/core';
 import { colors, palette } from '../constants/colors';
 import { useTheme } from '../app/ThemeContext';
 

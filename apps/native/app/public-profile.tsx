@@ -9,7 +9,7 @@ import { blockUser } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, type QuizResult } from '../utils/archetypes';
+import { parseArchetype, calculateSynergy, type QuizResult } from '@beanpool/core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';

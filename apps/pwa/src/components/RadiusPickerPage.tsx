@@ -95,7 +95,7 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                     circle.setLatLng([userLat, userLng]);
                     marker.setLatLng([userLat, userLng]);
                 },
-                () => {}, // Ignore errors
+                undefined,
                 { timeout: 5000 }
             );
         }

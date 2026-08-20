@@ -120,7 +120,7 @@ export function App() {
 
     // Connect to BeanPool Node once identity is loaded
     useEffect(() => {
-        let unsub = () => { };
+        let unsub: (() => void) | undefined;
         if (identity) {
             connectToAnchor();
             unsub = onSystemAnnouncement((a) => {
@@ -128,8 +128,8 @@ export function App() {
             });
             // Ensure existing users are registered with the node
             import('./lib/api').then(({ registerMember }) =>
-                registerMember(identity.publicKey, identity.callsign).catch(() => { })
-            );
+                registerMember(identity.publicKey, identity.callsign)
+            ).catch(Boolean);
             // Check membership status for guest/member UI. The node holds the
             // callsign that travels with your key, so if this device restored the
             // identity without a name yet (e.g. recovered while briefly offline),
@@ -142,9 +142,9 @@ export function App() {
                         if (updated) setIdentity(updated);
                     }
                 })
-                .catch(() => {});
+                .catch(Boolean);
         }
-        return unsub;
+        return () => { unsub?.(); };
     }, [identity]);
 
     // Poll unread message count and active deals

@@ -42,6 +42,53 @@ export function normalizeNodeUrl(rawUrl: string): string {
     return trimmed.replace(/\/+$/, '');
 }
 
+/**
+ * Resolves a target node endpoint URL.
+ * When running in the browser against an external node origin, routes requests through
+ * the local `/proxy/<scheme>/<host>/<path>` reverse proxy to prevent CORS and mixed-content
+ * preflight failures.
+ */
+export function resolveNodeApiUrl(nodeUrl: string, apiPath: string, searchParams?: Record<string, string>): string {
+    const cleanUrl = normalizeNodeUrl(nodeUrl);
+    const pathWithLeadingSlash = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
+
+    let targetUrl: string;
+    if (typeof window !== 'undefined' && window.location) {
+        const currentOrigin = normalizeNodeUrl(window.location.origin);
+        if (cleanUrl === currentOrigin) {
+            targetUrl = `${cleanUrl}${pathWithLeadingSlash}`;
+        } else {
+            const match = cleanUrl.match(/^(https?):\/\/([^/]+)/i);
+            if (match) {
+                const scheme = match[1].toLowerCase();
+                const host = match[2];
+                const cleanPath = pathWithLeadingSlash.replace(/^\/+/, '');
+                targetUrl = `/proxy/${scheme}/${host}/${cleanPath}`;
+            } else {
+                targetUrl = `${cleanUrl}${pathWithLeadingSlash}`;
+            }
+        }
+    } else {
+        targetUrl = `${cleanUrl}${pathWithLeadingSlash}`;
+    }
+
+    if (searchParams && Object.keys(searchParams).length > 0) {
+        const base = typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost';
+        const urlObj = new URL(targetUrl, base);
+        for (const [k, v] of Object.entries(searchParams)) {
+            if (v !== undefined && v !== null) {
+                urlObj.searchParams.set(k, v);
+            }
+        }
+        if (targetUrl.startsWith('/')) {
+            return urlObj.pathname + urlObj.search;
+        }
+        return urlObj.toString();
+    }
+
+    return targetUrl;
+}
+
 // Admin credentials travel in the X-Admin-Password header only, never as a query
 // parameter. checkAdminAuth reads the header (https-server.ts) ahead of ?password= in its
 // fallback chain, so the header alone is sufficient — and a credential in a URL ends up in
@@ -74,8 +121,8 @@ export async function loginToNode(
     adminPassword: string,
     totpCode: string,
 ): Promise<LoginResponse> {
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/admin/login`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/admin/login');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: adminPassword, totpCode }),
@@ -234,9 +281,8 @@ export async function downloadAdminFile(
 }
 
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const url = new URL(`${cleanUrl}/api/local/admin/diagnostics`);
-    const res = await fetch(url.toString(), {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/diagnostics');
+    const res = await fetch(endpoint, {
         headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
     });
@@ -272,10 +318,8 @@ export async function fetchOnboardingFunnel(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const url = new URL(`${cleanUrl}/api/local/admin/onboarding-funnel`);
-    url.searchParams.set('days', String(days));
-    const res = await fetch(url.toString(), {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/onboarding-funnel', { days: String(days) });
+    const res = await fetch(endpoint, {
         headers,
         cache: 'no-store',
     });
@@ -295,9 +339,8 @@ export async function fetchOnboardingFunnel(
 }
 
 export async function fetchGatewayConfig(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<GatewayConfig> {
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const url = new URL(`${cleanUrl}/api/local/admin/gateway`);
-    const res = await fetch(url.toString(), {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/gateway');
+    const res = await fetch(endpoint, {
         headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
     });
@@ -313,8 +356,8 @@ export async function updateGatewayConfig(
     adminPassword?: string,
     tfaToken?: string
 ): Promise<GatewayConfig> {
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/gateway`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/gateway');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...updates, password: adminPassword }),
@@ -327,8 +370,8 @@ export async function updateGatewayConfig(
 }
 
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any> {
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/data`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
@@ -340,8 +383,8 @@ export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfa
 }
 
 export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any[]> {
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/logs`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/logs');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword, limit: 50 }),
@@ -363,8 +406,8 @@ export async function freezeNodeUser(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`);
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ freeze, password: adminPassword }),
@@ -384,8 +427,8 @@ export async function pruneNodeUser(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`);
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ password: adminPassword }),
@@ -405,8 +448,8 @@ export async function generateNodeInvite(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/admin/seed-invite`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/admin/seed-invite');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ password: adminPassword, type }),
@@ -427,8 +470,8 @@ export async function updateNodeUserTier(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/tier`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/tier`);
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ tier, password: adminPassword }),
@@ -449,8 +492,8 @@ export async function updateNodeUserVoucher(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/voucher`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/voucher`);
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ grant: canVouch, password: adminPassword }),
@@ -471,8 +514,8 @@ export async function updateNodeUserOperator(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/users/${encodeURIComponent(pubkey)}/operator`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/operator`);
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ granted, password: adminPassword }),
@@ -493,8 +536,8 @@ export interface NodeTreasury {
 }
 
 export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury[]> {
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/treasuries`);
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/treasuries');
+    const res = await fetch(endpoint);
     if (!res.ok) return [];
     const data = await res.json();
     return data.treasuries || [];
@@ -509,8 +552,8 @@ export async function createNodeTreasury(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/treasury`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/treasury');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ ...data, password: adminPassword }),
@@ -531,8 +574,8 @@ export async function seedTreasuryOffer(
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;
     }
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/offer`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/offer`);
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ ...offer, password: adminPassword }),
@@ -612,8 +655,8 @@ export interface SnapshotItem {
 export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string): Promise<SnapshotItem[]> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) headers['X-Admin-Password'] = adminPassword;
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/snapshots/list`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/list');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ password: adminPassword }),
@@ -626,8 +669,8 @@ export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string
 export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string): Promise<SnapshotItem> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) headers['X-Admin-Password'] = adminPassword;
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/snapshots/create`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/create');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ password: adminPassword }),
@@ -642,8 +685,8 @@ export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string
 export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPassword?: string): Promise<void> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) headers['X-Admin-Password'] = adminPassword;
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/snapshots/delete`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/delete');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ name, password: adminPassword }),
@@ -661,8 +704,8 @@ export async function updateNodeReplicationCadence(
 ): Promise<void> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) headers['X-Admin-Password'] = adminPassword;
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/backup-config`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/backup-config');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ pullSeconds, reconcileMinutes, password: adminPassword }),
@@ -675,8 +718,8 @@ export async function updateNodeReplicationCadence(
 export async function forceNodeResync(nodeUrl: string, adminPassword?: string): Promise<void> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) headers['X-Admin-Password'] = adminPassword;
-    const cleanUrl = normalizeNodeUrl(nodeUrl);
-    const res = await fetch(`${cleanUrl}/api/local/admin/replication-resync`, {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-resync');
+    const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({ password: adminPassword }),
@@ -721,10 +764,10 @@ export async function getRegistrarPending(
         headers['X-Admin-Password'] = adminPassword;
         headers['x-admin-secret'] = adminPassword;
     }
-    const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
-    const endpoint = cleanUrl ? `${cleanUrl}/api/local/admin/registrar/pending` : '/api/local/admin/registrar/pending';
-    const url = new URL(endpoint, typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost');
-    const res = await fetch(url.toString(), {
+    const endpoint = nodeUrl
+        ? resolveNodeApiUrl(nodeUrl, '/api/local/admin/registrar/pending')
+        : '/api/local/admin/registrar/pending';
+    const res = await fetch(endpoint, {
         headers,
         cache: 'no-store',
     });
@@ -757,9 +800,8 @@ export async function approveRegistrarClaim(
         headers['X-Admin-Password'] = pwd;
         headers['x-admin-secret'] = pwd;
     }
-    const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
-    const endpoint = cleanUrl
-        ? `${cleanUrl}/api/local/admin/registrar/${encodeURIComponent(name)}/approve`
+    const endpoint = nodeUrl
+        ? resolveNodeApiUrl(nodeUrl, `/api/local/admin/registrar/${encodeURIComponent(name)}/approve`)
         : `/api/local/admin/registrar/${encodeURIComponent(name)}/approve`;
 
     const res = await fetch(endpoint, {
@@ -793,9 +835,8 @@ export async function revokeRegistrarClaim(
         headers['X-Admin-Password'] = pwd;
         headers['x-admin-secret'] = pwd;
     }
-    const cleanUrl = nodeUrl ? normalizeNodeUrl(nodeUrl) : '';
-    const endpoint = cleanUrl
-        ? `${cleanUrl}/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`
+    const endpoint = nodeUrl
+        ? resolveNodeApiUrl(nodeUrl, `/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`)
         : `/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`;
 
     const res = await fetch(endpoint, {
@@ -808,9 +849,4 @@ export async function revokeRegistrarClaim(
     }
     return res.json();
 }
-
-
-
-
-
 

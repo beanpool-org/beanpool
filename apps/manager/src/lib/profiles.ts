@@ -33,13 +33,7 @@ export function loadNodeProfiles(): NodeProfile[] {
         if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                const normalized = parsed.map((p: NodeProfile) => ({ ...p, url: normalizeNodeUrl(p.url) }));
-                const hasLocal = normalized.some((p: NodeProfile) => p.id === 'local-node' || p.url === localUrl);
-                if (!hasLocal) {
-                    profilesToUse = [defaultProfiles[0], ...normalized];
-                } else {
-                    profilesToUse = normalized;
-                }
+                profilesToUse = parsed.map((p: NodeProfile) => ({ ...p, url: normalizeNodeUrl(p.url) }));
             }
         }
     } catch { /* ignore */ }

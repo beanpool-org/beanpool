@@ -39,17 +39,18 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
         (async () => {
             try {
                 const p = await getMemberProfile(identity.publicKey, identity.publicKey);
-                if (p) {
-                    setAvatar(p.avatar);
-                    setBio(p.bio || '');
-                    if (p.contact) setContact(p.contact);
-                    // Open at the first missing step so someone who only needs a
-                    // photo isn't walked back through their name.
-                    const nameOk = (identity.callsign?.trim().length ?? 0) >= 2;
-                    if (nameOk && !resolveAvatarUrl(p.avatar)) setStep('avatar');
-                }
-            } catch { /* first time / offline — start at name */ }
-            setLoading(false);
+                if (!p) return;
+
+                setAvatar(p.avatar);
+                setBio(p.bio || '');
+                if (p.contact) setContact(p.contact);
+                // Open at the first missing step so someone who only needs a
+                // photo isn't walked back through their name.
+                const nameOk = (identity.callsign?.trim().length ?? 0) >= 2;
+                if (nameOk && !resolveAvatarUrl(p.avatar)) setStep('avatar');
+            } catch { /* first time / offline — start at name */ } finally {
+                setLoading(false);
+            }
         })();
         // eslint-disable-next-line
     }, []);

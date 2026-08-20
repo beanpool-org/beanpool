@@ -120,30 +120,30 @@ export function App() {
 
     // Connect to BeanPool Node once identity is loaded
     useEffect(() => {
-        let unsub = () => { };
-        if (identity) {
-            connectToAnchor();
-            unsub = onSystemAnnouncement((a) => {
-                setSysAnnouncement({ title: a.title, body: a.body, severity: a.severity });
-            });
-            // Ensure existing users are registered with the node
-            import('./lib/api').then(({ registerMember }) =>
-                registerMember(identity.publicKey, identity.callsign).catch(() => { })
-            );
-            // Check membership status for guest/member UI. The node holds the
-            // callsign that travels with your key, so if this device restored the
-            // identity without a name yet (e.g. recovered while briefly offline),
-            // adopt the node's — never overwrite a name the user already has.
-            checkMembership(identity.publicKey)
-                .then(async r => {
-                    setIsGuest(!r.isMember);
-                    if (r.callsign && !identity.callsign?.trim()) {
-                        const updated = await updateCallsign(r.callsign);
-                        if (updated) setIdentity(updated);
-                    }
-                })
-                .catch(() => {});
-        }
+        if (!identity) return;
+
+        connectToAnchor();
+        const unsub = onSystemAnnouncement((a) => {
+            setSysAnnouncement({ title: a.title, body: a.body, severity: a.severity });
+        });
+        // Ensure existing users are registered with the node
+        import('./lib/api').then(({ registerMember }) =>
+            registerMember(identity.publicKey, identity.callsign).catch(() => {})
+        );
+        // Check membership status for guest/member UI. The node holds the
+        // callsign that travels with your key, so if this device restored the
+        // identity without a name yet (e.g. recovered while briefly offline),
+        // adopt the node's — never overwrite a name the user already has.
+        checkMembership(identity.publicKey)
+            .then(async r => {
+                setIsGuest(!r.isMember);
+                if (r.callsign && !identity.callsign?.trim()) {
+                    const updated = await updateCallsign(r.callsign);
+                    if (updated) setIdentity(updated);
+                }
+            })
+            .catch(() => {});
+
         return unsub;
     }, [identity]);
 

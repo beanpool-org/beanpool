@@ -1174,16 +1174,23 @@ export async function getTransactions(pubkey: string) {
             const res = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubkey}&limit=20&_t=${Date.now()}`);
             if (res.ok) {
                 const txns = await res.json();
-                if (Array.isArray(txns)) {
+                if (Array.isArray(txns) && txns.length > 0) {
                     let newInserted = false;
-                    for (const t of txns) {
-                        try {
-                            const result = await database.runAsync(
-                                'INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                [t.id, t.from_pubkey || t.from, t.to_pubkey || t.to, t.amount, t.taxFee || t.tax_fee || 0, t.memo, t.timestamp]
-                            );
-                            if (result.changes > 0) newInserted = true;
-                        } catch(e) {}
+                    await acquireSyncLock();
+                    try {
+                        await database.withTransactionAsync(async () => {
+                            for (const t of txns) {
+                                try {
+                                    const result = await database.runAsync(
+                                        'INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                        [t.id, t.from_pubkey || t.from, t.to_pubkey || t.to, t.amount, t.taxFee || t.tax_fee || 0, t.memo, t.timestamp]
+                                    );
+                                    if (result.changes > 0) newInserted = true;
+                                } catch(e) {}
+                            }
+                        });
+                    } finally {
+                        releaseSyncLock();
                     }
                     if (newInserted) {
                         DeviceEventEmitter.emit('sync_data_updated');

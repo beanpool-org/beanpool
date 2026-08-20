@@ -971,7 +971,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         const wss = new WebSocketServer({ noServer: true });
         const logsWss = new WebSocketServer({ noServer: true });
 
-        server.on('upgrade', (req, socket, head) => {
+        server.on('upgrade', async (req, socket, head) => {
             const reqUrl = req.url || '';
             const parsedUrl = new URL(reqUrl, 'https://localhost');
             const pathname = parsedUrl.pathname;
@@ -1010,7 +1010,7 @@ export async function startHttpsServer(port: number): Promise<void> {
 
                 if (ticket && isValidWsTicket(ticket)) {
                     authorized = true;
-                } else if (auth && config.adminHash && config.salt && verifyPassword(auth, config.adminHash, config.salt)) {
+                } else if (auth && config.adminHash && config.salt && await verifyPasswordAsync(auth, config.adminHash, config.salt)) {
                     logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
                     authorized = true;
                 }

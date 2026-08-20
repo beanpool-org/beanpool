@@ -51,5 +51,9 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning
 
 ## 2026-08-20 - [Ledger Export Audit Coverage]
 **Gap found:** `exportLedgerAudit` in `apps/server/src/engine/audit.ts` had no corresponding test file.
-**Learning:** The export script reads from global state (like COMMONS_BALANCE) as well as the database. It is necessary to correctly mock the state and node configurations like `commons_projects` to ensure complete coverage of the output shape.
+**Learning:** The export script reads from global state (like COMMONS_BALANCE) as well as the database. It is necessary to correctly mock the state and node configurations like `commons_projects` to ensure complete coverage of the output shape. (Landed in #306).
 **Action:** Created `test-ledger-export.ts` to verify CSV formatting for balances and transactions.
+
+## 2026-08-20 - [Monorepo Test Isolation & PWA Dependency Boundary]
+**Gotcha:** Do NOT open component test PRs in `apps/pwa` that independently bootstrap `setupTests.ts`, add `@testing-library` packages, modify `pnpm-lock.yaml`, or edit `resolve.alias` in `vite.config.ts`.
+**Reason:** `apps/pwa` has no test harness on `main`. Ad-hoc bootstrapping attempts in multiple PRs churned the lockfile, downgraded React from 19.2.0 to 19.1.0 across the repo, and pointed production bundle aliases at testing-library's nested React. Test suites must only be added after a dedicated, unified test harness PR is approved on `main`.

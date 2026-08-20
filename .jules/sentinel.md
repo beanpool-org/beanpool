@@ -153,4 +153,10 @@ These were reviewed and **CLOSED, not merged**: their branches had ~260-file dri
 
 ## 2026-08-20 - [Sentinel] Fixed WebSocket upgrade synchronous scrypt DoS
 **Vulnerability:** In `apps/server/src/https-server.ts`, the WebSocket upgrade handler for `/ws/logs` was synchronously calling `verifyPassword` to validate the `?auth=` query parameter. Because `verifyPassword` runs `scryptSync`, this would block the main Node.js event loop for 100-300ms per connection attempt. An attacker could trivially cause a Denial of Service (DoS) by spamming the server with `/ws/logs?auth=...` requests.
-**Fix landed:** Migrated the password verification in the WebSocket upgrade handler to use `verifyPasswordAsync` (which uses the libuv threadpool), just like the REST API endpoints did in A2-21. Updated `server.on('upgrade')` to be an async handler.
+**Fix landed:** Migrated the password verification in the WebSocket upgrade handler to use `verifyPasswordAsync` (which uses the libuv threadpool), just like the REST API endpoints did in A2-21. Updated `server.on('upgrade')` to be an async handler. (Landed in #308).
+
+## 2026-08-20 - [Sentinel] Recovery Pending Endpoint & ENFORCE_READ_AUTH
+**Gotcha:** Do NOT remove `if (ENFORCE_READ_AUTH)` guards around `ctx.state.actor` in `apps/server/src/routes/community.ts` (such as `/api/recovery/pending/:guardianPubkey`). `requireSignature` only runs on GET requests when `ENFORCE_READ_AUTH` is explicitly enabled. Stripping the flag check causes `ctx.state.actor` to be undefined on standard nodes, permanently breaking recovery status lookups with false 403s.
+
+## 2026-08-20 - [Sentinel] Registrar Admin Secret Timing Comparison & Session Storage
+**Resolved:** Handled in PR #336 (constant-time `crypto.timingSafeEqual` comparison for registrar secrets) and PR #352 (switched registrar admin key from persistent `localStorage` to ephemeral `sessionStorage`). Do not re-raise. Do not widen `checkAdmin` to accept secrets via unauthenticated header transports or inject unescaped inputs into admin HTML.

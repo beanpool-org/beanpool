@@ -67,3 +67,10 @@ lookups/counts → O(1)" fix). Before opening a PR:
 ## 2026-07-02 - O(N^2) Nested Scan During Ledger Audit Export
 **Learning:** In `apps/server/src/state-engine.ts`, the `exportLedgerAudit` function used `members.find(...)` inside a loop over `pendingTxs` array to lookup the member details associated with a transaction. This `.find` creates an `O(N * M)` nested scan since it repeatedly scans over the entire list of community members.
 **Action:** When filtering or enriching rows sequentially, use `Map` lookups instead. A Map can be created via `const membersByPubKey = new Map(members.map(m => [m.publicKey, m]));` and then the lookup happens with an `O(1)` Map retrieval via `membersByPubKey.get(tx.buyer_pubkey)`. This transforms an O(N^2) procedure into a significantly faster O(N) operation.
+
+## 2026-08-20 - Connector Lookups by PeerId & Fallback Semantics
+**Learning:** When looking up connectors by peer ID, respect `materialise()` logic: `peerIdFromAddress(address)` is a fallback only when `status.peerId` is unset. The matching condition should be `(status?.peerId ?? peerIdFromAddress(c.address)) === peerId`. Do not match against address when live `status.peerId` is already present.
+
+## 2026-08-20 - SQLite Native Batching & Lock Hygiene
+**Learning:** In `apps/native/utils/db.ts`, batching accounts insertions during sync deltas (`applyDelta`) into chunks of 100 significantly accelerates synchronization without hitting SQLite variable limits (landed in #324). However, avoid taking global sync locks on detached or read-heavy background loops to prevent lock contention.
+

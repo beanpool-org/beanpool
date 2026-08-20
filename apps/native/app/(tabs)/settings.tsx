@@ -1886,7 +1886,18 @@ export default function SettingsScreen() {
                         <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} />
                     ) : (
                         <>
-                            <RecoveryAlertBanner />
+                            <RecoveryAlertBanner
+                                onResplit={Platform.OS !== 'web' ? () => {
+                                    const prot = protectionFrom(protectionResult);
+                                    if (prot.tier === 'sso') {
+                                        setShowSsoSheet(true);
+                                    } else if (prot.tier === 'friends') {
+                                        setShowFriendSheet(true);
+                                    } else {
+                                        setShowSsoSheet(true);
+                                    }
+                                } : undefined}
+                            />
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
                                 onProtectSso={Platform.OS !== 'web' ? (prov) => {
@@ -1894,6 +1905,16 @@ export default function SettingsScreen() {
                                     setShowSsoSheet(true);
                                 } : undefined}
                                 onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
+                                onResplit={Platform.OS !== 'web' ? () => {
+                                    const prot = protectionFrom(protectionResult);
+                                    if (prot.tier === 'sso') {
+                                        setShowSsoSheet(true);
+                                    } else if (prot.tier === 'friends') {
+                                        setShowFriendSheet(true);
+                                    } else {
+                                        setShowSsoSheet(true);
+                                    }
+                                } : undefined}
                             />
 
                             <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>

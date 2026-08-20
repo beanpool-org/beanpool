@@ -21,11 +21,19 @@ export function KeeperProtectionPanel({
     protection,
     onProtectSso,
     onProtectFriends,
+    onResplit,
 }: { 
     protection: Protection;
     onProtectSso?: (provider?: SsoProvider) => void;
     onProtectFriends?: () => void;
+    onResplit?: () => void;
 }): React.JSX.Element {
+    const handleResplit = onResplit ?? (
+        protection.tier === 'sso'
+            ? () => onProtectSso?.()
+            : () => onProtectFriends?.()
+    );
+
     if (protection.state === 'covered') {
         if (protection.tier === 'sso') {
             return (
@@ -40,6 +48,16 @@ export function KeeperProtectionPanel({
                     <Text style={styles.footnote}>
                         Neither of them can open your account alone — it takes both.
                     </Text>
+                    {(onResplit || onProtectSso) && (
+                        <TouchableOpacity
+                            style={styles.resplitButton}
+                            onPress={handleResplit}
+                            accessibilityRole="button"
+                            accessibilityLabel="Re-split keepers"
+                        >
+                            <Text style={styles.resplitButtonText}>🔄 Re-split Keepers</Text>
+                        </TouchableOpacity>
+                    )}
                     {onProtectFriends && (
                         <TouchableOpacity
                             onPress={onProtectFriends}
@@ -70,6 +88,16 @@ export function KeeperProtectionPanel({
                     <Text style={styles.footnote}>
                         No single piece can open your account — it takes the hub plus any {TWO_LAYER_THRESHOLD} friends.
                     </Text>
+                    {(onResplit || onProtectFriends) && (
+                        <TouchableOpacity
+                            style={styles.resplitButton}
+                            onPress={handleResplit}
+                            accessibilityRole="button"
+                            accessibilityLabel="Re-split keepers"
+                        >
+                            <Text style={styles.resplitButtonText}>🔄 Re-split Keepers</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             );
         }
@@ -184,5 +212,20 @@ const styles = StyleSheet.create({
         color: colors.text.secondary,
         marginTop: 6,
         textAlign: 'center',
+    },
+    resplitButton: {
+        backgroundColor: colors.surface.card,
+        borderWidth: 1,
+        borderColor: colors.border.default,
+        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        marginTop: 12,
+        alignItems: 'center',
+    },
+    resplitButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.text.heading,
     },
 });

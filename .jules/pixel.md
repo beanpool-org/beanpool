@@ -63,3 +63,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-08-20 - Add accessibilityRole to Clear Search Button in PricingGuideModal
 **Learning:** The 'Clear search' `<Pressable>` button in the `PricingGuideModal.tsx` lacked an `accessibilityRole` and `accessibilityLabel`, making it unclear to screen readers.
 **Action:** Always ensure that interactive elements like `<Pressable>` or `<TouchableOpacity>` have a valid `accessibilityRole="button"` and an `accessibilityLabel` describing their function.
+
+## 2026-08-21 - Add accessible container and label to SyncStatus component
+**Learning:** Grouped visual status indicators like `SyncStatus` combine dot indicators and text stacks without grouping, making screen readers read disjointed chunks.
+**Action:** Add `accessible={true}` and a comprehensive `accessibilityLabel` on container `<View>` elements that summarize child status components.

@@ -1,12 +1,17 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 
 export default defineConfig({
+    resolve: {
+        alias: {
+            '@beanpool/core': path.resolve(__dirname, '../../packages/beanpool-core/src/index.ts'),
+        }
+    },
     plugins: [
         react(),
-        VitePWA({
+        !process.env.VITEST && VitePWA({
             registerType: 'autoUpdate',
             selfDestroying: true, // Disable service worker until offline caching is properly configured
             includeAssets: ['favicon.svg'],
@@ -34,7 +39,7 @@ export default defineConfig({
                 ],
             },
         }),
-    ],
+    ].filter(Boolean),
     server: {
         host: true,
         proxy: {
@@ -54,5 +59,10 @@ export default defineConfig({
     build: {
         outDir: path.resolve(__dirname, '../server/public'),
         emptyOutDir: true,
+    },
+    test: {
+        globals: true,
+        environment: 'jsdom',
+        setupFiles: './src/setupTests.ts',
     },
 });

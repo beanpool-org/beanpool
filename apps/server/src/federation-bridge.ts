@@ -249,6 +249,49 @@ export function totalEnergyPosition(): number {
     return Math.round((row?.t ?? 0) * 100) / 100;
 }
 
+export interface BridgeDisplayNameParts {
+    emoji: string;
+    name: string;
+    ariaLabel: string;
+}
+
+/**
+ * Structured display parts for a bridge account counterparty label.
+ *
+ * Screen readers read the 🌐 emoji verbatim as "Globe showing Americas".
+ * This helper breaks the label into separate components so clients can render
+ * the emoji in an `<span aria-hidden="true">` while providing an `ariaLabel`
+ * (e.g. "Community: Byron Bay") to screen readers for accessible accessibility text.
+ */
+export function bridgeDisplayNameParts(accountId?: string | null): BridgeDisplayNameParts | null {
+    // Tolerate a missing id: counterparty fields are optional on some rows, and a label helper must not
+    // be the thing that throws on one (review finding).
+    if (!accountId || typeof accountId !== 'string') return null;
+    if (!accountId.startsWith('bridge_')) return null;
+
+    const peerId = peerFromBridgeAccountId(accountId);
+
+    // Connected but unnamed, configured and never met, or unparseable. Say what we know rather than leaking
+    // a peer id: "another community" is honest and readable, where a truncated hash is neither.
+    let name = 'Another community';
+
+    // A malformed `bridge_` id still gets a label. Returning null here let the caller fall back to its
+    // normal member lookup, which fails, and the raw `bridge_12D3Koo…` string reached a member's ledger
+    // (review finding). Every bridge account is *some* other community, whether we can name it or not.
+    if (peerId) {
+        // Trim, and strip a globe the operator may have typed into the callsign themselves — otherwise a
+        // community called "🌐 Byron" renders as "🌐 🌐 Byron", and a callsign of "   " renders as "🌐    ".
+        const callsign = getConnectors().find(c => c.peerId === peerId)?.callsign?.replace(/^🌐\s*/, '').trim();
+        if (callsign) name = callsign;
+    }
+
+    return {
+        emoji: '🌐',
+        name,
+        ariaLabel: `Community: ${name}`,
+    };
+}
+
 /**
  * Human label for a bridge account, for a member's ledger (#104).
  *
@@ -264,30 +307,9 @@ export function totalEnergyPosition(): number {
  * they are very different facts and would otherwise read alike.
  */
 export function bridgeDisplayName(accountId?: string | null): string | null {
-    // Tolerate a missing id: counterparty fields are optional on some rows, and a label helper must not
-    // be the thing that throws on one (review finding).
-    if (!accountId || typeof accountId !== 'string') return null;
-    if (!accountId.startsWith('bridge_')) return null;
-
-    const peerId = peerFromBridgeAccountId(accountId);
-
-    // A malformed `bridge_` id still gets a label. Returning null here let the caller fall back to its
-    // normal member lookup, which fails, and the raw `bridge_12D3Koo…` string reached a member's ledger
-    // (review finding). Every bridge account is *some* other community, whether we can name it or not.
-    if (peerId) {
-        // Trim, and strip a globe the operator may have typed into the callsign themselves — otherwise a
-        // community called "🌐 Byron" renders as "🌐 🌐 Byron", and a callsign of "   " renders as "🌐    ".
-        const callsign = getConnectors().find(c => c.peerId === peerId)?.callsign?.replace(/^🌐\s*/, '').trim();
-        if (callsign) return `🌐 ${callsign}`;
-    }
-
-    // Connected but unnamed, configured and never met, or unparseable. Say what we know rather than leaking
-    // a peer id: "another community" is honest and readable, where a truncated hash is neither.
-    //
-    // TODO(clients): screen readers read the globe verbatim ("Globe showing Americas, Byron Bay"). This
-    // returns a plain string because nothing renders it yet; when a client wires it up, wrap the emoji in
-    // an aria-hidden span and give the row an aria-label naming the community.
-    return '🌐 Another community';
+    const parts = bridgeDisplayNameParts(accountId);
+    if (!parts) return null;
+    return `${parts.emoji} ${parts.name}`;
 }
 
 /**

@@ -20,7 +20,7 @@ delete process.env.CF_RECORD_NAME;
 import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { addConnector } from './connector-manager.js';
-import { bridgeAccountId, resolveCounterpartyLabel, bridgeDisplayName } from './federation-bridge.js';
+import { bridgeAccountId, resolveCounterpartyLabel, bridgeDisplayName, bridgeDisplayNameParts } from './federation-bridge.js';
 import {
     openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, unfinalisedSettlementsSql,
     receiptStatus, actionForReceiptStatus,
@@ -184,6 +184,17 @@ async function main() {
     addConnector(`/dns4/dupe.beanpool.org/tcp/4001/p2p/12D3KooWDupeGlobe`, 'peer', '🌐 Mullum', 'https://dupe.beanpool.org');
     assert(bridgeDisplayName(bridgeAccountId('12D3KooWDupeGlobe')) === '🌐 Mullum',
         'a callsign that already carries a globe is not given a second one');
+
+    // Structured display parts for screen reader accessibility
+    const partsByron = bridgeDisplayNameParts(bridge);
+    assert(partsByron?.emoji === '🌐' && partsByron?.name === 'Byron Bay' && partsByron?.ariaLabel === 'Community: Byron Bay',
+        'bridgeDisplayNameParts returns emoji, name, and accessibility ariaLabel');
+
+    const partsUnknown = bridgeDisplayNameParts('bridge_');
+    assert(partsUnknown?.name === 'Another community' && partsUnknown?.ariaLabel === 'Community: Another community',
+        'bridgeDisplayNameParts returns generic accessibility parts for malformed bridge ID');
+
+    assert(bridgeDisplayNameParts('COMMONS_POOL') === null, 'bridgeDisplayNameParts returns null for non-bridge IDs');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

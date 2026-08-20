@@ -55,4 +55,9 @@ export default defineConfig({
         outDir: path.resolve(__dirname, '../server/public'),
         emptyOutDir: true,
     },
+    test: {
+        globals: true,
+        environment: 'jsdom',
+        setupFiles: './src/setupTests.ts',
+    },
 });

@@ -38,7 +38,7 @@ import {
     conservingTransaction, getNodeRole,
 } from './state-engine.js';
 import { bridgeAccountId, ensureBridgeAccount, settlementCapacityForPeer } from './federation-bridge.js';
-import { getConnectors } from './connector-manager.js';
+import { getConnectors, getConnectorByPeerId } from './connector-manager.js';
 import {
     openSettlement, advanceSettlement, getSettlement, unfinalisedSettlements, expiredReservations,
     receiptStatus, actionForReceiptStatus, type SettlementRow, type ReceiptStatus,
@@ -794,7 +794,7 @@ export function handlePurchaseRequest(input: {
     // Deriving it from the connector is also strictly better than believing the payload: we know who the
     // peer is from the authenticated connection, whereas `buyerHomeNode` is just a string they sent.
     const resolvedHomeNode = input.buyerHomeNode?.trim()
-        || getConnectors().find(c => c.peerId === input.peerId)?.publicUrl
+        || getConnectorByPeerId(input.peerId)?.publicUrl
         || null;
     if (!resolvedHomeNode) {
         return {

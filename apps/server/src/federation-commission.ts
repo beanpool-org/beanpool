@@ -51,7 +51,7 @@
 import { db } from './db/db.js';
 import { energyBalanceExact } from './federation-bridge.js';
 import { getFederationLink, type FederationLink } from './federation-link.js';
-import { getConnectors } from './connector-manager.js';
+import { getConnectors, getConnectorByPeerId } from './connector-manager.js';
 import { payFromCommons, getCommonsBalanceExact } from './state-engine.js';
 import { crossNodeFee } from './federation-settlement-exchange.js';
 import { logger } from './logger.js';
@@ -116,7 +116,7 @@ function capacityFor(link: FederationLink): CommissionCapacity {
         peerId: link.peerId,
         treasuryPubkey: link.treasuryPubkey,
         name: link.name,
-        originNode: getConnectors().find(c => c.peerId === link.peerId)?.publicUrl ?? null,
+        originNode: getConnectorByPeerId(link.peerId)?.publicUrl ?? null,
         energyBalance: round4(tab),
         ceiling: link.commissionCeiling,
         allowance: commissionAllowanceFor(link.commissionCeiling, tab),

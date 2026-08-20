@@ -9,6 +9,7 @@
  * History sub-filter: All | Received | Given
  */
 
+import { useState, useEffect } from 'react';
 import type { MarketplacePost } from '../lib/api';
 
 interface MarketplaceTransaction {
@@ -27,8 +28,6 @@ interface MarketplaceTransaction {
     ratedBySeller?: boolean;
 }
 
-import { useState, useEffect } from 'react';
-
 interface Props {
     visible: boolean;
     identity: { publicKey: string } | null;
@@ -38,6 +37,150 @@ interface Props {
     initialTab?: 'active' | 'pending' | 'history';
     onNavigateToPost?: (postId: string, txId?: string) => void;
     onPromptReview?: (tx: { txId: string; targetPubkey: string; targetCallsign: string; targetRole: 'provider' | 'receiver' }) => void;
+}
+
+interface TransactionCardProps {
+    item: MarketplaceTransaction;
+    identityPublicKey: string;
+    onClose: () => void;
+    onNavigateToPost?: (postId: string, txId?: string) => void;
+    onPromptReview?: (tx: { txId: string; targetPubkey: string; targetCallsign: string; targetRole: 'provider' | 'receiver' }) => void;
+}
+
+function TransactionCard({ item, identityPublicKey, onClose, onNavigateToPost, onPromptReview }: TransactionCardProps) {
+    const isBuyer = item.buyerPublicKey === identityPublicKey;
+    const isCompleted = item.status === 'completed';
+    const isPending = item.status === 'pending';
+    const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
+    const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
+
+    return (
+        <div
+            onClick={() => {
+                if (isPending && onNavigateToPost) {
+                    onClose();
+                    onNavigateToPost(item.postId, item.id);
+                }
+            }}
+            className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all ${
+                isPending ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20 cursor-pointer hover:border-emerald-400 hover:shadow-md'
+                : isCompleted ? 'border-nature-200 dark:border-nature-800'
+                : 'border-nature-200/50 dark:border-nature-800/50 opacity-60 grayscale-[50%]'
+            }`}
+        >
+            <div className="flex gap-3 mb-2">
+                {item.coverImage ? (
+                    <img src={item.coverImage} alt="Cover" className="w-14 h-14 rounded-xl object-cover border border-nature-100 dark:border-nature-800 shrink-0" />
+                ) : (
+                    <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
+                        <span className="text-xl opacity-50">{isBuyer ? '🛒' : '🏷️'}</span>
+                    </div>
+                )}
+                <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start mb-1">
+                        <div className="flex items-center gap-2">
+                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                isCompleted ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                : isPending ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400'
+                                : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-400'
+                            }`}>
+                                {item.status}
+                            </span>
+                            <span className="text-[10px] text-nature-400 font-bold">
+                                {new Date(item.createdAt).toLocaleDateString()}
+                            </span>
+                        </div>
+                        <div className="flex items-center">
+                            <span className={`font-black text-sm ${isBuyer ? 'text-red-500' : 'text-emerald-500'}`}>
+                                {isBuyer ? '- ' : '+ '}{item.credits}
+                            </span>
+                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
+                        </div>
+                    </div>
+                    <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate">
+                        {item.postTitle}
+                    </h4>
+                </div>
+            </div>
+            <div className="flex justify-between items-end">
+                <p className="text-[11px] text-nature-500 font-medium">
+                    {isBuyer ? 'Bought from ' : 'Sold to '}
+                    <span className="text-nature-800 dark:text-nature-300 font-bold">{partnerCallsign}</span>
+                </p>
+                {needsReview && onPromptReview && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onPromptReview({
+                                txId: item.id,
+                                targetPubkey: isBuyer ? item.sellerPublicKey : item.buyerPublicKey,
+                                targetCallsign: partnerCallsign,
+                                targetRole: isBuyer ? 'provider' : 'receiver',
+                            });
+                        }}
+                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 text-amber-800 dark:text-amber-500 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-800 transition-colors shadow-sm"
+                    >
+                        Leave Review
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+interface PostCardProps {
+    item: MarketplacePost;
+    onClose: () => void;
+    onNavigateToPost?: (postId: string, txId?: string) => void;
+}
+
+function PostCard({ item, onClose, onNavigateToPost }: PostCardProps) {
+    const coverImage = item.photos && item.photos.length > 0 ? item.photos[0] : null;
+    return (
+        <div
+            onClick={() => {
+                if (onNavigateToPost) {
+                    onClose();
+                    onNavigateToPost(item.id);
+                }
+            }}
+            className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all ${
+                item.status === 'pending' ? 'bg-emerald-50/10 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : ''
+            }`}
+        >
+            <div className="flex gap-4">
+                {coverImage ? (
+                    <img src={coverImage} alt="Cover" className="w-14 h-14 rounded-xl object-cover border border-nature-100 dark:border-nature-800 shrink-0" />
+                ) : (
+                    <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
+                        <span className="text-xl opacity-50">📦</span>
+                    </div>
+                )}
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <div className="flex justify-between items-start mb-1">
+                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                            item.type === 'offer' ? 'bg-terra-100 text-terra-800 dark:bg-terra-900/40 dark:text-terra-400'
+                            : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-400'
+                        }`}>
+                            {item.type}
+                        </span>
+                        <div className="flex items-center">
+                            <span className="font-black text-sm text-indigo-500">
+                                {item.credits ?? '?'}
+                            </span>
+                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
+                        </div>
+                    </div>
+                    <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
+                        {item.title}
+                    </h4>
+                    <p className="text-[11px] text-nature-500 font-bold uppercase tracking-wide">
+                        {item.status === 'pending' ? '🤝 Held in Trust' : '🟢 Active'}
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export function MyDealsModal({ visible, identity, onClose, posts, transactions, initialTab = 'pending', onNavigateToPost, onPromptReview }: Props) {
@@ -70,20 +213,23 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
 
     const pendingCount = pendingDeals.length + transactions.filter(t => t.status === 'pending').length;
 
-    const getData = (): any[] => {
-        if (dealsTab === 'active') return myPosts.filter(p => p.status === 'active');
+    const isPostsTab = dealsTab === 'active';
+
+    const getPostsData = (): MarketplacePost[] => myPosts.filter(p => p.status === 'active');
+
+    const getTransactionsData = (): MarketplaceTransaction[] => {
         if (dealsTab === 'pending') {
-            // Combine pending posts and pending transactions
             return transactions.filter(t => t.status === 'pending');
         }
-        // History
         let txs = transactions.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');
         if (historyFilter === 'buying') txs = txs.filter(t => t.buyerPublicKey === identity.publicKey);
         if (historyFilter === 'selling') txs = txs.filter(t => t.sellerPublicKey === identity.publicKey);
         return txs;
     };
 
-    const listData = getData();
+    const postsData = isPostsTab ? getPostsData() : [];
+    const transactionsData = isPostsTab ? [] : getTransactionsData();
+    const isListEmpty = isPostsTab ? postsData.length === 0 : transactionsData.length === 0;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
@@ -155,7 +301,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
 
                 {/* List */}
                 <div className="flex-1 overflow-y-auto p-4 bg-oat-50/30 dark:bg-nature-950">
-                    {listData.length === 0 ? (
+                    {isListEmpty ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                             <span className="text-5xl opacity-30 mb-4">{dealsTab === 'history' ? '📜' : dealsTab === 'pending' ? '🤝' : '📋'}</span>
                             <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">
@@ -179,139 +325,25 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                         </div>
                     ) : (
                         <div className="flex flex-col gap-3">
-                            {listData.map((item: any) => {
-                                // Transaction view (History + Pending)
-                                if (dealsTab === 'history' || dealsTab === 'pending') {
-                                    const isBuyer = item.buyerPublicKey === identity.publicKey;
-                                    const isCompleted = item.status === 'completed';
-                                    const isPending = item.status === 'pending';
-                                    const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
-                                    const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
-
-                                    return (
-                                        <div
-                                            key={item.id}
-                                            onClick={() => {
-                                                if (isPending && onNavigateToPost) {
-                                                    onClose();
-                                                    onNavigateToPost(item.postId, item.id);
-                                                }
-                                            }}
-                                            className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all ${
-                                                isPending ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20 cursor-pointer hover:border-emerald-400 hover:shadow-md'
-                                                : isCompleted ? 'border-nature-200 dark:border-nature-800'
-                                                : 'border-nature-200/50 dark:border-nature-800/50 opacity-60 grayscale-[50%]'
-                                            }`}
-                                        >
-                                            <div className="flex gap-3 mb-2">
-                                                {item.coverImage ? (
-                                                    <img src={item.coverImage} alt="Cover" className="w-14 h-14 rounded-xl object-cover border border-nature-100 dark:border-nature-800 shrink-0" />
-                                                ) : (
-                                                    <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
-                                                        <span className="text-xl opacity-50">{isBuyer ? '🛒' : '🏷️'}</span>
-                                                    </div>
-                                                )}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                                                isCompleted ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
-                                                                : isPending ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400'
-                                                                : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-400'
-                                                            }`}>
-                                                                {item.status}
-                                                            </span>
-                                                            <span className="text-[10px] text-nature-400 font-bold">
-                                                                {new Date(item.createdAt).toLocaleDateString()}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center">
-                                                            <span className={`font-black text-sm ${isBuyer ? 'text-red-500' : 'text-emerald-500'}`}>
-                                                                {isBuyer ? '- ' : '+ '}{item.credits}
-                                                            </span>
-                                                            <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
-                                                        </div>
-                                                    </div>
-                                                    <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate">
-                                                        {item.postTitle}
-                                                    </h4>
-                                                </div>
-                                            </div>
-                                            <div className="flex justify-between items-end">
-                                                <p className="text-[11px] text-nature-500 font-medium">
-                                                    {isBuyer ? 'Bought from ' : 'Sold to '}
-                                                    <span className="text-nature-800 dark:text-nature-300 font-bold">{partnerCallsign}</span>
-                                                </p>
-                                                {needsReview && onPromptReview && (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            onPromptReview({
-                                                                txId: item.id,
-                                                                targetPubkey: isBuyer ? item.sellerPublicKey : item.buyerPublicKey,
-                                                                targetCallsign: partnerCallsign,
-                                                                targetRole: isBuyer ? 'provider' : 'receiver',
-                                                            });
-                                                        }}
-                                                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 text-amber-800 dark:text-amber-500 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-800 transition-colors shadow-sm"
-                                                    >
-                                                        Leave Review
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                }
-
-                                // Active Posts View
-                                const coverImage = item.photos && item.photos.length > 0 ? item.photos[0] : null;
-                                return (
-                                    <div
-                                        key={item.id}
-                                        onClick={() => {
-                                            if (onNavigateToPost) {
-                                                onClose();
-                                                onNavigateToPost(item.id);
-                                            }
-                                        }}
-                                        className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all ${
-                                            item.status === 'pending' ? 'bg-emerald-50/10 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : ''
-                                        }`}
-                                    >
-                                        <div className="flex gap-4">
-                                            {coverImage ? (
-                                                <img src={coverImage} alt="Cover" className="w-14 h-14 rounded-xl object-cover border border-nature-100 dark:border-nature-800 shrink-0" />
-                                            ) : (
-                                                <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
-                                                    <span className="text-xl opacity-50">📦</span>
-                                                </div>
-                                            )}
-                                            <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                                        item.type === 'offer' ? 'bg-terra-100 text-terra-800 dark:bg-terra-900/40 dark:text-terra-400'
-                                                        : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-400'
-                                                    }`}>
-                                                        {item.type}
-                                                    </span>
-                                                    <div className="flex items-center">
-                                                        <span className="font-black text-sm text-indigo-500">
-                                                            {item.credits ?? '?'}
-                                                        </span>
-                                                        <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
-                                                    </div>
-                                                </div>
-                                                <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
-                                                    {item.title}
-                                                </h4>
-                                                <p className="text-[11px] text-nature-500 font-bold uppercase tracking-wide">
-                                                    {item.status === 'pending' ? '🤝 Held in Trust' : '🟢 Active'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            {isPostsTab
+                                ? postsData.map((post) => (
+                                      <PostCard
+                                          key={post.id}
+                                          item={post}
+                                          onClose={onClose}
+                                          onNavigateToPost={onNavigateToPost}
+                                      />
+                                  ))
+                                : transactionsData.map((tx) => (
+                                      <TransactionCard
+                                          key={tx.id}
+                                          item={tx}
+                                          identityPublicKey={identity.publicKey}
+                                          onClose={onClose}
+                                          onNavigateToPost={onNavigateToPost}
+                                          onPromptReview={onPromptReview}
+                                      />
+                                  ))}
                         </div>
                     )}
                 </div>

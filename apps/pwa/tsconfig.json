@@ -10,7 +10,8 @@
         "rootDir": "src",
         "declaration": true,
         "resolveJsonModule": true,
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "types": ["vitest/globals", "@testing-library/jest-dom"]
     },
     "include": [
         "src/**/*"

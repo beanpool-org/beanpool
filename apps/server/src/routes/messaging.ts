@@ -95,7 +95,8 @@ router.post('/api/messages/send', async (ctx) => {
     try {
         const conv = getConversation(conversationId);
         if (conv && conv.type === 'dm') {
-            const otherPubkey = conv.participants.find(p => p !== authorPubkey);
+            // ⚡ Bolt: Direct index lookup for DM recipient instead of array scan since DMs strictly have 2 participants
+            const otherPubkey = conv.participants[0] === authorPubkey ? conv.participants[1] : conv.participants[0];
             if (otherPubkey) {
                 const otherMember = getMember(otherPubkey);
 

@@ -547,7 +547,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                             clearButtonMode="while-editing"
                         />
                         {searchQuery.length > 0 && Platform.OS === 'android' && (
-                            <Pressable style={styles.clearSearchBtn} onPress={() => setSearchQuery('')}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Clear search" style={styles.clearSearchBtn} onPress={() => setSearchQuery('')}>
                                 <Text style={styles.clearSearchText}>✕</Text>
                             </Pressable>
                         )}

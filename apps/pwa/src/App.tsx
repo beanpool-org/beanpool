@@ -111,6 +111,16 @@ export function App() {
         if (tab === 'marketplace' && contextId) setOpenMarketPostId(contextId);
     }
 
+    const handleToggleCommunityStatus = () => {
+        if (!communityHealth) {
+            getCommunityHealth()
+                .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
+                .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
+        } else {
+            setShowCommunityStatus(!showCommunityStatus);
+        }
+    };
+
     // Load existing identity on mount
     useEffect(() => {
         loadIdentity()
@@ -120,30 +130,30 @@ export function App() {
 
     // Connect to BeanPool Node once identity is loaded
     useEffect(() => {
-        let unsub = () => { };
-        if (identity) {
-            connectToAnchor();
-            unsub = onSystemAnnouncement((a) => {
-                setSysAnnouncement({ title: a.title, body: a.body, severity: a.severity });
-            });
-            // Ensure existing users are registered with the node
-            import('./lib/api').then(({ registerMember }) =>
-                registerMember(identity.publicKey, identity.callsign).catch(() => { })
-            );
-            // Check membership status for guest/member UI. The node holds the
-            // callsign that travels with your key, so if this device restored the
-            // identity without a name yet (e.g. recovered while briefly offline),
-            // adopt the node's — never overwrite a name the user already has.
-            checkMembership(identity.publicKey)
-                .then(async r => {
-                    setIsGuest(!r.isMember);
-                    if (r.callsign && !identity.callsign?.trim()) {
-                        const updated = await updateCallsign(r.callsign);
-                        if (updated) setIdentity(updated);
-                    }
-                })
-                .catch(() => {});
-        }
+        if (!identity) return;
+
+        connectToAnchor();
+        const unsub = onSystemAnnouncement((a) => {
+            setSysAnnouncement({ title: a.title, body: a.body, severity: a.severity });
+        });
+        // Ensure existing users are registered with the node
+        import('./lib/api').then(({ registerMember }) =>
+            registerMember(identity.publicKey, identity.callsign).catch(() => { })
+        );
+        // Check membership status for guest/member UI. The node holds the
+        // callsign that travels with your key, so if this device restored the
+        // identity without a name yet (e.g. recovered while briefly offline),
+        // adopt the node's — never overwrite a name the user already has.
+        checkMembership(identity.publicKey)
+            .then(async r => {
+                setIsGuest(!r.isMember);
+                if (r.callsign && !identity.callsign?.trim()) {
+                    const updated = await updateCallsign(r.callsign);
+                    if (updated) setIdentity(updated);
+                }
+            })
+            .catch(() => {});
+
         return unsub;
     }, [identity]);
 
@@ -334,15 +344,7 @@ export function App() {
                             <span 
                                 className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer" 
                                 style={{ marginTop: '8px' }}
-                                onClick={() => {
-                                    if (!communityHealth) {
-                                        getCommunityHealth()
-                                            .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
-                                            .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
-                                    } else {
-                                        setShowCommunityStatus(!showCommunityStatus);
-                                    }
-                                }}
+                                onClick={handleToggleCommunityStatus}
                             >
                                 {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label}
                             </span>
@@ -350,15 +352,7 @@ export function App() {
                             <div 
                                 className="relative flex items-center gap-1.5 pointer-events-auto cursor-pointer" 
                                 style={{ transform: 'translateX(-12px) translateY(-2px)' }}
-                                onClick={() => {
-                                    if (!communityHealth) {
-                                        getCommunityHealth()
-                                            .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
-                                            .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
-                                    } else {
-                                        setShowCommunityStatus(!showCommunityStatus);
-                                    }
-                                }}
+                                onClick={handleToggleCommunityStatus}
                             >
                                 <img src="/bean.png" alt="BeanPool Icon" style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
                                 <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">BeanPool</span>

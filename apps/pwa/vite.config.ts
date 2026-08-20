@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
@@ -54,5 +54,17 @@ export default defineConfig({
     build: {
         outDir: path.resolve(__dirname, '../server/public'),
         emptyOutDir: true,
+    },
+    resolve: {
+        alias: {
+            '@beanpool/core': path.resolve(__dirname, '../../packages/beanpool-core/src/index.ts'),
+            react: path.resolve(__dirname, '../../node_modules/@testing-library/react/node_modules/react'),
+            'react-dom': path.resolve(__dirname, '../../node_modules/@testing-library/react/node_modules/react-dom'),
+        },
+    },
+    test: {
+        globals: true,
+        environment: 'jsdom',
+        setupFiles: path.resolve(__dirname, './src/setupTests.ts'),
     },
 });

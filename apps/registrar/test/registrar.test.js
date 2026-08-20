@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { attestOne, attestSweep } from '../src/index.js';
+import worker, { attestOne, attestSweep, timingSafeEqualStrings } from '../src/index.js';
 import * as db from '../src/db.js';
 
 function createMockD1() {
@@ -349,4 +349,57 @@ test('Metadata: claim with community_name and update via signed POST /api/regist
     const alloc3 = await db.getAllocation(env, 'cairns');
     assert.equal(alloc3.community_name, 'Cairns Eco Village');
     assert.equal(alloc3.contact, null);
+});
+
+test('timingSafeEqualStrings: constant-time string comparison unit tests', () => {
+    assert.equal(timingSafeEqualStrings('super-secret-123', 'super-secret-123'), true);
+    assert.equal(timingSafeEqualStrings('super-secret-123', 'super-secret-124'), false);
+    assert.equal(timingSafeEqualStrings('super-secret-123', 'super-secret'), false);
+    assert.equal(timingSafeEqualStrings('super-secret', 'super-secret-123'), false);
+    assert.equal(timingSafeEqualStrings('', ''), true);
+    assert.equal(timingSafeEqualStrings('a', ''), false);
+    assert.equal(timingSafeEqualStrings(null, 'secret'), false);
+    assert.equal(timingSafeEqualStrings('secret', null), false);
+    assert.equal(timingSafeEqualStrings(undefined, undefined), false);
+    assert.equal(timingSafeEqualStrings(12345, '12345'), false);
+});
+
+test('Admin Auth: /api/local/admin/registrar/pending security checks', async () => {
+    const env = mockEnv();
+
+    // 1. Request with valid x-admin-secret header
+    const validReq = new Request('https://beanpool.org/api/local/admin/registrar/pending', {
+        method: 'GET',
+        headers: { 'x-admin-secret': 'test-admin-secret' }
+    });
+    const validRes = await worker.fetch(validReq, env);
+    assert.equal(validRes.status, 200);
+    const validBody = await validRes.json();
+    assert.ok(Array.isArray(validBody.allocations));
+
+    // 2. Request with invalid x-admin-secret header
+    const invalidReq = new Request('https://beanpool.org/api/local/admin/registrar/pending', {
+        method: 'GET',
+        headers: { 'x-admin-secret': 'wrong-admin-secret' }
+    });
+    const invalidRes = await worker.fetch(invalidReq, env);
+    assert.equal(invalidRes.status, 401);
+    const invalidBody = await invalidRes.json();
+    assert.equal(invalidBody.error, 'unauthorized');
+
+    // 3. Request missing x-admin-secret header
+    const missingHeaderReq = new Request('https://beanpool.org/api/local/admin/registrar/pending', {
+        method: 'GET'
+    });
+    const missingHeaderRes = await worker.fetch(missingHeaderReq, env);
+    assert.equal(missingHeaderRes.status, 401);
+
+    // 4. Request when ADMIN_SECRET env variable is not set
+    const envNoSecret = { ...env, ADMIN_SECRET: '' };
+    const noSecretReq = new Request('https://beanpool.org/api/local/admin/registrar/pending', {
+        method: 'GET',
+        headers: { 'x-admin-secret': 'test-admin-secret' }
+    });
+    const noSecretRes = await worker.fetch(noSecretReq, envNoSecret);
+    assert.equal(noSecretRes.status, 401);
 });

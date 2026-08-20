@@ -10,6 +10,7 @@ import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, calculateSynergy, type QuizResult } from '@beanpool/core';
+import { getCanonicalProfile } from '../utils/canonical-profile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
@@ -371,8 +372,24 @@ export default function PublicProfileScreen() {
 
     useEffect(() => {
         if (identity?.publicKey) {
-            getMemberProfile(identity.publicKey).then(vp => {
-                if (vp) setViewerProfile(vp);
+            getMemberProfile(identity.publicKey).then(async vp => {
+                const canonical = await getCanonicalProfile().catch(() => null);
+                if (vp) {
+                    if (!vp.archetype && canonical?.archetype) {
+                        vp.archetype = canonical.archetype;
+                    }
+                    setViewerProfile(vp);
+                } else if (canonical) {
+                    setViewerProfile({
+                        public_key: identity.publicKey,
+                        callsign: identity.callsign,
+                        avatar_url: canonical.avatar,
+                        bio: canonical.bio,
+                        contact_value: canonical.contactValue,
+                        contact_visibility: canonical.contactVisibility,
+                        archetype: canonical.archetype,
+                    });
+                }
             }).catch(() => null);
         }
     }, [identity?.publicKey]);
@@ -380,7 +397,6 @@ export default function PublicProfileScreen() {
     const handleQuizComplete = async (quizResult: QuizResult) => {
         if (!identity) return;
         const jsonStr = JSON.stringify(quizResult);
-        setShowQuizModal(false);
         setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
 
         const publicArchetype = JSON.stringify({

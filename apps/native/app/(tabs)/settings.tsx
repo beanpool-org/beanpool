@@ -12,6 +12,7 @@ import { updateCallsign, wipeIdentity, getMnemonic, hasMnemonic } from '../../ut
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { updateMemberProfile, getMemberProfile, getPendingRecoveryRequests, approveRecoveryRequest, rejectRecoveryRequest, signedRequest } from '../../utils/db';
+import { getCanonicalProfile } from '../../utils/canonical-profile';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -636,15 +637,26 @@ export default function SettingsScreen() {
     React.useEffect(() => {
         // Load profile data on mount
         if (identity?.publicKey) {
-            getMemberProfile(identity.publicKey).then(profile => {
+            getMemberProfile(identity.publicKey).then(async profile => {
+                const canonical = await getCanonicalProfile().catch(() => null);
                 if (profile) {
                     const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
-                    setAvatar(cleaned);
+                    setAvatar(cleaned || canonical?.avatar || null);
                     if (profile.callsign) setEditCallsign(profile.callsign);
                     if (profile.bio) setBio(profile.bio);
+                    else if (canonical?.bio) setBio(canonical.bio);
                     if (profile.contact_value) setContact(profile.contact_value);
+                    else if (canonical?.contactValue) setContact(canonical.contactValue);
                     if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
+                    else if (canonical?.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
                     if (profile.archetype) setArchetypeRaw(profile.archetype);
+                    else if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
+                } else if (canonical) {
+                    if (canonical.avatar) setAvatar(canonical.avatar);
+                    if (canonical.bio) setBio(canonical.bio);
+                    if (canonical.contactValue) setContact(canonical.contactValue);
+                    if (canonical.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
+                    if (canonical.archetype) setArchetypeRaw(canonical.archetype);
                 }
             }).catch(() => {});
         }
@@ -1046,7 +1058,6 @@ export default function SettingsScreen() {
         if (!identity) return;
         const jsonStr = JSON.stringify(quizResult);
         setArchetypeRaw(jsonStr);
-        setShowQuizModal(false);
 
         // Update local database
         const localUpdate: any = {

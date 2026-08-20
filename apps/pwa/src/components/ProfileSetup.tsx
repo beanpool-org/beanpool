@@ -80,6 +80,14 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
         reader.readAsDataURL(file);
     }
 
+    async function syncCallsign(trimmedCallsign: string) {
+        if (!trimmedCallsign || trimmedCallsign === identity.callsign) return;
+        const updated = await updateCallsign(trimmedCallsign);
+        if (!updated) return;
+        await registerMember(updated.publicKey, updated.callsign);
+        onIdentityUpdated?.(updated);
+    }
+
     async function handleFinish() {
         if (!navigator.onLine) { setError('You need to be online to save your profile.'); return; }
         if (!nameOk || !avatarOk) return;
@@ -87,13 +95,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
         setError(null);
         try {
             await updateMemberProfile(identity.publicKey, { avatar, bio, contact });
-            if (callsign.trim() && callsign.trim() !== identity.callsign) {
-                const updated = await updateCallsign(callsign.trim());
-                if (updated) {
-                    await registerMember(updated.publicKey, updated.callsign);
-                    onIdentityUpdated?.(updated);
-                }
-            }
+            await syncCallsign(callsign.trim());
             onDone();
         } catch (err: any) {
             setError(err?.message || 'Could not save your profile. Try again.');

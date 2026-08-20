@@ -1,11 +1,19 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
+const testingLibPath = require.resolve('@testing-library/react');
+const resolvedReact = path.dirname(require.resolve('react/package.json', { paths: [testingLibPath] }));
+const resolvedReactDom = path.dirname(require.resolve('react-dom/package.json', { paths: [testingLibPath] }));
 
 export default defineConfig({
     plugins: [
         react(),
+        !process.env.VITEST &&
         VitePWA({
             registerType: 'autoUpdate',
             selfDestroying: true, // Disable service worker until offline caching is properly configured
@@ -34,7 +42,7 @@ export default defineConfig({
                 ],
             },
         }),
-    ],
+    ].filter(Boolean),
     server: {
         host: true,
         proxy: {
@@ -51,8 +59,20 @@ export default defineConfig({
             }
         }
     },
+    resolve: {
+        alias: {
+            '@beanpool/core': path.resolve(__dirname, '../../packages/beanpool-core/src/index.ts'),
+            react: resolvedReact,
+            'react-dom': resolvedReactDom,
+        },
+    },
     build: {
         outDir: path.resolve(__dirname, '../server/public'),
         emptyOutDir: true,
+    },
+    test: {
+        globals: true,
+        environment: 'jsdom',
+        setupFiles: './src/setupTests.ts',
     },
 });

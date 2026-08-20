@@ -1297,16 +1297,7 @@ router.post('/api/recovery/request', async (ctx) => {
 router.get('/api/recovery/pending/:guardianPubkey', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const guardianPubkey = ctx.params.guardianPubkey;
-    // A2-16: under ENFORCE_READ_AUTH this route is gated, so ctx.state.actor is the
-    // CRYPTOGRAPHICALLY VERIFIED signer — require it to be the guardian. The
-    // x-public-key header check below is non-authenticating (a caller just sets it
-    // to the value being queried); it remains only as the flag-off fallback. Full
-    // fix is a guardian-signed-proof recovery flow (tracked).
-    if (ENFORCE_READ_AUTH) {
-        if (ctx.state.actor !== guardianPubkey) {
-            ctx.status = 403; ctx.body = { error: 'Unauthorized' }; return;
-        }
-    } else if (ctx.request.header['x-public-key'] !== guardianPubkey) {
+    if (ctx.state.actor !== guardianPubkey) {
         ctx.status = 403; ctx.body = { error: 'Unauthorized' }; return;
     }
     try {

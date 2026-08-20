@@ -54,3 +54,7 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 ## 2024-05-18 - Input Label Associations
 **Learning:** Many form inputs throughout the application (such as in settings or profile pages) use `<label>` elements visually, but do not associate them to their respective inputs using `htmlFor` and `id`. This breaks the expected behavior for screen reader users and affects focus state toggling.
 **Action:** When adding or modifying inputs with visible label text, always ensure `htmlFor` on the label exactly matches the `id` on the `<input>` or `<textarea>`.
+
+## 2026-06-20 - CategoryPickerModal Dialog & Keyboard Accessibility
+**Learning:** `CategoryPickerModal.tsx` lacked modal ARIA markup (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`), had no explicit close button for screen reader users, lacked `aria-pressed` state indicators on category options, and lacked visible focus ring indicators (`focus-visible:ring-2`) for keyboard navigation.
+**Action:** Added dialog ARIA roles/labels, added an explicit close button with `aria-label="Close category picker"`, added `aria-pressed={isActive}`, and added `focus-visible:ring-2 focus-visible:ring-indigo-500` to all category buttons.

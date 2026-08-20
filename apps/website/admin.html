@@ -68,10 +68,24 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             padding: 0.5rem 1rem; border-radius: var(--radius-sm); font-weight: 600;
             cursor: pointer; text-decoration: none; transition: all 0.2s;
         }
-        .btn-approve { background: #10b981; color: white; border: none; }
+        .btn-approve { background: #10b981; color: white; border: none; padding: 0.4rem 0.85rem; font-size: 0.8rem; border-radius: var(--radius-sm); cursor: pointer; }
         .btn-approve:hover { background: #059669; }
-        .btn-revoke { background: #ef4444; color: white; border: none; }
-        .btn-revoke:hover { background: #dc2626; }
+        .btn-revoke {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            padding: 0.4rem 0.85rem;
+            font-size: 0.8rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        .btn-revoke:hover {
+            background: rgba(239, 68, 68, 0.9);
+            color: #ffffff;
+            border-color: #ef4444;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+        }
         .btn-logout { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
         .btn-logout:hover { background: rgba(239, 68, 68, 0.25); }
         .badge-mode {
@@ -190,7 +204,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
             try {
                 const res = await fetch('/api/local/admin/registrar/pending', {
-                    headers: { 'x-admin-secret': secret }
+                    headers: {
+                        'x-admin-secret': secret,
+                        'Authorization': 'Bearer ' + secret
+                    }
                 });
 
                 if (res.status === 401) {
@@ -220,16 +237,19 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 return;
             }
 
-            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Node Pubkey</th><th>Mode</th><th>Requested</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
+            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Community / Operator</th><th>Node Pubkey</th><th>Mode</th><th>Requested</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
 
             pending.forEach(function(claim) {
                 const domain = claim.name + '.beanpool.org';
                 const date = claim.requested_at ? new Date(claim.requested_at * 1000).toLocaleString() : '—';
                 const pubkeyShort = claim.node_pubkey ? claim.node_pubkey.slice(0, 12) + '...' + claim.node_pubkey.slice(-8) : '—';
                 const modeClass = claim.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
+                const comm = claim.community_name ? claim.community_name : '—';
+                const contactInfo = claim.contact ? ' (' + claim.contact + ')' : '';
 
                 html += '<tr>' +
                     '<td style="font-weight: 700; color: #fbbf24; font-family: monospace;">' + domain + '</td>' +
+                    '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
                     '<td><span class="badge-mode ' + modeClass + '">' + (claim.mode || 'tunnel') + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + date + '</td>' +
@@ -251,20 +271,23 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 return;
             }
 
-            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Node Pubkey</th><th>Mode</th><th>Status</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
+            let html = '<table class="admin-table"><thead><tr><th>Domain Name</th><th>Community / Operator</th><th>Node Pubkey</th><th>Mode</th><th>Status</th><th style="text-align: right;">Action</th></tr></thead><tbody>';
 
             active.forEach(function(alloc) {
                 const domain = alloc.name + '.beanpool.org';
                 const pubkeyShort = alloc.node_pubkey ? alloc.node_pubkey.slice(0, 12) + '...' + alloc.node_pubkey.slice(-8) : '—';
                 const modeClass = alloc.mode === 'direct' ? 'badge-direct' : 'badge-tunnel';
+                const comm = alloc.community_name ? alloc.community_name : '—';
+                const contactInfo = alloc.contact ? ' (' + alloc.contact + ')' : '';
 
                 html += '<tr>' +
                     '<td style="font-weight: 700; color: #10b981; font-family: monospace;">' + domain + '</td>' +
+                    '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
                     '<td><span class="badge-mode ' + modeClass + '">' + (alloc.mode || 'tunnel') + '</span></td>' +
                     '<td><span style="color: #10b981; font-weight: 600; font-size: 0.75rem; font-family: monospace;">🟢 ' + alloc.status + '</span></td>' +
                     '<td style="text-align: right;">' +
-                        '<button data-name="' + alloc.name + '" class="btn-revoke btn-act-revoke">Revoke</button>' +
+                        '<button data-name="' + alloc.name + '" class="btn btn-revoke btn-act-revoke">🗑️ Revoke</button>' +
                     '</td>' +
                 '</tr>';
             });
@@ -280,7 +303,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             try {
                 const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/approve', {
                     method: 'POST',
-                    headers: { 'x-admin-secret': secret }
+                    headers: {
+                        'x-admin-secret': secret,
+                        'Authorization': 'Bearer ' + secret
+                    }
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -296,12 +322,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
         async function revokeClaim(name) {
             const secret = secretInput.value.trim();
-            if (!confirm('Revoke/Reject ' + name + '.beanpool.org?')) return;
+            if (!confirm('⚠️ Are you sure you want to REVOKE ' + name + '.beanpool.org?\n\nThis will delete the Cloudflare Tunnel, remove the DNS record, and release the subdomain.')) return;
 
             try {
                 const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/revoke', {
                     method: 'POST',
-                    headers: { 'x-admin-secret': secret }
+                    headers: {
+                        'x-admin-secret': secret,
+                        'Authorization': 'Bearer ' + secret
+                    }
                 });
                 const data = await res.json();
                 if (res.ok) {

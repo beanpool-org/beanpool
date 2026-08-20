@@ -204,7 +204,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
             try {
                 const res = await fetch('/api/local/admin/registrar/pending', {
-                    headers: { 'x-admin-secret': secret }
+                    headers: {
+                        'x-admin-secret': secret,
+                        'Authorization': 'Bearer ' + secret
+                    }
                 });
 
                 if (res.status === 401) {
@@ -300,7 +303,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             try {
                 const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/approve', {
                     method: 'POST',
-                    headers: { 'x-admin-secret': secret }
+                    headers: {
+                        'x-admin-secret': secret,
+                        'Authorization': 'Bearer ' + secret
+                    }
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -321,7 +327,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             try {
                 const res = await fetch('/api/local/admin/registrar/' + encodeURIComponent(name) + '/revoke', {
                     method: 'POST',
-                    headers: { 'x-admin-secret': secret }
+                    headers: {
+                        'x-admin-secret': secret,
+                        'Authorization': 'Bearer ' + secret
+                    }
                 });
                 const data = await res.json();
                 if (res.ok) {

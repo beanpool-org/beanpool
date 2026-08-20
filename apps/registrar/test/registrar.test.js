@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { attestOne, attestSweep } from '../src/index.js';
+import worker, { attestOne, attestSweep, timingSafeEqualString } from '../src/index.js';
 import * as db from '../src/db.js';
 
 function createMockD1() {
@@ -349,4 +349,50 @@ test('Metadata: claim with community_name and update via signed POST /api/regist
     const alloc3 = await db.getAllocation(env, 'cairns');
     assert.equal(alloc3.community_name, 'Cairns Eco Village');
     assert.equal(alloc3.contact, null);
+});
+
+test('timingSafeEqualString helper verification', async () => {
+    assert.equal(await timingSafeEqualString('secret123', 'secret123'), true);
+    assert.equal(await timingSafeEqualString('secret123', 'secret124'), false);
+    assert.equal(await timingSafeEqualString('secret123', 'secret1234'), false);
+    assert.equal(await timingSafeEqualString('', ''), true);
+    assert.equal(await timingSafeEqualString(null, 'secret123'), false);
+    assert.equal(await timingSafeEqualString('secret123', undefined), false);
+});
+
+test('Admin Auth: timing-safe verification and supported headers', async () => {
+    const env = mockEnv();
+
+    // 1. Valid x-admin-secret
+    const req1 = new Request('https://beanpool.org/api/local/admin/registrar/pending', {
+        headers: { 'x-admin-secret': 'test-admin-secret' }
+    });
+    const res1 = await worker.fetch(req1, env);
+    assert.equal(res1.status, 200);
+
+    // 2. Valid x-admin-password
+    const req2 = new Request('https://beanpool.org/api/local/admin/registrar/pending', {
+        headers: { 'x-admin-password': 'test-admin-secret' }
+    });
+    const res2 = await worker.fetch(req2, env);
+    assert.equal(res2.status, 200);
+
+    // 3. Valid Authorization Bearer
+    const req3 = new Request('https://beanpool.org/api/local/admin/registrar/pending', {
+        headers: { 'authorization': 'Bearer test-admin-secret' }
+    });
+    const res3 = await worker.fetch(req3, env);
+    assert.equal(res3.status, 200);
+
+    // 4. Invalid admin secret -> 401
+    const req4 = new Request('https://beanpool.org/api/local/admin/registrar/pending', {
+        headers: { 'x-admin-secret': 'wrong-secret' }
+    });
+    const res4 = await worker.fetch(req4, env);
+    assert.equal(res4.status, 401);
+
+    // 5. Missing headers -> 401
+    const req5 = new Request('https://beanpool.org/api/local/admin/registrar/pending');
+    const res5 = await worker.fetch(req5, env);
+    assert.equal(res5.status, 401);
 });

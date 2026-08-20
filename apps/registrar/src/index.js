@@ -137,7 +137,30 @@ async function handleOffline(request, env, bodyText) {
 }
 
 // --- Admin (shared secret) ---
-const checkAdmin = (request, env) => !!env.ADMIN_SECRET && request.headers.get('x-admin-secret') === env.ADMIN_SECRET;
+export async function timingSafeEqualString(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const encoder = new TextEncoder();
+    const bufA = await crypto.subtle.digest('SHA-256', encoder.encode(a));
+    const bufB = await crypto.subtle.digest('SHA-256', encoder.encode(b));
+    const viewA = new Uint8Array(bufA);
+    const viewB = new Uint8Array(bufB);
+    let diff = 0;
+    for (let i = 0; i < viewA.length; i++) {
+        diff |= viewA[i] ^ viewB[i];
+    }
+    return diff === 0 && a.length === b.length;
+}
+
+const checkAdmin = async (request, env) => {
+    if (!env.ADMIN_SECRET) return false;
+    const authHeader = request.headers.get('authorization') || '';
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const secret = request.headers.get('x-admin-secret') ||
+                   request.headers.get('x-admin-password') ||
+                   bearerToken;
+    if (!secret) return false;
+    return await timingSafeEqualString(secret, env.ADMIN_SECRET);
+};
 
 async function handleAdminApprove(env, name) {
     const a = await db.getAllocation(env, name);
@@ -293,12 +316,12 @@ export default {
             if (method === 'POST' && p === '/api/registrar/offline') return await handleOffline(request, env, await request.text());
 
             if (method === 'GET' && p === '/api/local/admin/registrar/pending') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                if (!await checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
                 return json({ allocations: await db.listActive(env) });
             }
             const m = p.match(/^\/api\/local\/admin\/registrar\/([a-z0-9-]{3,32})\/(approve|revoke)$/);
             if (m && method === 'POST') {
-                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                if (!await checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
                 return m[2] === 'approve' ? await handleAdminApprove(env, m[1]) : await handleAdminRevoke(env, m[1]);
             }
 

@@ -680,8 +680,8 @@ export function getConnectorByPublicUrl(publicUrl: string): ConnectorStatus | nu
 export function getConnectorByPeerId(peerId: string): ConnectorStatus | null {
     for (const c of connectors) {
         const status = statuses.get(c.address);
-        if (status?.peerId === peerId) return materialise(c);
-        if (c.address && peerIdFromAddress(c.address) === peerId) return materialise(c);
+        const effectivePeerId = status?.peerId ?? (c.address ? peerIdFromAddress(c.address) : null);
+        if (effectivePeerId === peerId) return materialise(c);
     }
     return null;
 }

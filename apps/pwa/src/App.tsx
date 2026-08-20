@@ -142,7 +142,7 @@ export function App() {
                         if (updated) setIdentity(updated);
                     }
                 })
-                .catch(() => {});
+                .catch(console.error);
         }
         return unsub;
     }, [identity]);

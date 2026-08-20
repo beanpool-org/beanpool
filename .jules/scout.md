@@ -48,3 +48,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning
 **Gap found:** The pure utility functions `signReceipt` and `verifyReceipt` in `apps/server/src/federation-receipt.ts` had no isolated test file, specifically checking their edge cases (missing keys, undefined/NaN amounts, malformed signatures).
 **Learning:** Testing full libp2p networking setups in isolation (like `federatedVerifyMember`) is often too complex and fails due to missing subdependencies or module resolution issues within the test environment. It is much easier to focus on pure utility functions that require no network setup.
 **Action:** Created `test-federation-receipt.ts` to test these utility functions in isolation. When looking for coverage gaps, prioritize pure utilities and database logic first before attempting to mock complex network topologies.
+
+## 2026-08-20 - [Ledger Export Audit Coverage]
+**Gap found:** `exportLedgerAudit` in `apps/server/src/engine/audit.ts` had no corresponding test file.
+**Learning:** The export script reads from global state (like COMMONS_BALANCE) as well as the database. It is necessary to correctly mock the state and node configurations like `commons_projects` to ensure complete coverage of the output shape.
+**Action:** Created `test-ledger-export.ts` to verify CSV formatting for balances and transactions.

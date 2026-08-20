@@ -528,7 +528,7 @@ async function main() {
 
     // ── 10f. The cap is enforced on the UNROUNDED balance ─────────────────────────────────────────
     // getEnergyBalance rounds to 2dp but prices are carried at 4dp, so an exposure of 99.994 read as 99.99
-    // let another 0.01 through against a 100 cap — past the number the operator chose.
+    // would allow another 0.01 through against a 100 cap — past the number the operator chose.
     const FRAC = '12D3KooWFractionalPeer';
     addConnector(`/dns4/frac.beanpool.org/tcp/4001/p2p/${FRAC}`, 'peer', 'Frac', 'https://frac.beanpool.org');
     ensureBridgeAccount(FRAC);

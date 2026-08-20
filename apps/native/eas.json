@@ -8,14 +8,14 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "GOOGLE_MAPS_API_KEY": "AIzaSyDpRO8fjR8U-7pyFPbjvro6FCAPLZL2bBo"
+        "GOOGLE_MAPS_API_KEY": ""
       }
     },
     "preview": {
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "GOOGLE_MAPS_API_KEY": "AIzaSyDpRO8fjR8U-7pyFPbjvro6FCAPLZL2bBo"
+        "GOOGLE_MAPS_API_KEY": ""
       },
       "android": {
         "buildType": "apk",
@@ -25,7 +25,7 @@
     "production": {
       "channel": "production",
       "env": {
-        "GOOGLE_MAPS_API_KEY": "AIzaSyDpRO8fjR8U-7pyFPbjvro6FCAPLZL2bBo"
+        "GOOGLE_MAPS_API_KEY": ""
       },
       "android": {
         "credentialsSource": "remote"

@@ -272,29 +272,37 @@ async function requestLetsEncryptCert(): Promise<boolean> {
 // --- Cloudflare DNS API ---
 
 async function cfCreateTxtRecord(name: string, value: string): Promise<string> {
-    const res = await fetch(
-        `https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records`,
-        {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${CF_API_TOKEN}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                type: 'TXT',
-                name,
-                content: value,
-                ttl: 120,
-            }),
+    try {
+        const res = await fetch(
+            `https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records`,
+            {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${CF_API_TOKEN}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    type: 'TXT',
+                    name,
+                    content: value,
+                    ttl: 120,
+                }),
+            }
+        );
+
+        if (!res.ok) {
+            throw new Error(`HTTP error ${res.status}`);
         }
-    );
 
-    const data = await res.json() as { success: boolean; result: { id: string }; errors: unknown[] };
-    if (!data.success) {
-        throw new Error(`Cloudflare DNS create failed: ${JSON.stringify(data.errors)}`);
+        const data = await res.json() as { success: boolean; result: { id: string }; errors: unknown[] };
+        if (!data?.success || !data?.result?.id) {
+            throw new Error(`Cloudflare DNS create failed: ${JSON.stringify(data?.errors || data)}`);
+        }
+
+        return data.result.id;
+    } catch (e: any) {
+        throw new Error(`Failed to create TXT record: ${e.message}`);
     }
-
-    return data.result.id;
 }
 
 async function cfDeleteTxtRecord(recordId: string): Promise<void> {

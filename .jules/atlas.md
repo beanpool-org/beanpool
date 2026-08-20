@@ -48,3 +48,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** resolveAvatarUrl in apps/manager/src/lib/avatar.ts was untested.
 **Learning:** Vitest was already set up correctly for the manager app; running tests for lib utilities was straightforward and required no additional configuration.
 **Action:** Continue identifying utility functions in `lib` or pure functions to test.
+
+## $(date +%Y-%m-%d) - [manager tests] node profiles tests
+**Gap:** The node profile management utilities in `apps/manager/src/lib/profiles.ts` were completely untested.
+**Learning:** Mocking `localStorage` was straightforward via `vi.spyOn(Storage.prototype, 'getItem')` and `localStorage.clear()` in the `beforeEach` hook. Also needed to mock `node-client`'s `normalizeNodeUrl` to isolate the profile logic from URL formatting details.
+**Action:** Continue auditing `lib` directory for small pure function gaps.

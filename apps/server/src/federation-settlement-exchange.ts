@@ -943,7 +943,7 @@ export function settleHeldReceipt(key: string, opts?: { latchOnRefusal?: boolean
         //   • Boot recovery (no latch): nobody is waiting. Latching here would turn a TEMPORARY cap change
         //     — an operator lowering a limit during maintenance, or a trust level briefly edited — into a
         //     permanent outcome, because `reversed` is terminal. Restoring the cap afterwards would not
-        //     let the seller be paid, and we would owe someone with no way left to pay them.
+        //     allow the seller to be paid, and we would owe someone with no way left to pay them.
         //
         // So recovery leaves it `held` and tries again next boot, and `stuckSettlements()` surfaces it if it
         // never clears.

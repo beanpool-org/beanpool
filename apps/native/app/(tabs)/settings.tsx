@@ -1886,7 +1886,7 @@ export default function SettingsScreen() {
                         <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} />
                     ) : (
                         <>
-                            <RecoveryAlertBanner />
+                            <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
                                 onProtectSso={Platform.OS !== 'web' ? (prov) => {

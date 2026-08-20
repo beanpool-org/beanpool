@@ -26,7 +26,11 @@ interface RecoverySession {
     status: string;
 }
 
-export function RecoveryAlertBanner(): React.JSX.Element | null {
+export interface RecoveryAlertBannerProps {
+    onStopSuccess?: () => void;
+}
+
+export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps = {}): React.JSX.Element | null {
     const [sessions, setSessions] = useState<RecoverySession[]>([]);
     const [loading, setLoading] = useState(true);
     const [stopping, setStopping] = useState(false);
@@ -81,21 +85,11 @@ export function RecoveryAlertBanner(): React.JSX.Element | null {
                                 }
                             }
 
-                            // Re-split: POST /api/recovery/shares triggers a generation bump
-                            // which invalidates ALL old fragments. This is the nuclear option —
-                            // the attacker's collected fragments become noise.
-                            //
-                            // NOTE: We need the current keeper shares to re-deposit. For now,
-                            // we rely on the cancel being sufficient. A full re-split requires
-                            // client-side key material that the [Stop it] flow doesn't have
-                            // access to. The generation bump happens server-side via the cancel
-                            // marking the session as 'cancelled', and collection refuses to
-                            // serve fragments from a cancelled session.
-                            //
-                            // TODO: In the future, trigger a proper re-split from Settings
-                            // keeper management UI.
-
+                            // Cancelling marks active recovery sessions as 'cancelled' on the
+                            // server, preventing fragment releases. If onStopSuccess is provided,
+                            // notify parent view to refresh protection state.
                             setSessions([]);
+                            onStopSuccess?.();
                             Alert.alert(
                                 '✅ Recovery Stopped',
                                 'All active recovery sessions have been cancelled. '

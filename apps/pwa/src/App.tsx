@@ -96,6 +96,16 @@ export function App() {
     const [showCommunityStatus, setShowCommunityStatus] = useState(false);
     const [communityHealth, setCommunityHealth] = useState<any | null>(null);
 
+    const handleToggleCommunityStatus = () => {
+        if (!communityHealth) {
+            getCommunityHealth()
+                .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
+                .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
+        } else {
+            setShowCommunityStatus(!showCommunityStatus);
+        }
+    };
+
     function navigateToTab(tab: string, contextId?: string) {
         if (tab === 'profile-setup') {
             setShowProfileSetup(true);
@@ -334,15 +344,7 @@ export function App() {
                             <span 
                                 className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer" 
                                 style={{ marginTop: '8px' }}
-                                onClick={() => {
-                                    if (!communityHealth) {
-                                        getCommunityHealth()
-                                            .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
-                                            .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
-                                    } else {
-                                        setShowCommunityStatus(!showCommunityStatus);
-                                    }
-                                }}
+                                onClick={handleToggleCommunityStatus}
                             >
                                 {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label}
                             </span>
@@ -350,15 +352,7 @@ export function App() {
                             <div 
                                 className="relative flex items-center gap-1.5 pointer-events-auto cursor-pointer" 
                                 style={{ transform: 'translateX(-12px) translateY(-2px)' }}
-                                onClick={() => {
-                                    if (!communityHealth) {
-                                        getCommunityHealth()
-                                            .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
-                                            .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
-                                    } else {
-                                        setShowCommunityStatus(!showCommunityStatus);
-                                    }
-                                }}
+                                onClick={handleToggleCommunityStatus}
                             >
                                 <img src="/bean.png" alt="BeanPool Icon" style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
                                 <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">BeanPool</span>

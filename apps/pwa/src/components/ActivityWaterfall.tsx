@@ -12,6 +12,13 @@ interface Props {
     isFullView?: boolean;
 }
 
+const EVENT_EMOJIS: Record<ActivityFeedItem['eventType'], string> = {
+    member_joined: '🎉',
+    trade_completed: '✅',
+    rating_given: '⭐️',
+    post_created: '📍',
+};
+
 function formatRelativeTime(isoDate: string): string {
     const diffMs = Date.now() - new Date(isoDate).getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -21,6 +28,21 @@ function formatRelativeTime(isoDate: string): string {
     if (diffHours < 24) return `${diffHours}h ago`;
     const diffDays = Math.floor(diffHours / 24);
     return `${diffDays}d ago`;
+}
+
+function getCompactLabel(item: ActivityFeedItem): string {
+    const actor = item.actorCallsign || 'Someone';
+    switch (item.eventType) {
+        case 'trade_completed':
+            return `${actor} traded`;
+        case 'rating_given':
+            return `${actor} rated ★`;
+        case 'post_created':
+            return `${actor} posted`;
+        case 'member_joined':
+        default:
+            return `${actor} joined`;
+    }
 }
 
 export function ActivityWaterfall({ isFullView = false }: Props) {
@@ -199,24 +221,16 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
                 </div>
 
                 <div className="flex-1 overflow-x-auto scrollbar-none flex items-center gap-2">
-                    {latestItems.map((item) => {
-                        const actor = item.actorCallsign || 'Someone';
-                        let label = `${actor} joined`;
-                        if (item.eventType === 'trade_completed') label = `${actor} traded`;
-                        if (item.eventType === 'rating_given') label = `${actor} rated ★`;
-                        if (item.eventType === 'post_created') label = `${actor} posted`;
-
-                        return (
-                            <span
-                                key={item.id}
-                                className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium"
-                            >
-                                <span aria-hidden="true">{item.eventType === 'member_joined' ? '🎉' : item.eventType === 'trade_completed' ? '✅' : item.eventType === 'rating_given' ? '⭐️' : '📍'}</span>
-                                {label}
-                                <span className="text-zinc-400 text-[10px] ml-0.5">{formatRelativeTime(item.createdAt)}</span>
-                            </span>
-                        );
-                    })}
+                    {latestItems.map((item) => (
+                        <span
+                            key={item.id}
+                            className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium"
+                        >
+                            <span aria-hidden="true">{EVENT_EMOJIS[item.eventType] || '✨'}</span>
+                            {getCompactLabel(item)}
+                            <span className="text-zinc-400 text-[10px] ml-0.5">{formatRelativeTime(item.createdAt)}</span>
+                        </span>
+                    ))}
                 </div>
             </div>
         </div>

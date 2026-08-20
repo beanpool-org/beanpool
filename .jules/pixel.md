@@ -59,3 +59,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-08-07 - Added missing accessibilityRole to color scheme settings
 **Learning:** The color palette choice elements used `<Pressable>` but lacked `accessibilityRole="button"` and explicit labels, causing accessibility issues for screen readers.
 **Action:** Update the `<Pressable>` elements with `accessibilityRole="button"`, `accessibilityLabel`, and `accessibilityState` in the apps/native/app/(tabs)/settings.tsx file.
+
+## 2026-08-20 - Add accessibilityRole to Clear Search Button in PricingGuideModal
+**Learning:** The 'Clear search' `<Pressable>` button in the `PricingGuideModal.tsx` lacked an `accessibilityRole` and `accessibilityLabel`, making it unclear to screen readers.
+**Action:** Always ensure that interactive elements like `<Pressable>` or `<TouchableOpacity>` have a valid `accessibilityRole="button"` and an `accessibilityLabel` describing their function.

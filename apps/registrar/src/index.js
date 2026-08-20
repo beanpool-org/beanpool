@@ -136,8 +136,24 @@ async function handleOffline(request, env, bodyText) {
     return json({ status: 'revoked', name: a.name });
 }
 
+// Constant-time string comparison to prevent timing attacks on secret checks.
+export function timingSafeEqualStrings(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const bufA = new TextEncoder().encode(a);
+    const bufB = new TextEncoder().encode(b);
+    let result = bufA.length ^ bufB.length;
+    const len = Math.max(bufA.length, bufB.length);
+    for (let i = 0; i < len; i++) {
+        const byteA = i < bufA.length ? bufA[i] : 0;
+        const byteB = i < bufB.length ? bufB[i] : 0;
+        result |= byteA ^ byteB;
+    }
+    return result === 0;
+}
+
 // --- Admin (shared secret) ---
-const checkAdmin = (request, env) => !!env.ADMIN_SECRET && request.headers.get('x-admin-secret') === env.ADMIN_SECRET;
+const checkAdmin = (request, env) =>
+    !!env.ADMIN_SECRET && timingSafeEqualStrings(request.headers.get('x-admin-secret'), env.ADMIN_SECRET);
 
 async function handleAdminApprove(env, name) {
     const a = await db.getAllocation(env, name);

@@ -38,13 +38,12 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
     useEffect(() => {
         if (!isOpen) return;
         function handleKeyDown(e: KeyboardEvent) {
-            if (e.key === 'Escape') {
-                if (reportingItem) {
-                    setReportingItem(null);
-                } else {
-                    onClose();
-                }
+            if (e.key !== 'Escape') return;
+            if (reportingItem) {
+                setReportingItem(null);
+                return;
             }
+            onClose();
         }
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
@@ -58,13 +57,13 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
             setLoading(true);
             try {
                 const res = await getPricingGuideApi();
-                if (isMounted && res) {
-                    if (Array.isArray(res.items) && res.items.length > 0) {
-                        setItems(res.items);
-                    }
-                    if (res.config) {
-                        setConfig(res.config);
-                    }
+                if (!isMounted || !res) return;
+
+                if (Array.isArray(res.items) && res.items.length > 0) {
+                    setItems(res.items);
+                }
+                if (res.config) {
+                    setConfig(res.config);
                 }
             } catch (e) {
                 console.warn('[PricingGuide] Using local fallback catalog:', e);

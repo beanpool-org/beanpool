@@ -42,6 +42,13 @@ export function normalizeNodeUrl(rawUrl: string): string {
     return trimmed.replace(/\/+$/, '');
 }
 
+export function getProxiedUrl(targetUrl: string): string {
+    const match = targetUrl.match(/^(https?):\/\/([^/]+)(\/.*)?$/);
+    if (!match) return targetUrl;
+    const [, scheme, host, path = ''] = match;
+    return `/proxy/${scheme}/${host}${path}`;
+}
+
 // Admin credentials travel in the X-Admin-Password header only, never as a query
 // parameter. checkAdminAuth reads the header (https-server.ts) ahead of ?password= in its
 // fallback chain, so the header alone is sufficient — and a credential in a URL ends up in
@@ -566,19 +573,24 @@ export interface HarvesterStatusResponse {
     harvestState: Record<string, HarvesterNodeState>;
 }
 
-export async function fetchHarvesterStatus(): Promise<HarvesterStatusResponse> {
-    const res = await fetch('/api/manager/backups/status');
+export async function fetchHarvesterStatus(adminPassword?: string): Promise<HarvesterStatusResponse> {
+    const headers: Record<string, string> = {};
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    const res = await fetch('/api/manager/backups/status', { headers });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }
 
-export async function triggerHarvesterSync(nodeId: string, url?: string, adminPassword?: string): Promise<any> {
+export async function triggerHarvesterSync(nodeId: string, url?: string, adminPassword?: string, managerPassword?: string): Promise<any> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const authPass = managerPassword || adminPassword;
+    if (authPass) headers['X-Admin-Password'] = authPass;
     const res = await fetch('/api/manager/backups/trigger', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId, url, adminPassword, password: adminPassword }),
+        headers,
+        body: JSON.stringify({ nodeId, url, adminPassword, password: authPass }),
     });
     if (!res.ok) {
         const text = await res.text();
@@ -594,8 +606,10 @@ export interface HistoryFileItem {
     modifiedAt: string;
 }
 
-export async function fetchNodeHistory(nodeId: string): Promise<HistoryFileItem[]> {
-    const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`);
+export async function fetchNodeHistory(nodeId: string, adminPassword?: string): Promise<HistoryFileItem[]> {
+    const headers: Record<string, string> = {};
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`, { headers });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }

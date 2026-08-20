@@ -35,11 +35,17 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         };
     }
 
-    // Status of all harvested backups
+    // Status of all harvested backups (safe metadata readout for dashboard)
     router.get('/api/manager/backups/status', async (ctx) => {
-        if (!(await checkAdminAuth(ctx as any))) return;
+        const rawNodes = getNodes();
+        const safeNodes = rawNodes.map(n => ({
+            id: n.id,
+            name: n.name,
+            url: n.url,
+            isPrimary: (n as any).isPrimary,
+        }));
         ctx.body = {
-            nodes: getNodes(),
+            nodes: safeNodes,
             harvestState: loadHarvestState(),
         };
     });
@@ -47,7 +53,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
     // Trigger immediate manual harvest
     router.post('/api/manager/backups/trigger', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        const body = (ctx.request as any).body || {};
+        const body = (ctx as any).requestBody || (ctx.request as any).body || {};
         const nodeId = body.nodeId;
 
         try {
@@ -199,7 +205,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
     // Proxy: List remote node snapshots
     router.post('/api/manager/backups/snapshots/list', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        const body = (ctx.request as any).body || {};
+        const body = (ctx as any).requestBody || (ctx.request as any).body || {};
         const node = findNodeConfig(body.nodeId, body.url, body.adminPassword);
         const baseUrl = node.url.replace(/\/+$/, '');
 
@@ -224,7 +230,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
     // Proxy: Create remote snapshot now
     router.post('/api/manager/backups/snapshots/create', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        const body = (ctx.request as any).body || {};
+        const body = (ctx as any).requestBody || (ctx.request as any).body || {};
         const node = findNodeConfig(body.nodeId, body.url, body.adminPassword);
         const baseUrl = node.url.replace(/\/+$/, '');
 
@@ -249,7 +255,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
     // Proxy: Delete remote snapshot
     router.post('/api/manager/backups/snapshots/delete', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        const body = (ctx.request as any).body || {};
+        const body = (ctx as any).requestBody || (ctx.request as any).body || {};
         const node = findNodeConfig(body.nodeId, body.url, body.adminPassword);
         const baseUrl = node.url.replace(/\/+$/, '');
 
@@ -274,7 +280,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
     // Proxy: Update replication cadence config
     router.post('/api/manager/backups/replication-config', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        const body = (ctx.request as any).body || {};
+        const body = (ctx as any).requestBody || (ctx.request as any).body || {};
         const node = findNodeConfig(body.nodeId, body.url, body.adminPassword);
         const baseUrl = node.url.replace(/\/+$/, '');
 

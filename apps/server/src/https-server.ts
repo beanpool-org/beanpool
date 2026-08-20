@@ -685,6 +685,7 @@ export async function startHttpsServer(port: number): Promise<void> {
                     (ctx as any).rawBody = body;  // X-1: exact bytes the client signed
                     const parsed = JSON.parse(body);
                     (ctx as any).requestBody = parsed;
+                    (ctx.request as any).body = parsed;
 
                     const sender = parsed.publicKey || parsed.authorPublicKey || parsed.buyerPublicKey || parsed.from || parsed.memberPublicKey || parsed.voterPublicKey;
                     if (sender && typeof sender === 'string' && sender.length >= 32) {
@@ -700,9 +701,11 @@ export async function startHttpsServer(port: number): Promise<void> {
                         return;
                     }
                     (ctx as any).requestBody = {};
+                    (ctx.request as any).body = {};
                 }
             } else {
                 (ctx as any).requestBody = {};
+                (ctx.request as any).body = {};
             }
         }
         await next();

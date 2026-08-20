@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse } from '../../lib/node-client';
 import {
+    normalizeNodeUrl,
     fetchHarvesterStatus,
     triggerHarvesterSync,
     fetchNodeHistory,
@@ -33,6 +34,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const [activeTab, setActiveTab] = useState<TabType>('fleet-backups');
 
     // Harvester State
+    const [harvesterNodes, setHarvesterNodes] = useState<Array<{ id: string; name: string; url: string }>>([]);
     const [harvesterState, setHarvesterState] = useState<Record<string, HarvesterNodeState>>({});
     const [harvestLoading, setHarvestLoading] = useState(false);
     const [harvestingNodeId, setHarvestingNodeId] = useState<string | null>(null);
@@ -128,7 +130,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const loadHarvester = async () => {
         setHarvestLoading(true);
         try {
-            const data = await fetchHarvesterStatus();
+            const data = await fetchHarvesterStatus(activeNode?.adminPassword);
+            if (data.nodes && Array.isArray(data.nodes) && data.nodes.length > 0) {
+                setHarvesterNodes(data.nodes);
+            }
             setHarvesterState(data.harvestState || {});
         } catch (e) {
             console.warn('[HarvesterUI] Failed to fetch harvester status:', e);
@@ -141,7 +146,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         loadHarvester();
         const interval = setInterval(loadHarvester, 15000);
         return () => clearInterval(interval);
-    }, []);
+    }, [activeNode?.adminPassword]);
 
     // Load Snapshots for target node
     const loadSnapshots = async () => {
@@ -188,7 +193,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     ? '/api/manager/backups/download-db'
                     : '/api/manager/backups/download-identity',
                 { nodeId: slug },
-                node?.adminPassword,
+                node?.adminPassword || activeNode?.adminPassword,
                 kind === 'db'
                     ? `beanpool-backup-${slug}.db`
                     : `identity-bundle-${slug}.tar.gz`,
@@ -212,7 +217,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const handleTriggerSync = async (nodeId: string, node?: NodeProfile) => {
         setHarvestingNodeId(nodeId);
         try {
-            await triggerHarvesterSync(nodeId, node?.url, node?.adminPassword);
+            await triggerHarvesterSync(nodeId, node?.url, node?.adminPassword, activeNode?.adminPassword);
             await loadHarvester();
         } catch (e: any) {
             alert(`Harvest sync failed: ${e.message}`);
@@ -226,7 +231,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setSelectedHistoryNode({ id: nodeId, name });
         setHistoryLoading(true);
         try {
-            const items = await fetchNodeHistory(nodeId);
+            const items = await fetchNodeHistory(nodeId, activeNode?.adminPassword);
             setHistoryList(items);
         } catch {
             setHistoryList([]);
@@ -341,7 +346,19 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         return id;
     };
 
-    const fleetNodesList = profiles.length > 0 ? profiles : [activeNode];
+    const fleetNodesList = harvesterNodes.length > 0
+        ? harvesterNodes.map(hn => {
+            const match = profiles.find(p => p.id === hn.id || getSlug(p) === hn.id || (p.url && hn.url && normalizeNodeUrl(p.url) === normalizeNodeUrl(hn.url)));
+            return {
+                id: hn.id,
+                name: hn.name,
+                url: hn.url,
+                adminPassword: match?.adminPassword,
+                replicationToken: match?.replicationToken,
+                isPrimary: match?.isPrimary,
+            };
+        })
+        : (profiles.length > 0 ? profiles : [activeNode]);
     const totalFleetBackupBytes = Object.values(harvesterState).reduce((acc, curr) => acc + (curr.dbSizeBytes || 0), 0);
 
     return (
@@ -379,7 +396,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
-                    <span>📦</span>
+                    <span>🗄️</span>
                     <span>Harvested Fleet Backups</span>
                 </button>
                 <button
@@ -413,7 +430,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     }`}
                 >
                     <span>🌐</span>
-                    <span>Domain Name Claims</span>
+                    <span>Domain Claims</span>
                 </button>
                 <button
                     onClick={() => setActiveTab('runbook')}
@@ -424,7 +441,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     }`}
                 >
                     <span>🛠️</span>
-                    <span>Disaster Recovery Runbook</span>
+                    <span>Recovery Runbook</span>
                 </button>
             </div>
 
@@ -459,13 +476,20 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                         </div>
                     </div>
 
+                    {!activeNode?.adminPassword && (
+                        <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl text-amber-300 text-xs flex items-center gap-2">
+                            <span>🔒</span>
+                            <span>Enter your Admin Password in the top header bar to authenticate and view live harvested node backups.</span>
+                        </div>
+                    )}
+
                     {/* Nodes Table */}
                     <div className="bg-nature-950/60 border border-nature-800 rounded-2xl overflow-hidden">
                         <div className="px-5 py-4 border-b border-nature-800 flex items-center justify-between">
                             <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
                                 Harvested Node Replicas & Identity Bundles
                             </h4>
-                            <span className="text-xs text-nature-400 font-mono">Auto-prunes history archives &gt;30d</span>
+                            <span className="text-[10px] text-nature-400">Auto-prunes history archives &gt;30d</span>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs">
@@ -484,7 +508,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                 <tbody className="divide-y divide-nature-800/60">
                                     {fleetNodesList.map((node) => {
                                         const slug = getSlug(node);
-                                        const state = harvesterState[node.id] || harvesterState[slug];
+                                        const state = harvesterState[node.id] || harvesterState[slug] || Object.values(harvesterState).find(s => s.nodeId === node.id || s.nodeId === slug || (s.nodeUrl && node.url && normalizeNodeUrl(s.nodeUrl) === normalizeNodeUrl(node.url)));
                                         const isSyncing = harvestingNodeId === node.id || harvestingNodeId === slug;
 
                                         return (

@@ -12,6 +12,13 @@ interface Props {
     isFullView?: boolean;
 }
 
+interface EventDetails {
+    emoji: string;
+    badgeBg: string;
+    content: React.ReactNode;
+    compactLabel: string;
+}
+
 function formatRelativeTime(isoDate: string): string {
     const diffMs = Date.now() - new Date(isoDate).getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -21,6 +28,91 @@ function formatRelativeTime(isoDate: string): string {
     if (diffHours < 24) return `${diffHours}h ago`;
     const diffDays = Math.floor(diffHours / 24);
     return `${diffDays}d ago`;
+}
+
+function getEventDetails(item: ActivityFeedItem): EventDetails {
+    const actorName = item.actorCallsign || 'Member';
+    const targetName = item.targetCallsign || 'Member';
+    const compactActor = item.actorCallsign || 'Someone';
+
+    switch (item.eventType) {
+        case 'member_joined':
+            return {
+                emoji: '🎉',
+                badgeBg: 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+                content: (
+                    <p className="text-xs text-zinc-800 dark:text-zinc-200">
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> joined the community
+                    </p>
+                ),
+                compactLabel: `${compactActor} joined`,
+            };
+        case 'trade_completed':
+            return {
+                emoji: '✅',
+                badgeBg: 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+                content: (
+                    <p className="text-xs text-zinc-800 dark:text-zinc-200">
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> completed a trade with{' '}
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{targetName}</span>
+                        {item.metadata?.credits && (
+                            <span className="ml-1 font-bold text-emerald-600 dark:text-emerald-400">
+                                (🫘 {item.metadata.credits})
+                            </span>
+                        )}
+                    </p>
+                ),
+                compactLabel: `${compactActor} traded`,
+            };
+        case 'rating_given': {
+            const starCount = Math.max(1, Math.min(5, Math.round(Number(item.metadata?.stars) || 5)));
+            return {
+                emoji: '⭐️',
+                badgeBg: 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+                content: (
+                    <p className="text-xs text-zinc-800 dark:text-zinc-200">
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> rated{' '}
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{targetName}</span>{' '}
+                        <span
+                            className="font-bold text-amber-500"
+                            role="img"
+                            aria-label={`${starCount} out of 5 stars`}
+                        >
+                            {'★'.repeat(starCount)}
+                        </span>
+                        {item.metadata?.comment && (
+                            <span className="italic text-zinc-500 dark:text-zinc-400 block text-[11px] mt-0.5">
+                                "{item.metadata.comment}"
+                            </span>
+                        )}
+                    </p>
+                ),
+                compactLabel: `${compactActor} rated ★`,
+            };
+        }
+        case 'post_created':
+            return {
+                emoji: '📍',
+                badgeBg: 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800',
+                content: (
+                    <p className="text-xs text-zinc-800 dark:text-zinc-200">
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> posted{' '}
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                            "{item.metadata?.title || 'Listing'}"
+                        </span>
+                        {item.metadata?.credits ? ` for 🫘 ${item.metadata.credits}` : ''}
+                    </p>
+                ),
+                compactLabel: `${compactActor} posted`,
+            };
+        default:
+            return {
+                emoji: '✨',
+                badgeBg: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300',
+                content: null,
+                compactLabel: `${compactActor} active`,
+            };
+    }
 }
 
 export function ActivityWaterfall({ isFullView = false }: Props) {
@@ -52,17 +144,17 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
         };
     }, []);
 
-    if (loading && feed.length === 0) {
-        return isFullView ? (
-            <div className="py-12 flex flex-col items-center justify-center text-zinc-400">
-                <div className="animate-spin text-2xl mb-2" aria-hidden="true">⏳</div>
-                <p className="text-xs font-semibold">Tuning into community pulse...</p>
-            </div>
-        ) : null;
-    }
-
     if (feed.length === 0) {
-        return isFullView ? (
+        if (!isFullView) return null;
+        if (loading) {
+            return (
+                <div className="py-12 flex flex-col items-center justify-center text-zinc-400">
+                    <div className="animate-spin text-2xl mb-2" aria-hidden="true">⏳</div>
+                    <p className="text-xs font-semibold">Tuning into community pulse...</p>
+                </div>
+            );
+        }
+        return (
             <div className="py-12 flex flex-col items-center justify-center text-center p-6 bg-zinc-50 dark:bg-zinc-900/40 rounded-2xl border border-zinc-200/80 dark:border-zinc-800">
                 <div className="text-4xl mb-3" aria-hidden="true">🌱</div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Welcome to the Community</h3>
@@ -70,7 +162,7 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
                     You're among the first here! Create an offer or need above to start local circulation.
                 </p>
             </div>
-        ) : null;
+        );
     }
 
     // FULL VIEW MODE: Rich card stream for cold-start / empty marketplace state
@@ -90,77 +182,8 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
 
                 <div className="space-y-2.5">
                     {feed.map((item) => {
-                        const actorName = item.actorCallsign || 'Member';
-                        const targetName = item.targetCallsign || 'Member';
                         const timeStr = formatRelativeTime(item.createdAt);
-
-                        let emoji = '✨';
-                        let badgeBg = 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300';
-                        let content = null;
-
-                        switch (item.eventType) {
-                            case 'member_joined':
-                                emoji = '🎉';
-                                badgeBg = 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
-                                content = (
-                                    <p className="text-xs text-zinc-800 dark:text-zinc-200">
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> joined the community
-                                    </p>
-                                );
-                                break;
-                            case 'trade_completed':
-                                emoji = '✅';
-                                badgeBg = 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
-                                content = (
-                                    <p className="text-xs text-zinc-800 dark:text-zinc-200">
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> completed a trade with{' '}
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{targetName}</span>
-                                        {item.metadata?.credits && (
-                                            <span className="ml-1 font-bold text-emerald-600 dark:text-emerald-400">
-                                                (🫘 {item.metadata.credits})
-                                            </span>
-                                        )}
-                                    </p>
-                                );
-                                break;
-                            case 'rating_given': {
-                                const starCount = Math.max(1, Math.min(5, Math.round(Number(item.metadata?.stars) || 5)));
-                                emoji = '⭐️';
-                                badgeBg = 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
-                                content = (
-                                    <p className="text-xs text-zinc-800 dark:text-zinc-200">
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> rated{' '}
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{targetName}</span>{' '}
-                                        <span
-                                            className="font-bold text-amber-500"
-                                            role="img"
-                                            aria-label={`${starCount} out of 5 stars`}
-                                        >
-                                            {'★'.repeat(starCount)}
-                                        </span>
-                                        {item.metadata?.comment && (
-                                            <span className="italic text-zinc-500 dark:text-zinc-400 block text-[11px] mt-0.5">
-                                                "{item.metadata.comment}"
-                                            </span>
-                                        )}
-                                    </p>
-                                );
-                                break;
-                            }
-                            case 'post_created':
-                                emoji = '📍';
-                                badgeBg = 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800';
-                                content = (
-                                    <p className="text-xs text-zinc-800 dark:text-zinc-200">
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">{actorName}</span> posted{' '}
-                                        <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                                            "{item.metadata?.title || 'Listing'}"
-                                        </span>
-                                        {item.metadata?.credits ? ` for 🫘 ${item.metadata.credits}` : ''}
-                                    </p>
-                                );
-                                break;
-                        }
+                        const { emoji, badgeBg, content } = getEventDetails(item);
 
                         return (
                             <div
@@ -200,19 +223,15 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
 
                 <div className="flex-1 overflow-x-auto scrollbar-none flex items-center gap-2">
                     {latestItems.map((item) => {
-                        const actor = item.actorCallsign || 'Someone';
-                        let label = `${actor} joined`;
-                        if (item.eventType === 'trade_completed') label = `${actor} traded`;
-                        if (item.eventType === 'rating_given') label = `${actor} rated ★`;
-                        if (item.eventType === 'post_created') label = `${actor} posted`;
+                        const { emoji, compactLabel } = getEventDetails(item);
 
                         return (
                             <span
                                 key={item.id}
                                 className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/60 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium"
                             >
-                                <span aria-hidden="true">{item.eventType === 'member_joined' ? '🎉' : item.eventType === 'trade_completed' ? '✅' : item.eventType === 'rating_given' ? '⭐️' : '📍'}</span>
-                                {label}
+                                <span aria-hidden="true">{emoji}</span>
+                                {compactLabel}
                                 <span className="text-zinc-400 text-[10px] ml-0.5">{formatRelativeTime(item.createdAt)}</span>
                             </span>
                         );

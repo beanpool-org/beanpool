@@ -677,6 +677,15 @@ export function getConnectorByPublicUrl(publicUrl: string): ConnectorStatus | nu
     return connector ? materialise(connector) : null;
 }
 
+export function getConnectorByPeerId(peerId: string): ConnectorStatus | null {
+    for (const c of connectors) {
+        const status = statuses.get(c.address);
+        if (status?.peerId === peerId) return materialise(c);
+        if (c.address && peerIdFromAddress(c.address) === peerId) return materialise(c);
+    }
+    return null;
+}
+
 /**
  * Check if a remote peer (by PeerId string) is trusted by this node.
  * Used by the handshake handler to respond to trust queries.

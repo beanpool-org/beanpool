@@ -6,6 +6,7 @@ import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders 
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
+import { parseArchetype } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -1349,7 +1350,7 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
             bio = COALESCE(excluded.bio, members.bio),
             contact_value = COALESCE(excluded.contact_value, members.contact_value),
             contact_visibility = COALESCE(excluded.contact_visibility, members.contact_visibility),
-            archetype = excluded.archetype
+            archetype = COALESCE(excluded.archetype, members.archetype)
     `, [pubkey, data.callsign, data.avatar_url || null, data.bio || null, data.contact_value || null, data.contact_visibility || null, data.archetype !== undefined ? data.archetype : null]);
 
     // Mirror the user's OWN profile into the canonical (node-independent) store
@@ -1967,7 +1968,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
                    earned_credit = excluded.earned_credit,
                    elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                   archetype = excluded.archetype`,
+                   archetype = COALESCE(excluded.archetype, members.archetype)`,
                 [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch]
             );
         }
@@ -2286,7 +2287,7 @@ export async function syncMessages(publicKey: string) {
                                        callsign = excluded.callsign,
                                        avatar_url = COALESCE(excluded.avatar_url, members.avatar_url),
                                        elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                                       archetype = excluded.archetype`,
+                                       archetype = COALESCE(excluded.archetype, members.archetype)`,
                                     [pk, cs, av, evb, arch]
                                 );
                             }
@@ -3291,14 +3292,28 @@ export async function pushProfileToServer(): Promise<boolean> {
     const bio = profile?.bio ?? canonical?.bio ?? '';
     const contactValue = profile?.contact_value ?? canonical?.contactValue ?? null;
     const contactVisibility = profile?.contact_visibility ?? canonical?.contactVisibility ?? 'community';
+    const archetypeRaw = profile?.archetype ?? canonical?.archetype ?? null;
+    let publicArchetype: string | null = null;
+    if (archetypeRaw) {
+        const parsed = parseArchetype(archetypeRaw);
+        publicArchetype = parsed ? JSON.stringify({
+            primary: parsed.primary,
+            secondary: parsed.secondary,
+            mode: parsed.mode,
+            updatedAt: parsed.updatedAt,
+        }) : archetypeRaw;
+    }
 
-    const payloadObj = {
+    const payloadObj: any = {
         publicKey: identity.publicKey,
         avatar,
         bio: bio || '',
         contact: contactValue ? { value: contactValue, visibility: contactVisibility } : null,
         callsign,
     };
+    if (publicArchetype) {
+        payloadObj.archetype = publicArchetype;
+    }
     const bodyString = JSON.stringify(payloadObj);
     const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
     try {
@@ -3322,7 +3337,7 @@ export async function pushProfileToServer(): Promise<boolean> {
         await AsyncStorage.removeItem('pending_profile_sync');
         // Mirror the canonical avatar into THIS node's local DB when it was
         // missing, so local reads and the marketplace pre-check see it at once.
-        if (!profile?.avatar_url) {
+        if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {
             try {
                 await updateMemberProfile(identity.publicKey, {
                     callsign,
@@ -3330,6 +3345,7 @@ export async function pushProfileToServer(): Promise<boolean> {
                     bio: bio || undefined,
                     contact_value: contactValue || undefined,
                     contact_visibility: contactVisibility,
+                    archetype: archetypeRaw || undefined,
                 });
             } catch { /* local mirror is best-effort */ }
         }

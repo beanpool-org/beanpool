@@ -73,6 +73,11 @@ export function ArchetypeQuizModal({
             const finalResult = scoreQuiz(nextAnswers, mode);
             setResult(finalResult);
             setStep('result');
+            try {
+                onComplete(finalResult);
+            } catch (e) {
+                console.warn('[ArchetypeQuiz] Auto-save on completion failed:', e);
+            }
         }
     };
 
@@ -84,11 +89,23 @@ export function ArchetypeQuizModal({
         }
     };
 
+    const handleClose = () => {
+        if (result) {
+            try {
+                onComplete(result);
+            } catch (e) {
+                console.warn('[ArchetypeQuiz] Save on close failed:', e);
+            }
+        }
+        onClose();
+    };
+
     const handleSave = async () => {
         if (!result) return;
         setSaving(true);
         try {
             await onComplete(result);
+            onClose();
         } finally {
             setSaving(false);
         }
@@ -102,7 +119,7 @@ export function ArchetypeQuizModal({
             visible={visible}
             animationType="slide"
             presentationStyle="pageSheet"
-            onRequestClose={onClose}
+            onRequestClose={handleClose}
         >
             <SafeAreaView
                 style={[
@@ -151,7 +168,7 @@ export function ArchetypeQuizModal({
                         accessibilityLabel="Close quiz modal"
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         style={styles.headerBtn}
-                        onPress={onClose}
+                        onPress={handleClose}
                     >
                         <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
                     </Pressable>
@@ -586,7 +603,7 @@ export function ArchetypeQuizModal({
                                             { color: colors.text.inverse },
                                         ]}
                                     >
-                                        Save to My Profile
+                                        Done · Save to Profile
                                     </Text>
                                 )}
                             </Pressable>

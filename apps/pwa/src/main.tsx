@@ -54,8 +54,6 @@ class ErrorBoundary extends Component<
     }
 }
 
-console.log('[BeanPool] Mounting React app...');
-
 try {
     createRoot(document.getElementById('root')!).render(
         <StrictMode>
@@ -64,7 +62,6 @@ try {
             </ErrorBoundary>
         </StrictMode>
     );
-    console.log('[BeanPool] React mounted successfully');
 } catch (err) {
     console.error('[BeanPool] FATAL:', err);
     const root = document.getElementById('root');

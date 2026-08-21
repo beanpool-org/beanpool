@@ -42,3 +42,8 @@ Vault's domain is `apps/manager/` ONLY. Do NOT touch `apps/server` (Sentinel's d
 ## Journal — Critical Learnings Only
 
 Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learning:** [Why it existed]\n**Prevention:** [How to avoid next time]`
+
+## 2026-08-21 - Unauthenticated Snapshot Download Links
+**Vulnerability:** Direct `<a href>` elements pointing to snapshot and history backup endpoints lacked HTTP admin authorization headers.
+**Learning:** Raw anchor tags cannot send custom headers (`X-Admin-Password`), risking authentication bypass or unauthenticated download attempts.
+**Prevention:** Use the `downloadAdminFile()` fetch wrapper for admin file downloads to ensure headers are attached securely.

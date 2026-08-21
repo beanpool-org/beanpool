@@ -160,3 +160,8 @@ These were reviewed and **CLOSED, not merged**: their branches had ~260-file dri
 
 ## 2026-08-20 - [Sentinel] Registrar Admin Secret Timing Comparison & Session Storage
 **Resolved:** Handled in PR #336 (constant-time `crypto.timingSafeEqual` comparison for registrar secrets) and PR #352 (switched registrar admin key from persistent `localStorage` to ephemeral `sessionStorage`). Do not re-raise. Do not widen `checkAdmin` to accept secrets via unauthenticated header transports or inject unescaped inputs into admin HTML.
+
+## 2026-08-21 - [Sentinel] Sanitize tar entry paths in fleet backup harvester
+**Vulnerability:** In `apps/server/src/services/harvester.ts`, `pullBackupForNode` extracted downloaded node backup tar archives (`.tmp-backup.tar.gz`) directly using `tar -xzf` without verifying member entry paths beforehand. If a compromised node or attacker sent a crafted tarball with absolute paths or `..` path traversal segments, extraction could write outside the temporary directory (Zip-Slip vulnerability).
+**Learning:** Even internal or admin-authenticated archive downloads must validate tar member paths using `tar -tf` prior to extraction, similar to `pullIdentityForNode` and `/restore`.
+**Prevention:** Always inspect tar member paths before extraction and reject any entries starting with `/` or containing `..`.

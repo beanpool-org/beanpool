@@ -110,10 +110,10 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
     if (loading || sessions.length === 0) return null;
 
     return (
-        <View style={styles.container}>
+        <View style={styles.container} accessibilityLiveRegion="assertive">
             <View style={styles.header}>
-                <Text style={styles.icon}>🚨</Text>
-                <Text style={styles.title}>Someone is recovering your account</Text>
+                <Text style={styles.icon} importantForAccessibility="no" accessibilityElementsHidden={true}>🚨</Text>
+                <Text style={styles.title} accessibilityRole="header">Someone is recovering your account</Text>
             </View>
             <Text style={styles.body}>
                 A device is trying to restore access to your account.
@@ -128,6 +128,10 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                 onPress={handleStopIt}
                 disabled={stopping}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Stop recovery attempt now"
+                accessibilityHint="Cancels active recovery sessions"
+                accessibilityState={{ disabled: stopping }}
             >
                 {stopping ? (
                     <ActivityIndicator size="small" color={palette.white} />

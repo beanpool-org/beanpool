@@ -377,7 +377,14 @@ export function TelemetryModule({
                     </div>
                 </div>
 
-                {viewMode === 'condensed' ? (
+                {profiles.length === 0 ? (
+                    <div className="bg-nature-950/60 border border-nature-800 rounded-2xl p-8 text-center text-nature-400 space-y-2 font-sans">
+                        <p className="text-sm font-bold text-white">No active node profiles found</p>
+                        <p className="text-xs text-nature-500">
+                            Configure or select a sovereign node profile in Fleet Settings to view real-time diagnostics and telemetry.
+                        </p>
+                    </div>
+                ) : viewMode === 'condensed' ? (
                     /* CONDENSED GRID VIEW */
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
                         {profiles.map((profile, pIdx) => {

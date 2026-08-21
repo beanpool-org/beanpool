@@ -240,6 +240,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/activity/feed',            // living activity waterfall community pulse feed (#208)
+    '/api/node/info',                // node metadata + peer list (PWA node discovery)
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't

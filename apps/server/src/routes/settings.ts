@@ -380,6 +380,8 @@ router.post('/api/admin/check-update', async (ctx) => {
                     publishedAt: '',
                 };
             } else {
+                // Return Bad Gateway if upstream update source (GitHub API) is unreachable
+                ctx.status = 502;
                 ctx.body = {
                     currentVersion: getVersion(),
                     latestVersion: '',
@@ -389,6 +391,8 @@ router.post('/api/admin/check-update', async (ctx) => {
             }
         }
     } catch (e: any) {
+        // Return Internal Server Error on unhandled update check exceptions
+        ctx.status = 500;
         ctx.body = {
             currentVersion: getVersion(),
             latestVersion: '',

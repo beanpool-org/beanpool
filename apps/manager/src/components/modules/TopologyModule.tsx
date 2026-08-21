@@ -221,6 +221,34 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         }
     };
 
+    const handleDownloadSnapshot = async (snapName: string) => {
+        if (!targetSnapshotNode) return;
+        try {
+            await downloadAdminFile(
+                `${targetSnapshotNode.url}/api/local/admin/snapshots/download`,
+                { name: snapName },
+                targetSnapshotNode.adminPassword,
+                snapName,
+            );
+        } catch (e: any) {
+            alert(`Snapshot download failed: ${e.message || String(e)}`);
+        }
+    };
+
+    const handleDownloadHistoryArchive = async (nodeId: string, filename: string) => {
+        const historyNode = profiles.find(p => p.id === nodeId) || activeNode;
+        try {
+            await downloadAdminFile(
+                '/api/manager/backups/download-history',
+                { nodeId, filename },
+                historyNode?.adminPassword,
+                filename,
+            );
+        } catch (e: any) {
+            alert(`Archive download failed: ${e.message || String(e)}`);
+        }
+    };
+
     // Open History Modal
     const handleOpenHistory = async (nodeId: string, name: string) => {
         setSelectedHistoryNode({ id: nodeId, name });
@@ -654,14 +682,12 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                             <td className="px-4 py-3 text-nature-300">{snap.createdAt}</td>
                                             <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    <a
-                                                        href={`${targetSnapshotNode.url}/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}`}
-                                                        target="_blank"
-                                                        rel="noreferrer"
+                                                    <button
+                                                        onClick={() => handleDownloadSnapshot(snap.name)}
                                                         className="px-3 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-sky-400 font-bold text-[11px] transition-all inline-block"
                                                     >
                                                         ⬇ Download
-                                                    </a>
+                                                    </button>
                                                     <button
                                                         onClick={() => handleDeleteSnapshot(snap.name)}
                                                         className="px-3 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-400 font-bold text-[11px] border border-rose-800/60 transition-all"
@@ -1183,14 +1209,12 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                 <td className="px-4 py-2.5 font-mono text-nature-300">{item.filename}</td>
                                                 <td className="px-4 py-2.5 font-mono text-amber-400 font-bold">{fmtBytes(item.sizeBytes)}</td>
                                                 <td className="px-4 py-2.5 text-right">
-                                                    <a
-                                                        href={`/api/manager/backups/download-history?nodeId=${selectedHistoryNode.id}&filename=${encodeURIComponent(item.filename)}`}
-                                                        target="_blank"
-                                                        rel="noreferrer"
+                                                    <button
+                                                        onClick={() => handleDownloadHistoryArchive(selectedHistoryNode.id, item.filename)}
                                                         className="px-3 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-sky-400 font-bold text-[11px] transition-all inline-block"
                                                     >
                                                         ⬇ Download Archive
-                                                    </a>
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}

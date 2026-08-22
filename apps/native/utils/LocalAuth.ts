@@ -1,7 +1,10 @@
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const APP_LOCK_KEY = 'beanpool_app_lock_enabled';
+const isWeb = Platform.OS === 'web';
 
 /**
  * Check if the device hardware supports local authentication.
@@ -61,8 +64,28 @@ export async function authenticateUser(reason: string): Promise<boolean> {
  */
 export async function getAppLockEnabled(): Promise<boolean> {
     try {
-        const val = await AsyncStorage.getItem(APP_LOCK_KEY);
-        return val === 'true';
+        let val: string | null = null;
+        if (isWeb) {
+            val = localStorage.getItem(APP_LOCK_KEY);
+        } else {
+            val = await SecureStore.getItemAsync(APP_LOCK_KEY);
+        }
+        if (val !== null) {
+            return val === 'true';
+        }
+
+        // Fallback / auto-migrate legacy preference stored in AsyncStorage
+        const legacyVal = await AsyncStorage.getItem(APP_LOCK_KEY);
+        if (legacyVal !== null) {
+            if (isWeb) {
+                localStorage.setItem(APP_LOCK_KEY, legacyVal);
+            } else {
+                await SecureStore.setItemAsync(APP_LOCK_KEY, legacyVal);
+            }
+            await AsyncStorage.removeItem(APP_LOCK_KEY).catch(() => {});
+            return legacyVal === 'true';
+        }
+        return false;
     } catch {
         return false;
     }
@@ -73,7 +96,13 @@ export async function getAppLockEnabled(): Promise<boolean> {
  */
 export async function setAppLockEnabled(enabled: boolean): Promise<void> {
     try {
-        await AsyncStorage.setItem(APP_LOCK_KEY, enabled ? 'true' : 'false');
+        const strVal = enabled ? 'true' : 'false';
+        if (isWeb) {
+            localStorage.setItem(APP_LOCK_KEY, strVal);
+        } else {
+            await SecureStore.setItemAsync(APP_LOCK_KEY, strVal);
+        }
+        await AsyncStorage.removeItem(APP_LOCK_KEY).catch(() => {});
     } catch (e) {
         console.error('Failed to save app lock preference:', e);
     }

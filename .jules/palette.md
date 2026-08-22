@@ -54,3 +54,7 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 ## 2024-05-18 - Input Label Associations
 **Learning:** Many form inputs throughout the application (such as in settings or profile pages) use `<label>` elements visually, but do not associate them to their respective inputs using `htmlFor` and `id`. This breaks the expected behavior for screen reader users and affects focus state toggling.
 **Action:** When adding or modifying inputs with visible label text, always ensure `htmlFor` on the label exactly matches the `id` on the `<input>` or `<textarea>`.
+
+## 2026-06-20 - CategoryPickerModal Dialog & Keyboard Accessibility
+**Learning:** `CategoryPickerModal.tsx` lacked modal dialog accessibility semantics (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`), had no Escape key event listener to close the modal, lacked toggle button state attributes (`aria-pressed`), and had no visible focus ring for keyboard navigation.
+**Action:** Added `role="dialog"`, `aria-modal="true"`, and `aria-labelledby="category-picker-title"` to the modal backdrop, added an `useEffect` hook for the Escape key listener, set `type="button"` and `aria-pressed` on category option buttons, and added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`.

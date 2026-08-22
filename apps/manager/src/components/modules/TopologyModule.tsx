@@ -209,6 +209,27 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         }
     };
 
+    const handleDownloadSnapshot = async (snapName: string) => {
+        if (!targetSnapshotNode) return;
+        const key = `snapshot:${snapName}`;
+        setDownloadingKey(key);
+        try {
+            await downloadAdminFile(
+                `${targetSnapshotNode.url}/api/local/admin/snapshots/download`,
+                { name: snapName },
+                targetSnapshotNode.adminPassword,
+                snapName,
+            );
+        } catch (e: any) {
+            const detail = /failed to fetch|networkerror|load failed/i.test(e?.message || '')
+                ? "no response from the target node server"
+                : (e?.message || String(e));
+            alert(`Snapshot download failed: ${detail}`);
+        } finally {
+            setDownloadingKey(null);
+        }
+    };
+
     const handleTriggerSync = async (nodeId: string, node?: NodeProfile) => {
         setHarvestingNodeId(nodeId);
         try {
@@ -654,14 +675,13 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                             <td className="px-4 py-3 text-nature-300">{snap.createdAt}</td>
                                             <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    <a
-                                                        href={`${targetSnapshotNode.url}/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}`}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="px-3 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-sky-400 font-bold text-[11px] transition-all inline-block"
+                                                    <button
+                                                        onClick={() => handleDownloadSnapshot(snap.name)}
+                                                        disabled={downloadingKey === `snapshot:${snap.name}`}
+                                                        className="px-3 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 disabled:opacity-50 text-sky-400 font-bold text-[11px] transition-all"
                                                     >
-                                                        ⬇ Download
-                                                    </a>
+                                                        {downloadingKey === `snapshot:${snap.name}` ? '...' : '⬇ Download'}
+                                                    </button>
                                                     <button
                                                         onClick={() => handleDeleteSnapshot(snap.name)}
                                                         className="px-3 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-400 font-bold text-[11px] border border-rose-800/60 transition-all"

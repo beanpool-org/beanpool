@@ -177,6 +177,15 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<{ dbSize
     const fileStream = fs.createWriteStream(tmpTar);
     await pipeline(Readable.fromWeb(res.body as any), fileStream);
 
+    // Validate tar entry paths prior to extraction to prevent path traversal (Zip-Slip)
+    const entryList = execFileSync('tar', ['-tf', tmpTar], { encoding: 'utf-8' });
+    const entries = entryList.split('\n').map(s => s.trim()).filter(Boolean);
+    for (const entry of entries) {
+        if (entry.startsWith('/') || entry.includes('..')) {
+            throw new Error(`Insecure backup entry path detected: ${entry}`);
+        }
+    }
+
     // Extract tar.gz with security flags
     execFileSync('tar', ['-xzf', tmpTar, '-C', tmpExtract, '--no-same-owner', '--no-same-permissions']);
 

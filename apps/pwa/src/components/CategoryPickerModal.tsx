@@ -42,13 +42,25 @@ export function CategoryPickerModal({ visible, selected, onSelect, onClose }: Ca
             onClick={onClose}
         >
             <div
-                className="bg-white dark:bg-nature-950 w-full sm:w-[90vw] sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 pb-10 sm:pb-6 max-h-[60vh] overflow-y-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="category-picker-title"
+                className="bg-white dark:bg-nature-950 w-full sm:w-[90vw] sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 pb-10 sm:pb-6 max-h-[60vh] overflow-y-auto animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300 relative"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Handle bar (mobile) */}
                 <div className="w-10 h-1 rounded-full bg-nature-300 dark:bg-nature-700 mx-auto mb-4 sm:hidden" />
 
-                <h3 className="text-lg font-black text-nature-900 dark:text-white text-center mb-5">Category</h3>
+                <div className="flex justify-between items-center mb-5">
+                    <h3 id="category-picker-title" className="text-lg font-black text-nature-900 dark:text-white text-center flex-1">Category</h3>
+                    <button
+                        onClick={onClose}
+                        aria-label="Close category picker"
+                        className="w-8 h-8 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                    >
+                        ✕
+                    </button>
+                </div>
 
                 <div className="grid grid-cols-4 gap-3">
                     {CATEGORIES.map(cat => {
@@ -57,7 +69,8 @@ export function CategoryPickerModal({ visible, selected, onSelect, onClose }: Ca
                             <button
                                 key={cat.id}
                                 onClick={() => { onSelect(cat.id); onClose(); }}
-                                className={`flex flex-col items-center justify-center py-3 rounded-2xl border-[1.5px] transition-all ${
+                                aria-pressed={isActive}
+                                className={`flex flex-col items-center justify-center py-3 rounded-2xl border-[1.5px] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                                     isActive
                                         ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-400 dark:border-indigo-600'
                                         : 'bg-nature-50 dark:bg-nature-900 border-nature-200 dark:border-nature-800 hover:bg-nature-100 dark:hover:bg-nature-800'

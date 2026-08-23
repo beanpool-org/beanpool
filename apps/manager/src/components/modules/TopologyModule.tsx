@@ -657,7 +657,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                     <a
                                                         href={`${targetSnapshotNode.url}/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}`}
                                                         target="_blank"
-                                                        rel="noreferrer"
+                                                        rel="noopener noreferrer"
                                                         className="px-3 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-sky-400 font-bold text-[11px] transition-all inline-block"
                                                     >
                                                         ⬇ Download
@@ -1186,7 +1186,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                     <a
                                                         href={`/api/manager/backups/download-history?nodeId=${selectedHistoryNode.id}&filename=${encodeURIComponent(item.filename)}`}
                                                         target="_blank"
-                                                        rel="noreferrer"
+                                                        rel="noopener noreferrer"
                                                         className="px-3 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-sky-400 font-bold text-[11px] transition-all inline-block"
                                                     >
                                                         ⬇ Download Archive

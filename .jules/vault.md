@@ -42,3 +42,8 @@ Vault's domain is `apps/manager/` ONLY. Do NOT touch `apps/server` (Sentinel's d
 ## Journal — Critical Learnings Only
 
 Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learning:** [Why it existed]\n**Prevention:** [How to avoid next time]`
+
+## 2025-05-18 - Target blank external links missing noopener
+**Vulnerability:** External links with `target="_blank"` used `rel="noreferrer"` without `noopener`.
+**Learning:** Modern browsers handle window.opener safety automatically for `target="_blank"`, but explicit `rel="noopener noreferrer"` ensures full security across all environments and static analysis compliance.
+**Prevention:** Always pair `target="_blank"` with `rel="noopener noreferrer"`.

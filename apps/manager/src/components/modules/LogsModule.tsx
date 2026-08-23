@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 
+export interface LogEntry {
+    timestamp?: string | number;
+    level?: string;
+    message?: string;
+    [key: string]: unknown;
+}
+
 interface LogsModuleProps {
-    logs: any[];
+    logs: LogEntry[];
     onRefresh: () => void;
 }
 
@@ -9,7 +16,7 @@ export function LogsModule({ logs, onRefresh }: LogsModuleProps) {
     const [levelFilter, setLevelFilter] = useState<string>('ALL');
     const [searchQuery, setSearchQuery] = useState<string>('');
 
-    const filteredLogs = logs.filter((log: any) => {
+    const filteredLogs = logs.filter((log: LogEntry) => {
         if (levelFilter !== 'ALL' && (log.level || 'INFO').toUpperCase() !== levelFilter) {
             return false;
         }
@@ -69,7 +76,7 @@ export function LogsModule({ logs, onRefresh }: LogsModuleProps) {
             {/* Stream Console */}
             <div className="h-96 bg-nature-950 border border-nature-800 rounded-xl p-4 font-mono text-xs overflow-y-auto space-y-2 text-nature-300 shadow-inner custom-scrollbar">
                 {filteredLogs.length > 0 ? (
-                    filteredLogs.map((log: any, idx: number) => {
+                    filteredLogs.map((log: LogEntry, idx: number) => {
                         const level = (log.level || 'INFO').toUpperCase();
                         const colorClass =
                             level === 'ERROR'

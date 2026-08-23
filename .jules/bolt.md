@@ -74,3 +74,6 @@ lookups/counts → O(1)" fix). Before opening a PR:
 ## 2026-08-20 - SQLite Native Batching & Lock Hygiene
 **Learning:** In `apps/native/utils/db.ts`, batching accounts insertions during sync deltas (`applyDelta`) into chunks of 100 significantly accelerates synchronization without hitting SQLite variable limits (landed in #324). However, avoid taking global sync locks on detached or read-heavy background loops to prevent lock contention.
 
+## 2026-08-21 - Pre-grouping actionable deals in native inbox tab
+**Learning:** In `apps/native/app/(tabs)/chats.tsx`, `list.map` ran four `.filter()` calls per conversation over the full `deals` array (an O(N*M) pattern).
+**Action:** Pre-grouped `deals` by `conversationId` into a `Map` prior to `list.map`, reducing lookup to O(1) and computing action counts in a single pass (O(N+M) total).

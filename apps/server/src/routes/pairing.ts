@@ -21,7 +21,8 @@ export function createPairingRoutes(deps: RouteDeps): Router {
     router.post('/api/pair/init', async (ctx) => {
         if (!deps.rateLimit(ctx)) return;
 
-        const { sessionId, desktopPubHex } = (ctx.request as any).body || {};
+        // Fallback to ctx.requestBody (set by signature middleware) if present
+        const { sessionId, desktopPubHex } = (ctx as any).requestBody || (ctx.request as any)?.body || {};
 
         if (!sessionId || !desktopPubHex) {
             ctx.status = 400;
@@ -67,7 +68,8 @@ export function createPairingRoutes(deps: RouteDeps): Router {
     router.post('/api/pair/transfer', async (ctx) => {
         if (!deps.rateLimit(ctx)) return;
 
-        const { sessionId, mobilePubHex, nonceHex, ciphertextHex } = (ctx.request as any).body || {};
+        // Fallback to ctx.requestBody (set by signature middleware) if present
+        const { sessionId, mobilePubHex, nonceHex, ciphertextHex } = (ctx as any).requestBody || (ctx.request as any)?.body || {};
 
         if (!sessionId || !mobilePubHex || !nonceHex || !ciphertextHex) {
             ctx.status = 400;
@@ -92,7 +94,8 @@ export function createPairingRoutes(deps: RouteDeps): Router {
     router.post('/api/pair/cancel', async (ctx) => {
         if (!deps.rateLimit(ctx)) return;
 
-        const { sessionId } = (ctx.request as any).body || {};
+        // Fallback to ctx.requestBody (set by signature middleware) if present
+        const { sessionId } = (ctx as any).requestBody || (ctx.request as any)?.body || {};
         if (sessionId) {
             cancelPairingSession(sessionId);
         }

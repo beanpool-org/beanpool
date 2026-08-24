@@ -48,3 +48,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** resolveAvatarUrl in apps/manager/src/lib/avatar.ts was untested.
 **Learning:** Vitest was already set up correctly for the manager app; running tests for lib utilities was straightforward and required no additional configuration.
 **Action:** Continue identifying utility functions in `lib` or pure functions to test.
+
+## 2026-08-08 - [manager tests] node-client unit tests
+**Gap:** `node-client.ts` helper functions (`normalizeNodeUrl`, `resolveNodeApiUrl`, `buildAdminHeaders`, `isTotpRequired`, TFA session token storage) were untested.
+**Learning:** Testing `resolveNodeApiUrl` requires stubbing `location.origin` with `vi.stubGlobal('location', { origin: '...' })` to test cross-origin proxy routing.
+**Action:** Look for remaining untested helper files in `lib/` or core React components in `components/`.

@@ -68,7 +68,15 @@ export function LogsModule({ logs, onRefresh }: LogsModuleProps) {
 
             {/* Stream Console */}
             <div className="h-96 bg-nature-950 border border-nature-800 rounded-xl p-4 font-mono text-xs overflow-y-auto space-y-2 text-nature-300 shadow-inner custom-scrollbar">
-                {filteredLogs.length > 0 ? (
+                {logs.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center p-8 text-center">
+                        <span className="text-3xl mb-2">📜</span>
+                        <p className="text-nature-300 font-bold m-0 text-sm">No log entries captured yet</p>
+                        <p className="text-nature-500 text-xs m-0 mt-1 max-w-sm">
+                            There are no log records recorded on this node. Trigger actions or click Refresh Stream to fetch recent events.
+                        </p>
+                    </div>
+                ) : filteredLogs.length > 0 ? (
                     filteredLogs.map((log: any, idx: number) => {
                         const level = (log.level || 'INFO').toUpperCase();
                         const colorClass =

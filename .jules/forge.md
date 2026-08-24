@@ -57,3 +57,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `apps/server/src/services/tls.ts` lacked a try/catch and `res.ok` check around its `fetch` for Cloudflare TXT record creation.
 **Learning:** External fetch calls in services (especially API providers) can crash the server if they throw uncaught exceptions or return unexpected formats (like HTML instead of JSON for a 500 error).
 **Pattern:** Look for `await fetch` in service files that lack `try/catch` and missing `if (!res.ok)` before reading `await res.json()`.
+
+## 2026-08-21 - [Unchecked Koa requestBody in pairing routes]
+**Issue:** `apps/server/src/routes/pairing.ts` accessed `(ctx.request as any).body` directly instead of checking `(ctx as any).requestBody || (ctx.request as any)?.body || {}`.
+**Learning:** When requests pass through signature or body parser Koa middleware, the parsed JSON body is attached to `(ctx as any).requestBody`. Accessing `ctx.request.body` directly evaluates to `undefined`, causing requests to fail with 400 Bad Request error.
+**Pattern:** Look for route handlers extracting `(ctx.request as any).body` directly without checking `(ctx as any).requestBody`.

@@ -12,7 +12,7 @@ import {
     getNodeRole, getMemberStats,
 } from '../state-engine.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig, verifyPassword,
+    getLocalConfig, saveLocalConfig, updateLocalConfig, verifyPasswordAsync,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
     getGatewayConfig,
 } from '../config/local-config.js';
@@ -302,7 +302,7 @@ router.post('/api/admin/thresholds', async (ctx) => {
     const config = getLocalConfig();
     const { password, ...updates } = (ctx as any).requestBody || {};
     if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+        !(await verifyPasswordAsync(password, config.adminHash, config.salt))) {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -338,7 +338,7 @@ router.post('/api/admin/check-update', async (ctx) => {
     const config = getLocalConfig();
     const { password } = (ctx as any).requestBody || {};
     if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+        !(await verifyPasswordAsync(password, config.adminHash, config.salt))) {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -414,7 +414,7 @@ router.get('/api/local/admin/2fa/status', async (ctx) => {
     const headerPass = (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-password') : null)
         || ctx.request?.headers?.['x-admin-password']
         || (ctx as any).headers?.['x-admin-password'];
-    if (!headerPass || !config.adminHash || !config.salt || !verifyPassword(headerPass, config.adminHash, config.salt)) {
+    if (!headerPass || !config.adminHash || !config.salt || !(await verifyPasswordAsync(headerPass, config.adminHash, config.salt))) {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;

@@ -537,6 +537,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         );
     }
 
+    // Pre-compute O(1) member lookup map for message rendering performance in large chat threads.
+    const membersByPublicKey = new Map(members.map(m => [m.publicKey, m]));
+
     // Chat view
     if (activeConv) {
         return (
@@ -760,7 +763,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             >
                                 {!isMe && activeConv.type === 'group' && (
                                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
-                                        {members.find(m => m.publicKey === msg.authorPubkey)?.callsign
+                                        {membersByPublicKey.get(msg.authorPubkey)?.callsign
                                             || msg.authorPubkey.substring(0, 8)}
                                     </div>
                                 )}
@@ -786,7 +789,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             const parentMsg = messages.find(m => m.id === metaObj.replyToId);
                                             const parentText = parentMsg ? (parentMsg.type === 'image' ? '🔒 Photo' : decryptMessage(parentMsg)) : 'Message not found';
                                             const parentAuthor = parentMsg 
-                                                ? (members.find(m => m.publicKey === parentMsg.authorPubkey)?.callsign 
+                                                ? (membersByPublicKey.get(parentMsg.authorPubkey)?.callsign
                                                    || (parentMsg.authorPubkey === identity.publicKey ? 'You' : parentMsg.authorPubkey.substring(0, 8))) 
                                                 : 'Someone';
                                             return (
@@ -899,7 +902,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)', paddingLeft: '8px' }}>
                             <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--accent)' }}>
-                                Replying to {replyToMessage.authorPubkey === identity.publicKey ? 'You' : (members.find(m => m.publicKey === replyToMessage.authorPubkey)?.callsign || 'Someone')}
+                                Replying to {replyToMessage.authorPubkey === identity.publicKey ? 'You' : (membersByPublicKey.get(replyToMessage.authorPubkey)?.callsign || 'Someone')}
                             </div>
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
                                 {replyToMessage.type === 'image' ? '🔒 Photo' : decryptMessage(replyToMessage)}

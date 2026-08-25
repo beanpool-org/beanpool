@@ -87,6 +87,10 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-08-20 - SQLite Native Batching & Lock Hygiene
 **Learning:** In `apps/native/utils/db.ts`, batching accounts insertions during sync deltas (`applyDelta`) into chunks of 100 significantly accelerates synchronization without hitting SQLite variable limits (landed in #324). However, avoid taking global sync locks on detached or read-heavy background loops to prevent lock contention.
 
+## 2026-08-21 - O(N*M) Member Lookups in PWA MessagesPage
+**Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, looking up member callsigns for each message and reply via `members.find(m => m.publicKey === ...)` created an $O(N \times M)$ operation on every render in large chat threads.
+**Action:** Pre-compute `const membersByPublicKey = new Map(members.map(m => [m.publicKey, m]))` before rendering messages to convert lookups into $O(1)$ operations.
+
 ## 2026-08-28 - O(M*P) Nested Member Profile Lookups in Manager Roster Rendering
 **Learning:** In `apps/manager/src/components/modules/MembersModule.tsx`, member filtering and list item rendering invoked `getMemberDisplayName` and `getMemberAvatar`, which performed `profiles.find(...)` on every member row for both name and avatar. This created an `O(M * P)` array scan across every filter and render cycle.
 **Action:** Pre-compute `const profilesMap = React.useMemo(...)` to map public keys to profile records in O(P) time, and update `getMemberDisplayName` / `getMemberAvatar` to accept either `Map` or `Array` parameters for backward compatibility. This turns member roster rendering into an O(M + P) operation.

@@ -99,13 +99,31 @@ export function sendMessage(
     clientId?: string
 ): Message | null {
     assertMemberActive(authorPubkey);
-    const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conversationId) as any[];
+    let effectiveConvId = conversationId;
+    let participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
+    
+    // If not found directly, check if conversationId was consolidated into an active DM
+    if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) {
+        try {
+            const consolidatedMsg = db.prepare(`
+                SELECT conversation_id FROM messages
+                WHERE json_extract(metadata, '$.originalConversationId') = ?
+                   OR json_extract(metadata, '$.originalConversationIds') LIKE ?
+                LIMIT 1
+            `).get(conversationId, `%${conversationId}%`) as any;
+            if (consolidatedMsg?.conversation_id) {
+                effectiveConvId = consolidatedMsg.conversation_id;
+                participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
+            }
+        } catch (e) {}
+    }
+
     if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) return null;
 
     if (clientId) {
         const existing = db.prepare("SELECT * FROM messages WHERE id=?").get(clientId) as any;
         if (existing) {
-            if (existing.author_pubkey === authorPubkey && existing.conversation_id === conversationId) {
+            if (existing.author_pubkey === authorPubkey && existing.conversation_id === effectiveConvId) {
                 return {
                     id: existing.id,
                     conversationId: existing.conversation_id,
@@ -123,7 +141,7 @@ export function sendMessage(
 
     const msg: Message = {
         id: clientId || crypto.randomUUID(),
-        conversationId,
+        conversationId: effectiveConvId,
         authorPubkey,
         ciphertext,
         nonce,
@@ -137,7 +155,7 @@ export function sendMessage(
         db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime) VALUES (?, ?, ?, ?)`).run(msg.id, attachment.data, attachment.nonce, attachment.mime || 'image/jpeg');
     }
 
-    cb.broadcast({ type: 'new_message', conversationId, message: msg, participants: participants.map(p => p.public_key) });
+    cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) });
 
     const senderMember = getMember(db, authorPubkey) as any;
     const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
@@ -146,7 +164,7 @@ export function sendMessage(
         authorPubkey,
         '💬 New Message',
         `${senderName} sent you a message`,
-        { screen: 'chat', conversationId },
+        { screen: 'chat', conversationId: effectiveConvId },
         'chat'
     );
 

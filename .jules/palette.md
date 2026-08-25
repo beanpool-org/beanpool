@@ -23,6 +23,7 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 - WelcomePage FAQ accordion headers: `role="button"`, `tabIndex`, `aria-expanded`,
   Enter/Space, focus ring.
 - Marketplace filter-clear `✕` buttons (category + distance): keyboard-operable.
+- CategoryPickerModal dialog & keyboard accessibility: landed in #371 (includes Escape key handler). Do not re-file.
 - REJECTED: WelcomePage "← Back" controls (#72) — already semantic `<button>`s; not
   an a11y gap. Do not re-file.
 

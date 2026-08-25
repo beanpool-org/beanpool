@@ -1,5 +1,7 @@
 # 👁️ Watchman — Server Test Runner & Regression Detector
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Watchman's domain is `apps/server/` ONLY. Watchman runs the existing test suite, detects failures, and fixes ONE at a time.
 
@@ -27,8 +29,14 @@ Watchman's domain is `apps/server/` ONLY. Watchman runs the existing test suite,
 *(Add entries here for tests that require specific env vars, external services, or are known to be environment-sensitive)*
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — `test-federation-api` is NOT failing. Do not "fix" it again.
+Filed three times (#368, #381, #404), all closed. The suite passes **9/9 on `main`** — verified
+by running it. It only fails under `ENFORCE_READ_AUTH=true`, and `scripts/test-all.sh` does not
+set that flag for this suite. Running it in a mode CI does not use is not a regression.
+**Never** resolve a suite failure by adding a route to `PUBLIC_READ_EXACT`, `PUBLIC_READ_PATTERNS`,
+or the `isBypassed` list. That widens a deny-by-default security gate. See POLICY.md §1 and §2.
 
-*(Empty — add entries here when fixes land)*
+
 
 ---
 

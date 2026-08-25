@@ -3274,18 +3274,22 @@ export async function pushProfileToServer(): Promise<boolean> {
 
     const canonical = await getCanonicalProfile();
     const avatar = profile?.avatar_url || canonical?.avatar || null;
-    if (!avatar) {
-        // Genuinely no picture anywhere — nothing to publish. Clear any stale
-        // pending flag so the sync loop doesn't retry forever.
-        await AsyncStorage.removeItem('pending_profile_sync');
-        return false;
-    }
 
     const callsign = profile?.callsign || identity.callsign;
     const bio = profile?.bio ?? canonical?.bio ?? '';
     const contactValue = profile?.contact_value ?? canonical?.contactValue ?? null;
     const contactVisibility = profile?.contact_visibility ?? canonical?.contactVisibility ?? 'community';
     const archetypeRaw = profile?.archetype ?? canonical?.archetype ?? null;
+
+    // The bail-out used to be `if (!avatar)`, from when a picture was the only thing this
+    // published. It now carries bio, contact and archetype too, so keying it on the avatar
+    // dropped a quiz result on the floor for anyone who hadn't uploaded a photo — and cleared
+    // the pending flag on the way out, so it never retried. Only give up when there is
+    // genuinely nothing anywhere to publish.
+    if (!avatar && !bio && !contactValue && !archetypeRaw) {
+        await AsyncStorage.removeItem('pending_profile_sync');
+        return false;
+    }
     let publicArchetype: string | null = null;
     if (archetypeRaw) {
         const parsed = parseArchetype(archetypeRaw);
@@ -3297,16 +3301,20 @@ export async function pushProfileToServer(): Promise<boolean> {
         }) : archetypeRaw;
     }
 
+    // ADDITIVE ONLY. The server reads `update.avatar !== undefined ? update.avatar : existing`
+    // (engine/members.ts), so a field sent as null or '' CLEARS it. This is the catch-up sync
+    // path, not the explicit-edit path — settings.tsx sends its own payload when the user
+    // actually edits something — so it must never clear a field it merely doesn't have locally.
+    // That mattered less when the function bailed unless an avatar existed; now that a quiz
+    // result alone can bring us here, sending `avatar: null` would wipe the picture off the node.
     const payloadObj: any = {
         publicKey: identity.publicKey,
-        avatar,
-        bio: bio || '',
-        contact: contactValue ? { value: contactValue, visibility: contactVisibility } : null,
         callsign,
     };
-    if (publicArchetype) {
-        payloadObj.archetype = publicArchetype;
-    }
+    if (avatar) payloadObj.avatar = avatar;
+    if (bio) payloadObj.bio = bio;
+    if (contactValue) payloadObj.contact = { value: contactValue, visibility: contactVisibility };
+    if (publicArchetype) payloadObj.archetype = publicArchetype;
     const bodyString = JSON.stringify(payloadObj);
     const headers = await buildSignedHeaders('POST', '/api/profile/update', bodyString, identity.privateKey, identity.publicKey);
     try {
@@ -3334,7 +3342,7 @@ export async function pushProfileToServer(): Promise<boolean> {
             try {
                 await updateMemberProfile(identity.publicKey, {
                     callsign,
-                    avatar_url: avatar,
+                    avatar_url: avatar || undefined,
                     bio: bio || undefined,
                     contact_value: contactValue || undefined,
                     contact_visibility: contactVisibility,

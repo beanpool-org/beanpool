@@ -375,9 +375,18 @@ export default function PublicProfileScreen() {
             getMemberProfile(identity.publicKey).then(async vp => {
                 const canonical = await getCanonicalProfile().catch(() => null);
                 if (vp) {
-                    if (!vp.archetype && canonical?.archetype) {
-                        vp.archetype = canonical.archetype;
-                    }
+                    // Backfill EVERY field from canonical, not just archetype. handleQuizComplete
+                    // rebuilds the whole profile row from viewerProfile — `avatar_url: … || null`,
+                    // `bio: … || ''` — and updateMemberProfile mirrors that straight back into
+                    // canonical storage, which merges on `!== undefined`. So '' and null both count
+                    // as present and overwrite. On a node where the local row hasn't synced yet,
+                    // taking the quiz here wiped the user's canonical avatar, bio and contact
+                    // device-wide. Filling the gaps on mount is what stops that.
+                    if (!vp.avatar_url && canonical?.avatar) vp.avatar_url = canonical.avatar;
+                    if (!vp.bio && canonical?.bio) vp.bio = canonical.bio;
+                    if (!vp.contact_value && canonical?.contactValue) vp.contact_value = canonical.contactValue;
+                    if (!vp.contact_visibility && canonical?.contactVisibility) vp.contact_visibility = canonical.contactVisibility;
+                    if (!vp.archetype && canonical?.archetype) vp.archetype = canonical.archetype;
                     setViewerProfile(vp);
                 } else if (canonical) {
                     setViewerProfile({

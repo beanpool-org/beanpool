@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+    fetchHarvesterStatus,
+    triggerHarvesterSync,
+    fetchNodeHistory,
     normalizeNodeUrl,
     resolveNodeApiUrl,
     buildAdminHeaders,
@@ -139,5 +142,70 @@ describe('resolveNodeApiUrl', () => {
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
 
         vi.unstubAllGlobals();
+    });
+});
+
+describe('harvester helpers send the manager credential', () => {
+    // These three call /api/manager/* on the same origin, and every one of those routes is
+    // behind checkAdminAuth. They previously sent no credential at all, so each answered 401
+    // and the Harvested Fleet Backups tab sat permanently empty.
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    const lastCall = () => fetchMock.mock.calls[0];
+    const headersOf = (init: any) => (init?.headers ?? {}) as Record<string, string>;
+
+    beforeEach(() => {
+        fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({ nodes: [], harvestState: {}, history: [] }),
+            text: async () => '',
+        });
+        vi.stubGlobal('fetch', fetchMock);
+    });
+
+    it('fetchHarvesterStatus sends X-Admin-Password', async () => {
+        await fetchHarvesterStatus('manager-secret');
+        const [url, init] = lastCall();
+        expect(url).toBe('/api/manager/backups/status');
+        expect(headersOf(init)['X-Admin-Password']).toBe('manager-secret');
+    });
+
+    it('fetchNodeHistory sends X-Admin-Password', async () => {
+        await fetchNodeHistory('mullum', 'manager-secret');
+        const [url, init] = lastCall();
+        expect(url).toContain('/api/manager/backups/history');
+        expect(headersOf(init)['X-Admin-Password']).toBe('manager-secret');
+    });
+
+    it('omits the header entirely when no password is held', async () => {
+        await fetchHarvesterStatus(undefined);
+        expect(headersOf(lastCall()[1])).not.toHaveProperty('X-Admin-Password');
+    });
+
+    it('never puts the credential in the URL', async () => {
+        await fetchNodeHistory('mullum', 'manager-secret');
+        expect(String(lastCall()[0])).not.toContain('manager-secret');
+    });
+
+    it('triggerHarvesterSync authenticates with the MANAGER password, not the target node\'s', async () => {
+        // Two different secrets. The header authenticates us to the local manager API; the body
+        // carries the target node's own credential for the server to forward. The server resolves
+        // the target as `body.adminPassword || body.password || found.adminPassword`, so leaking
+        // the manager password into `password` would override the configured per-node credential.
+        await triggerHarvesterSync('mullum', 'https://mullum.example', 'node-secret', 'manager-secret');
+        const [, init] = lastCall();
+        expect(headersOf(init)['X-Admin-Password']).toBe('manager-secret');
+
+        const body = JSON.parse((init as any).body);
+        expect(body.adminPassword).toBe('node-secret');
+        expect(body.password).toBe('node-secret');
+        expect(JSON.stringify(body)).not.toContain('manager-secret');
+    });
+
+    it('falls back to the node password when no manager password is held', async () => {
+        await triggerHarvesterSync('mullum', 'https://mullum.example', 'node-secret');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('node-secret');
     });
 });

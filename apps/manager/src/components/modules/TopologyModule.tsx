@@ -128,7 +128,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const loadHarvester = async () => {
         setHarvestLoading(true);
         try {
-            const data = await fetchHarvesterStatus();
+            const data = await fetchHarvesterStatus(activeNode?.adminPassword);
             setHarvesterState(data.harvestState || {});
         } catch (e) {
             console.warn('[HarvesterUI] Failed to fetch harvester status:', e);
@@ -141,7 +141,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         loadHarvester();
         const interval = setInterval(loadHarvester, 15000);
         return () => clearInterval(interval);
-    }, []);
+    }, [activeNode?.adminPassword]);
 
     // Load Snapshots for target node
     const loadSnapshots = async () => {
@@ -212,7 +212,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const handleTriggerSync = async (nodeId: string, node?: NodeProfile) => {
         setHarvestingNodeId(nodeId);
         try {
-            await triggerHarvesterSync(nodeId, node?.url, node?.adminPassword);
+            await triggerHarvesterSync(nodeId, node?.url, node?.adminPassword, activeNode?.adminPassword);
             await loadHarvester();
         } catch (e: any) {
             alert(`Harvest sync failed: ${e.message}`);
@@ -254,7 +254,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setSelectedHistoryNode({ id: nodeId, name });
         setHistoryLoading(true);
         try {
-            const items = await fetchNodeHistory(nodeId);
+            const items = await fetchNodeHistory(nodeId, activeNode?.adminPassword);
             setHistoryList(items);
         } catch {
             setHistoryList([]);

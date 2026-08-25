@@ -43,10 +43,10 @@ export function SyncStatus() {
                 const identity = await loadIdentity();
                 if (!identity || cancelled) return;
                 const result = await checkMembership(identity.publicKey);
-                if (!cancelled) {
-                    setIsHttpOnline(true);
-                    setIsMember(result.isMember);
-                }
+                if (cancelled) return;
+
+                setIsHttpOnline(true);
+                setIsMember(result.isMember);
             } catch {
                 if (!cancelled) setIsHttpOnline(false);
             }
@@ -68,14 +68,34 @@ export function SyncStatus() {
     const isMemberConfirmed = isMember === true;
     const isReachable = sync.connected || isHttpOnline === true;
 
-    const isOnline = isReachable && isMemberConfirmed;
-    const isGuestMode = isReachable && isMember === false;
-    const borderColor = isOnline ? 'rgba(16, 185, 129, 0.3)' 
-        : isGuestMode ? 'rgba(217, 119, 6, 0.4)' 
-        : 'rgba(239, 68, 68, 0.3)';
-    const dotColor = isOnline ? '#10b981' : isGuestMode ? '#d97706' : '#ef4444';
-    const labelColor = isOnline ? '#10b981' : isGuestMode ? '#d97706' : '#ef4444';
-    const label = isOnline ? 'Online' : isGuestMode ? 'Guest' : 'Offline';
+    const statusMode = (isReachable && isMemberConfirmed)
+        ? 'online'
+        : (isReachable && isMember === false)
+        ? 'guest'
+        : 'offline';
+
+    const STATUS_CONFIG = {
+        online: {
+            borderColor: 'rgba(16, 185, 129, 0.3)',
+            color: '#10b981',
+            label: 'Online',
+            bg: 'var(--bg-card)',
+        },
+        guest: {
+            borderColor: 'rgba(217, 119, 6, 0.4)',
+            color: '#d97706',
+            label: 'Guest',
+            bg: '#fffbeb',
+        },
+        offline: {
+            borderColor: 'rgba(239, 68, 68, 0.3)',
+            color: '#ef4444',
+            label: 'Offline',
+            bg: 'var(--bg-card)',
+        },
+    } as const;
+
+    const config = STATUS_CONFIG[statusMode];
 
     return (
         <div style={{
@@ -84,8 +104,8 @@ export function SyncStatus() {
             gap: '0.4rem',
             padding: '0.3rem 0.75rem',
             borderRadius: '9999px',
-            background: isGuestMode ? '#fffbeb' : 'var(--bg-card)',
-            border: `1px solid ${borderColor}`,
+            background: config.bg,
+            border: `1px solid ${config.borderColor}`,
             fontSize: '0.75rem',
             fontWeight: 500,
             transition: 'all 0.3s ease',
@@ -94,14 +114,14 @@ export function SyncStatus() {
                 width: '7px',
                 height: '7px',
                 borderRadius: '50%',
-                background: dotColor,
+                background: config.color,
                 animation: sync.connected ? 'pulse 2s infinite' : 'none',
                 flexShrink: 0,
             }} />
-            <span style={{ color: labelColor, whiteSpace: 'nowrap' }}>
-                {label}
+            <span style={{ color: config.color, whiteSpace: 'nowrap' }}>
+                {config.label}
             </span>
-            {sync.lastSyncTime && !isGuestMode && (
+            {sync.lastSyncTime && statusMode !== 'guest' && (
                 <span style={{ color: 'var(--text-faint)', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
                     {formatTimeAgo(sync.lastSyncTime)}
                 </span>

@@ -10,6 +10,8 @@ import { db } from './db/db.js';
 import { aggregateObservedPrice, type PricingTrend } from '@beanpool/core';
 import { getPricingConfig } from './db/pricing-guide-db.js';
 
+const STOP_WORDS = new Set(['per', 'the', 'and', 'for', 'with', 'set', 'lot', 'pack', 'free']);
+
 /**
  * Normalizes text to tokens for keyword matching.
  */
@@ -69,7 +71,8 @@ export function runPricingAggregationCycle(): {
 
     const updateTx = db.transaction(() => {
         for (const item of items) {
-            const nameTokens = tokenize(item.name).filter(t => !['per', 'the', 'and', 'for', 'with', 'set', 'lot', 'pack', 'free'].includes(t));
+            // [Perf Optimization] Use STOP_WORDS Set for O(1) filtering
+            const nameTokens = tokenize(item.name).filter(t => !STOP_WORDS.has(t));
             const itemTokens = tokenize(`${item.name} ${item.description}`);
             if (!itemTokens.length) continue;
 
@@ -80,7 +83,13 @@ export function runPricingAggregationCycle(): {
             for (const post of parsedPosts) {
                 // Category match requirement or exact name substring / high token overlap
                 const categoryMatch = !post.category || post.category === item.category;
-                const matchScore = itemTokens.filter(t => post.tokens.has(t)).length;
+
+                // [Perf Optimization] Avoid array allocation in O(items x posts) inner loop by counting token overlaps directly
+                let matchScore = 0;
+                for (const t of itemTokens) {
+                    if (post.tokens.has(t)) matchScore++;
+                }
+
                 const titleTokenMatch = categoryMatch && nameTokens.some(t => t.length >= 4 && post.tokens.has(t));
 
                 if (post.text.includes(nameLower) || (categoryMatch && matchScore >= 2) || titleTokenMatch) {

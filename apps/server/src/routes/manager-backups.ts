@@ -180,11 +180,13 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
 
+        // eslint-disable-next-line no-control-regex
+        const safeNodeId = nodeId.replace(/[\r\n"\x00-\x1F\x7F]/g, '_');
         const tmpTar = path.join(BACKUPS_DIR, slug, `.identity-export-${Date.now()}.tar.gz`);
         try {
             execFileSync('tar', ['-czf', tmpTar, '-C', identityDir, '.']);
             ctx.set('Content-Type', 'application/gzip');
-            ctx.set('Content-Disposition', `attachment; filename="identity-bundle-${nodeId}.tar.gz"`);
+            ctx.set('Content-Disposition', `attachment; filename="identity-bundle-${safeNodeId}.tar.gz"`);
             const stream = fs.createReadStream(tmpTar);
             stream.on('close', () => {
                 try { if (fs.existsSync(tmpTar)) fs.unlinkSync(tmpTar); } catch {}
@@ -212,7 +214,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                 headers,
                 body: JSON.stringify({ password: node.adminPassword }),
             });
-            const data = await res.json();
+            // Safely parse JSON in case remote node returns non-JSON error (e.g. 500 HTML/404)
+            const data = await res.json().catch(() => ({ error: `Remote HTTP ${res.status}: ${res.statusText}` }));
             ctx.status = res.status;
             ctx.body = data;
         } catch (e: any) {
@@ -237,7 +240,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                 headers,
                 body: JSON.stringify({ password: node.adminPassword }),
             });
-            const data = await res.json();
+            // Safely parse JSON in case remote node returns non-JSON error (e.g. 500 HTML/404)
+            const data = await res.json().catch(() => ({ error: `Remote HTTP ${res.status}: ${res.statusText}` }));
             ctx.status = res.status;
             ctx.body = data;
         } catch (e: any) {
@@ -262,7 +266,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                 headers,
                 body: JSON.stringify({ name: body.name, password: node.adminPassword }),
             });
-            const data = await res.json();
+            // Safely parse JSON in case remote node returns non-JSON error (e.g. 500 HTML/404)
+            const data = await res.json().catch(() => ({ error: `Remote HTTP ${res.status}: ${res.statusText}` }));
             ctx.status = res.status;
             ctx.body = data;
         } catch (e: any) {
@@ -291,7 +296,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                     password: node.adminPassword,
                 }),
             });
-            const data = await res.json();
+            // Safely parse JSON in case remote node returns non-JSON error (e.g. 500 HTML/404)
+            const data = await res.json().catch(() => ({ error: `Remote HTTP ${res.status}: ${res.statusText}` }));
             ctx.status = res.status;
             ctx.body = data;
         } catch (e: any) {

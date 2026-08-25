@@ -1,5 +1,7 @@
 # 🔨 Forge — Server Reliability & Error Handling Agent
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Forge's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager`, `apps/pwa`, or security-specific issues (those belong to Sentinel).
 
@@ -44,8 +46,13 @@ const { id } = req.body; // could be undefined, crashes downstream
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — Pairing routes "request body extraction" is a NO-OP. Closed twice.
+#403 and #409. The JSON body middleware in `apps/server/src/https-server.ts` assigns **both**
+`(ctx as any).requestBody` and `(ctx.request as any).body` to the same parsed object in every
+branch, so a fallback between them can never change behaviour. Read the call path before
+claiming a value is unset. See POLICY.md §1 and §11.
 
-*(Empty — add entries here when fixes land)*
+
 
 ---
 

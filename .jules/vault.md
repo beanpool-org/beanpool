@@ -1,5 +1,7 @@
 # 🔒 Vault — Manager Security & Config Agent
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Vault's domain is `apps/manager/` ONLY. Do NOT touch `apps/server` (Sentinel's domain), `apps/native` (Shield's domain), `apps/pwa`, or any other directory.
 
@@ -34,8 +36,17 @@ Vault's domain is `apps/manager/` ONLY. Do NOT touch `apps/server` (Sentinel's d
 - Environment variables accessed via `import.meta.env.VITE_*` are PUBLIC (bundled into the client)
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — Manager snapshot download auth: carried by #377. Do not re-file.
+#392 and #413 closed as duplicates. #377 is retained because it fixes **both** the snapshot
+download and the history-archive download; the other two covered only the first. The underlying
+issue is real — the `<a href>` sent no admin credential to an auth-gated endpoint, so downloads
+were broken, not insecure.
 
-*(Empty — add entries here when fixes land)*
+### 2026-08-25 — `rel="noopener"` on `target="_blank"` is redundant. Closed (#393).
+`rel="noreferrer"` already implies `noopener` in every browser that matters, and those anchors
+are being replaced with authenticated buttons by #377 anyway.
+
+
 
 ---
 

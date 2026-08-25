@@ -1,4 +1,6 @@
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 This repo has accumulated many duplicate Bolt PRs (15+ filing the same "member
 lookups/counts → O(1)" fix). Before opening a PR:
@@ -16,6 +18,13 @@ lookups/counts → O(1)" fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
+### 2026-08-25 — DM recipient lookup micro-optimisation rejected as churn (#363).
+Replacing `.find()` with a ternary on a two-element array changes nothing observable and trades a
+self-evident expression for an index assumption. See POLICY.md §11.
+
+Note for `#415` (MessagesPage member Map): building the Map in the component body rebuilds it on
+every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rather than a win.
+
 - Member lookups → O(1): `getMembers().find(m => m.publicKey === x)` replaced with
   `getMember(x)` in federation-protocol, https-server, federation-api.
 - Member counts → O(1): `getMembers().length` replaced with SQL `COUNT` in
@@ -77,3 +86,7 @@ lookups/counts → O(1)" fix). Before opening a PR:
 ## 2026-08-21 - O(N*M) Member Lookups in PWA MessagesPage
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, looking up member callsigns for each message and reply via `members.find(m => m.publicKey === ...)` created an $O(N \times M)$ operation on every render in large chat threads.
 **Action:** Pre-compute `const membersByPublicKey = new Map(members.map(m => [m.publicKey, m]))` before rendering messages to convert lookups into $O(1)$ operations.
+
+## 2026-08-21 - Pre-grouping actionable deals in native inbox tab
+**Learning:** In `apps/native/app/(tabs)/chats.tsx`, `list.map` ran four `.filter()` calls per conversation over the full `deals` array (an O(N*M) pattern).
+**Action:** Pre-grouped `deals` by `conversationId` into a `Map` prior to `list.map`, reducing lookup to O(1) and computing action counts in a single pass (O(N+M) total).

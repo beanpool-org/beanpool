@@ -1,4 +1,6 @@
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 This repo has accumulated many duplicate Sentinel PRs (5 on the PWA identity-import
 storage issue, repeats on the SQL parameter-limit issue, and historically ~6 each on
@@ -16,6 +18,15 @@ stack-trace leak and CWE-598). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #109)
+### 2026-08-25 — Harvester tar path-traversal hardening LANDED in #361. Raised three times.
+#378 and #400 were **byte-identical** to #361 and were closed. Check open PRs for the file before
+starting — see POLICY.md §3.
+
+### 2026-08-25 — TOTP constant-time comparison LANDED in #410.
+Fixed-width 6-byte buffers, so `crypto.timingSafeEqual` can no longer throw on a length mismatch.
+
+### 2026-08-25 — `Content-Disposition` nodeId sanitisation LANDED in #391.
+
 - PWA identity import (PWA-4): import now persists via `importIdentity()` (IndexedDB),
   not `localStorage`; the legacy `localStorage` key is purged; `wipeIdentity()` deletes
   the key from IndexedDB on "Wipe Forever". Supersedes the duplicate set #96/#99/#103/#105/#108.

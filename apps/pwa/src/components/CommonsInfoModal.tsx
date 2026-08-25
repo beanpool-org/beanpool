@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 /**
  * CommonsInfoModal — Explains the Community Commons fund mechanics:
@@ -31,10 +31,25 @@ interface Props {
 export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
     const [activeTab, setActiveTab] = useState<'brackets' | 'flow' | 'qv'>('flow');
 
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center" onClick={onClose}>
+        <div
+            className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center"
+            onClick={onClose}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="commons-modal-title"
+        >
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
             <div
                 className="relative bg-nature-100 dark:bg-[#0d0d0d] rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300"
@@ -44,13 +59,13 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                 <div className="sticky top-0 bg-nature-100/90 dark:bg-[#0d0d0d]/90 backdrop-blur-md p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between z-10">
                     <div className="flex items-center gap-2">
                         <span className="text-xl">🏛️</span>
-                        <h2 className="font-bold text-nature-900 dark:text-white text-lg">Community Commons</h2>
+                        <h2 id="commons-modal-title" className="font-bold text-nature-900 dark:text-white text-lg">Community Commons</h2>
                     </div>
-                    <button onClick={onClose} className="text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer text-lg font-bold p-1" aria-label="Close information modal">✕</button>
+                    <button type="button" onClick={onClose} className="text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer text-lg font-bold p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg" aria-label="Close information modal">✕</button>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex gap-1 p-3 pb-0">
+                <div className="flex gap-1 p-3 pb-0" role="tablist" aria-label="Commons information tabs">
                     {[
                         { id: 'flow' as const, label: '🌊 How It Works' },
                         { id: 'brackets' as const, label: '📊 Circulation Fees' },
@@ -58,6 +73,9 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                     ].map(tab => (
                         <button
                             key={tab.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={activeTab === tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             style={{
                                 flex: 1,

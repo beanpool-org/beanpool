@@ -35,11 +35,27 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         };
     }
 
-    // Status of all harvested backups
+    // Status of all harvested backups.
+    //
+    // Stays behind checkAdminAuth. /api/manager/* is on the requireSignature bypass list
+    // precisely because these handlers are contracted to do their own admin check, so dropping
+    // it here would leave the route wide open — and it is internet-reachable, serving fleet
+    // topology, node URLs, member and post counts, DB sizes and identity filenames.
+    //
+    // The payload is sanitised regardless: getNodes() returns FleetNodeConfig, which carries
+    // adminPassword and replicationToken. The dashboard has never needed either, and a
+    // credential that is never serialised cannot leak through a logged response, a cached
+    // proxy, or the next handler that forgets the auth check.
     router.get('/api/manager/backups/status', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
+        const safeNodes = getNodes().map(n => ({
+            id: n.id,
+            name: n.name,
+            url: n.url,
+            isPrimary: (n as any).isPrimary,
+        }));
         ctx.body = {
-            nodes: getNodes(),
+            nodes: safeNodes,
             harvestState: loadHarvestState(),
         };
     });

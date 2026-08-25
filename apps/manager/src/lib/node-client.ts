@@ -605,22 +605,47 @@ export interface HarvesterNodeState {
 }
 
 export interface HarvesterStatusResponse {
-    nodes: Array<{ id: string; name: string; url: string }>;
+    // Mirrors the sanitised shape the server sends. adminPassword and replicationToken are
+    // deliberately absent — the dashboard has never needed either.
+    nodes: Array<{ id: string; name: string; url: string; isPrimary?: boolean }>;
     harvestState: Record<string, HarvesterNodeState>;
 }
 
-export async function fetchHarvesterStatus(): Promise<HarvesterStatusResponse> {
-    const res = await fetch('/api/manager/backups/status');
+// The three harvester helpers below talk to /api/manager/* on the SAME ORIGIN — the server
+// hosting this dashboard, not the node being inspected — and every one of those routes is behind
+// checkAdminAuth. They were sending no credential at all, so each answered 401 and the Harvested
+// Fleet Backups tab sat permanently empty. Same class of bug as the download buttons in #377.
+// The password travels in X-Admin-Password only, never a query parameter (see the note above
+// buildAdminHeaders): checkAdminAuth reads the header ahead of ?password= in its fallback chain,
+// and a credential in a URL ends up in access logs and browser history.
+export async function fetchHarvesterStatus(adminPassword?: string): Promise<HarvesterStatusResponse> {
+    const headers: Record<string, string> = {};
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    const res = await fetch('/api/manager/backups/status', { headers });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }
 
-export async function triggerHarvesterSync(nodeId: string, url?: string, adminPassword?: string): Promise<any> {
+// `managerPassword` authenticates US to the local manager API. `adminPassword` is the TARGET
+// node's own credential and stays in the body, where the server forwards it to that node — the
+// two are different secrets and must not be conflated. The server resolves the target's password
+// as `body.adminPassword || body.password || found.adminPassword`, so putting the manager's
+// password in `password` would override the configured per-node credential and make the harvest
+// authenticate to a remote node with the wrong secret.
+export async function triggerHarvesterSync(
+    nodeId: string,
+    url?: string,
+    adminPassword?: string,
+    managerPassword?: string,
+): Promise<any> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const managerAuth = managerPassword ?? adminPassword;
+    if (managerAuth) headers['X-Admin-Password'] = managerAuth;
     const res = await fetch('/api/manager/backups/trigger', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ nodeId, url, adminPassword, password: adminPassword }),
     });
     if (!res.ok) {
@@ -637,8 +662,10 @@ export interface HistoryFileItem {
     modifiedAt: string;
 }
 
-export async function fetchNodeHistory(nodeId: string): Promise<HistoryFileItem[]> {
-    const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`);
+export async function fetchNodeHistory(nodeId: string, adminPassword?: string): Promise<HistoryFileItem[]> {
+    const headers: Record<string, string> = {};
+    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+    const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`, { headers });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }

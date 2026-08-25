@@ -145,11 +145,26 @@ export default function ChatsScreen() {
         // now and may hold several deals. Hidden while searching.
         const actionRequired = searchQuery.trim() !== '' ? [] : deals;
 
+        // Pre-group deals by conversationId into a Map for O(1) lookups and O(N+M) total processing
+        const dealsByConvId = new Map<string, any[]>();
+        for (const d of deals) {
+            if (d.conversationId) {
+                const group = dealsByConvId.get(d.conversationId);
+                if (group) group.push(d);
+                else dealsByConvId.set(d.conversationId, [d]);
+            }
+        }
+
         let regular = list.map(c => {
-            const conversationDeals = deals.filter(d => d.conversationId === c.id);
-            const releaseCount = conversationDeals.filter(d => d.action === 'release').length;
-            const fulfillCount = conversationDeals.filter(d => d.action === 'fulfill').length;
-            const reviewCount = conversationDeals.filter(d => d.action === 'review').length;
+            const conversationDeals = dealsByConvId.get(c.id) || [];
+            let releaseCount = 0;
+            let fulfillCount = 0;
+            let reviewCount = 0;
+            for (const d of conversationDeals) {
+                if (d.action === 'release') releaseCount++;
+                else if (d.action === 'fulfill') fulfillCount++;
+                else if (d.action === 'review') reviewCount++;
+            }
             return {
                 ...c,
                 actionableCount: conversationDeals.length,

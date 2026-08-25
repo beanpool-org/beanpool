@@ -215,35 +215,43 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
 });
 
 router.post('/api/marketplace/transactions/reject', async (ctx) => {
-    const { transactionId, authorPublicKey } = (ctx as any).requestBody || {};
-    if (!transactionId || !authorPublicKey) {
-        ctx.status = 400;
-        ctx.body = { error: 'transactionId and authorPublicKey are required' };
-        return;
+    try {
+        const { transactionId, authorPublicKey } = (ctx as any).requestBody || {};
+        if (!transactionId || !authorPublicKey) {
+            ctx.status = 400;
+            ctx.body = { error: 'transactionId and authorPublicKey are required' };
+            return;
+        }
+        const tx = rejectPostRequest(transactionId, (ctx.state.actor as string) || authorPublicKey);
+        if (!tx) {
+            ctx.status = 400;
+            ctx.body = { error: 'Cannot reject — request not found or unauthorized' };
+            return;
+        }
+        ctx.body = { success: true, transaction: tx };
+    } catch (err: any) {
+        respondSettlementAware(ctx, err, 'Failed to reject request');
     }
-    const tx = rejectPostRequest(transactionId, (ctx.state.actor as string) || authorPublicKey);
-    if (!tx) {
-        ctx.status = 400;
-        ctx.body = { error: 'Cannot reject — request not found or unauthorized' };
-        return;
-    }
-    ctx.body = { success: true, transaction: tx };
 });
 
 router.post('/api/marketplace/transactions/cancel-request', async (ctx) => {
-    const { transactionId, buyerPublicKey } = (ctx as any).requestBody || {};
-    if (!transactionId || !buyerPublicKey) {
-        ctx.status = 400;
-        ctx.body = { error: 'transactionId and buyerPublicKey are required' };
-        return;
+    try {
+        const { transactionId, buyerPublicKey } = (ctx as any).requestBody || {};
+        if (!transactionId || !buyerPublicKey) {
+            ctx.status = 400;
+            ctx.body = { error: 'transactionId and buyerPublicKey are required' };
+            return;
+        }
+        const tx = cancelPostRequest(transactionId, (ctx.state.actor as string) || buyerPublicKey);
+        if (!tx) {
+            ctx.status = 400;
+            ctx.body = { error: 'Cannot cancel — request not found or unauthorized' };
+            return;
+        }
+        ctx.body = { success: true, transaction: tx };
+    } catch (err: any) {
+        respondSettlementAware(ctx, err, 'Failed to cancel request');
     }
-    const tx = cancelPostRequest(transactionId, (ctx.state.actor as string) || buyerPublicKey);
-    if (!tx) {
-        ctx.status = 400;
-        ctx.body = { error: 'Cannot cancel — request not found or unauthorized' };
-        return;
-    }
-    ctx.body = { success: true, transaction: tx };
 });
 
 router.post('/api/marketplace/transactions/complete', async (ctx) => {
@@ -269,19 +277,23 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
 });
 
 router.post('/api/marketplace/transactions/cancel', async (ctx) => {
-    const { transactionId, cancellerPublicKey } = (ctx as any).requestBody || {};
-    if (!transactionId || !cancellerPublicKey) {
-        ctx.status = 400;
-        ctx.body = { error: 'transactionId and cancellerPublicKey are required' };
-        return;
+    try {
+        const { transactionId, cancellerPublicKey } = (ctx as any).requestBody || {};
+        if (!transactionId || !cancellerPublicKey) {
+            ctx.status = 400;
+            ctx.body = { error: 'transactionId and cancellerPublicKey are required' };
+            return;
+        }
+        const tx = cancelPostTransaction(transactionId, (ctx.state.actor as string) || cancellerPublicKey);
+        if (!tx) {
+            ctx.status = 400;
+            ctx.body = { error: 'Cannot cancel — transaction not found or not authorized' };
+            return;
+        }
+        ctx.body = { success: true, transaction: tx };
+    } catch (err: any) {
+        respondSettlementAware(ctx, err, 'Failed to cancel transaction');
     }
-    const tx = cancelPostTransaction(transactionId, (ctx.state.actor as string) || cancellerPublicKey);
-    if (!tx) {
-        ctx.status = 400;
-        ctx.body = { error: 'Cannot cancel — transaction not found or not authorized' };
-        return;
-    }
-    ctx.body = { success: true, transaction: tx };
 });
 
 router.post('/api/marketplace/posts/pause', async (ctx) => {

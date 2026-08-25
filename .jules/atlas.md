@@ -1,5 +1,7 @@
 # 🗺️ Atlas — Manager Test Coverage Agent
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Atlas's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native`, `apps/pwa`, or any other directory.
 
@@ -34,8 +36,14 @@ Atlas's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native
 - Stack uses Tailwind for styling — no CSS modules
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — Manager tests are BLOCKED. Stop adding them until this is fixed.
+`apps/manager/package.json` has **no `"test"` script**, so `turbo run test` skips the package
+entirely and nothing under `apps/manager/src/**/*.test.ts` has ever run in CI — including the
+three test files already on `main`. #365, #374, #386 closed as duplicates; #394 and #406 are held
+open pending the one-line fix (`"test": "vitest run"`). Adding more tests to a package CI does not
+run creates the appearance of coverage without the fact of it. See POLICY.md §6.
 
-*(Empty — add entries here when tests land)*
+
 
 ---
 
@@ -48,3 +56,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** resolveAvatarUrl in apps/manager/src/lib/avatar.ts was untested.
 **Learning:** Vitest was already set up correctly for the manager app; running tests for lib utilities was straightforward and required no additional configuration.
 **Action:** Continue identifying utility functions in `lib` or pure functions to test.
+
+## 2026-08-08 - [manager tests] node-client unit tests
+**Gap:** `node-client.ts` helper functions (`normalizeNodeUrl`, `resolveNodeApiUrl`, `buildAdminHeaders`, `isTotpRequired`, TFA session token storage) were untested.
+**Learning:** Testing `resolveNodeApiUrl` requires stubbing `location.origin` with `vi.stubGlobal('location', { origin: '...' })` to test cross-origin proxy routing.
+**Action:** Look for remaining untested helper files in `lib/` or core React components in `components/`.

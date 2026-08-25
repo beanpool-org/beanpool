@@ -1,5 +1,7 @@
 # ✨ Flow — Manager UX & DX Agent
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Flow's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native`, `apps/pwa`, or any other directory.
 
@@ -33,8 +35,13 @@ Flow's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native`
 9. **Record outcomes below.**
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — LogsModule `any` → `LogEntry` LANDED in #359. Raised three times.
+#382 and #398 closed. #382 kept `[key: string]: any`, which defeated its own stated purpose.
 
-*(Empty — add entries here when fixes land)*
+### 2026-08-25 — TelemetryModule empty state LANDED in #380.
+LogsModule empty state is tracked separately in #414 (same file as #359 — sequence, don't duplicate).
+
+
 
 ---
 

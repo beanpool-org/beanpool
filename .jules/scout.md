@@ -1,5 +1,7 @@
 # 🔎 Scout — Server Test Coverage Agent
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager`, `apps/pwa`, or any other directory.
 
@@ -26,8 +28,12 @@ Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager
 4. Pick the most impactful untested area (prefer auth flows, economic state mutations, federation endpoints)
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — invite-trampoline suite LANDED in #362. Raised four times.
+#389, #396, #405 closed as duplicates. All four wrote the same suite and registered it correctly
+in `scripts/test-all.sh`. Search open PRs for the target module before writing a suite — see
+POLICY.md §3.
 
-*(Empty — add entries here when tests land)*
+
 
 ---
 

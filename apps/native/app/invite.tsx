@@ -6,9 +6,9 @@ import { Redirect, useLocalSearchParams } from 'expo-router';
  * Redirects to `/welcome` passing through `invite` and `server` params
  */
 export default function InviteRouteAlias() {
-    const params = useLocalSearchParams();
-    const code = (params.invite || params.code || '') as string;
-    const server = (params.server || '') as string;
+    const params = useLocalSearchParams<{ invite?: string; code?: string; server?: string }>();
+    const code = params.invite || params.code || '';
+    const server = params.server || '';
 
     return (
         <Redirect

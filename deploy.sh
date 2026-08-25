@@ -112,13 +112,50 @@ for NODE in "${TARGETS[@]}"; do
       sudo docker compose --profile tunnel -p beanpool-\$PROJ_NAME down --remove-orphans 2>/dev/null || true
       sleep 1
     )
-    sudo mv $PROJECT_DIR/data $HOME_DIR/beanpool-data-backup-$DIR 2>/dev/null || true
-    sudo mv $PROJECT_DIR/.env $HOME_DIR/beanpool-env-backup-$DIR 2>/dev/null || true
+    # --- BEGIN preserve/restore (scripts/test-deploy-preserve.sh extracts and runs this exact block) ---
+    # Preserve data/ and .env across the wipe below.
+    #
+    # `mv SRC DEST` moves SRC *into* DEST when DEST is an existing directory rather than
+    # replacing it. Both moves here used to be bare `mv ... 2>/dev/null || true`, so a backup
+    # left behind by an interrupted deploy silently turned the NEXT deploy into
+    # data/beanpool-data-backup-<DIR>/... — an entire stale data dir nested inside the live one,
+    # and `|| true` meant nothing was ever reported. Found on `test` 2026-08-25 holding 220 MB
+    # (186 MB of it snapshots), which then inflated every snapshot and harvest taken of data/.
+    #
+    # Two rules now: the destination is guaranteed not to exist before each move, and failing to
+    # preserve or restore data/ is FATAL. Continuing past that would wipe a node's identity keys
+    # and ledger, which is not something to shrug off with `|| true`.
+    if [ -e "$HOME_DIR/beanpool-data-backup-$DIR" ]; then
+      echo "⚠️  Stale backup found at $HOME_DIR/beanpool-data-backup-$DIR — a previous deploy did not finish."
+      echo "    The live data/ is authoritative, so parking the stale copy at .stale (outside the project dir)."
+      sudo rm -rf "$HOME_DIR/beanpool-data-backup-$DIR.stale"
+      sudo mv "$HOME_DIR/beanpool-data-backup-$DIR" "$HOME_DIR/beanpool-data-backup-$DIR.stale"
+    fi
+    if [ -d "$PROJECT_DIR/data" ]; then
+      sudo mv "$PROJECT_DIR/data" "$HOME_DIR/beanpool-data-backup-$DIR" || {
+        echo "🛑 FATAL: could not preserve $PROJECT_DIR/data — refusing to wipe the project dir."; exit 1; }
+    fi
+    if [ -e "$PROJECT_DIR/.env" ]; then
+      sudo rm -rf "$HOME_DIR/beanpool-env-backup-$DIR"
+      sudo mv "$PROJECT_DIR/.env" "$HOME_DIR/beanpool-env-backup-$DIR" || {
+        echo "🛑 FATAL: could not preserve $PROJECT_DIR/.env — refusing to wipe the project dir."; exit 1; }
+    fi
     sudo rm -rf $PROJECT_DIR
     mkdir -p $PROJECT_DIR
     tar -xzf $HOME_DIR/beanpool-deploy.tar.gz -C $PROJECT_DIR
-    sudo mv $HOME_DIR/beanpool-data-backup-$DIR $PROJECT_DIR/data 2>/dev/null || true
-    sudo mv $HOME_DIR/beanpool-env-backup-$DIR $PROJECT_DIR/.env 2>/dev/null || true
+    if [ -e "$HOME_DIR/beanpool-data-backup-$DIR" ]; then
+      # The tarball excludes data/, but be explicit — if this exists, the mv below nests inside it.
+      sudo rm -rf "$PROJECT_DIR/data"
+      sudo mv "$HOME_DIR/beanpool-data-backup-$DIR" "$PROJECT_DIR/data" || {
+        echo "🛑 FATAL: data/ is preserved at $HOME_DIR/beanpool-data-backup-$DIR but could not be restored."
+        echo "    Restore it by hand before starting the node — do NOT re-run the deploy."; exit 1; }
+    fi
+    if [ -e "$HOME_DIR/beanpool-env-backup-$DIR" ]; then
+      sudo rm -rf "$PROJECT_DIR/.env"
+      sudo mv "$HOME_DIR/beanpool-env-backup-$DIR" "$PROJECT_DIR/.env" || {
+        echo "🛑 FATAL: .env is preserved at $HOME_DIR/beanpool-env-backup-$DIR but could not be restored."; exit 1; }
+    fi
+    # --- END preserve/restore ---
     cd $PROJECT_DIR
     export PUBLIC_IP=\$(curl -s ifconfig.me)
     export CF_API_TOKEN='${CF_API_TOKEN}'

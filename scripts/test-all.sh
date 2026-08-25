@@ -101,6 +101,12 @@ run_check "typecheck"     pnpm turbo run typecheck
 # check here that fails for something NOT being tested.
 run_check "suite_registration" bash scripts/check-suite-registration.sh
 
+# deploy.sh wipes each node's project directory on every run and moves data/ and .env aside first.
+# When that move nested instead of replacing, the live ledger was buried at data/data/ and the node
+# booted on a stale backup's community.key — silently, because both moves were `|| true`. Pure
+# shell against a temp dir, so it costs nothing to keep honest.
+run_check "deploy_preserve" bash scripts/test-deploy-preserve.sh
+
 # Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
 # so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
 # invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the

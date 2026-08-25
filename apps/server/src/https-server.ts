@@ -685,6 +685,19 @@ export async function startHttpsServer(port: number): Promise<void> {
                     (ctx as any).rawBody = body;  // X-1: exact bytes the client signed
                     const parsed = JSON.parse(body);
                     (ctx as any).requestBody = parsed;
+                    // Koa core does NOT parse request bodies, and this server mounts no bodyparser
+                    // middleware, so `ctx.request.body` is undefined unless it is set right here.
+                    // Fourteen handlers across routes/pairing.ts, routes/pricing-guide.ts and
+                    // routes/manager-backups.ts read the `ctx.request.body` spelling — every one of
+                    // them was silently receiving `{}`. Pairing 400'd on every attempt, and a
+                    // single-node harvest fell through its `!nodeId` guard and ran the whole fleet.
+                    // Both spellings now name the same parsed object.
+                    //
+                    // The handler-level suites (test-pairing-relay, test-pricing-guide) call the
+                    // service layer directly and stayed green throughout, which is exactly how this
+                    // survived. test-request-body.ts asserts it over real HTTP instead — same
+                    // reasoning as test-keeper-http.ts, and the same trap as #143.
+                    (ctx.request as any).body = parsed;
 
                     const sender = parsed.publicKey || parsed.authorPublicKey || parsed.buyerPublicKey || parsed.from || parsed.memberPublicKey || parsed.voterPublicKey;
                     if (sender && typeof sender === 'string' && sender.length >= 32) {
@@ -700,9 +713,11 @@ export async function startHttpsServer(port: number): Promise<void> {
                         return;
                     }
                     (ctx as any).requestBody = {};
+                    (ctx.request as any).body = {};
                 }
             } else {
                 (ctx as any).requestBody = {};
+                (ctx.request as any).body = {};
             }
         }
         await next();

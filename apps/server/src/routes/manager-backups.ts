@@ -214,7 +214,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                 headers,
                 body: JSON.stringify({ password: node.adminPassword }),
             });
-            const data = await res.json();
+            // Safely parse JSON in case remote node returns non-JSON error (e.g. 500 HTML/404)
+            const data = await res.json().catch(() => ({ error: `Remote HTTP ${res.status}: ${res.statusText}` }));
             ctx.status = res.status;
             ctx.body = data;
         } catch (e: any) {
@@ -239,7 +240,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                 headers,
                 body: JSON.stringify({ password: node.adminPassword }),
             });
-            const data = await res.json();
+            // Safely parse JSON in case remote node returns non-JSON error (e.g. 500 HTML/404)
+            const data = await res.json().catch(() => ({ error: `Remote HTTP ${res.status}: ${res.statusText}` }));
             ctx.status = res.status;
             ctx.body = data;
         } catch (e: any) {
@@ -264,7 +266,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                 headers,
                 body: JSON.stringify({ name: body.name, password: node.adminPassword }),
             });
-            const data = await res.json();
+            // Safely parse JSON in case remote node returns non-JSON error (e.g. 500 HTML/404)
+            const data = await res.json().catch(() => ({ error: `Remote HTTP ${res.status}: ${res.statusText}` }));
             ctx.status = res.status;
             ctx.body = data;
         } catch (e: any) {
@@ -293,7 +296,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
                     password: node.adminPassword,
                 }),
             });
-            const data = await res.json();
+            // Safely parse JSON in case remote node returns non-JSON error (e.g. 500 HTML/404)
+            const data = await res.json().catch(() => ({ error: `Remote HTTP ${res.status}: ${res.statusText}` }));
             ctx.status = res.status;
             ctx.body = data;
         } catch (e: any) {

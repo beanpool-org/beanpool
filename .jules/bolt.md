@@ -98,3 +98,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-08-21 - Pre-grouping actionable deals in native inbox tab
 **Learning:** In `apps/native/app/(tabs)/chats.tsx`, `list.map` ran four `.filter()` calls per conversation over the full `deals` array (an O(N*M) pattern).
 **Action:** Pre-grouped `deals` by `conversationId` into a `Map` prior to `list.map`, reducing lookup to O(1) and computing action counts in a single pass (O(N+M) total).
+
+## 2026-08-29 - O(N*M) Member Lookups in ThreatReviewModal
+**Learning:** In `apps/manager/src/components/modules/ThreatReviewModal.tsx`, resolving member public keys and rendering flagged entities performed `members.find(...)` across `members` for each involved key, creating an $O(N \times M)$ scan.
+**Action:** Pre-computed `membersMap` using `useMemo` indexed by both full public key and prefix tokens to turn member lookups into $O(1)$ retrievals.

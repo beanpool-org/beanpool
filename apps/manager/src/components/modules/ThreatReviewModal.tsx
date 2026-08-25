@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { getMemberDisplayName } from './MembersModule';
 
 interface ThreatReviewModalProps {
@@ -25,6 +25,25 @@ export function ThreatReviewModal({
     const [actionState, setActionState] = useState<string | null>(null);
     const [copiedLog, setCopiedLog] = useState(false);
 
+    // ⚡ Bolt: Pre-compute Map for O(1) member lookups by exact key or prefix token
+    const membersMap = useMemo(() => {
+        const map = new Map<string, any>();
+        for (const m of members) {
+            const pk = m.publicKey || m.pubkey || '';
+            if (pk) {
+                map.set(pk, m);
+                // Store prefix keys (e.g. wash1-17 from wash1-1784649...)
+                const dashIdx = pk.indexOf('-');
+                if (dashIdx !== -1) {
+                    const secondDash = pk.indexOf('-', dashIdx + 1);
+                    const prefix = pk.substring(0, secondDash !== -1 ? secondDash : pk.length);
+                    if (prefix && !map.has(prefix)) map.set(prefix, m);
+                }
+            }
+        }
+        return map;
+    }, [members]);
+
     const isReport = threat?.isReport || threat?.targetPubkey !== undefined;
     const severity = threat?.severity || (isReport ? 'warning' : 'critical');
     const title = isReport ? 'USER REPORTED ABUSE' : (threat?.type || 'SECURITY ALERT');
@@ -44,7 +63,7 @@ export function ThreatReviewModal({
 
         // Map short/prefix tokens (e.g. ring0-17) to full pubkeys in members roster (e.g. ring0-1784649014864...)
         return rawKeys.map((key) => {
-            const found = members.find((m: any) => {
+            const found = membersMap.get(key) || members.find((m: any) => {
                 const pk = m.publicKey || m.pubkey || '';
                 return pk === key || (pk && key && (pk.startsWith(key) || key.startsWith(pk)));
             });
@@ -181,10 +200,7 @@ export function ThreatReviewModal({
                     <div className="bg-nature-900/40 border border-nature-800/80 p-3 rounded-xl space-y-2 max-h-36 overflow-y-auto">
                         {involvedPubkeys.length > 0 ? (
                             involvedPubkeys.map((pub, idx) => {
-                                const matchedMember = members.find((m: any) => {
-                                    const pk = m.publicKey || m.pubkey || '';
-                                    return pk === pub || (pk && pub && (pk.startsWith(pub) || pub.startsWith(pk)));
-                                }) || { pubkey: pub, publicKey: pub };
+                                const matchedMember = membersMap.get(pub) || { pubkey: pub, publicKey: pub };
                                 const displayName = getMemberDisplayName(matchedMember, profiles);
                                 const isItemFrozen = (frozenPubkeys instanceof Set ? frozenPubkeys.has(pub) : (frozenPubkeys || []).includes(pub)) || actionState === 'freeze';
                                 

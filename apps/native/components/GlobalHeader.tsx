@@ -400,6 +400,7 @@ export function GlobalHeader() {
                 <View style={styles.headerLeft}>
                     <TouchableOpacity
                         accessibilityRole="button"
+                        accessibilityLabel={!hasAnchorUrl ? 'Connect to community' : isGuestOnActive ? 'Join community' : 'Invite friends'}
                         style={[styles.headerLeftControls, !hasAnchorUrl ? styles.headerLeftControlsDisconnected : isGuestOnActive ? styles.headerLeftControlsGuest : undefined]}
                         onPress={() => {
                             if (!hasAnchorUrl) {

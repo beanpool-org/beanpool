@@ -56,6 +56,10 @@
 
         // ======================== TAB SWITCHING ========================
         function switchTab(tabName) {
+            // Self-heal: a session that already stored the literal string "undefined" (see the
+            // .tab-btn[data-tab] selector below) would otherwise stay blank for its whole life,
+            // because the `|| 'identity'` fallback at every call site treats "undefined" as truthy.
+            if (!tabName || tabName === 'undefined') tabName = 'identity';
             // Update buttons
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.tab === tabName);
@@ -122,7 +126,14 @@
         }
         let backupHealthInterval = null;
 
-        document.querySelectorAll('.tab-btn').forEach(btn => {
+        // `[data-tab]`, not bare `.tab-btn`. The "🎮 Fleet Manager ↗" entry in the tab bar wears
+        // .tab-btn for styling but is an <a href="/manager/"> to a different app, so it has no
+        // data-tab. Binding it here called switchTab(undefined), which matched no button and no
+        // panel — hiding EVERY panel and leaving the settings page blank — and then persisted the
+        // string "undefined" to sessionStorage, so the blank state survived reloads. It read as
+        // an unknown/empty page, and was most visible when the new tab did not take focus
+        // (popup blocked, remote browser session), leaving you looking at the emptied page.
+        document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
             btn.addEventListener('click', () => switchTab(btn.dataset.tab));
         });
 

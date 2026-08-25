@@ -407,6 +407,16 @@
             color: #cbd5e1;
         }
 
+        /* The Inbox panel is a chat column: a scrolling thread above a composer. Its layout used to
+           live in an inline style, but switchTab() reveals a panel by clearing `style.display`, which
+           drops back to .glass's default block and silently killed the flex column. Keeping it in CSS
+           means showing the panel restores the intended layout. */
+        .glass[data-tab="comms"] {
+            display: flex;
+            flex-direction: column;
+            max-height: 85vh;
+        }
+
         /* Leaves this page for the Fleet Manager app. Deliberately NOT .tab-btn: it sits in
            the tab row but is a link, not a tab, and must never be picked up by a .tab-btn
            selector — doing so blanked every panel and poisoned the persisted tab (#418). */
@@ -711,6 +721,9 @@
                 <button class="tab-btn" data-tab="network">🔗 Network &amp; Gateway</button>
                 <button class="tab-btn" data-tab="invites">🎫 Invites</button>
                 <button class="tab-btn" data-tab="system">⚙️ System</button>
+                <button class="tab-btn" data-tab="commons">🏛️ Commons</button>
+                <button class="tab-btn" data-tab="comms">📥 Inbox</button>
+                <button class="tab-btn" data-tab="connections">🔌 Connections</button>
                 <a href="/manager/" target="_blank" rel="noopener" class="fleet-link" title="Opens the Fleet Manager in a new tab">🎮 Fleet Manager ↗</a>
             </div>
 
@@ -1479,7 +1492,7 @@
             </div>
 
             <!-- Inbox & Global Comms -->
-            <div class="glass" data-tab="comms" style="display:none; flex-direction:column; max-height:85vh;">
+            <div class="glass" data-tab="comms" style="display:none;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
                     <h3 style="margin:0;">📥 Inbox & Global Comms</h3>
                     <button class="btn btn-outline" onclick="loadAdminInbox()" style="padding:0.3rem 0.75rem;font-size:0.8rem;">🔄 Refresh</button>

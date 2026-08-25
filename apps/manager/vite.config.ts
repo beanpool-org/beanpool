@@ -17,6 +17,18 @@ export default defineConfig({
     server: {
         port: 3001,
         proxy: {
+            '^/proxy/(https?)/([^/]+)/(.*)': {
+                target: 'http://localhost',
+                changeOrigin: true,
+                router: (req) => {
+                    const match = req.url?.match(/^\/proxy\/(https?)\/([^/]+)\/(.*)/);
+                    if (match) {
+                        return `${match[1]}://${match[2]}`;
+                    }
+                    return 'http://localhost';
+                },
+                rewrite: (path) => path.replace(/^\/proxy\/(https?)\/([^/]+)\//, '/'),
+            },
             '/api': {
                 target: 'https://localhost:8443',
                 secure: false,

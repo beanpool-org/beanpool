@@ -24,6 +24,7 @@ import {
     createNodeTreasury,
     seedTreasuryOffer,
     loginToNode,
+    resolveNodeApiUrl,
     buildAdminHeaders,
     getTfaSessionToken,
     setTfaSessionToken,
@@ -85,7 +86,14 @@ function credentialDigest(password?: string): string {
 
 export function App() {
     const [profiles, setProfiles] = useState<NodeProfile[]>(() => loadNodeProfiles());
-    const [activeProfileId, setActiveProfileId] = useState<string>(() => loadActiveProfileId());
+    const [activeProfileId, setActiveProfileId] = useState<string>(() => {
+        const savedId = loadActiveProfileId();
+        const loaded = loadNodeProfiles();
+        if (loaded.some((p) => p.id === savedId)) {
+            return savedId;
+        }
+        return loaded[0]?.id || 'local-node';
+    });
     const [activeTab, setActiveTab] = useState<TabId>(() => {
         try {
             return (localStorage.getItem('bp_fleet_active_tab') as TabId) || 'overview';
@@ -373,11 +381,9 @@ export function App() {
                 // Use raw fetch instead of fetchDiagnostics so we can inspect
                 // the response body for totpRequired errors (which node-client's
                 // helper throws away).
-                const diagUrl = new URL(p.url);
-                if (!diagUrl.pathname.endsWith('/')) diagUrl.pathname += '/';
-                diagUrl.pathname += 'api/local/admin/diagnostics';
+                const diagUrl = resolveNodeApiUrl(p.url, '/api/local/admin/diagnostics');
                 const diagHeaders = buildAdminHeaders(p.adminPassword, getTfaSessionToken(p.id));
-                const diagRes = await fetch(diagUrl.toString(), { headers: diagHeaders, cache: 'no-store' });
+                const diagRes = await fetch(diagUrl, { headers: diagHeaders, cache: 'no-store' });
 
                 let totpRetry = false;
                 let sessionToken: string | undefined;
@@ -402,7 +408,7 @@ export function App() {
                         if (totpRetry) {
                             // Retry diagnostics with the session token
                             const retryHeaders = buildAdminHeaders(p.adminPassword, sessionToken);
-                            const retryRes = await fetch(diagUrl.toString(), { headers: retryHeaders, cache: 'no-store' });
+                            const retryRes = await fetch(diagUrl, { headers: retryHeaders, cache: 'no-store' });
                             if (!retryRes.ok) {
                                 throw new Error(`HTTP ${retryRes.status}: ${retryRes.statusText}`);
                             }
@@ -616,7 +622,11 @@ export function App() {
             delete authBlockedRef.current[id];
             const remaining = loadNodeProfiles();
             setProfiles(remaining);
-            setActiveProfileId(remaining[0].id);
+            if (activeProfileId === id) {
+                const nextActive = remaining[0]?.id || '';
+                setActiveProfileId(nextActive);
+                saveActiveProfileId(nextActive);
+            }
         }
     };
 
@@ -791,7 +801,7 @@ export function App() {
                             onFreezeUser={async (pubkey, freeze) => {
                                 if (activeNode) {
                                     const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                    const url = `${activeNode.url.replace(/\/+$/, '')}/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`;
+                                    const url = resolveNodeApiUrl(activeNode.url, `/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`);
                                     await fetch(url, {
                                         method: 'POST',
                                         headers,
@@ -802,7 +812,7 @@ export function App() {
                             onPruneUser={async (pubkey) => {
                                 if (activeNode) {
                                     const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                    const url = `${activeNode.url.replace(/\/+$/, '')}/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`;
+                                    const url = resolveNodeApiUrl(activeNode.url, `/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`);
                                     await fetch(url, {
                                         method: 'POST',
                                         headers,

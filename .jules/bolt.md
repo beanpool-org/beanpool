@@ -1,4 +1,6 @@
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 This repo has accumulated many duplicate Bolt PRs (15+ filing the same "member
 lookups/counts → O(1)" fix). Before opening a PR:
@@ -16,6 +18,13 @@ lookups/counts → O(1)" fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
+### 2026-08-25 — DM recipient lookup micro-optimisation rejected as churn (#363).
+Replacing `.find()` with a ternary on a two-element array changes nothing observable and trades a
+self-evident expression for an index assumption. See POLICY.md §11.
+
+Note for `#415` (MessagesPage member Map): building the Map in the component body rebuilds it on
+every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rather than a win.
+
 - Member lookups → O(1): `getMembers().find(m => m.publicKey === x)` replaced with
   `getMember(x)` in federation-protocol, https-server, federation-api.
 - Member counts → O(1): `getMembers().length` replaced with SQL `COUNT` in
@@ -71,3 +80,13 @@ lookups/counts → O(1)" fix). Before opening a PR:
 ## 2026-08-20 - O(N) Array Allocation in Connector Lookups
 **Learning:** In `apps/server/src/connector-manager.ts`, there were several places where `getConnectors().find(c => c.peerId === peerId)` was used to fetch a single connector by its Peer ID. `getConnectors()` Maps over the entire `connectors` array and allocates a materialized object for every connector on every call, leading to `O(N)` memory allocation overhead.
 **Action:** Implemented a new `getConnectorByPeerId(peerId: string)` helper in `connector-manager.ts` that iterates the raw internal `connectors` array and only materializes and returns the single matching connector. Updated call sites in `federation-bridge.ts`, `federation-commission.ts`, and `federation-settlement-exchange.ts` to use it, turning O(N) allocations into O(1).
+
+## 2026-08-20 - Connector Lookups by PeerId & Fallback Semantics
+**Learning:** When looking up connectors by peer ID, respect `materialise()` logic: `peerIdFromAddress(address)` is a fallback only when `status.peerId` is unset. The matching condition should be `(status?.peerId ?? peerIdFromAddress(c.address)) === peerId`. Do not match against address when live `status.peerId` is already present.
+
+## 2026-08-20 - SQLite Native Batching & Lock Hygiene
+**Learning:** In `apps/native/utils/db.ts`, batching accounts insertions during sync deltas (`applyDelta`) into chunks of 100 significantly accelerates synchronization without hitting SQLite variable limits (landed in #324). However, avoid taking global sync locks on detached or read-heavy background loops to prevent lock contention.
+
+## 2026-08-21 - Pre-grouping actionable deals in native inbox tab
+**Learning:** In `apps/native/app/(tabs)/chats.tsx`, `list.map` ran four `.filter()` calls per conversation over the full `deals` array (an O(N*M) pattern).
+**Action:** Pre-grouped `deals` by `conversationId` into a `Map` prior to `list.map`, reducing lookup to O(1) and computing action counts in a single pass (O(N+M) total).

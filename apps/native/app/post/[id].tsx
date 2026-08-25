@@ -335,7 +335,7 @@ export default function PostDetailModal() {
         },
     }));
 
-    const { id, txId } = useLocalSearchParams();
+    const { id, txId } = useLocalSearchParams<{ id: string; txId?: string }>();
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {

@@ -1,5 +1,7 @@
 # 🎨 Pixel — Native UX & Accessibility Agent
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`, `apps/pwa`, or any other directory.
 
@@ -46,8 +48,13 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — `GlobalHeader.tsx` is a protected file. Do not edit it.
+#411 (a one-line `accessibilityLabel`) is held for human review rather than merged, purely because
+of where it lands. GlobalHeader, `logo.png`, `map.tsx` and `UnifiedMapPin` are fragile and have
+been reverted before. Record the suggestion in this journal and let a human apply it.
+See POLICY.md §7.
 
-*(Empty — add entries here when fixes land)*
+
 
 ---
 
@@ -59,3 +66,11 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-08-07 - Added missing accessibilityRole to color scheme settings
 **Learning:** The color palette choice elements used `<Pressable>` but lacked `accessibilityRole="button"` and explicit labels, causing accessibility issues for screen readers.
 **Action:** Update the `<Pressable>` elements with `accessibilityRole="button"`, `accessibilityLabel`, and `accessibilityState` in the apps/native/app/(tabs)/settings.tsx file.
+
+## 2026-08-20 - Add accessibilityRole to Clear Search Button in PricingGuideModal
+**Learning:** The 'Clear search' `<Pressable>` button in the `PricingGuideModal.tsx` lacked an `accessibilityRole` and `accessibilityLabel`, making it unclear to screen readers.
+**Action:** Always ensure that interactive elements like `<Pressable>` or `<TouchableOpacity>` have a valid `accessibilityRole="button"` and an `accessibilityLabel` describing their function.
+
+## 2026-08-21 - Add accessible container and label to SyncStatus component
+**Learning:** Grouped visual status indicators like `SyncStatus` combine dot indicators and text stacks without grouping, making screen readers read disjointed chunks.
+**Action:** Add `accessible={true}` and a comprehensive `accessibilityLabel` on container `<View>` elements that summarize child status components.

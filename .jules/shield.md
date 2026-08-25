@@ -1,5 +1,7 @@
 # 🛡️ Shield — Native Security Agent
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Shield's domain is `apps/native/` ONLY. Do NOT touch `apps/server` (that's Sentinel's domain), `apps/manager`, `apps/pwa`, or any other directory.
 
@@ -31,8 +33,13 @@ Shield's domain is `apps/native/` ONLY. Do NOT touch `apps/server` (that's Senti
 - Sensitive storage should use `expo-secure-store`, NOT `AsyncStorage`
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — Hardcoded `GOOGLE_MAPS_API_KEY` in `apps/native/eas.json`. Closed five times.
+#310, #360, #370, #395, #407 — all closed. The key is **restricted on Google Cloud Console**, so
+removing it from `eas.json` is not required and is already in git history regardless. Do not re-file.
+If it is ever revisited: never substitute `""` for the value (as #360 did). An empty `env` entry
+overrides the EAS secret and ships an app with blank map tiles.
 
-*(Empty — add entries here when fixes land)*
+
 
 ---
 

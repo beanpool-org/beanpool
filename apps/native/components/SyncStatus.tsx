@@ -32,7 +32,11 @@ export function SyncStatus() {
     const isOnline = lastSync !== null && (now - lastSync) < 5 * 60 * 1000;
 
     return (
-        <View style={[styles.container, isOnline ? styles.onlineBorder : styles.offlineBorder]}>
+        <View
+            style={[styles.container, isOnline ? styles.onlineBorder : styles.offlineBorder]}
+            accessible={true}
+            accessibilityLabel={`Sync status: ${isOnline ? 'Online' : 'Offline'}${lastSync ? `, last synced ${formatTimeAgo(lastSync)}` : ''}`}
+        >
             <View style={[styles.dot, isOnline ? styles.onlineDot : styles.offlineDot]} />
             <View style={styles.textStack}>
                 <Text style={[styles.text, isOnline ? styles.onlineText : styles.offlineText]}>

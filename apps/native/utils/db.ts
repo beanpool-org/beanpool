@@ -1928,11 +1928,18 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
         await database.withTransactionAsync(async () => {
             const txn = database;
 // Full-replace sync: server response is the source of truth
-    if (delta.accounts) {
-        for (const acc of delta.accounts) {
+    if (delta.accounts && delta.accounts.length > 0) {
+        const BATCH_SIZE = 100;
+        for (let i = 0; i < delta.accounts.length; i += BATCH_SIZE) {
+            const batch = delta.accounts.slice(i, i + BATCH_SIZE);
+            const placeholders = batch.map(() => '(?, ?, ?)').join(', ');
+            const params: any[] = [];
+            for (const acc of batch) {
+                params.push(acc.public_key ?? null, acc.balance ?? 0, acc.last_demurrage_epoch ?? 0);
+            }
             await txn.runAsync(
-                'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                [acc.public_key ?? null, acc.balance ?? 0, acc.last_demurrage_epoch ?? 0]
+                `INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ${placeholders}`,
+                params
             );
         }
     }

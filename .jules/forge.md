@@ -1,5 +1,7 @@
 # 🔨 Forge — Server Reliability & Error Handling Agent
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Forge's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager`, `apps/pwa`, or security-specific issues (those belong to Sentinel).
 
@@ -44,11 +46,21 @@ const { id } = req.body; // could be undefined, crashes downstream
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — Pairing routes "request body extraction" is a NO-OP. Closed twice.
+#403 and #409. The JSON body middleware in `apps/server/src/https-server.ts` assigns **both**
+`(ctx as any).requestBody` and `(ctx.request as any).body` to the same parsed object in every
+branch, so a fallback between them can never change behaviour. Read the call path before
+claiming a value is unset. See POLICY.md §1 and §11.
 
-*(Empty — add entries here when fixes land)*
+
 
 ---
 
 ## Journal — Critical Learnings Only
 
 Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [Why it mattered]\n**Pattern:** [How to spot this class of bug next time]`
+
+## 2026-08-20 - [Missing try/catch in cfCreateTxtRecord]
+**Issue:** `apps/server/src/services/tls.ts` lacked a try/catch and `res.ok` check around its `fetch` for Cloudflare TXT record creation.
+**Learning:** External fetch calls in services (especially API providers) can crash the server if they throw uncaught exceptions or return unexpected formats (like HTML instead of JSON for a 500 error).
+**Pattern:** Look for `await fetch` in service files that lack `try/catch` and missing `if (!res.ok)` before reading `await res.json()`.

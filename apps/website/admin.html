@@ -131,7 +131,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         const refreshBtn = document.getElementById('refreshBtn');
 
         function updateAuthUI() {
-            const savedSecret = localStorage.getItem('bp_registrar_admin_secret');
+            const savedSecret = sessionStorage.getItem('bp_registrar_admin_secret');
             if (savedSecret) {
                 secretInput.value = savedSecret;
                 statusText.textContent = 'Key connected.';
@@ -150,14 +150,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         saveBtn.addEventListener('click', function() {
             const val = secretInput.value.trim();
             if (val) {
-                localStorage.setItem('bp_registrar_admin_secret', val);
+                sessionStorage.setItem('bp_registrar_admin_secret', val);
                 updateAuthUI();
                 loadRegistrarData();
             }
         });
 
         function performLogout() {
-            localStorage.removeItem('bp_registrar_admin_secret');
+            sessionStorage.removeItem('bp_registrar_admin_secret');
             updateAuthUI();
             document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171;">Logged out. Please enter your ADMIN_SECRET key above.</p>';
             document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
@@ -316,7 +316,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
 
         updateAuthUI();
-        if (localStorage.getItem('bp_registrar_admin_secret')) loadRegistrarData();
+        if (sessionStorage.getItem('bp_registrar_admin_secret')) loadRegistrarData();
     </script>
 </body>
 </html>`;

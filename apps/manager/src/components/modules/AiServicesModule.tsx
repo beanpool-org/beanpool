@@ -143,6 +143,8 @@ export function AiServicesModule({ activeNode, contextData }: AiServicesModulePr
                         <label className="block text-nature-400 mb-1 font-semibold">OpenRouter API Key:</label>
                         <input
                             type="password"
+                            autoComplete="off"
+                            spellCheck={false}
                             value={config.apiKey || ''}
                             onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
                             placeholder="sk-or-v1-..."

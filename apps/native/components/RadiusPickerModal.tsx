@@ -171,6 +171,8 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                         minimumTrackTintColor={palette.amber600}
                         maximumTrackTintColor={palette.gray600}
                         thumbTintColor={colors.surface.subtle}
+                        accessibilityLabel="Search radius"
+                        accessibilityHint="Adjusts search distance radius"
                     />
                     
                     <View style={styles.sliderLabels}>

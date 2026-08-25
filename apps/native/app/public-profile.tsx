@@ -38,7 +38,7 @@ const fmtLastActive = (iso?: string | null): string => {
 };
 
 export default function PublicProfileScreen() {
-    const { publicKey, callsign } = useLocalSearchParams();
+    const { publicKey, callsign } = useLocalSearchParams<{ publicKey?: string; callsign?: string }>();
     const { identity } = useIdentity();
     const { theme, colors } = useTheme();
     const RISK_BAND = React.useMemo<Record<string, { bg: string; border: string; text: string; emoji: string }>>(() => ({

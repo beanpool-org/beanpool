@@ -53,18 +53,26 @@ export function PhotoCarousel({ photos, height = 280, borderRadius = 16 }: Props
             >
                 {width > 0 &&
                     valid.map((uri, i) => (
-                        <Image key={i} source={{ uri }} style={{ width, height }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                        <Image
+                            key={i}
+                            source={{ uri }}
+                            style={{ width, height }}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            transition={150}
+                            accessibilityLabel={`Photo ${i + 1} of ${valid.length}`}
+                        />
                     ))}
             </ScrollView>
 
             {!single && (
                 <>
-                    <View style={styles.counter}>
+                    <View style={styles.counter} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden={true}>
                         <Text style={styles.counterText}>
                             {index + 1} / {valid.length}
                         </Text>
                     </View>
-                    <View style={styles.dots} pointerEvents="none">
+                    <View style={styles.dots} pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden={true}>
                         {valid.map((_, i) => (
                             <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
                         ))}

@@ -44,6 +44,17 @@ export function ArchetypeQuizModal({
     const [result, setResult] = useState<QuizResult | null>(null);
     const [saving, setSaving] = useState(false);
 
+    // One quiz run saves once. The result screen auto-saves the moment scoring finishes so a
+    // dismissed modal never loses the answer, which means "Done" and the X button would otherwise
+    // fire onComplete a SECOND time — a duplicate SQLite upsert plus a duplicate signed POST to
+    // /api/profile/update, racing the first one. The ref (not state) is what makes the guard hold:
+    // a re-render is not needed and would not have landed in time anyway.
+    //
+    // onComplete is declared `=> void` but every caller passes an async function, so a sync
+    // try/catch around it catches nothing — a failed write escaped as an unhandled rejection.
+    // Promise.resolve() normalises both shapes so the catch is real.
+    const hasSavedRef = React.useRef(false);
+
     useEffect(() => {
         if (visible) {
             setStep('intro');
@@ -52,6 +63,7 @@ export function ArchetypeQuizModal({
             setAnswers([]);
             setResult(null);
             setSaving(false);
+            hasSavedRef.current = false;
         }
     }, [visible, initialMode]);
 
@@ -60,6 +72,17 @@ export function ArchetypeQuizModal({
     const currentQ = questions[currentIndex];
     const totalQuestions = questions.length;
     const progress = totalQuestions > 0 ? (currentIndex + 1) / totalQuestions : 0;
+
+    const persistResult = React.useCallback(async (res: QuizResult) => {
+        if (hasSavedRef.current) return;
+        hasSavedRef.current = true;
+        try {
+            await Promise.resolve(onComplete(res));
+        } catch (e) {
+            hasSavedRef.current = false;   // let the explicit Save button retry
+            console.warn('[ArchetypeQuiz] Save failed:', e);
+        }
+    }, [onComplete]);
 
     const handleSelectOption = (target: ArchetypeKey) => {
         const nextAnswers = [...answers];
@@ -73,6 +96,7 @@ export function ArchetypeQuizModal({
             const finalResult = scoreQuiz(nextAnswers, mode);
             setResult(finalResult);
             setStep('result');
+            void persistResult(finalResult);
         }
     };
 
@@ -84,11 +108,17 @@ export function ArchetypeQuizModal({
         }
     };
 
+    const handleClose = () => {
+        if (result) void persistResult(result);
+        onClose();
+    };
+
     const handleSave = async () => {
         if (!result) return;
         setSaving(true);
         try {
-            await onComplete(result);
+            await persistResult(result);
+            onClose();
         } finally {
             setSaving(false);
         }
@@ -102,7 +132,7 @@ export function ArchetypeQuizModal({
             visible={visible}
             animationType="slide"
             presentationStyle="pageSheet"
-            onRequestClose={onClose}
+            onRequestClose={handleClose}
         >
             <SafeAreaView
                 style={[
@@ -151,7 +181,7 @@ export function ArchetypeQuizModal({
                         accessibilityLabel="Close quiz modal"
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         style={styles.headerBtn}
-                        onPress={onClose}
+                        onPress={handleClose}
                     >
                         <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
                     </Pressable>
@@ -565,7 +595,7 @@ export function ArchetypeQuizModal({
                         <View style={styles.actionButtonsWrap}>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel={saving ? "Saving archetype to profile" : "Save to My Profile"}
+                                accessibilityLabel={saving ? "Saving archetype to profile" : "Done · Save to Profile"}
                                 accessibilityState={{ disabled: saving, busy: saving }}
                                 style={({ pressed }) => [
                                     styles.saveBtn,
@@ -586,7 +616,7 @@ export function ArchetypeQuizModal({
                                             { color: colors.text.inverse },
                                         ]}
                                     >
-                                        Save to My Profile
+                                        Done · Save to Profile
                                     </Text>
                                 )}
                             </Pressable>

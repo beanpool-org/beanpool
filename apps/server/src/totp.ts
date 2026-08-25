@@ -83,9 +83,14 @@ export function verifyTotpCode(token: string, secretBase32: string, window = 1):
     const cleanToken = token.replace(/[\s-]/g, '').trim();
     if (!/^\d{6}$/.exec(cleanToken)) return false;
 
+    const tokenBuf = Buffer.alloc(6);
+    tokenBuf.write(cleanToken, 'utf8');
+
     for (let errorWindow = -window; errorWindow <= window; errorWindow++) {
         const expected = generateTotpCode(secretBase32, errorWindow);
-        if (crypto.timingSafeEqual(Buffer.from(cleanToken), Buffer.from(expected))) {
+        const expectedBuf = Buffer.alloc(6);
+        expectedBuf.write(expected, 'utf8');
+        if (crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
             return true;
         }
     }

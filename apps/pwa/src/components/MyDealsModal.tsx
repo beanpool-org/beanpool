@@ -86,7 +86,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
     const listData = getData();
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+        <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" role="dialog" aria-modal="true" aria-labelledby="my-deals-title" onClick={onClose}>
             <div
                 className="bg-white dark:bg-nature-950 w-full sm:w-[90vw] sm:max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[85vh] sm:h-[80vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300"
                 onClick={e => e.stopPropagation()}
@@ -96,7 +96,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
 
                 {/* Header */}
                 <div className="flex justify-between items-center px-6 py-4 border-b border-nature-100 dark:border-nature-800 shrink-0">
-                    <h3 className="text-xl font-black text-nature-900 dark:text-white">My Deals</h3>
+                    <h3 id="my-deals-title" className="text-xl font-black text-nature-900 dark:text-white">My Deals</h3>
                     <button
                         onClick={onClose}
                         aria-label="Close My Deals"
@@ -191,6 +191,18 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                     return (
                                         <div
                                             key={item.id}
+                                            role={isPending ? "button" : undefined}
+                                            tabIndex={isPending ? 0 : undefined}
+                                            aria-label={isPending ? `View deal: ${item.postTitle}` : undefined}
+                                            onKeyDown={isPending ? (e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    if (onNavigateToPost) {
+                                                        onClose();
+                                                        onNavigateToPost(item.postId, item.id);
+                                                    }
+                                                }
+                                            } : undefined}
                                             onClick={() => {
                                                 if (isPending && onNavigateToPost) {
                                                     onClose();
@@ -198,7 +210,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                 }
                                             }}
                                             className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all ${
-                                                isPending ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20 cursor-pointer hover:border-emerald-400 hover:shadow-md'
+                                                isPending ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20 cursor-pointer hover:border-emerald-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500'
                                                 : isCompleted ? 'border-nature-200 dark:border-nature-800'
                                                 : 'border-nature-200/50 dark:border-nature-800/50 opacity-60 grayscale-[50%]'
                                             }`}
@@ -268,13 +280,25 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                 return (
                                     <div
                                         key={item.id}
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label={`View post: ${item.title}`}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                if (onNavigateToPost) {
+                                                    onClose();
+                                                    onNavigateToPost(item.id);
+                                                }
+                                            }
+                                        }}
                                         onClick={() => {
                                             if (onNavigateToPost) {
                                                 onClose();
                                                 onNavigateToPost(item.id);
                                             }
                                         }}
-                                        className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all ${
+                                        className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                                             item.status === 'pending' ? 'bg-emerald-50/10 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : ''
                                         }`}
                                     >

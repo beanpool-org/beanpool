@@ -58,3 +58,7 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 ## 2026-06-20 - CategoryPickerModal Dialog & Keyboard Accessibility
 **Learning:** `CategoryPickerModal.tsx` lacked modal dialog semantics (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`), an explicit close button ("✕"), Escape key dismiss handler, and `aria-pressed` / focus ring indicators on category selection buttons.
 **Action:** Added dialog semantics, Escape key listener, explicit close button with `aria-label="Close category picker"`, and `aria-pressed` with `focus-visible:ring-2` to category buttons.
+
+## 2026-06-25 - MyDealsModal Card Accessibility & Modal Semantics
+**Learning:** The `MyDealsModal` component contained interactive card `<div>` elements with `onClick` handlers for viewing deal details and active posts, but lacked keyboard accessibility (`role="button"`, `tabIndex={0}`, `onKeyDown` handlers for Enter/Space), `aria-label` text, dynamic focus rings, and proper modal dialog semantics (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`).
+**Action:** Added `role="dialog"`, `aria-modal="true"`, `aria-labelledby="my-deals-title"` to the backdrop overlay and `id="my-deals-title"` to the modal title. Made all interactive deal transaction and active post cards fully keyboard accessible with `role="button"`, `tabIndex={0}` (or gated on pending status), `onKeyDown` listener, descriptive `aria-label`s, and focus ring classes (`focus-visible:ring-2`).

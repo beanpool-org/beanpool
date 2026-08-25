@@ -1,4 +1,6 @@
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 This repo has accumulated many duplicate Palette PRs (6 on marketplace cards, 4 on
 PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
@@ -17,6 +19,13 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #112 / #113)
+### 2026-08-25 — CategoryPickerModal a11y LANDED in #371. Raised four times.
+#366, #390, #399 closed as duplicates. #371 won because it was the only one with an Escape
+handler *and* an explicit close button *and* `type="button"`. One open nit worth a future PR:
+`role="dialog"` / `aria-modal` sit on the backdrop div rather than the inner dialog container.
+
+### 2026-08-25 — MyDealsModal a11y LANDED in #412. Do not re-file.
+
 - Marketplace post cards (grid + list): clickable `<div>`s made keyboard-operable
   (`role="button"`, `tabIndex`, Enter/Space, `aria-label`, focus ring).
 - PostAuthorTrust author chip (compact + full): same, gated on `isInteractive`.

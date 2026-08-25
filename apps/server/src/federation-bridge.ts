@@ -27,7 +27,7 @@
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { bridgeAccountId, peerFromBridgeAccountId } from '@beanpool/core';
-import { getConnectorCreditCap, getConnectors } from './connector-manager.js';
+import { getConnectorCreditCap, getConnectors, getConnectorByPeerId } from './connector-manager.js';
 import { reservedAgainstPeer } from './federation-settlement-state.js';
 
 export { bridgeAccountId, peerFromBridgeAccountId };
@@ -182,7 +182,7 @@ export function settlementCapacity(
  *     partner) → refuse. Trust level and credit cap are separate decisions and both must be affirmative.
  */
 export function settlementCapacityForPeer(peerId: string, amount = 0, excludeKey?: string): SettlementCapacity {
-    const connector = getConnectors().find(c => c.peerId === peerId);
+    const connector = getConnectorByPeerId(peerId);
     if (!connector || connector.trustLevel !== 'peer') {
         return {
             ok: false,

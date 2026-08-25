@@ -17,9 +17,11 @@ interface MembersModuleProps {
     onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
 }
 
-export function getMemberAvatar(m: any, profiles: any[] = []): string | null {
+export function getMemberAvatar(m: any, profiles: any[] | Map<string, any> = []): string | null {
     const pub = m?.publicKey || m?.pubkey || '';
-    const profile = profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
+    const profile = profiles instanceof Map
+        ? profiles.get(pub)
+        : profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
     const raw = profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
     return resolveAvatarUrl(raw);
 }
@@ -43,12 +45,14 @@ export function fmtLastActive(iso?: string | null): string {
     return `Active ${d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
 }
 
-export function getMemberDisplayName(m: any, profiles: any[] = []): string {
+export function getMemberDisplayName(m: any, profiles: any[] | Map<string, any> = []): string {
     const pub = m?.publicKey || m?.pubkey || '';
     if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'System Node Operator';
 
-    // Look up in profiles array
-    const profile = profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
+    // Look up in profiles Map or array
+    const profile = profiles instanceof Map
+        ? profiles.get(pub)
+        : profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
     if (profile?.name?.trim()) return profile.name.trim();
     if (profile?.displayName?.trim()) return profile.displayName.trim();
     if (profile?.callsign?.trim()) return profile.callsign.trim();
@@ -341,6 +345,19 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
     const members = nodeData?.members || [];
     const profiles = nodeData?.profiles || [];
     const posts = nodeData?.posts || [];
+
+    // O(1) profile lookup map derived from profiles array to avoid O(N*M) nested scans during render & search
+    const profilesMap = React.useMemo(() => {
+        const map = new Map<string, any>();
+        if (Array.isArray(profiles)) {
+            for (const p of profiles) {
+                if (!p) continue;
+                if (p.publicKey) map.set(p.publicKey, p);
+                if (p.pubkey) map.set(p.pubkey, p);
+            }
+        }
+        return map;
+    }, [profiles]);
     const health = nodeData?.health;
     const rawReports = nodeData?.reports || [];
     const rawFlags = health?.flags || [];
@@ -354,7 +371,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
 
     const filteredMembers = members.filter((m: any) => {
         if (m.status === 'pruned') return false;
-        const name = getMemberDisplayName(m, profiles).toLowerCase();
+        const name = getMemberDisplayName(m, profilesMap).toLowerCase();
         const pub = (m.publicKey || '').toLowerCase();
         const term = searchTerm.toLowerCase();
         return name.includes(term) || pub.includes(term);
@@ -590,7 +607,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                 </div>
                                 <div className="divide-y divide-nature-800/60">
                                     {filteredMembers.map((m: any, idx: number) => {
-                                        const displayName = getMemberDisplayName(m, profiles);
+                                        const displayName = getMemberDisplayName(m, profilesMap);
                                         const pubkey = m.publicKey || m.pubkey || '';
                                         const initial = displayName.charAt(0).toUpperCase();
 
@@ -621,7 +638,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                             >
                                                 <div className="col-span-4 flex items-center gap-2.5">
                                                     {(() => {
-                                                        const avatar = getMemberAvatar(m, profiles);
+                                                        const avatar = getMemberAvatar(m, profilesMap);
                                                         if (avatar) {
                                                             return (
                                                                 <img
@@ -847,7 +864,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                             <div>
                                 <h3 className="text-base font-bold text-white m-0">🌟 Upgrade Member Standing Tier</h3>
                                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Assign tier badge & granted credit floor for <code className="text-terra-400 font-bold">{getMemberDisplayName(tierEditMember, profiles)}</code>
+                                    Assign tier badge & granted credit floor for <code className="text-terra-400 font-bold">{getMemberDisplayName(tierEditMember, profilesMap)}</code>
                                 </p>
                             </div>
                             <button

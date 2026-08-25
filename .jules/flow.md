@@ -55,3 +55,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2024-08-07 - Add missing empty state for AnalyticsModule
 **Learning:** Found that `AnalyticsModule.tsx` did not have an empty state for when there are no active node profiles, causing the page to render with empty graphs and headers. Adding an explicit empty state improves the UX by guiding the user on what action to take.
 **Action:** Always check array mapping blocks to ensure that there is a handled empty state or placeholder if the length is 0.
+
+## 2024-08-08 - Add missing empty state for LogsModule
+**Learning:** Found that `LogsModule.tsx` did not distinguish between zero captured logs (`logs.length === 0`) and filtered out logs (`filteredLogs.length === 0`). Adding a dedicated empty state guides users when no log records exist on the node yet.
+**Action:** Check if raw arrays are empty before evaluating filter rules when building list UI components.

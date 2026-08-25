@@ -77,6 +77,10 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 **Learning:** In `apps/server/src/state-engine.ts`, the `exportLedgerAudit` function used `members.find(...)` inside a loop over `pendingTxs` array to lookup the member details associated with a transaction. This `.find` creates an `O(N * M)` nested scan since it repeatedly scans over the entire list of community members.
 **Action:** When filtering or enriching rows sequentially, use `Map` lookups instead. A Map can be created via `const membersByPubKey = new Map(members.map(m => [m.publicKey, m]));` and then the lookup happens with an `O(1)` Map retrieval via `membersByPubKey.get(tx.buyer_pubkey)`. This transforms an O(N^2) procedure into a significantly faster O(N) operation.
 
+## 2026-08-20 - O(N) Array Allocation in Connector Lookups
+**Learning:** In `apps/server/src/connector-manager.ts`, there were several places where `getConnectors().find(c => c.peerId === peerId)` was used to fetch a single connector by its Peer ID. `getConnectors()` Maps over the entire `connectors` array and allocates a materialized object for every connector on every call, leading to `O(N)` memory allocation overhead.
+**Action:** Implemented a new `getConnectorByPeerId(peerId: string)` helper in `connector-manager.ts` that iterates the raw internal `connectors` array and only materializes and returns the single matching connector. Updated call sites in `federation-bridge.ts`, `federation-commission.ts`, and `federation-settlement-exchange.ts` to use it, turning O(N) allocations into O(1).
+
 ## 2026-08-20 - Connector Lookups by PeerId & Fallback Semantics
 **Learning:** When looking up connectors by peer ID, respect `materialise()` logic: `peerIdFromAddress(address)` is a fallback only when `status.peerId` is unset. The matching condition should be `(status?.peerId ?? peerIdFromAddress(c.address)) === peerId`. Do not match against address when live `status.peerId` is already present.
 
@@ -86,6 +90,10 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-08-21 - O(N*M) Member Lookups in PWA MessagesPage
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, looking up member callsigns for each message and reply via `members.find(m => m.publicKey === ...)` created an $O(N \times M)$ operation on every render in large chat threads.
 **Action:** Pre-compute `const membersByPublicKey = new Map(members.map(m => [m.publicKey, m]))` before rendering messages to convert lookups into $O(1)$ operations.
+
+## 2026-08-28 - O(M*P) Nested Member Profile Lookups in Manager Roster Rendering
+**Learning:** In `apps/manager/src/components/modules/MembersModule.tsx`, member filtering and list item rendering invoked `getMemberDisplayName` and `getMemberAvatar`, which performed `profiles.find(...)` on every member row for both name and avatar. This created an `O(M * P)` array scan across every filter and render cycle.
+**Action:** Pre-compute `const profilesMap = React.useMemo(...)` to map public keys to profile records in O(P) time, and update `getMemberDisplayName` / `getMemberAvatar` to accept either `Map` or `Array` parameters for backward compatibility. This turns member roster rendering into an O(M + P) operation.
 
 ## 2026-08-21 - Pre-grouping actionable deals in native inbox tab
 **Learning:** In `apps/native/app/(tabs)/chats.tsx`, `list.map` ran four `.filter()` calls per conversation over the full `deals` array (an O(N*M) pattern).

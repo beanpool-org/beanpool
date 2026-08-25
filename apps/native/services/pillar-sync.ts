@@ -88,29 +88,43 @@ async function discoverAnchor(): Promise<string | null> {
     // Clear saved node address temporarily to force Azure discovery
     await AsyncStorage.removeItem('pillar:anchor-url');
 
-    for (const url of candidates) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        try {
-            const res = await fetch(`${url}/api/community/health`, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            if (res.ok) {
-                // Any 200 OK response from /api/community/health means the node is BeanPool aware.
-                // Cache the successful URL
-                await AsyncStorage.setItem('beanpool_anchor_url', url);
-                return url;
-            }
-        } catch (e) {
-            clearTimeout(timeoutId);
-            // Ignore fetch errors
-        }
+    if (candidates.length === 0) {
+        return null;
     }
 
-    return null;
+    const controllers: AbortController[] = [];
+    try {
+        const winningUrl = await Promise.any(
+            candidates.map(async (url) => {
+                const controller = new AbortController();
+                controllers.push(controller);
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                try {
+                    const res = await fetch(`${url}/api/community/health`, {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' },
+                        signal: controller.signal
+                    });
+                    if (res.ok) {
+                        return url;
+                    }
+                    throw new Error(`Health check failed with status ${res.status}`);
+                } finally {
+                    clearTimeout(timeoutId);
+                }
+            })
+        );
+
+        // Any 200 OK response from /api/community/health means the node is BeanPool aware.
+        // Cache the successful URL
+        await AsyncStorage.setItem('beanpool_anchor_url', winningUrl);
+        return winningUrl;
+    } catch (e) {
+        // Promise.any rejects with AggregateError when all candidates fail
+        return null;
+    } finally {
+        controllers.forEach((c) => c.abort());
+    }
 }
 
 let isSyncing = false;

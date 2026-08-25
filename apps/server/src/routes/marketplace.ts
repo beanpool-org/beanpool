@@ -72,6 +72,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const offset = clampOffset(ctx.query.offset);
     const updatedAfter = ctx.query.updatedAfter as string | undefined;
     const sync = ctx.query.sync === 'true';
+    const targetGroupId = ctx.query.targetGroupId as string | undefined;
+    const assignedTo = ctx.query.assignedTo as string | undefined;
+    const audienceScope = ctx.query.audienceScope as any;
+    const targetArchetype = ctx.query.targetArchetype as string | undefined;
 
     // #108: beans-only browse, so nobody is ambushed by a cash requirement in paragraph three of a
     // description. Forced on for a peer node's request — cash cannot cross a boundary, so a listing
@@ -88,12 +92,19 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
-    ctx.body = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined, sync, beansOnly });
+    ctx.body = getPosts({
+        id, type, category, query: q, limit, offset, updatedAfter,
+        authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined,
+        sync, beansOnly, targetGroupId, assignedTo, audienceScope, targetArchetype
+    });
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers } =
-        (ctx as any).requestBody || {};
+    const {
+        id, type, category, title, description, credits, priceType, authorPublicKey,
+        lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers,
+        audienceScope, targetGroupId, targetPubkey, assignedTo, targetArchetypes
+    } = (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
         ctx.body = { error: 'type, title, and authorPublicKey are required' };
@@ -109,10 +120,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             repeatable === true || repeatable === 'true',
             id,
             cashAlsoNeeded === true || cashAlsoNeeded === 'true',
-            // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
-            // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
-            // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers }
+            { reach, reachPeers, audienceScope, targetGroupId, targetPubkey, assignedTo, targetArchetypes }
         );
         if (!post) {
             ctx.status = 400;

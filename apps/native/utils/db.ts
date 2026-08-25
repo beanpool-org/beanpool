@@ -250,6 +250,11 @@ async function _doInitDB() {
             photos TEXT,
             reach TEXT DEFAULT 'local',
             reach_peers TEXT,
+            audience_scope TEXT DEFAULT 'public',
+            target_group_id TEXT,
+            target_pubkey TEXT,
+            assigned_to TEXT,
+            target_archetypes TEXT,
             author_energy_cycled INTEGER DEFAULT 0,
             author_founding_needed INTEGER DEFAULT 1
         );
@@ -269,26 +274,26 @@ async function _doInitDB() {
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             completed_at DATETIME,
             cover_image TEXT,
+            rated_by_buyer INTEGER DEFAULT 0,
+            rated_by_seller INTEGER DEFAULT 0,
             post_title TEXT
         );
 
-        -- 5. Messaging & Chat
+        -- 5. Messaging Conversations & Messages
         CREATE TABLE IF NOT EXISTS conversations (
             id TEXT PRIMARY KEY,
             type TEXT NOT NULL,
-            post_id TEXT,
             name TEXT,
-            created_by TEXT,
-            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-            post_title TEXT,
+            created_by TEXT NOT NULL,
+            post_id TEXT,
             post_status TEXT,
-            post_photo TEXT,
-            post_credits REAL
+            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
 
         CREATE TABLE IF NOT EXISTS conversation_participants (
-            conversation_id TEXT,
-            public_key TEXT,
+            conversation_id TEXT NOT NULL,
+            public_key TEXT NOT NULL,
+            joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             last_read_at DATETIME,
             PRIMARY KEY (conversation_id, public_key)
         );
@@ -300,26 +305,12 @@ async function _doInitDB() {
             ciphertext TEXT NOT NULL,
             nonce TEXT NOT NULL,
             type TEXT DEFAULT 'text',
-            system_type TEXT,
             metadata TEXT,
+            edited_at DATETIME,
             timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
-        CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 
-        -- 6. Relations (Friends, Ratings, Abuse)
-        CREATE TABLE IF NOT EXISTS ratings (
-            id TEXT PRIMARY KEY,
-            target_pubkey TEXT NOT NULL,
-            rater_pubkey TEXT NOT NULL,
-            role TEXT NOT NULL,
-            stars INTEGER NOT NULL CHECK(stars BETWEEN 1 AND 5),
-            comment TEXT,
-            transaction_id TEXT,
-            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-            UNIQUE(rater_pubkey, transaction_id)
-        );
-
-        -- 6b. Friends
+        -- 6. Friends and Trust
         CREATE TABLE IF NOT EXISTS friends (
             owner_pubkey TEXT NOT NULL,
             friend_pubkey TEXT NOT NULL,
@@ -327,7 +318,7 @@ async function _doInitDB() {
             is_guardian INTEGER DEFAULT 0,
             PRIMARY KEY (owner_pubkey, friend_pubkey)
         );
-        
+
         -- 7. Projects
         CREATE TABLE IF NOT EXISTS projects (
             id TEXT PRIMARY KEY,
@@ -340,6 +331,34 @@ async function _doInitDB() {
             deadline_at DATETIME,
             status TEXT DEFAULT 'ACTIVE',
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+        -- 8. Groups & Working Groups
+        CREATE TABLE IF NOT EXISTS groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            slug TEXT UNIQUE NOT NULL,
+            description TEXT,
+            avatar_url TEXT,
+            category TEXT DEFAULT 'general',
+            created_by TEXT NOT NULL,
+            join_policy TEXT NOT NULL DEFAULT 'open',
+            is_official INTEGER NOT NULL DEFAULT 0,
+            treasury_pubkey TEXT,
+            conversation_id TEXT,
+            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS group_members (
+            group_id TEXT NOT NULL,
+            member_pubkey TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'member',
+            status TEXT NOT NULL DEFAULT 'active',
+            joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            invited_by TEXT,
+            updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            PRIMARY KEY (group_id, member_pubkey)
         );
     `;
 
@@ -429,6 +448,41 @@ async function _doInitDB() {
         // #143 step 4: per-listing reach control for federation
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach TEXT DEFAULT 'local';`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach_peers TEXT;`); } catch (e) {}
+        // Groups, Scoping, Direct Assignment & Archetype Matching
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN audience_scope TEXT DEFAULT 'public';`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_group_id TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN assigned_to TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT;`); } catch (e) {}
+        try {
+            await database.execAsync(`
+                CREATE TABLE IF NOT EXISTS groups (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    slug TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    avatar_url TEXT,
+                    category TEXT DEFAULT 'general',
+                    created_by TEXT NOT NULL,
+                    join_policy TEXT NOT NULL DEFAULT 'open',
+                    is_official INTEGER NOT NULL DEFAULT 0,
+                    treasury_pubkey TEXT,
+                    conversation_id TEXT,
+                    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                );
+                CREATE TABLE IF NOT EXISTS group_members (
+                    group_id TEXT NOT NULL,
+                    member_pubkey TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'member',
+                    status TEXT NOT NULL DEFAULT 'active',
+                    joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    invited_by TEXT,
+                    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    PRIMARY KEY (group_id, member_pubkey)
+                );
+            `);
+        } catch (e) {}
         // Ratings table migration for legacy setups where Schema wasn't ran
         try { 
             await database.execAsync(`
@@ -507,7 +561,15 @@ export async function clearDB() {
 /**
  * PWA Fetch Equivalents executed cleanly across the Local Disk
  */
-export async function getPosts(filter?: { type?: string; category?: string }) {
+export async function getPosts(filter?: {
+    type?: string;
+    category?: string;
+    targetGroupId?: string;
+    assignedTo?: string;
+    audienceScope?: string;
+    targetArchetype?: string;
+    viewerPubkey?: string;
+}) {
     let database = await waitForInit();
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at
@@ -524,6 +586,22 @@ export async function getPosts(filter?: { type?: string; category?: string }) {
     if (filter?.category) {
         query += ' AND p.category = ?';
         params.push(filter.category);
+    }
+    if (filter?.targetGroupId) {
+        query += ' AND p.target_group_id = ?';
+        params.push(filter.targetGroupId);
+    }
+    if (filter?.assignedTo) {
+        query += ' AND (p.assigned_to = ? OR p.target_pubkey = ?)';
+        params.push(filter.assignedTo, filter.assignedTo);
+    }
+    if (filter?.audienceScope) {
+        query += ' AND p.audience_scope = ?';
+        params.push(filter.audienceScope);
+    }
+    if (filter?.targetArchetype) {
+        query += ' AND (p.target_archetypes LIKE ? OR p.target_archetypes = ?)';
+        params.push(`%"${filter.targetArchetype}"%`, filter.targetArchetype);
     }
     query += ' ORDER BY p.created_at DESC';
     
@@ -553,6 +631,19 @@ export async function getPosts(filter?: { type?: string; category?: string }) {
     return rows.map(r => {
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
+        r.audienceScope = r.audience_scope || 'public';
+        r.targetGroupId = r.target_group_id || null;
+        r.targetPubkey = r.target_pubkey || null;
+        r.assignedTo = r.assigned_to || null;
+        if (typeof r.target_archetypes === 'string') {
+            try {
+                r.targetArchetypes = JSON.parse(r.target_archetypes);
+            } catch {
+                r.targetArchetypes = [r.target_archetypes];
+            }
+        } else {
+            r.targetArchetypes = r.target_archetypes || null;
+        }
 
         if (typeof r.photos === 'string') {
             try {
@@ -1481,6 +1572,11 @@ export async function createPost(post: any) {
         // #143 step 4 — per-listing reach. Omitted fields default to 'local' on the server.
         ...(post.reach ? { reach: post.reach } : {}),
         ...(post.reach === 'peers' && post.reachPeers ? { reachPeers: post.reachPeers } : {}),
+        ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
+        ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
+        ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
+        ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {}),
+        ...(post.targetArchetypes || post.target_archetypes ? { targetArchetypes: post.targetArchetypes || post.target_archetypes } : {}),
     };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
@@ -1536,12 +1632,17 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, audience_scope, target_group_id, target_pubkey, assigned_to, target_archetypes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
-         post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null]
+         post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null,
+         post.audience_scope || post.audienceScope || 'public',
+         post.target_group_id || post.targetGroupId || null,
+         post.target_pubkey || post.targetPubkey || null,
+         post.assigned_to || post.assignedTo || null,
+         post.target_archetypes ? (typeof post.target_archetypes === 'string' ? post.target_archetypes : JSON.stringify(post.target_archetypes)) : (post.targetArchetypes ? JSON.stringify(post.targetArchetypes) : null)]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
 }
@@ -2001,7 +2102,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             // Deleted posts are transmitted with active=0 and tombstoned here natively.
             for (const p of delta.posts) {
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, audience_scope, target_group_id, target_pubkey, assigned_to, target_archetypes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         p.id ?? null,
                         p.type ?? null,
@@ -2026,7 +2127,14 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
                         p.updated_at || p.updatedAt || null,
                         p.origin_node || p.originNode || null,
                         p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
-                        p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0)
+                        p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
+                        p.reach || 'local',
+                        p.reach_peers ? JSON.stringify(p.reach_peers) : (p.reachPeers ? JSON.stringify(p.reachPeers) : null),
+                        p.audience_scope || p.audienceScope || 'public',
+                        p.target_group_id || p.targetGroupId || null,
+                        p.target_pubkey || p.targetPubkey || null,
+                        p.assigned_to || p.assignedTo || null,
+                        p.target_archetypes ? (typeof p.target_archetypes === 'string' ? p.target_archetypes : JSON.stringify(p.target_archetypes)) : (p.targetArchetypes ? JSON.stringify(p.targetArchetypes) : null)
                     ]
                 );
             }
@@ -4327,5 +4435,213 @@ export async function getDatabaseStats() {
         messages: msgCount,
         integrity
     };
+}
+
+// ===================== GROUPS, WORKING GROUPS & TEAMS =====================
+
+export interface GroupItem {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    avatarUrl: string | null;
+    category: 'enterprise' | 'project' | 'guild' | 'working_group' | 'social' | 'general';
+    createdBy: string;
+    joinPolicy: 'open' | 'request_to_join' | 'invite_only';
+    isOfficial: boolean;
+    treasuryPubkey: string | null;
+    conversationId: string | null;
+    createdAt: string;
+    updatedAt: string;
+    memberCount?: number;
+    myRole?: 'steward' | 'member' | 'observer' | null;
+    myStatus?: 'active' | 'pending_approval' | 'invited' | null;
+}
+
+export interface GroupMemberItem {
+    groupId: string;
+    memberPubkey: string;
+    role: 'steward' | 'member' | 'observer';
+    status: 'active' | 'pending_approval' | 'invited';
+    joinedAt: string;
+    invitedBy: string | null;
+    callsign?: string;
+    avatarUrl?: string | null;
+}
+
+/** Fetch groups list from server with fallback to local SQLite */
+export async function fetchGroups(filter?: { category?: string; memberPubkey?: string; search?: string }): Promise<GroupItem[]> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    const identity = await loadIdentity();
+    const myPubkey = identity?.publicKey || filter?.memberPubkey;
+
+    if (anchorUrl) {
+        try {
+            const params = new URLSearchParams();
+            if (filter?.category) params.set('category', filter.category);
+            if (filter?.memberPubkey) params.set('member', filter.memberPubkey);
+            if (filter?.search) params.set('q', filter.search);
+
+            const headers: Record<string, string> = { 'Accept': 'application/json' };
+            const url = `${anchorUrl}/api/groups${params.toString() ? '?' + params.toString() : ''}`;
+            const res = await fetch(url, { headers });
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data?.groups)) {
+                    // Update local cache
+                    const database = await getDb();
+                    for (const g of data.groups) {
+                        await database.runAsync(`
+                            INSERT INTO groups (id, name, slug, description, avatar_url, category, created_by, join_policy, is_official, treasury_pubkey, conversation_id, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(id) DO UPDATE SET
+                                name = excluded.name,
+                                slug = excluded.slug,
+                                description = excluded.description,
+                                avatar_url = excluded.avatar_url,
+                                category = excluded.category,
+                                join_policy = excluded.join_policy,
+                                is_official = excluded.is_official,
+                                treasury_pubkey = excluded.treasury_pubkey,
+                                conversation_id = excluded.conversation_id,
+                                updated_at = excluded.updated_at
+                        `, [
+                            g.id, g.name, g.slug, g.description || null, g.avatarUrl || null,
+                            g.category || 'general', g.createdBy, g.joinPolicy || 'open',
+                            g.isOfficial ? 1 : 0, g.treasuryPubkey || null, g.conversationId || null,
+                            g.createdAt, g.updatedAt
+                        ]);
+                    }
+                    return data.groups;
+                }
+            }
+        } catch (e) {
+            console.warn('[Groups] Remote fetch failed, falling back to local DB:', e);
+        }
+    }
+
+    // Local fallback
+    const database = await getDb();
+    let query = `
+        SELECT g.*,
+            (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as memberCount,
+            (SELECT gm2.role FROM group_members gm2 WHERE gm2.group_id = g.id AND gm2.member_pubkey = ?) as myRole,
+            (SELECT gm3.status FROM group_members gm3 WHERE gm3.group_id = g.id AND gm3.member_pubkey = ?) as myStatus
+        FROM groups g
+        WHERE 1=1
+    `;
+    const params: any[] = [myPubkey || '', myPubkey || ''];
+    if (filter?.category) {
+        query += ' AND g.category = ?';
+        params.push(filter.category);
+    }
+    if (filter?.search) {
+        query += ' AND (g.name LIKE ? OR g.description LIKE ?)';
+        params.push(`%${filter.search}%`, `%${filter.search}%`);
+    }
+    query += ' ORDER BY g.is_official DESC, g.updated_at DESC';
+
+    const rows = await database.getAllAsync<any>(query, params);
+    return rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        description: r.description,
+        avatarUrl: r.avatar_url,
+        category: r.category,
+        createdBy: r.created_by,
+        joinPolicy: r.join_policy,
+        isOfficial: Boolean(r.is_official),
+        treasuryPubkey: r.treasury_pubkey,
+        conversationId: r.conversation_id,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        memberCount: r.memberCount || 0,
+        myRole: r.myRole || null,
+        myStatus: r.myStatus || null,
+    }));
+}
+
+/** Fetch a single group with members */
+export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem; members: GroupMemberItem[] } | null> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (anchorUrl) {
+        try {
+            const res = await fetch(`${anchorUrl}/api/groups/${encodeURIComponent(id)}`);
+            if (res.ok) {
+                const data = await res.json();
+                return { group: data.group, members: data.members || [] };
+            }
+        } catch (e) {
+            console.warn('[Groups] Failed to fetch group detail:', e);
+        }
+    }
+    return null;
+}
+
+/** Create a new group */
+export async function createGroupApi(groupData: {
+    name: string;
+    slug?: string;
+    description?: string;
+    avatarUrl?: string;
+    category?: string;
+    joinPolicy?: 'open' | 'request_to_join' | 'invite_only';
+    isOfficial?: boolean;
+    treasuryPubkey?: string;
+    conversationId?: string;
+}): Promise<GroupItem> {
+    const res = await _signedRequest('/api/groups', groupData);
+    if (!res.success || !res.group) {
+        throw new Error(res.error || 'Failed to create group');
+    }
+    return res.group;
+}
+
+/** Join a group */
+export async function joinGroupApi(groupId: string, invitedBy?: string): Promise<any> {
+    const res = await _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/join`, { invitedBy });
+    if (!res.success) {
+        throw new Error(res.error || 'Failed to join group');
+    }
+    return res.membership;
+}
+
+/** Set role or approve member in a group */
+export async function setGroupMemberRoleApi(
+    groupId: string,
+    memberPubkey: string,
+    role: 'steward' | 'member' | 'observer',
+    status?: 'active' | 'pending_approval' | 'invited'
+): Promise<any> {
+    const res = await _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/members`, {
+        memberPubkey,
+        role,
+        status: status || 'active'
+    });
+    if (!res.success) {
+        throw new Error(res.error || 'Failed to update member role');
+    }
+    return res.membership;
+}
+
+/** Leave group or remove member */
+export async function leaveGroupApi(groupId: string, memberPubkey: string): Promise<boolean> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('Offline');
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found');
+
+    const path = `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`;
+    const headers = await buildSignedHeaders('DELETE', path, '', identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}${path}`, {
+        method: 'DELETE',
+        headers
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to remove group member');
+    }
+    return true;
 }
 

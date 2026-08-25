@@ -123,7 +123,7 @@ export default function MarketScreen() {
         setShowFirstOfferQuest(false);
         AsyncStorage.setItem('beanpool_first_offer_quest_dismissed', 'true').catch(() => {});
     };
-    const [filter, setFilter] = useState<'all' | 'needs' | 'offers' | 'for-you'>('all');
+    const [filter, setFilter] = useState<'all' | 'needs' | 'offers' | 'groups' | 'for-you'>('all');
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
@@ -474,6 +474,7 @@ export default function MarketScreen() {
         segmentBtnFavActive: { backgroundColor: colors.accent.primary },
         segmentBtnOfferActive: { backgroundColor: colors.brand.primary },
         segmentBtnNeedActive: { backgroundColor: colors.action.fab },
+        segmentBtnGroupActive: { backgroundColor: palette.indigo600 },
 
         dropdownsRow: {
             flexDirection: 'row',
@@ -777,10 +778,17 @@ export default function MarketScreen() {
         // #108: beans-only browse. Rows predating the column read as 0, i.e. beans-only.
         if (beansOnly && p.cash_also_needed === 1) return false;
         
-        // Type / For You filters
+        // Type / Groups / For You filters
         if (filter === 'offers' && p.type !== 'offer') return false;
         if (filter === 'needs' && p.type !== 'need') return false;
-        if (filter === 'for-you' && !favCategories.includes(p.category)) return false;
+        if (filter === 'groups' && !(p.audience_scope === 'group' || p.target_group_id)) return false;
+        if (filter === 'for-you') {
+            const matchesFav = favCategories.includes(p.category);
+            const isAssignedToMe = (p.assigned_to && p.assigned_to === identity?.publicKey) || (p.target_pubkey && p.target_pubkey === identity?.publicKey);
+            const userArchetype = (identity as any)?.archetype;
+            const matchesArchetype = Array.isArray(p.targetArchetypes) && userArchetype && p.targetArchetypes.includes(userArchetype);
+            if (!matchesFav && !isAssignedToMe && !matchesArchetype) return false;
+        }
         
         // Trust Level filters
         if (trustFilter === 'founding' && !p.authorFoundingNeeded) return false;
@@ -938,6 +946,14 @@ export default function MarketScreen() {
                         accessibilityState={{ selected: filter === 'needs' }}
                     >
                         <Text style={[styles.segmentText, filter === 'needs' && styles.segmentTextActive]}>🟠 Needs</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={() => setFilter(filter === 'groups' ? 'all' : 'groups')}
+                        style={[styles.segmentBtn, filter === 'groups' && styles.segmentBtnGroupActive]}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: filter === 'groups' }}
+                    >
+                        <Text style={[styles.segmentText, filter === 'groups' && styles.segmentTextActive]}>👥 Groups</Text>
                     </Pressable>
                 </View>
 
@@ -1357,6 +1373,23 @@ export default function MarketScreen() {
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text.secondary }}>
                                     {catEmoji} {catLabel}
                                 </Text>
+                                {item.target_group_id || item.audience_scope === 'group' ? (
+                                    <View style={{ backgroundColor: '#e0e7ff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#4338ca' }}>👥 GROUP</Text>
+                                    </View>
+                                ) : null}
+                                {((item.assigned_to && item.assigned_to === identity?.publicKey) || (item.target_pubkey && item.target_pubkey === identity?.publicKey)) ? (
+                                    <View style={{ backgroundColor: '#ede9fe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#6d28d9' }}>🎯 ASSIGNED</Text>
+                                    </View>
+                                ) : null}
+                                {Array.isArray(item.targetArchetypes) && item.targetArchetypes.length > 0 ? (
+                                    <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#b45309' }}>
+                                            🧭 {item.targetArchetypes[0]}
+                                        </Text>
+                                    </View>
+                                ) : null}
                                 {!!item.repeatable && (
                                     <View style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>↻ RECURRING</Text>

@@ -142,6 +142,11 @@ CREATE TABLE IF NOT EXISTS posts (
     -- addresses: a callsign is a peer's own mutable label and an address is operator config that changes
     -- when a host moves, while the peer id is the thing the trust relationship and the bridge are keyed on.
     reach_peers TEXT,
+    audience_scope TEXT NOT NULL DEFAULT 'public' CHECK (audience_scope IN ('public', 'group', 'direct')),
+    target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
+    target_pubkey TEXT REFERENCES members(public_key),
+    assigned_to TEXT REFERENCES members(public_key),
+    target_archetypes TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
@@ -164,6 +169,8 @@ CREATE INDEX IF NOT EXISTS idx_posts_reach ON posts(created_at DESC)
 CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
 CREATE INDEX IF NOT EXISTS idx_posts_updated_at ON posts(updated_at);
+CREATE INDEX IF NOT EXISTS idx_posts_target_group ON posts(target_group_id) WHERE target_group_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_assigned_to ON posts(assigned_to) WHERE assigned_to IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS post_photos (
     post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -951,4 +958,55 @@ CREATE TABLE IF NOT EXISTS activity_feed (
 
 CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_feed_event ON activity_feed(event_type, created_at DESC);
+
+-- ===================== GROUPS, WORKING GROUPS & ENTERPRISE TEAMS =====================
+CREATE TABLE IF NOT EXISTS groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    description TEXT,
+    avatar_url TEXT,
+    category TEXT DEFAULT 'general' CHECK (category IN ('enterprise', 'project', 'guild', 'working_group', 'social', 'general')),
+    created_by TEXT NOT NULL REFERENCES members(public_key),
+    join_policy TEXT NOT NULL DEFAULT 'open' CHECK (join_policy IN ('open', 'request_to_join', 'invite_only')),
+    is_official INTEGER NOT NULL DEFAULT 0,
+    treasury_pubkey TEXT REFERENCES members(public_key),
+    conversation_id TEXT REFERENCES conversations(id),
+    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_groups_updated_at ON groups(updated_at);
+CREATE INDEX IF NOT EXISTS idx_groups_slug ON groups(slug);
+CREATE INDEX IF NOT EXISTS idx_groups_treasury ON groups(treasury_pubkey);
+
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('steward', 'member', 'observer')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_approval', 'invited')),
+    joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    invited_by TEXT REFERENCES members(public_key),
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (group_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_group_members_pubkey ON group_members(member_pubkey);
+CREATE INDEX IF NOT EXISTS idx_group_members_updated_at ON group_members(updated_at);
+CREATE INDEX IF NOT EXISTS idx_group_members_role ON group_members(group_id, role, status);
+
+CREATE TRIGGER IF NOT EXISTS groups_touch_updated_at
+AFTER UPDATE ON groups
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE groups SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS group_members_touch_updated_at
+AFTER UPDATE ON group_members
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE group_members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE group_id = NEW.group_id AND member_pubkey = NEW.member_pubkey;
+END;
 

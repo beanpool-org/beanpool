@@ -100,10 +100,16 @@ export function createPost(
     repeatable?: boolean,
     id?: string,
     cashAlsoNeeded?: boolean,
-    // #143 step 4. An OPTIONS OBJECT rather than positions 15 and 16: this list is already fourteen
-    // positional parameters deep, and `createPost(…, undefined, undefined, 'peers', [id])` at a call site
-    // is how the wrong argument ends up in the wrong slot.
-    options?: { reach?: unknown; reachPeers?: unknown },
+    // Options for reach, audience scoping, direct assignment, and target archetypes
+    options?: {
+        reach?: unknown;
+        reachPeers?: unknown;
+        audienceScope?: unknown;
+        targetGroupId?: unknown;
+        targetPubkey?: unknown;
+        assignedTo?: unknown;
+        targetArchetypes?: unknown;
+    },
 ): MarketplacePost | null {
     assertMemberActive(authorPublicKey);
     if (!getMember(db, authorPublicKey)) {
@@ -119,11 +125,24 @@ export function createPost(
     const createdAt = new Date().toISOString();
     const searchKeywords = generateSearchKeywords(title, description, category);
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
+    const audienceScope = options?.audienceScope === 'group' || options?.audienceScope === 'direct' ? options.audienceScope : 'public';
+    const targetGroupId = typeof options?.targetGroupId === 'string' && options.targetGroupId.trim() ? options.targetGroupId.trim() : null;
+    const targetPubkey = typeof options?.targetPubkey === 'string' && options.targetPubkey.trim() ? options.targetPubkey.trim() : null;
+    const assignedTo = typeof options?.assignedTo === 'string' && options.assignedTo.trim() ? options.assignedTo.trim() : null;
+    const targetArchetypes = Array.isArray(options?.targetArchetypes)
+        ? JSON.stringify(options.targetArchetypes.filter(a => typeof a === 'string'))
+        : typeof options?.targetArchetypes === 'string' && options.targetArchetypes.trim()
+            ? options.targetArchetypes.trim()
+            : null;
 
     db.transaction(() => {
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?)`).run(finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt, repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords, cashAlsoNeeded ? 1 : 0, reach, reachPeers);
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, audience_scope, target_group_id, target_pubkey, assigned_to, target_archetypes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
+            repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
+            cashAlsoNeeded ? 1 : 0, reach, reachPeers, audienceScope, targetGroupId, targetPubkey, assignedTo, targetArchetypes
+        );
 
         if (photos && photos.length > 0) {
             const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
@@ -183,6 +202,14 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.credits !== undefined) { fields.push('credits = ?'); values.push(updates.credits); }
     if (updates.priceType !== undefined) { fields.push('price_type = ?'); values.push(updates.priceType); }
     if (updates.repeatable !== undefined) { fields.push('repeatable = ?'); values.push(updates.repeatable ? 1 : 0); }
+    if (updates.audienceScope !== undefined) { fields.push('audience_scope = ?'); values.push(updates.audienceScope); }
+    if (updates.targetGroupId !== undefined) { fields.push('target_group_id = ?'); values.push(updates.targetGroupId); }
+    if (updates.targetPubkey !== undefined) { fields.push('target_pubkey = ?'); values.push(updates.targetPubkey); }
+    if (updates.assignedTo !== undefined) { fields.push('assigned_to = ?'); values.push(updates.assignedTo); }
+    if (updates.targetArchetypes !== undefined) {
+        fields.push('target_archetypes = ?');
+        values.push(Array.isArray(updates.targetArchetypes) ? JSON.stringify(updates.targetArchetypes) : updates.targetArchetypes);
+    }
     // The string "false" is truthy, so a stringified payload could never CLEAR the flag.
     // Normalise the same way the create route does.
     if (updates.cashAlsoNeeded !== undefined) { fields.push('cash_also_needed = ?'); values.push((updates.cashAlsoNeeded === true || (updates.cashAlsoNeeded as any) === 'true') ? 1 : 0); }

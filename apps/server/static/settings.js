@@ -126,13 +126,13 @@
         }
         let backupHealthInterval = null;
 
-        // `[data-tab]`, not bare `.tab-btn`. The "🎮 Fleet Manager ↗" entry in the tab bar wears
-        // .tab-btn for styling but is an <a href="/manager/"> to a different app, so it has no
-        // data-tab. Binding it here called switchTab(undefined), which matched no button and no
-        // panel — hiding EVERY panel and leaving the settings page blank — and then persisted the
-        // string "undefined" to sessionStorage, so the blank state survived reloads. It read as
-        // an unknown/empty page, and was most visible when the new tab did not take focus
-        // (popup blocked, remote browser session), leaving you looking at the emptied page.
+        // `[data-tab]`, not bare `.tab-btn` — belt and braces. The "🎮 Fleet Manager ↗" entry sits
+        // in the tab row but is an <a href="/manager/"> to a different app; it now carries its own
+        // .fleet-link class rather than .tab-btn, so it can no longer be caught here. The guard
+        // stays because when it WAS a .tab-btn, binding it called switchTab(undefined): no button
+        // and no panel matched, so EVERY panel was hidden and the page went blank, and the string
+        // "undefined" was persisted to sessionStorage so the blank state survived reloads. Any
+        // future tab-shaped link would reintroduce that, hence both the class split and this filter.
         document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
             btn.addEventListener('click', () => switchTab(btn.dataset.tab));
         });

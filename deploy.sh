@@ -115,16 +115,24 @@ for NODE in "${TARGETS[@]}"; do
     # --- BEGIN preserve/restore (scripts/test-deploy-preserve.sh extracts and runs this exact block) ---
     # Preserve data/ and .env across the wipe below.
     #
-    # `mv SRC DEST` moves SRC *into* DEST when DEST is an existing directory rather than
-    # replacing it. Both moves here used to be bare `mv ... 2>/dev/null || true`, so a backup
-    # left behind by an interrupted deploy silently turned the NEXT deploy into
+    # NOTE: this whole block is inside an UNQUOTED heredoc, so the LOCAL shell expands it before
+    # it is ever sent. Never use backticks or an unescaped dollar-paren in here, comments included
+    # — bash runs them on YOUR machine. Doing exactly that is what produced
+    # "syntax error near unexpected token ||" on every node deployed 2026-08-25.
+    # test-deploy-preserve.sh now fails the build if either reappears.
+    #
+    # mv SRC DEST moves SRC *into* DEST when DEST is an existing directory rather than replacing
+    # it. Both moves here used to be bare mv with 2>/dev/null and a || true, so a backup left
+    # behind by an interrupted deploy silently turned the NEXT deploy into
     # data/beanpool-data-backup-<DIR>/... — an entire stale data dir nested inside the live one,
-    # and `|| true` meant nothing was ever reported. Found on `test` 2026-08-25 holding 220 MB
-    # (186 MB of it snapshots), which then inflated every snapshot and harvest taken of data/.
+    # and the || true meant nothing was ever reported. Worse: the live ledger ended up buried at
+    # data/data/state.db while data/ was repopulated from the STALE copy, so the node booted on a
+    # different community.key. Found on test 2026-08-25 holding 220 MB (186 MB of it snapshots),
+    # which also inflated every snapshot and harvest taken of data/.
     #
     # Two rules now: the destination is guaranteed not to exist before each move, and failing to
     # preserve or restore data/ is FATAL. Continuing past that would wipe a node's identity keys
-    # and ledger, which is not something to shrug off with `|| true`.
+    # and ledger, which is not something to shrug off.
     if [ -e "$HOME_DIR/beanpool-data-backup-$DIR" ]; then
       echo "⚠️  Stale backup found at $HOME_DIR/beanpool-data-backup-$DIR — a previous deploy did not finish."
       echo "    The live data/ is authoritative, so parking the stale copy at .stale (outside the project dir)."

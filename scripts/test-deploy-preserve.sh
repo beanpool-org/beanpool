@@ -25,6 +25,24 @@ sed -n '/--- BEGIN preserve\/restore/,/--- END preserve\/restore/p' "$ROOT/deplo
 [ -s "$BLOCK" ] || { echo "✗ could not extract the preserve/restore block from deploy.sh"; exit 1; }
 grep -q 'FATAL' "$BLOCK" || { echo "✗ extracted block is missing its fatal guards"; exit 1; }
 
+# The block lives inside deploy.sh's UNQUOTED heredoc, so the LOCAL shell expands it before it is
+# sent to the node. A backtick or an unescaped dollar-paren there runs on the operator's machine —
+# and it does so even inside a comment. On 2026-08-25 a backticked comment produced
+# "syntax error near unexpected token ||" on every node deployed, twice each. Harmless that time
+# only because the substitution failed; a comment quoting a real command would have executed it.
+BT='`'
+if grep -q "$BT" "$BLOCK"; then
+  echo "✗ preserve/restore block contains a backtick — the local shell will run it (comments included)"
+  grep -n "$BT" "$BLOCK" | head -5
+  exit 1
+fi
+if grep -qE '(^|[^\\])\$\(' "$BLOCK"; then
+  echo "✗ preserve/restore block contains an unescaped \$( — the local shell will run it"
+  grep -nE '(^|[^\\])\$\(' "$BLOCK" | head -5
+  exit 1
+fi
+echo "✓ block is free of backticks and unescaped command substitution"
+
 # Simulate a node, with the precondition that caused the bug: a leftover backup from a deploy
 # that died between the two moves.
 HOME_DIR="$SB/root"; DIR="BeanPool-Test"; PROJECT_DIR="$HOME_DIR/$DIR"

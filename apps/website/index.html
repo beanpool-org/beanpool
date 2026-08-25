@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BeanPool — Community Exchange for Local Neighborhoods</title>
-    <meta name="description" content="BeanPool is a decentralized exchange platform that lets communities trade services, share resources, and fund local projects — peer-to-peer, no middlemen.">
+    <title>BeanPool — Decentralized Mutual Credit & Federated Community Exchange</title>
+    <meta name="description" content="BeanPool is a decentralized mutual credit protocol and native mobile app that lets communities trade services, federate inter-town clearing, and fund local projects — peer-to-peer, no middlemen.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,13 +12,13 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css?v=1.3">
+    <link rel="stylesheet" href="style.css?v=1.4">
 </head>
 <body>
     <!-- Navigation Bar -->
     <nav id="navbar">
         <div class="nav-inner">
-            <a href="#" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 64px; height: 64px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> <span>BeanPool</span></a>
+            <a href="#" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
                 <a href="#how-it-works">How It Works</a>
                 <a href="rules.html">The Rules</a>
@@ -36,12 +36,12 @@
     <section id="hero">
         <div class="hero-bg"></div>
         <div class="hero-content">
-            <div class="hero-badge">📱 Native iOS & Android · Peer-to-Peer · Community-Owned</div>
-            <h1>Exchange for <span class="gradient-text">Communities</span>,<br>Not Corporations</h1>
-            <p class="hero-subtitle">BeanPool is a local exchange platform with a stunning native mobile application that lets neighborhoods trade services and share resources — peer-to-peer, no middlemen, no fees.</p>
+            <div class="hero-badge">📱 Native iOS & Android · Federated Mutual Credit · Community-Owned</div>
+            <h1>Exchange for <span class="gradient-text">Communities</span>,<br>Not Commercial Banks</h1>
+            <p class="hero-subtitle">BeanPool is a decentralized mutual credit protocol and native mobile app that lets neighborhoods trade goods and services, federate inter-community trade without fiat money, and build resilient local wealth.</p>
             <div class="hero-actions">
                 <a href="#get-started" class="btn btn-primary font-header">Start Your Node →</a>
-                <a href="#how-it-works" class="btn btn-ghost">Learn More</a>
+                <a href="#how-it-works" class="btn btn-ghost">Learn How It Works</a>
             </div>
             <div class="store-badges">
                 <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="store-badge" title="Download on the App Store">
@@ -75,61 +75,37 @@
         </div>
     </section>
 
-    <!-- Live Nodes Map Section -->
-    <section id="live-nodes">
-        <div class="container">
-            <div class="section-header">
-                <h2>Find Your Local Exchange</h2>
-                <p>Discover active local communities running BeanPool connecting people near you.</p>
-            </div>
-            <div class="map-wrapper">
-                <div id="nodes-map"></div>
-            </div>
-            <div class="map-stats">
-                <div class="map-stat">
-                    <span class="map-stat-value" id="stat-nodes">—</span>
-                    <span class="map-stat-label">Live Nodes</span>
-                </div>
-                <div class="map-stat-divider"></div>
-                <div class="map-stat">
-                    <span class="map-stat-value" id="stat-members">—</span>
-                    <span class="map-stat-label">Community Members</span>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <!-- How It Works Section -->
     <section id="how-it-works">
         <div class="container">
             <div class="section-header">
                 <h2>How BeanPool Works</h2>
-                <p>A community exchange where everyone starts at zero. Value flows from real services exchanged between real people — no money changes hands.</p>
+                <p>A zero-sum community exchange where value flows directly from real services between real people — no debt, no interest, no banks.</p>
             </div>
             <div class="steps-grid">
                 <div class="step-card glass-panel">
                     <div class="step-icon">🏡</div>
                     <div class="step-number">01</div>
-                    <h3>Start a Node</h3>
-                    <p>Deploy a BeanPool node for your neighborhood, town, or community. It runs on any server — even a Raspberry Pi.</p>
+                    <h3>1. Bootstrap a Node</h3>
+                    <p>Deploy a lightweight sovereign node with Docker on any server or Raspberry Pi. Your community owns its data, ledger, and rules.</p>
                 </div>
                 <div class="step-card glass-panel">
-                    <div class="step-icon">🤝</div>
+                    <div class="step-icon">🔑</div>
                     <div class="step-number">02</div>
-                    <h3>Invite Members</h3>
-                    <p>Members join through a web-of-trust invitation tree. Each person is invited by someone already in the network, creating a clear chain of trust.</p>
+                    <h3>2. Sovereign Identity</h3>
+                    <p>Cryptographic Ed25519 keys generated on your device. Choose pure passkey self-custody or seamless 1-click encrypted SSO cloud backup + Social Recovery.</p>
                 </div>
                 <div class="step-card glass-panel">
-                    <div class="step-icon">🔄</div>
+                    <div class="step-icon">⚖️</div>
                     <div class="step-number">03</div>
-                    <h3>Trade Services</h3>
-                    <p>Post what you need or offer on the marketplace. When services are exchanged, your balance adjusts — positive for providers, negative for receivers.</p>
+                    <h3>3. Earned Reciprocal Credit</h3>
+                    <p>Start at zero. Earn your credit floor through completed trades with diverse members, unlocked by keeping active community offers live.</p>
                 </div>
                 <div class="step-card glass-panel">
-                    <div class="step-icon">🏛️</div>
+                    <div class="step-icon">🌐</div>
                     <div class="step-number">04</div>
-                    <h3>Fund Projects</h3>
-                    <p>Circulation Fee (a small progressive fee on idle positive balances) flows into a Community Commons pool. Members vote to fund local projects.</p>
+                    <h3>4. Federated Clearing & Commons</h3>
+                    <p>Trade with neighbouring towns via Keynesian multilateral clearing connectors, while progressive circulation fees fund democratic local projects.</p>
                 </div>
             </div>
         </div>
@@ -146,46 +122,83 @@
     <section id="features">
         <div class="container">
             <div class="section-header">
-                <h2>Built Different</h2>
-                <p>Not a blockchain. Not a startup. A platform owned by the communities that run it.</p>
+                <h2>Engineered for Economic Resilience</h2>
+                <p>Not a speculative token. Not a corporate startup. A complete protocol for community sovereignty.</p>
             </div>
             <div class="features-grid">
+                <!-- Highlight: Keynesian Trade Connectors -->
                 <div class="feature-card feature-highlight glass-panel">
-                    <div class="feature-icon"><img src="bean.png" alt="BeanPool Icon" style="width: 42px; height: 42px; object-fit: contain; vertical-align: middle;" /></div>
+                    <div class="feature-icon">🌐</div>
                     <div class="feature-content">
-                        <h3>Balanced Exchange</h3>
-                        <p>No money changes hands. When you provide a service, your balance goes up. When you receive one, it goes down. The community always balances to zero.</p>
+                        <h3>Federated Trade Connectors (Keynesian Multilateral Clearing)</h3>
+                        <p>Trade between towns and nodes without fiat currency. Inspired by John Maynard Keynes’ Bancor and multilateral clearing unions, BeanPool Connectors enable autonomous community nodes to trade cross-border peer-to-peer. Transactions clear symmetrically across nodes with automated routing and zero drain on local currency reserves.</p>
                     </div>
                 </div>
+
+                <!-- Dual-Custody Key Management -->
                 <div class="feature-card glass-panel">
-                    <div class="feature-icon">🗺️</div>
-                    <h3>Local-First Marketplace</h3>
-                    <p>An integrated marketplace with map pins, category tags, and the ability to browse needs and offers from connected nodes.</p>
+                    <div class="feature-icon">🔑</div>
+                    <h3>Dual-Custody Key Architecture</h3>
+                    <p>True self-sovereignty for power users with hardware passkeys & <code>SecureStore</code>, plus 1-click encrypted cloud backup via Apple/Google SSO and Shamir Social Guardian Recovery so everyday members never lose access.</p>
                 </div>
+
+                <!-- Reciprocal Credit & Staking -->
                 <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌳</div>
-                    <h3>Web of Trust</h3>
-                    <p>Membership is managed through an invitation tree — not anonymous sign-ups. This keeps communities accountable and Sybil-resistant.</p>
+                    <div class="feature-icon">⚖️</div>
+                    <h3>Earned Credit & Active Offer Staking</h3>
+                    <p>Credit lines are earned through verified multi-party trades — never bought or granted arbitrarily. Carrying a debit balance requires maintaining live active offers, ensuring all credit is backed by ongoing community commitment.</p>
                 </div>
+
+                <!-- 4-Tier Location Privacy -->
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🛡️</div>
-                    <h3>4-Tier Location Privacy</h3>
-                    <p>Protect your private address. Automatically obscure your location at the Regional, Postal Code, or Neighborhood level while remaining mathematically verified.</p>
+                    <h3>4-Tier Mathematical Privacy</h3>
+                    <p>Protect home addresses while trading locally. Automatically obscure your location at the Regional, Postal Code, or Neighborhood level while remaining mathematically verified across the web-of-trust tree.</p>
                 </div>
+
+                <!-- Demurrage & Commons -->
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🏛️</div>
-                    <h3>Community Commons</h3>
-                    <p>Circulation Fee (a small progressive fee on idle positive balances) feeds a commons pool. Members propose and vote on projects to fund.</p>
+                    <h3>Progressive Commons & Circulation</h3>
+                    <p>A modest progressive circulation incentive (demurrage) on idle surplus balances encourages active local exchange and continuously feeds a Community Commons pool for member-voted civic projects.</p>
                 </div>
+
+                <!-- Autonomous Fleet Manager -->
                 <div class="feature-card glass-panel">
-                    <div class="feature-icon">⭐</div>
-                    <h3>Rating System</h3>
-                    <p>Provider and receiver ratings build after each transaction, creating trust signals that are visible across the network.</p>
+                    <div class="feature-icon">🚀</div>
+                    <h3>Autonomous Fleet Management</h3>
+                    <p>A dedicated operator control plane for multi-node networks: live telemetry, automated encrypted snapshot backups (harvester), tamper-resistant audit logs, and peer health monitoring.</p>
                 </div>
+
+                <!-- Encrypted Messaging -->
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">💬</div>
-                    <h3>Encrypted Messaging</h3>
-                    <p>Communicate securely with other members to negotiate trades, share details, and organize community events using end-to-end encryption.</p>
+                    <h3>Encrypted Messaging & Deals</h3>
+                    <p>Communicate privately to negotiate trades, coordinate pickups, and sign cryptographic transaction receipts with end-to-end encryption.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Nodes Map Section -->
+    <section id="live-nodes">
+        <div class="container">
+            <div class="section-header">
+                <h2>Find Your Local Exchange</h2>
+                <p>Discover active communities running BeanPool nodes connecting people near you.</p>
+            </div>
+            <div class="map-wrapper">
+                <div id="nodes-map"></div>
+            </div>
+            <div class="map-stats">
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-nodes">—</span>
+                    <span class="map-stat-label">Live Nodes</span>
+                </div>
+                <div class="map-stat-divider"></div>
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-members">—</span>
+                    <span class="map-stat-label">Community Members</span>
                 </div>
             </div>
         </div>
@@ -247,7 +260,7 @@
             <div class="newsletter-card glass-panel">
                 <div class="newsletter-content">
                     <h3><img src="bean.png" alt="Icon" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />Stay in the Loop</h3>
-                    <p>Get notified about new releases, community events, and network milestones.</p>
+                    <p>Get notified about new releases, federation updates, and network milestones.</p>
                 </div>
                 <div class="newsletter-form-container">
                     <form id="newsletter-form" class="newsletter-form">
@@ -265,8 +278,8 @@
         <div class="container">
             <div class="footer-inner">
                 <div class="footer-brand">
-                    <span class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 64px; height: 64px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
-                    <p>Community exchange for local neighborhoods.</p>
+                    <span class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Decentralized mutual credit & federated community exchange.</p>
                 </div>
                 <div class="footer-links">
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
@@ -284,6 +297,6 @@
         </div>
     </footer>
 
-    <script src="main.js?v=1.3"></script>
+    <script src="main.js?v=1.4"></script>
 </body>
 </html>

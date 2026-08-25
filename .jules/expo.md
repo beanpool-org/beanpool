@@ -1,5 +1,7 @@
 # 📱 Expo — Native Integration & Compatibility Agent
 # ⚠️ Operating policy — READ BEFORE OPENING ANY PR
+# 📕 Read `.jules/POLICY.md` FIRST — it is shared, binding, and takes precedence
+#    over anything below it that contradicts it.
 
 Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`, `apps/pwa`, or any other directory.
 
@@ -32,8 +34,13 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
 - Navigation types should be declared in a central params file
 
 ## ✅ Resolved — do NOT re-file
+### 2026-08-25 — `useLocalSearchParams` typing LANDED in #397 (chat + post) and #383 (invite).
+#376 closed as subsumed by #397. Do not re-file.
 
-*(Empty — add entries here when fixes land)*
+Note for `#408`: it bundles a Root `ErrorBoundary` export (valuable) with an unrelated dead-import
+cleanup in `utils/maps.ts`. Split those — see POLICY.md §4.
+
+
 
 ---
 

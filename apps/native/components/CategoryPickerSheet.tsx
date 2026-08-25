@@ -121,6 +121,7 @@ export function CategoryPickerSheet({ visible, selected, onSelect, onClose }: Ca
                                     key={cat.id}
                                     style={[styles.item, isActive && styles.itemActive]}
                                     accessibilityRole="button"
+                                    accessibilityLabel={cat.label}
                                     accessibilityState={{ selected: isActive }}
                                     onPress={() => { onSelect(cat.id); onClose(); }}
                                 >

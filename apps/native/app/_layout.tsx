@@ -1,6 +1,8 @@
 import 'fast-text-encoding';
 import { useEffect, useState, useRef } from 'react';
-import { Stack, useRouter, useSegments, useGlobalSearchParams } from 'expo-router';
+import { Stack, useRouter, useSegments, useGlobalSearchParams, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { Alert, LogBox, AppState, AppStateStatus, View, Text, TextInput, Pressable, Platform, StyleSheet, DeviceEventEmitter } from 'react-native';

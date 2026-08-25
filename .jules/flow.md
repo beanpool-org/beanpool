@@ -59,3 +59,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2024-08-08 - Add missing empty state for LogsModule
 **Learning:** Found that `LogsModule.tsx` did not distinguish between zero captured logs (`logs.length === 0`) and filtered out logs (`filteredLogs.length === 0`). Adding a dedicated empty state guides users when no log records exist on the node yet.
 **Action:** Check if raw arrays are empty before evaluating filter rules when building list UI components.
+
+## 2026-08-25 - Add loading state and spinner for AiServicesModule
+**Learning:** Async operations like asking AI Copilot lacked visual loading feedback, leaving the user unsure if the query was processing.
+**Action:** Add explicit loading state banners and animated spinners to async submit buttons and result panels.

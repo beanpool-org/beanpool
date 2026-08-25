@@ -70,12 +70,20 @@ export function AiServicesModule({ activeNode, contextData }: AiServicesModulePr
                             disabled={loading || !prompt.trim()}
                             className="px-5 py-3 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all shadow-md active:scale-95 disabled:opacity-50 shrink-0 flex items-center gap-2"
                         >
-                            <span>{loading ? 'Analyzing...' : 'Ask Copilot 🚀'}</span>
+                            <span className={loading ? 'animate-spin' : ''}>{loading ? '🔄' : '🚀'}</span>
+                            <span>{loading ? 'Analyzing...' : 'Ask Copilot'}</span>
                         </button>
                     </div>
                 </form>
 
-                {response && (
+                {loading && (
+                    <div className="p-5 rounded-2xl bg-nature-950 border border-nature-800 text-xs text-nature-400 font-mono animate-pulse flex items-center gap-2.5 shadow-inner">
+                        <span className="animate-spin text-base">🔄</span>
+                        <span>Sovereign Copilot is analyzing node diagnostics and preparing response...</span>
+                    </div>
+                )}
+
+                {!loading && response && (
                     <div className="p-5 rounded-2xl bg-nature-950 border border-nature-800 text-xs text-nature-200 space-y-3 shadow-inner">
                         <div className="flex items-center justify-between border-b border-nature-800/80 pb-2 text-[10px] uppercase font-bold text-terra-400">
                             <span>Sovereign Copilot Output</span>

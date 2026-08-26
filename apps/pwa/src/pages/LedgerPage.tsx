@@ -326,8 +326,11 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                                 return (
                                     <button
                                         key={t.name}
+                                        type="button"
+                                        aria-pressed={isSel}
+                                        aria-label={`View ${t.name} level details`}
                                         onClick={() => setSelectedLevel(i)}
-                                        className="flex flex-col items-center py-3 px-1 rounded-xl border-2 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1"
+                                        className="flex flex-col items-center py-3 px-1 rounded-xl border-2 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
                                         style={{
                                             background: isSel ? t.bg : '#fff',
                                             borderColor: isSel ? t.color : '#e5e7eb',

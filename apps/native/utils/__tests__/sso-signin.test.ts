@@ -42,6 +42,8 @@ import {
     SsoSignInError,
     describeAppleError,
     describeGoogleError,
+    formatAppleErrorMessage,
+    formatGoogleErrorMessage,
     readAppleCredential,
     readNonceResponse,
     signInWithFacebook,
@@ -84,6 +86,12 @@ describe('what the Apple sheet threw', () => {
         expect(describeAppleError(null)).toBe('provider');
         expect(describeAppleError(undefined)).toBe('provider');
     });
+
+    it('diagnoses iOS simulator missing Apple ID with actionable advice', () => {
+        const errorMsg = 'The authorization attempt failed for an unknown reason.';
+        expect(formatAppleErrorMessage(new Error(errorMsg))).toContain('Apple Sign-In requires an active Apple ID in device or simulator settings');
+        expect(formatAppleErrorMessage({ message: 'Error 1000' })).toContain('Apple Sign-In requires an active Apple ID');
+    });
 });
 
 describe('what the Google sheet threw', () => {
@@ -100,6 +108,11 @@ describe('what the Google sheet threw', () => {
         expect(describeGoogleError(new Error('network down'))).toBe('provider');
         expect(describeGoogleError(null)).toBe('provider');
         expect(describeGoogleError(undefined)).toBe('provider');
+    });
+
+    it('diagnoses missing Play Services or developer error with actionable advice', () => {
+        expect(formatGoogleErrorMessage(new Error('DEVELOPER_ERROR: code 10'))).toContain('Google Sign-In requires Google Play Services and an active Google account');
+        expect(formatGoogleErrorMessage({ message: 'PLAY_SERVICES_NOT_AVAILABLE' })).toContain('Google Sign-In requires Google Play Services');
     });
 });
 

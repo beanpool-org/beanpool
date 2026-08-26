@@ -202,6 +202,47 @@ export function readAppleCredential(
     return { idToken: credential.identityToken, email: credential.email ?? undefined };
 }
 
+function extractErrorMessage(e: unknown): string {
+    if (typeof e === 'string') return e;
+    if (e instanceof Error) return e.message;
+    if (typeof e === 'object' && e !== null) {
+        const obj = e as Record<string, unknown>;
+        const parts: string[] = [];
+        if (typeof obj.message === 'string') parts.push(obj.message);
+        if (typeof obj.code === 'string' || typeof obj.code === 'number') parts.push(String(obj.code));
+        if (typeof obj.error === 'string') parts.push(obj.error);
+        if (parts.length > 0) return parts.join(' - ');
+    }
+    return String(e);
+}
+
+export function formatAppleErrorMessage(e: unknown): string {
+    const msg = extractErrorMessage(e);
+    if (
+        msg.includes('unknown reason') ||
+        msg.includes('Authorization attempt failed') ||
+        msg.includes('1000') ||
+        msg.includes('ERR_UNAVAILABLE')
+    ) {
+        return 'Apple Sign-In requires an active Apple ID in device or simulator settings (Settings → Apple ID).';
+    }
+    return `Apple could not sign you in: ${msg}`;
+}
+
+export function formatGoogleErrorMessage(e: unknown): string {
+    const msg = extractErrorMessage(e);
+    if (
+        msg.includes('Play Services') ||
+        msg.includes('PLAY_SERVICES') ||
+        msg.includes('12500') ||
+        msg.includes('DEVELOPER_ERROR') ||
+        msg.includes('code 10')
+    ) {
+        return 'Google Sign-In requires Google Play Services and an active Google account on this device / emulator.';
+    }
+    return `Google could not sign you in: ${msg}`;
+}
+
 /**
  * Run the Apple sheet against a node-issued nonce.
  *
@@ -223,7 +264,7 @@ export async function signInWithApple(nonce: string): Promise<Omit<SsoSignIn, 'p
         const reason = describeAppleError(e);
         throw new SsoSignInError(
             reason,
-            reason === 'cancelled' ? 'Sign-in was cancelled.' : `Apple could not sign you in: ${(e as Error).message}`,
+            reason === 'cancelled' ? 'Sign-in was cancelled.' : formatAppleErrorMessage(e),
         );
     }
     return { ...readAppleCredential(credential), nonce };
@@ -304,7 +345,7 @@ export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, '
                 ? 'Sign-in was cancelled.'
                 : reason === 'unsupported'
                     ? 'Google Play Services is not available on this device.'
-                    : `Google could not sign you in: ${e instanceof Error ? e.message : String(e)}`,
+                    : formatGoogleErrorMessage(e),
         );
     }
 

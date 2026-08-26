@@ -467,14 +467,20 @@ async function _doInitDB() {
                 } catch (e) {}
             }
         });
-        // Client-side consolidation cleanup: remove local post-keyed conversations (post_id IS NOT NULL) to match the consolidated model.
+        // Client-side consolidation cleanup: one-time migration to remove legacy un-migrated post-keyed threads
         try {
-            await database.execAsync(`
-                DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE post_id IS NOT NULL);
-                DELETE FROM conversation_participants WHERE conversation_id IN (SELECT id FROM conversations WHERE post_id IS NOT NULL);
-                DELETE FROM conversations WHERE post_id IS NOT NULL;
-            `);
-            console.log('[SQLite] Local legacy post-keyed conversations pruned successfully.');
+            const postCleanupKey = 'bp_legacy_post_conv_cleaned_v1';
+            const alreadyCleaned = await AsyncStorage.getItem(postCleanupKey);
+            if (!alreadyCleaned) {
+                await database.execAsync(`
+                    DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE post_id IS NOT NULL AND type != 'dm');
+                    DELETE FROM conversation_participants WHERE conversation_id IN (SELECT id FROM conversations WHERE post_id IS NOT NULL AND type != 'dm');
+                    DELETE FROM conversations WHERE post_id IS NOT NULL AND type != 'dm';
+                    UPDATE conversations SET post_id = NULL WHERE type = 'dm' AND post_id IS NOT NULL;
+                `);
+                await AsyncStorage.setItem(postCleanupKey, 'true');
+                console.log('[SQLite] Local legacy post-keyed conversations pruned successfully.');
+            }
         } catch (cleanupErr) {
             console.error('[SQLite] Failed to clean up legacy conversations locally:', cleanupErr);
         }
@@ -2256,7 +2262,7 @@ export async function syncMessages(publicKey: string) {
         
         let convRes;
         try {
-            convRes = await fetch(`${anchorUrl}/api/messages/conversations/${publicKey}`, { headers: { 'Accept': 'application/json' }, signal: controller1.signal });
+            convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { signal: controller1.signal });
         } catch (e) {
             console.warn('[DB] conversations fetch failed:', e);
             clearTimeout(timeout1);
@@ -2266,7 +2272,7 @@ export async function syncMessages(publicKey: string) {
         let dirRes = null;
         if (shouldFetchMembers) {
             try {
-                dirRes = await fetch(`${anchorUrl}/api/members`, { headers: { 'Accept': 'application/json' }, signal: controller1.signal });
+                dirRes = await signedGet('/api/members', { signal: controller1.signal });
             } catch (e) {
                 console.warn('[DB] members fetch failed:', e);
             }
@@ -2424,7 +2430,7 @@ export async function syncMessages(publicKey: string) {
             const timeout2 = setTimeout(() => controller2.abort(), 5000);
             let msgRes;
             try {
-                msgRes = await fetch(`${anchorUrl}/api/messages/${conv.id}`, { headers: { 'Accept': 'application/json' }, signal: controller2.signal });
+                msgRes = await signedGet(`/api/messages/${conv.id}`, { signal: controller2.signal });
             } catch (err) {
                 clearTimeout(timeout2);
                 continue;
@@ -2507,7 +2513,7 @@ export async function syncSingleConversation(conversationId: string) {
         const timeout = setTimeout(() => controller.abort(), 12000);
         let msgRes;
         try {
-            msgRes = await fetch(`${anchorUrl}/api/messages/${conversationId}`, { headers: { 'Accept': 'application/json' }, signal: controller.signal });
+            msgRes = await signedGet(`/api/messages/${conversationId}`, { signal: controller.signal });
         } catch (e: any) {
             console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} fetch failed/timed out: ${e?.message || e}`);
             return;
@@ -2629,10 +2635,28 @@ async function getDmKeyContext(conversationId: string): Promise<DMKeyContext | n
     const identity = await loadIdentity();
     if (!identity?.publicKey || !identity?.privateKey) return null;
     const database = await getDb();
-    const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    const conv = await database.getFirstAsync<any>('SELECT type, created_by FROM conversations WHERE id = ?', [conversationId]);
     if (!conv || conv.type !== 'dm') return null;
     const parts = await database.getAllAsync<any>('SELECT public_key FROM conversation_participants WHERE conversation_id = ?', [conversationId]);
-    const peers = parts.map(p => p.public_key).filter((pk: string) => pk && pk !== identity.publicKey);
+    let peers = parts.map(p => p.public_key).filter((pk: string) => pk && pk !== identity.publicKey);
+
+    // Resilient fallback: if local participants cache hasn't populated yet, find peer from thread history or creator
+    if (peers.length === 0) {
+        const msgPeer = await database.getFirstAsync<any>(
+            'SELECT author_pubkey FROM messages WHERE conversation_id = ? AND author_pubkey != ? AND author_pubkey != "SYSTEM" LIMIT 1',
+            [conversationId, identity.publicKey]
+        );
+        if (msgPeer?.author_pubkey) {
+            peers = [msgPeer.author_pubkey];
+            await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, msgPeer.author_pubkey]).catch(() => {});
+            await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, identity.publicKey]).catch(() => {});
+        } else if (conv.created_by && conv.created_by !== identity.publicKey) {
+            peers = [conv.created_by];
+            await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, conv.created_by]).catch(() => {});
+            await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, identity.publicKey]).catch(() => {});
+        }
+    }
+
     if (peers.length !== 1) return null; // not a clean 2-party DM — don't encrypt
     return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId };
 }
@@ -2887,7 +2911,8 @@ async function _deliverPendingMessage(
             'UPDATE OR REPLACE messages SET id=?, timestamp=?, metadata=? WHERE id=?',
             [serverMsg.id, serverMsg.timestamp, body.metadata || null, tempId]
         );
-    } catch {
+    } catch (deliverErr: any) {
+        console.warn(`[Messaging] Delivery failed for message ${tempId.slice(0, 8)}:`, deliverErr?.message || deliverErr);
         try {
             const row = await database.getFirstAsync<any>('SELECT metadata FROM messages WHERE id=?', [tempId]);
             let meta: any = {};
@@ -3016,9 +3041,7 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
         // 2. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk).
         const dmCtx = await getDmKeyContext(conversationId);
         if (!dmCtx) return null;
-        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (!anchorUrl) return null;
-        const res = await fetch(`${anchorUrl}/api/messages/${messageId}/attachment`, { headers: { 'Accept': 'application/json' } });
+        const res = await signedGet(`/api/messages/${messageId}/attachment`);
         if (!res.ok) return null;
         const { data, nonce } = await res.json();
 
@@ -3118,9 +3141,11 @@ export async function createConversationApi(type: 'dm' | 'group', participants: 
             let postStatus: string | null = null;
             let postPhoto: string | null = null;
             let postCredits: number | null = null;
-            const pid = conv.postId || conv.post_id || postId;
-            if (pid) {
-                const post = await database.getFirstAsync<{ title: string, status: string, photos: string, credits: number }>('SELECT title, status, photos, credits FROM posts WHERE id = ?', [pid]);
+            const convType = conv.type || type;
+            const pid = convType === 'dm' ? null : (conv.postId || conv.post_id || postId);
+            const lookupPid = conv.postId || conv.post_id || postId;
+            if (lookupPid) {
+                const post = await database.getFirstAsync<{ title: string, status: string, photos: string, credits: number }>('SELECT title, status, photos, credits FROM posts WHERE id = ?', [lookupPid]);
                 if (post) {
                     postTitle = post.title;
                     postStatus = post.status;
@@ -3137,7 +3162,7 @@ export async function createConversationApi(type: 'dm' | 'group', participants: 
                 'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     conv.id,
-                    conv.type || type,
+                    convType,
                     pid || null,
                     conv.name || name || null,
                     conv.createdBy || createdBy,
@@ -3438,6 +3463,33 @@ async function _signedRequest(endpoint: string, payload: any) {
 // through here.
 export async function signedRequest(endpoint: string, payload: any) {
     return _signedRequest(endpoint, payload);
+}
+
+/**
+ * Replay-proof signed GET request helper.
+ * Under ENFORCE_READ_AUTH=true, gated GET endpoints require signed headers with an empty body.
+ */
+export async function signedGet(path: string, options?: { signal?: AbortSignal; customHeaders?: Record<string, string> }): Promise<Response> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
+
+    let headers: Record<string, string> = { 'Accept': 'application/json', ...(options?.customHeaders || {}) };
+    const identity = await loadIdentity();
+    if (identity?.privateKey && identity?.publicKey) {
+        try {
+            const signPath = path.split('?')[0];
+            const signedHeaders = await buildSignedHeaders('GET', signPath, '', identity.privateKey, identity.publicKey);
+            headers = { ...headers, ...signedHeaders };
+        } catch (e) {
+            console.warn('[signedGet] Could not sign GET request:', e);
+        }
+    }
+
+    return fetch(`${anchorUrl}${path}`, {
+        method: 'GET',
+        headers,
+        signal: options?.signal,
+    });
 }
 
 /**
@@ -3777,12 +3829,7 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
     }
     
     try {
-        const res = await fetch(`${anchorUrl}/api/ratings/${publicKey}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        const res = await signedGet(`/api/ratings/${publicKey}`);
         if (!res.ok) {
             throw new Error(`Failed to fetch ratings: ${res.statusText}`);
         }
@@ -3874,15 +3921,8 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
 
 /** Reviews the given member has WRITTEN about others, newest first. */
 export async function getRatingsGiven(raterPubkey: string): Promise<any[]> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (anchorUrl) {
-        try {
-            const res = await fetch(`${anchorUrl}/api/ratings/${raterPubkey}?direction=given`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
+    try {
+        const res = await signedGet(`/api/ratings/${raterPubkey}?direction=given`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.ratings) {
@@ -3936,9 +3976,8 @@ export async function getRatingsGiven(raterPubkey: string): Promise<any[]> {
                     }));
                 }
             }
-        } catch (e: any) {
-            console.warn('Failed to fetch given ratings from server, falling back to local DB:', e.message);
-        }
+    } catch (e: any) {
+        console.warn('Failed to fetch given ratings from server, falling back to local DB:', e.message);
     }
 
     await acquireSyncLock();
@@ -4118,12 +4157,8 @@ async function _syncFriendToServer(action: 'add' | 'remove', ownerPubkey: string
 
 /** Fetch friends from server (used by sync) */
 export async function fetchFriendsFromServer(publicKey: string): Promise<any[]> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) return [];
     try {
-        const res = await fetch(`${anchorUrl}/api/friends/${publicKey}`, {
-            headers: { 'Accept': 'application/json' }
-        });
+        const res = await signedGet(`/api/friends/${publicKey}`);
         if (res.ok) return await res.json();
     } catch (e) {
         console.warn('[Friends] Failed to fetch from server:', e);
@@ -4197,14 +4232,10 @@ export async function createRecoveryRequest(oldPubkey: string, guardianGuess: st
 }
 
 export async function getPendingRecoveryRequests(): Promise<any[]> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) return [];
     const identity = await loadIdentity();
     if (!identity) return [];
 
-    const res = await fetch(`${anchorUrl}/api/recovery/pending/${identity.publicKey}`, {
-        headers: { 'X-Public-Key': identity.publicKey }
-    });
+    const res = await signedGet(`/api/recovery/pending/${identity.publicKey}`);
     if (!res.ok) throw new Error('Failed to fetch requests');
     return res.json();
 }

@@ -99,13 +99,53 @@ export function sendMessage(
     clientId?: string
 ): Message | null {
     assertMemberActive(authorPubkey);
-    const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conversationId) as any[];
+    let effectiveConvId = conversationId;
+    let participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
+    
+    // If not found directly, check if conversationId was consolidated into an active DM
+    if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) {
+        try {
+            // json_valid() guards json_extract via CASE so a single row with malformed
+            // metadata cannot abort the whole SELECT (which the surrounding catch would
+            // then swallow, silently disabling consolidation resolution node-wide).
+            const consolidatedMsg = db.prepare(`
+                SELECT conversation_id FROM messages
+                WHERE metadata IS NOT NULL
+                  AND CASE WHEN json_valid(metadata) THEN (
+                        json_extract(metadata, '$.originalConversationId') = ?
+                        OR json_extract(metadata, '$.originalConversationIds') LIKE ?
+                      ) ELSE 0 END
+                LIMIT 1
+            `).get(conversationId, `%${conversationId}%`) as any;
+            if (consolidatedMsg?.conversation_id) {
+                effectiveConvId = consolidatedMsg.conversation_id;
+                participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
+
+                // Preserve the ORIGINAL conversation id the sender encrypted against.
+                // DM ciphertext is XChaCha20-Poly1305 with the conversationId as AEAD
+                // associated data (apps/*/e2e-crypto.ts), so a recipient reading the
+                // message under effectiveConvId can only decrypt by retrying with the
+                // original id — which the client fallback finds in metadata.originalConversationId.
+                // Without this, remapped messages are permanently undecryptable.
+                try {
+                    const metaObj = metadata ? JSON.parse(metadata) : {};
+                    if (!metaObj.originalConversationId) {
+                        metaObj.originalConversationId = conversationId;
+                        metadata = JSON.stringify(metaObj);
+                    }
+                } catch {
+                    metadata = JSON.stringify({ originalConversationId: conversationId });
+                }
+            }
+        } catch (e) {}
+    }
+
     if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) return null;
 
     if (clientId) {
         const existing = db.prepare("SELECT * FROM messages WHERE id=?").get(clientId) as any;
         if (existing) {
-            if (existing.author_pubkey === authorPubkey && existing.conversation_id === conversationId) {
+            if (existing.author_pubkey === authorPubkey && existing.conversation_id === effectiveConvId) {
                 return {
                     id: existing.id,
                     conversationId: existing.conversation_id,
@@ -123,7 +163,7 @@ export function sendMessage(
 
     const msg: Message = {
         id: clientId || crypto.randomUUID(),
-        conversationId,
+        conversationId: effectiveConvId,
         authorPubkey,
         ciphertext,
         nonce,
@@ -137,7 +177,7 @@ export function sendMessage(
         db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime) VALUES (?, ?, ?, ?)`).run(msg.id, attachment.data, attachment.nonce, attachment.mime || 'image/jpeg');
     }
 
-    cb.broadcast({ type: 'new_message', conversationId, message: msg, participants: participants.map(p => p.public_key) });
+    cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) });
 
     const senderMember = getMember(db, authorPubkey) as any;
     const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
@@ -146,7 +186,7 @@ export function sendMessage(
         authorPubkey,
         '💬 New Message',
         `${senderName} sent you a message`,
-        { screen: 'chat', conversationId },
+        { screen: 'chat', conversationId: effectiveConvId },
         'chat'
     );
 

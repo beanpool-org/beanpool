@@ -66,3 +66,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `ai-client.ts` functions (`loadAiConfig`, `saveAiConfig`, `askAiCopilot`) were untested.
 **Learning:** `askAiCopilot` interacts with both local Ollama API endpoints and OpenRouter cloud API endpoints, returning simulated diagnostic fallbacks when network requests fail. Mocking `globalThis.fetch` allowed full coverage of both success responses and fallback diagnostics.
 **Action:** Focus on untested UI components in `apps/manager/src/components/` for future coverage tasks.
+
+## 2026-08-10 - [manager tests] active profile ID helper functions unit tests
+**Gap:** `loadActiveProfileId` and `saveActiveProfileId` in `apps/manager/src/lib/profiles.ts` were untested.
+**Learning:** Testing `loadActiveProfileId` and `saveActiveProfileId` required mocking `localStorage` error handling paths to ensure fallback behavior worked properly when storage fails.
+**Action:** Check remaining utility functions in `lib/` for additional edge case tests.

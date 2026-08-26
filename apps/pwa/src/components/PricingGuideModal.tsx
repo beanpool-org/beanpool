@@ -201,6 +201,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                             </button>
                         );
                     })}
+                </div>
+
                 {/* Instructions Tip Banner */}
                 <div className="mx-4 mt-3 mb-1 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
                     <span className="text-sm" aria-hidden="true">💡</span>

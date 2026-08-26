@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, Dimensions } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { processProfileImage } from '../utils/image-processing';
@@ -16,6 +16,16 @@ interface AvatarPickerSheetProps {
 export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPickerSheetProps) {
     const [loading, setLoading] = useState(false);
     const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
+
+    // Scroll affordance for the horizontal avatar strip: without an on-screen cue it isn't
+    // obvious there are more avatars off the right edge. We track offset/size to show a chevron
+    // on whichever side has more to reveal (also tappable to page through).
+    const avatarScrollRef = useRef<ScrollView>(null);
+    const [avatarScrollX, setAvatarScrollX] = useState(0);
+    const [avatarViewW, setAvatarViewW] = useState(0);
+    const [avatarContentW, setAvatarContentW] = useState(0);
+    const canScrollLeft = avatarScrollX > 4;
+    const canScrollRight = avatarContentW - avatarViewW - avatarScrollX > 4;
 
     const handleTakePhotos = async () => {
         try {
@@ -110,37 +120,65 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                                     </Pressable>
                                 </View>
 
-                                <Text style={styles.sectionTitle}>Or choose an avatar:</Text>
-                                
-                                <ScrollView 
-                                    horizontal 
-                                    showsHorizontalScrollIndicator={false}
-                                    contentContainerStyle={styles.avatarScrollContent}
-                                >
-                                    {BUNDLED_AVATARS.map((avatar) => {
-                                        const isSelected = selectedAvatarId === avatar.id;
-                                        return (
-                                            <Pressable
-                                                key={avatar.id}
-                                                style={[
-                                                    styles.avatarItem,
-                                                    isSelected && styles.avatarItemSelected
-                                                ]}
-                                                accessibilityRole="button"
-                                                accessibilityLabel="Select avatar"
-                                                accessibilityState={{ selected: isSelected }}
-                                                onPress={() => setSelectedAvatarId(avatar.id)}
-                                            >
-                                                <Image
-                                                    source={avatar.source}
-                                                    accessibilityElementsHidden={true}
-                                                    importantForAccessibility="no-hide-descendants"
-                                                    style={isSelected ? styles.avatarImageSelected : styles.avatarImage}
-                                                />
-                                            </Pressable>
-                                        );
-                                    })}
-                                </ScrollView>
+                                <Text style={styles.sectionTitle}>Or choose an avatar — swipe for more:</Text>
+
+                                <View style={styles.avatarScrollWrap}>
+                                    <ScrollView
+                                        ref={avatarScrollRef}
+                                        horizontal
+                                        showsHorizontalScrollIndicator={true}
+                                        contentContainerStyle={styles.avatarScrollContent}
+                                        scrollEventThrottle={16}
+                                        onScroll={(e) => setAvatarScrollX(e.nativeEvent.contentOffset.x)}
+                                        onLayout={(e) => setAvatarViewW(e.nativeEvent.layout.width)}
+                                        onContentSizeChange={(w) => setAvatarContentW(w)}
+                                    >
+                                        {BUNDLED_AVATARS.map((avatar) => {
+                                            const isSelected = selectedAvatarId === avatar.id;
+                                            return (
+                                                <Pressable
+                                                    key={avatar.id}
+                                                    style={[
+                                                        styles.avatarItem,
+                                                        isSelected && styles.avatarItemSelected
+                                                    ]}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel="Select avatar"
+                                                    accessibilityState={{ selected: isSelected }}
+                                                    onPress={() => setSelectedAvatarId(avatar.id)}
+                                                >
+                                                    <Image
+                                                        source={avatar.source}
+                                                        accessibilityElementsHidden={true}
+                                                        importantForAccessibility="no-hide-descendants"
+                                                        style={isSelected ? styles.avatarImageSelected : styles.avatarImage}
+                                                    />
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </ScrollView>
+
+                                    {canScrollLeft && (
+                                        <Pressable
+                                            style={[styles.avatarChevron, styles.avatarChevronLeft]}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Show earlier avatars"
+                                            onPress={() => avatarScrollRef.current?.scrollTo({ x: Math.max(0, avatarScrollX - 200), animated: true })}
+                                        >
+                                            <Text style={styles.avatarChevronText}>‹</Text>
+                                        </Pressable>
+                                    )}
+                                    {canScrollRight && (
+                                        <Pressable
+                                            style={[styles.avatarChevron, styles.avatarChevronRight]}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Show more avatars"
+                                            onPress={() => avatarScrollRef.current?.scrollTo({ x: avatarScrollX + 200, animated: true })}
+                                        >
+                                            <Text style={styles.avatarChevronText}>›</Text>
+                                        </Pressable>
+                                    )}
+                                </View>
 
                                 {selectedAvatarId && (
                                     <Pressable style={styles.confirmButton} accessibilityRole="button" onPress={handleSelectBundled}>
@@ -227,10 +265,47 @@ const styles = StyleSheet.create({
         color: palette.slate600,
         marginBottom: 16,
     },
+    avatarScrollWrap: {
+        position: 'relative',
+    },
     avatarScrollContent: {
         gap: 16,
         paddingVertical: 10,
         paddingHorizontal: 4,
+    },
+    avatarChevron: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        width: 36,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarChevronLeft: {
+        left: -4,
+        alignItems: 'flex-start',
+    },
+    avatarChevronRight: {
+        right: -4,
+        alignItems: 'flex-end',
+    },
+    avatarChevronText: {
+        fontSize: 26,
+        fontWeight: '800',
+        color: palette.slate700,
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        textAlign: 'center',
+        lineHeight: 32,
+        overflow: 'hidden',
+        // subtle lift so the cue reads as a control floating over the strip
+        shadowColor: '#000',
+        shadowOpacity: 0.18,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 1 },
+        elevation: 3,
     },
     avatarItem: {
         width: 80,

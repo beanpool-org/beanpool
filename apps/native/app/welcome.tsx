@@ -129,6 +129,17 @@ export default function WelcomeScreen() {
     // shape to compare them against, instead of a cliff where the old rows have no variant.
     const protectionShownRef = useRef(false);
 
+    // The getting-started guide scrolls to top on entry. Each `mode` renders its own top-level
+    // ScrollView at the same position in the tree, so React reconciles them as one instance and
+    // carries the previous screen's scroll offset over — dropping the user into the middle of the
+    // guide. Resetting to the top on arrival is what makes it open at the beginning.
+    const guideScrollRef = useRef<ScrollView>(null);
+    useEffect(() => {
+        if (mode === 'onboardingGuide') {
+            requestAnimationFrame(() => guideScrollRef.current?.scrollTo({ y: 0, animated: false }));
+        }
+    }, [mode]);
+
     /** Whether a covered member has asked to see the words anyway. Never hides them once shown. */
     const [revealWords, setRevealWords] = useState(false);
     const protection = protectionFrom(enrolment);
@@ -1143,7 +1154,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
-                <ScrollView contentContainerStyle={styles.scroll}>
+                <ScrollView ref={guideScrollRef} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={4} />
                     <View style={styles.card}>
                         <Text style={styles.title}>🫘 Welcome to BeanPool</Text>

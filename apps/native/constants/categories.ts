@@ -4,6 +4,8 @@
  * screen and the market feed kept divergent lists (e.g. transport was 🚲 in one
  * place and 🚗 in the other, and 'garden'/'tech' were missing from the detail).
  */
+import { normalizeCategory } from '@beanpool/core';
+
 export const CATEGORY_META: Record<string, { emoji: string; label: string }> = {
     all: { emoji: '🏷️', label: 'All Categories' },
     food: { emoji: '🥕', label: 'Food' },
@@ -30,9 +32,15 @@ export const POST_CATEGORIES = Object.entries(CATEGORY_META)
     .map(([id, m]) => ({ id, emoji: m.emoji, label: m.label }));
 
 export function categoryEmoji(id: string | undefined | null): string {
-    return (id && CATEGORY_META[id]?.emoji) || '📦';
+    if (!id) return '📦';
+    if (CATEGORY_META[id]?.emoji) return CATEGORY_META[id].emoji;
+    const normalized = normalizeCategory(id);
+    return CATEGORY_META[normalized]?.emoji || '📦';
 }
 
 export function categoryLabel(id: string | undefined | null): string {
-    return (id && CATEGORY_META[id]?.label) || (id ? String(id) : 'General');
+    if (!id) return 'General';
+    if (CATEGORY_META[id]?.label) return CATEGORY_META[id].label;
+    const normalized = normalizeCategory(id);
+    return CATEGORY_META[normalized]?.label || 'General';
 }

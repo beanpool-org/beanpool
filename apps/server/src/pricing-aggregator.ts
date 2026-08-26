@@ -7,7 +7,7 @@
  */
 
 import { db } from './db/db.js';
-import { aggregateObservedPrice, type PricingTrend } from '@beanpool/core';
+import { aggregateObservedPrice, normalizeCategory, type PricingTrend } from '@beanpool/core';
 import { getPricingConfig } from './db/pricing-guide-db.js';
 
 const STOP_WORDS = new Set(['per', 'the', 'and', 'for', 'with', 'set', 'lot', 'pack', 'free']);
@@ -82,7 +82,7 @@ export function runPricingAggregationCycle(): {
 
             for (const post of parsedPosts) {
                 // Category match requirement or exact name substring / high token overlap
-                const categoryMatch = !post.category || post.category === item.category;
+                const categoryMatch = !post.category || normalizeCategory(post.category) === normalizeCategory(item.category);
 
                 // [Perf Optimization] Avoid array allocation in O(items x posts) inner loop by counting token overlaps directly
                 let matchScore = 0;

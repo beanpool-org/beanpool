@@ -24,25 +24,10 @@ import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PI
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
+import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
+import { normalizeCategory } from '@beanpool/core';
 
-const CATEGORIES = [
-    { id: 'food', emoji: '🥕', label: 'Food & Produce' },
-    { id: 'services', emoji: '🤝', label: 'Services' },
-    { id: 'labour', emoji: '👷', label: 'Labour' },
-    { id: 'tools', emoji: '🛠️', label: 'Tools' },
-    { id: 'goods', emoji: '📦', label: 'Goods' },
-    { id: 'garden', emoji: '🌻', label: 'Garden' },
-    { id: 'housing', emoji: '🏠', label: 'Housing' },
-    { id: 'transport', emoji: '🚗', label: 'Transport' },
-    { id: 'education', emoji: '📚', label: 'Education' },
-    { id: 'arts', emoji: '🎨', label: 'Arts' },
-    { id: 'health', emoji: '🌿', label: 'Health & Wellness' },
-    { id: 'care', emoji: '❤️', label: 'Care & Support' },
-    { id: 'animals', emoji: '🐾', label: 'Animals' },
-    { id: 'tech', emoji: '💻', label: 'Tech & Digital' },
-    { id: 'energy', emoji: '☀️', label: 'Energy' },
-    { id: 'general', emoji: '🌱', label: 'General' },
-];
+const CATEGORIES = POST_CATEGORIES;
 
 // Hide Google Maps POI markers
 const hidePoisStyle = [
@@ -964,7 +949,7 @@ export default function MapScreen() {
 
                         return true;
                     }).map(post => {
-                        const catObj = CATEGORIES.find(c => c.id === post.category);
+                        const catObj = CATEGORIES.find(c => c.id === post.category) || { id: normalizeCategory(post.category), emoji: categoryEmoji(post.category), label: categoryLabel(post.category) };
                         const safePost = { ...post, lat: Number(post.lat), lng: Number(post.lng) };
                         const isSelected = selectedPostPreview?.id === post.id;
                         return (
@@ -1021,7 +1006,7 @@ export default function MapScreen() {
                         <View style={styles.filterDivider} />
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapCategoryFilter !== 'all' }} style={[styles.filterChip, mapCategoryFilter !== 'all' && styles.filterChipActive]} onPress={() => setShowMapCategoryPicker(true)}>
                             <Text style={[styles.filterChipText, mapCategoryFilter !== 'all' && styles.filterChipTextActive]}>
-                                {mapCategoryFilter === 'all' ? '🏷️ Category' : `${CATEGORIES.find(c => c.id === mapCategoryFilter)?.emoji || '🏷️'} ▼`}
+                                {mapCategoryFilter === 'all' ? '🏷️ Category' : `${categoryEmoji(mapCategoryFilter)} ▼`}
                             </Text>
                         </Pressable>
                         {/* Clear all icon if filters active */}
@@ -1075,13 +1060,13 @@ export default function MapScreen() {
                             <RNImage source={{ uri: selectedPostPreview.photos[0] }} style={styles.previewThumb} />
                         ) : (
                             <View style={[styles.previewThumbPlaceholder, { backgroundColor: selectedPostPreview.type === 'offer' ? colors.market.offer.bg : colors.market.need.bg }]}>
-                                <Text style={{ fontSize: 36, color: '#000', lineHeight: 44, textAlign: 'center' }}>{CATEGORIES.find(c => c.id === selectedPostPreview.category)?.emoji || '📌'}</Text>
+                                <Text style={{ fontSize: 36, color: '#000', lineHeight: 44, textAlign: 'center' }}>{categoryEmoji(selectedPostPreview.category)}</Text>
                             </View>
                         )}
                         <View style={styles.previewInfo}>
                             <View style={styles.previewHeader}>
                                 <Text style={styles.previewCategory} numberOfLines={1}>
-                                    {CATEGORIES.find(c => c.id === selectedPostPreview.category)?.label || 'General'}
+                                    {categoryLabel(selectedPostPreview.category)}
                                 </Text>
                                 <CurrencyDisplay
                                     asView={true}
@@ -1246,7 +1231,7 @@ export default function MapScreen() {
                             <Text style={styles.sectionLabel}>Category <Text style={styles.requiredStar}>*</Text></Text>
                             <Pressable accessibilityRole="button" style={[styles.pickerWrap, fieldBorder('category')]} onPress={() => setShowCategoryModal(true)}>
                                 <Text style={[styles.pickerText, postCategory && styles.pickerTextActive]}>
-                                    {postCategory ? `${CATEGORIES.find(c => c.id === postCategory)?.emoji} ${CATEGORIES.find(c => c.id === postCategory)?.label}` : 'Select a category...'}
+                                    {postCategory ? `${categoryEmoji(postCategory)} ${categoryLabel(postCategory)}` : 'Select a category...'}
                                 </Text>
                                 <Text style={styles.pickerArrow}>▼</Text>
                             </Pressable>
@@ -1500,7 +1485,7 @@ export default function MapScreen() {
                 onClose={() => setShowPricingGuideModal(false)}
                 onSelectOfferItem={(item, effectivePrice) => {
                     setPostType('offer');
-                    setPostCategory(item.category);
+                    setPostCategory(normalizeCategory(item.category));
                     setPostTitle(item.name);
                     setPostDescription(item.description);
                     setPostCredits(String(effectivePrice));

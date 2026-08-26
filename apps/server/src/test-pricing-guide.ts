@@ -54,18 +54,18 @@ async function main() {
     assert(allItems.length >= DEFAULT_PRICING_CATALOG.length, 'Initializes and seeds full default catalog');
     const eggItem = allItems.find(i => i.id === 'fp-001');
     assert(!!eggItem, 'Finds baseline egg item');
-    assert(eggItem?.priceBeans === 6 && eggItem?.category === 'food_produce', 'Egg item has expected baseline price and category');
+    assert(eggItem?.priceBeans === 6 && eggItem?.category === 'food', 'Egg item has expected baseline price and category');
 
     // 2. Category & Search Filtering
-    const foodItems = getPricingGuideItems('food_produce');
-    assert(foodItems.length > 0 && foodItems.every(i => i.category === 'food_produce'), 'Filters items strictly by category');
+    const foodItems = getPricingGuideItems('food');
+    assert(foodItems.length > 0 && foodItems.every(i => i.category === 'food'), 'Filters items strictly by category');
 
     const searchResults = getPricingGuideItems(undefined, 'Sourdough');
     assert(searchResults.length > 0 && searchResults.some(i => i.name.includes('Sourdough')), 'Searches items by keyword');
 
     // 3. Custom Item Management & Price Pinning
     const customItem = savePricingGuideItem({
-        category: 'food_produce',
+        category: 'food',
         emoji: '🫐',
         name: 'Local Organic Marionberries (500g)',
         description: 'Fresh hand-picked bush marionberries',
@@ -113,7 +113,7 @@ async function main() {
 
     const insertPost = db.prepare(`
         INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active)
-        VALUES (?, 'offer', 'labour_services', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1)
+        VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1)
     `);
 
     insertPost.run('post-mock-1', 'Babysitting and childcare', 'Weekend evening babysitting', 20);
@@ -124,7 +124,7 @@ async function main() {
     const aggResult = runPricingAggregationCycle();
     assert(aggResult.updatedCount > 0, 'Runs auto-pricing aggregation cycle across catalog');
 
-    const babyItem = getPricingGuideItems('labour_services').find(i => i.id === 'ls-001');
+    const babyItem = getPricingGuideItems('care').find(i => i.id === 'ls-001');
     assert(!!babyItem, 'Finds babysitting guide item');
     assert(babyItem?.confidenceCount === 3, 'Counts 3 valid listings (ignoring 999 outlier)');
     assert(babyItem?.priceBeans === 22, 'Calculates trimmed average price (22 beans)');

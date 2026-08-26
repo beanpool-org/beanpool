@@ -18,7 +18,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts, getNodeConfig, getBalance, getReachablePeers, type MarketplacePost, type PostReach, type ReachablePeer } from '../lib/api';
 import { haversineDistance } from '../lib/geo';
-import { MARKETPLACE_CATEGORIES, POST_TYPE_COLORS } from '../lib/marketplace';
+import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -465,7 +465,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         markersRef.current.clearLayers();
 
         posts.filter(post => !post.status || post.status === 'active').forEach((post) => {
-            const cat = MARKETPLACE_CATEGORIES.find(c => c.id === post.category);
+            const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
             const emoji = cat?.emoji || '📌';
             const typeColor = POST_TYPE_COLORS[post.type] || '#888';
             const isRemote = !!(post as any)._remoteNode;
@@ -688,13 +688,13 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                         <img src={previewPost.photos[0]} alt="thumb" className="w-[90px] h-[90px] rounded-2xl object-cover bg-gray-100 dark:bg-nature-800" />
                     ) : (
                         <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">
-                            <span className="text-4xl">{MARKETPLACE_CATEGORIES.find(c => c.id === previewPost.category)?.emoji || '📦'}</span>
+                            <span className="text-4xl">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>
                         </div>
                     )}
                     <div className="flex-1 ml-4 flex flex-col justify-center">
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate mr-2 flex-1">
-                                {MARKETPLACE_CATEGORIES.find(c => c.id === previewPost.category)?.label || previewPost.category}
+                                {MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.label || previewPost.category}
                             </span>
                             <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 mr-6">
                                 {previewPost.credits}B

@@ -23,6 +23,10 @@ export default defineConfig({
                 router: (req) => {
                     const match = req.url?.match(/^\/proxy\/(https?)\/([^/]+)\/(.*)/);
                     if (match) {
+                        const host = match[2].toLowerCase().split(':')[0];
+                        if (host === '169.254.169.254' || host === '169.254.169.253' || host.endsWith('.internal')) {
+                            return 'http://localhost';
+                        }
                         return `${match[1]}://${match[2]}`;
                     }
                     return 'http://localhost';

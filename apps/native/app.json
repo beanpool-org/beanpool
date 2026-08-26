@@ -34,7 +34,6 @@
           "UIInterfaceOrientationPortrait"
         ],
         "UIBackgroundModes": [
-          "fetch",
           "fetch"
         ],
         "NSLocationWhenInUseUsageDescription": "BeanPool relies exclusively on your device's GPS to plot your independent identity on the community map, enabling you to physically discover neighboring Marketplace needs and offers.",

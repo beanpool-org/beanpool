@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { getProjects, getBalance, voteForProjectApi, getActiveVotingRound, getTreasuries } from '../../utils/db';
@@ -16,6 +16,7 @@ export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
     const [projects, setProjects] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     const [activeRound, setActiveRound] = useState<any>(null);
@@ -109,6 +110,42 @@ export default function ProjectsScreen() {
         emptyDesc: { fontSize: 14, color: colors.text.muted, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
         emptyBtn: { backgroundColor: colors.brand.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
         emptyBtnText: { color: colors.text.inverse, fontSize: 14, fontWeight: '700' },
+        skeletonCard: {
+            backgroundColor: colors.surface.card,
+            borderRadius: 16,
+            marginBottom: 16,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            overflow: 'hidden',
+        },
+        skeletonHero: {
+            height: 120,
+            width: '100%',
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.grayAlt100,
+        },
+        skeletonBody: {
+            padding: 16,
+            gap: 12,
+        },
+        skeletonLineTitle: {
+            height: 18,
+            width: '60%',
+            borderRadius: 6,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.grayAlt100,
+        },
+        skeletonLineDesc: {
+            height: 14,
+            width: '90%',
+            borderRadius: 4,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.grayAlt100,
+        },
+        skeletonLineProgress: {
+            height: 8,
+            width: '100%',
+            borderRadius: 4,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.grayAlt100,
+            marginTop: 4,
+        },
         fab: {
             position: 'absolute',
             bottom: 24,
@@ -158,6 +195,18 @@ export default function ProjectsScreen() {
             isActive = false;
         };
     }, []);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            const { requestSync } = await import('../../services/pillar-sync');
+            await requestSync();
+        } catch (e) {
+            console.warn('[Projects] Sync error during refresh:', e);
+        }
+        loadData();
+        setRefreshing(false);
+    }, [loadData]);
 
     useFocusEffect(loadData);
 
@@ -451,6 +500,14 @@ export default function ProjectsScreen() {
                 keyExtractor={item => item.id}
                 renderItem={renderItem}
                 contentContainerStyle={styles.listContainer}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={colors.brand.primary}
+                        colors={[colors.brand.primary]}
+                    />
+                }
                 ListHeaderComponent={
                     <View style={styles.headerContainer}>
                         <View style={styles.headerInfo}>
@@ -552,26 +609,47 @@ export default function ProjectsScreen() {
                     </View>
                 }
                 ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyEmoji}>🌱</Text>
-                        <Text style={styles.emptyTitle}>No projects proposed yet</Text>
-                        <Text style={styles.emptyDesc}>
-                            Got an idea that benefits the community? Propose a project and get it funded through collective contributions.
-                        </Text>
-                        <Pressable accessibilityRole="button" style={styles.emptyBtn} onPress={async () => {
-                            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-                            if (!anchorUrl) {
-                                Alert.alert('Not Connected', 'Connect to a community first.', [
-                                    { text: 'Cancel', style: 'cancel' },
-                                    { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
-                                ]);
-                                return;
-                            }
-                            router.push('/propose-project');
-                        }}>
-                            <Text style={styles.emptyBtnText}>+ Propose a Project</Text>
-                        </Pressable>
-                    </View>
+                    loading ? (
+                        <View style={{ gap: 16 }}>
+                            <View style={styles.skeletonCard}>
+                                <View style={styles.skeletonHero} />
+                                <View style={styles.skeletonBody}>
+                                    <View style={styles.skeletonLineTitle} />
+                                    <View style={styles.skeletonLineDesc} />
+                                    <View style={styles.skeletonLineProgress} />
+                                </View>
+                            </View>
+                            <View style={styles.skeletonCard}>
+                                <View style={styles.skeletonHero} />
+                                <View style={styles.skeletonBody}>
+                                    <View style={styles.skeletonLineTitle} />
+                                    <View style={styles.skeletonLineDesc} />
+                                    <View style={styles.skeletonLineProgress} />
+                                </View>
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyEmoji}>🌱</Text>
+                            <Text style={styles.emptyTitle}>No projects proposed yet</Text>
+                            <Text style={styles.emptyDesc}>
+                                Got an idea that benefits the community? Propose a project and get it funded through collective contributions.
+                            </Text>
+                            <Pressable accessibilityRole="button" style={styles.emptyBtn} onPress={async () => {
+                                const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+                                if (!anchorUrl) {
+                                    Alert.alert('Not Connected', 'Connect to a community first.', [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
+                                    ]);
+                                    return;
+                                }
+                                router.push('/propose-project');
+                            }}>
+                                <Text style={styles.emptyBtnText}>+ Propose a Project</Text>
+                            </Pressable>
+                        </View>
+                    )
                 }
             />
             <Pressable accessibilityRole="button" accessibilityLabel="Propose a project" style={styles.fab} onPress={async () => {

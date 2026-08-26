@@ -170,30 +170,31 @@ export default function ProjectsScreen() {
     const [voteSteppers, setVoteSteppers] = useState<Record<string, number>>({});
     const [votingInProgress, setVotingInProgress] = useState<string | null>(null);
 
-    const loadData = useCallback(() => {
-        let isActive = true;
-        loadIdentity().then((id: any) => {
-            if (isActive) {
-                setIdentity(id);
-                if (id?.publicKey) {
-                    getBalance(id.publicKey).then(setBalanceState).catch(console.error);
-                    getTreasuries().then(setTreasuries).catch(() => {});
-                }
+    const loadData = useCallback(async () => {
+        try {
+            const id = await loadIdentity();
+            setIdentity(id);
+            if (id?.publicKey) {
+                getBalance(id.publicKey).then(setBalanceState).catch(console.error);
+                getTreasuries().then(setTreasuries).catch(() => {});
             }
-        });
-        getProjects().then((data) => {
-            if (isActive) {
-                setProjects(data);
-                setLoading(false);
-            }
-        }).catch(err => {
-            console.error(err);
-            if (isActive) setLoading(false);
-        });
-        getActiveVotingRound().then(r => { if (isActive) setActiveRound(r); }).catch(() => {});
-        return () => {
-            isActive = false;
-        };
+        } catch (e) {
+            console.error('[Projects] Failed loading identity:', e);
+        }
+
+        try {
+            const data = await getProjects();
+            setProjects(data);
+            setLoading(false);
+        } catch (err) {
+            console.error('[Projects] Failed loading projects:', err);
+            setLoading(false);
+        }
+
+        try {
+            const r = await getActiveVotingRound();
+            setActiveRound(r);
+        } catch {}
     }, []);
 
     const onRefresh = useCallback(async () => {
@@ -204,11 +205,15 @@ export default function ProjectsScreen() {
         } catch (e) {
             console.warn('[Projects] Sync error during refresh:', e);
         }
-        loadData();
+        await loadData();
         setRefreshing(false);
     }, [loadData]);
 
-    useFocusEffect(loadData);
+    useFocusEffect(
+        useCallback(() => {
+            loadData();
+        }, [loadData])
+    );
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('sync_data_updated', loadData);

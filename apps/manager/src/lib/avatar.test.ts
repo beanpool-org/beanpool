@@ -13,10 +13,15 @@ describe('resolveAvatarUrl', () => {
             expect(resolveAvatarUrl('bundled://bean-green')).toBe('/avatars/avatar_bean_green.jpg');
             expect(resolveAvatarUrl('bundled://sun')).toBe('/avatars/avatar_sun.jpg');
             expect(resolveAvatarUrl('bundled://crystal')).toBe('/avatars/avatar_crystal.jpg');
+            expect(resolveAvatarUrl('bundled://rocket')).toBe('/avatars/avatar_rocket.jpg');
+            expect(resolveAvatarUrl('bundled://solartree')).toBe('/avatars/avatar_solartree.jpg');
+            expect(resolveAvatarUrl('bundled://sunflower')).toBe('/avatars/avatar_sunflower.jpg');
+            expect(resolveAvatarUrl('bundled://portal')).toBe('/avatars/avatar_portal.jpg');
         });
 
         it('ignores query parameters in bundled urls', () => {
             expect(resolveAvatarUrl('bundled://wave?v=123')).toBe('/avatars/avatar_wave.jpg');
+            expect(resolveAvatarUrl('bundled://rocket?v=123')).toBe('/avatars/avatar_rocket.jpg');
         });
 
         it('returns null for unknown bundled keys', () => {

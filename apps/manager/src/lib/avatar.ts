@@ -16,6 +16,20 @@ const BUNDLED_MAP: Record<string, string> = {
     'mountain':    '/avatars/avatar_mountain.jpg',
     'fire':        '/avatars/avatar_fire.jpg',
     'crystal':     '/avatars/avatar_crystal.jpg',
+    'sunflower':   '/avatars/avatar_sunflower.jpg',
+    'mushroom':    '/avatars/avatar_mushroom.jpg',
+    'honeybee':    '/avatars/avatar_honeybee.jpg',
+    'butterfly':   '/avatars/avatar_butterfly.jpg',
+    'wind':        '/avatars/avatar_wind.jpg',
+    'rocket':      '/avatars/avatar_rocket.jpg',
+    'atom':        '/avatars/avatar_atom.jpg',
+    'planet':      '/avatars/avatar_planet.jpg',
+    'robot':       '/avatars/avatar_robot.jpg',
+    'bolt':        '/avatars/avatar_bolt.jpg',
+    'satellite':   '/avatars/avatar_satellite.jpg',
+    'solartree':   '/avatars/avatar_solartree.jpg',
+    'portal':      '/avatars/avatar_portal.jpg',
+    'cybereye':    '/avatars/avatar_cybereye.jpg',
 };
 
 export function resolveAvatarUrl(url: string | null | undefined): string | null {

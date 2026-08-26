@@ -19,6 +19,7 @@ export const MARKETPLACE_CATEGORIES = [
     { id: 'animals', emoji: '🐾', label: 'Animals' },
     { id: 'tech', emoji: '💻', label: 'Tech & Digital' },
     { id: 'energy', emoji: '☀️', label: 'Energy' },
+    { id: 'mindset', emoji: '📜', label: 'Mindset & Philosophy' },
     { id: 'general', emoji: '🌱', label: 'General' },
 ] as const;
 

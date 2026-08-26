@@ -22,6 +22,7 @@ export type PricingCategory =
     | 'animals'
     | 'tech'
     | 'energy'
+    | 'mindset'
     | 'general';
 
 export interface PricingCategoryMeta {
@@ -47,6 +48,7 @@ export const PRICING_CATEGORIES: PricingCategoryMeta[] = [
     { id: 'animals', label: 'Animals & Pets', emoji: '🐾', description: 'Poultry, hay, pet sitting, dog walking, and animal care' },
     { id: 'tech', label: 'Tech & Digital', emoji: '💻', description: 'Phone repair, computing, home WiFi, 3D printing, and digital support' },
     { id: 'energy', label: 'Energy & Firewood', emoji: '☀️', description: 'Firewood, kindling, solar consults, and off-grid power solutions' },
+    { id: 'mindset', label: 'Mindset & Wisdom', emoji: '📜', description: 'Philosophy, mutual aid, daily pulse essays, community mindset' },
     { id: 'general', label: 'General & Community', emoji: '🌱', description: 'Event gear, venue space, marquee, sound hire, and community items' },
 ];
 

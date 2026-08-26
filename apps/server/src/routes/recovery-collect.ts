@@ -81,7 +81,10 @@ function fail(ctx: any, e: unknown): void {
         ctx.body = { error: (e as Error).message };
         return;
     }
-    throw e;
+    // Handle unexpected errors with 500 status and JSON body instead of unhandled route exception
+    const msg = e instanceof Error ? e.message : String(e);
+    ctx.status = 500;
+    ctx.body = { error: msg || 'Recovery operation failed' };
 }
 
 export function createRecoveryCollectRoutes(deps: RouteDeps): Router {

@@ -99,7 +99,11 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
 
     const s = styles(colors);
     return (
-        <View style={s.cbar}>
+        <View
+            style={s.cbar}
+            accessible={true}
+            accessibilityLabel={`Credit balance ${balance} Beans, credit limit ${floor} Beans, fee-free ceiling ${feeFreeMax} Beans.`}
+        >
             {/* Lane 2 — the track */}
             <View style={s.track}>
                 <LinearGradient

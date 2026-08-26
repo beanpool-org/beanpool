@@ -196,7 +196,12 @@ router.post('/api/local/admin/logs', async (ctx) => {
     const token = ctx.request.header['x-replication-token'] || (ctx as any).requestBody?.token;
     const isTokenValid = token && (await verifyReplicationToken(String(token)));
     if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
-    const { level, category, searchQuery, limit = 100, offset = 0 } = (ctx as any).requestBody || {};
+    const body = (ctx as any).requestBody || {};
+    const { level, category, searchQuery } = body;
+    const parsedLimit = parseInt(String(body.limit), 10);
+    const limit = Math.max(1, Math.min(isNaN(parsedLimit) ? 100 : parsedLimit, 500));
+    const parsedOffset = parseInt(String(body.offset), 10);
+    const offset = Math.max(0, isNaN(parsedOffset) ? 0 : parsedOffset);
 
     let sql = 'SELECT * FROM system_logs WHERE 1=1';
     const params: any[] = [];

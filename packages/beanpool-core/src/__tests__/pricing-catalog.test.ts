@@ -8,13 +8,14 @@ import {
 } from '../pricing-catalog.js';
 
 describe('Pricing Catalog & Utilities (#206)', () => {
-    it('contains all 16 valid unified marketplace categories with meta definitions', () => {
-        expect(PRICING_CATEGORIES).toHaveLength(16);
+    it('contains all valid unified marketplace categories with meta definitions', () => {
+        expect(PRICING_CATEGORIES).toHaveLength(17);
         const ids = PRICING_CATEGORIES.map(c => c.id);
         expect(ids).toContain('food');
         expect(ids).toContain('services');
         expect(ids).toContain('tools');
         expect(ids).toContain('labour');
+        expect(ids).toContain('mindset');
         expect(ids).toContain('general');
     });
 

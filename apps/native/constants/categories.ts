@@ -23,6 +23,7 @@ export const CATEGORY_META: Record<string, { emoji: string; label: string }> = {
     animals: { emoji: '🐾', label: 'Animals' },
     tech: { emoji: '💻', label: 'Tech' },
     energy: { emoji: '☀️', label: 'Energy' },
+    mindset: { emoji: '📜', label: 'Mindset' },
     general: { emoji: '🌱', label: 'General' },
 };
 
@@ -42,5 +43,7 @@ export function categoryLabel(id: string | undefined | null): string {
     if (!id) return 'General';
     if (CATEGORY_META[id]?.label) return CATEGORY_META[id].label;
     const normalized = normalizeCategory(id);
-    return CATEGORY_META[normalized]?.label || 'General';
+    if (CATEGORY_META[normalized]?.label) return CATEGORY_META[normalized].label;
+    const str = String(id).trim();
+    return str.charAt(0).toUpperCase() + str.slice(1);
 }

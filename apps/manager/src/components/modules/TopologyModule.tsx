@@ -495,6 +495,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             </h4>
                             <span className="text-xs text-nature-400 font-mono">Auto-prunes history archives &gt;30d</span>
                         </div>
+                        {harvestLoading && Object.keys(harvesterState).length === 0 ? (
+                            <div className="p-8 text-center text-xs text-sky-400 font-mono animate-pulse">
+                                🔄 Loading harvested fleet backup status...
+                            </div>
+                        ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs">
                                 <thead>
@@ -623,6 +628,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                 </tbody>
                             </table>
                         </div>
+                        )}
                     </div>
                 </div>
             )}

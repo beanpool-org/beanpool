@@ -866,7 +866,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
-                <ScrollView contentContainerStyle={styles.scroll}>
+                <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={2} />
                     <View style={styles.card}>
                         {inviterName && (
@@ -965,7 +965,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
-                <ScrollView contentContainerStyle={styles.scroll}>
+                <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={3} />
                     <View style={styles.card}>
                         <KeeperProtectionPanel
@@ -1143,7 +1143,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
-                <ScrollView contentContainerStyle={styles.scroll}>
+                <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={4} />
                     <View style={styles.card}>
                         <Text style={styles.title}>🫘 Welcome to BeanPool</Text>
@@ -1294,7 +1294,7 @@ export default function WelcomeScreen() {
                     behavior="padding"
                     style={{ flex: 1 }}
                 >
-                    <ScrollView contentContainerStyle={styles.scroll}>
+                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={1} />
                     <View style={styles.card}>
                         <Text style={styles.title}>🎟️ Join BeanPool</Text>
@@ -1444,7 +1444,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
-                <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
                         <Text style={styles.title} accessibilityRole="header">🔑 Restore your account</Text>
                         <Text style={styles.subtitle}>
@@ -1501,7 +1501,7 @@ export default function WelcomeScreen() {
             <SafeAreaView style={styles.container}>
                 <StatusBar style="dark" />
                 <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-                    <ScrollView contentContainerStyle={styles.scroll}>
+                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                         <View style={styles.card}>
                             <Text style={styles.title}>⚠️ Replace this phone's account?</Text>
                             <Text style={styles.subtitle}>
@@ -1613,7 +1613,7 @@ export default function WelcomeScreen() {
                     behavior="padding"
                     style={{ flex: 1 }}
                 >
-                    <ScrollView contentContainerStyle={styles.scroll}>
+                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
                         <Text style={styles.title}>🔑 Recover Identity</Text>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -1705,7 +1705,7 @@ export default function WelcomeScreen() {
                     behavior="padding"
                     style={{ flex: 1 }}
                 >
-                    <ScrollView contentContainerStyle={styles.scroll}>
+                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
                                 🌐 Recover with Social Sign-In

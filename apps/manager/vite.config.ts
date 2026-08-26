@@ -24,7 +24,16 @@ export default defineConfig({
                     const match = req.url?.match(/^\/proxy\/(https?)\/([^/]+)\/(.*)/);
                     if (match) {
                         const host = match[2].toLowerCase().split(':')[0];
-                        if (host === '169.254.169.254' || host === '169.254.169.253' || host.endsWith('.internal')) {
+                        const isBlocked = host === 'localhost' ||
+                            host === '127.0.0.1' ||
+                            host === '::1' ||
+                            host.startsWith('10.') ||
+                            host.startsWith('192.168.') ||
+                            host.startsWith('169.254.') ||
+                            host.endsWith('.internal') ||
+                            host.endsWith('.local') ||
+                            /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+                        if (isBlocked) {
                             return 'http://localhost';
                         }
                         return `${match[1]}://${match[2]}`;

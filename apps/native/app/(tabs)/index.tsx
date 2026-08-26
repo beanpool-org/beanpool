@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, Pressable, SafeAreaView, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Pressable, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -1388,7 +1388,7 @@ export default function MarketScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <View style={styles.safeArea}>
             <View style={{ paddingTop: 8, paddingBottom: 0 }}>
                 {HeaderComponent}
             </View>
@@ -1537,7 +1537,7 @@ export default function MarketScreen() {
                 onClose={() => setShowDealsSheet(false)}
                 initialTab={dealsInitialTab}
             />
-        </SafeAreaView>
+        </View>
     );
 }
 

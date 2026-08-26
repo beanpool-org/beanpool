@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, SafeAreaView, TextInput, Image,
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Image,
     DeviceEventEmitter, Alert, ScrollView, Keyboard, Platform } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useFocusEffect, router } from 'expo-router';
@@ -864,7 +864,7 @@ export default function LedgerScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.root}>
+        <View style={styles.root}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 keyboardVerticalOffset={88}
@@ -962,7 +962,7 @@ export default function LedgerScreen() {
             <CirculationInfoModal isOpen={showCirculationInfo} onClose={() => setShowCirculationInfo(false)} />
             <TrustInfoModal isOpen={showTrustInfo} onClose={() => setShowTrustInfo(false)} initialTab={trustInfoTab} />
             <SliderInfoModal isOpen={showSliderInfo} onClose={() => setShowSliderInfo(false)} />
-        </SafeAreaView>
+        </View>
     );
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, SafeAreaView, Image, Alert, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { getProjects, getBalance, voteForProjectApi, getActiveVotingRound, getTreasuries } from '../../utils/db';
@@ -445,7 +445,7 @@ export default function ProjectsScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <View style={styles.safeArea}>
             <FlatList
                 data={sortedProjects}
                 keyExtractor={item => item.id}
@@ -593,7 +593,7 @@ export default function ProjectsScreen() {
                 onClose={() => setShowCommonsInfo(false)}
                 commonsBalance={balanceState.commons || 0}
             />
-        </SafeAreaView>
+        </View>
     );
 }
 

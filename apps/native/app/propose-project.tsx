@@ -8,7 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { createProject } from '../utils/db';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrencyDisplay } from '../components/CurrencyDisplay';
 import { colors, palette } from '../constants/colors';
@@ -173,7 +173,7 @@ export default function ProposeProjectModal() {
                                 display="default"
                                 minimumDate={new Date()}
                                 maximumDate={maxDate}
-                                onChange={(event: any, selectedDate?: Date) => {
+                                onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
                                     setShowPicker(false);
                                     if (event.type === 'set' && selectedDate) {
                                         setDeadlineDate(selectedDate);

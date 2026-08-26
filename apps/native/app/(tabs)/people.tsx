@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MemberAvatar } from '../../components/MemberAvatar';
-import { View, Text, StyleSheet, FlatList, Pressable, SafeAreaView, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi, setGuardianApi } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -631,7 +631,7 @@ export default function PeopleScreen() {
     const pendingInvites = invites.filter((i: any) => !i.usedBy);
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <View style={styles.safeArea}>
             {/* Header sub-nav */}
             <View style={styles.navRow}>
                 {(['friends', 'community', 'invites', 'guardians'] as SubView[]).map(v => {
@@ -1100,7 +1100,6 @@ export default function PeopleScreen() {
                 </ScrollView>
             )}
             </KeyboardAvoidingView>
-
-        </SafeAreaView>
+        </View>
     );
 }

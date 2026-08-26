@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, SafeAreaView, Platform, Image, TextInput, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Platform, Image, TextInput, DeviceEventEmitter } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
@@ -465,7 +465,7 @@ export default function ChatsScreen() {
     );
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <View style={styles.safeArea}>
             <View style={[styles.header, { borderBottomWidth: 0, paddingBottom: 8 }]}>
                 <Text style={styles.title}>Inbox</Text>
                 <Pressable accessibilityRole="button" accessibilityLabel="New message" style={styles.newChatBtn} onPress={() => {
@@ -641,7 +641,6 @@ export default function ChatsScreen() {
             />
 
 
-        </SafeAreaView>
+        </View>
     );
 }
-

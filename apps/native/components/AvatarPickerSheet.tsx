@@ -18,14 +18,25 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
     const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
 
     // Scroll affordance for the horizontal avatar strip: without an on-screen cue it isn't
-    // obvious there are more avatars off the right edge. We track offset/size to show a chevron
-    // on whichever side has more to reveal (also tappable to page through).
+    // obvious there are more avatars off the right edge. We show a chevron on whichever side
+    // has more to reveal (also tappable to page through).
+    //
+    // Offset/size live in refs, not state, so a drag doesn't re-render the whole sheet at 60fps —
+    // only the two chevron-visibility booleans are state, and they update solely when they flip.
+    // `canScrollRight` is gated on a measured width so it can't flash on before the first layout.
     const avatarScrollRef = useRef<ScrollView>(null);
-    const [avatarScrollX, setAvatarScrollX] = useState(0);
-    const [avatarViewW, setAvatarViewW] = useState(0);
-    const [avatarContentW, setAvatarContentW] = useState(0);
-    const canScrollLeft = avatarScrollX > 4;
-    const canScrollRight = avatarContentW - avatarViewW - avatarScrollX > 4;
+    const scrollXRef = useRef(0);
+    const viewWRef = useRef(0);
+    const contentWRef = useRef(0);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(false);
+    const updateScrollCues = () => {
+        const x = scrollXRef.current;
+        const left = x > 4;
+        const right = viewWRef.current > 0 && (contentWRef.current - viewWRef.current - x > 4);
+        setCanScrollLeft(prev => (prev === left ? prev : left));
+        setCanScrollRight(prev => (prev === right ? prev : right));
+    };
 
     const handleTakePhotos = async () => {
         try {
@@ -129,9 +140,9 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                                         showsHorizontalScrollIndicator={true}
                                         contentContainerStyle={styles.avatarScrollContent}
                                         scrollEventThrottle={16}
-                                        onScroll={(e) => setAvatarScrollX(e.nativeEvent.contentOffset.x)}
-                                        onLayout={(e) => setAvatarViewW(e.nativeEvent.layout.width)}
-                                        onContentSizeChange={(w) => setAvatarContentW(w)}
+                                        onScroll={(e) => { scrollXRef.current = e.nativeEvent.contentOffset.x; updateScrollCues(); }}
+                                        onLayout={(e) => { viewWRef.current = e.nativeEvent.layout.width; updateScrollCues(); }}
+                                        onContentSizeChange={(w) => { contentWRef.current = w; updateScrollCues(); }}
                                     >
                                         {BUNDLED_AVATARS.map((avatar) => {
                                             const isSelected = selectedAvatarId === avatar.id;
@@ -143,7 +154,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                                                         isSelected && styles.avatarItemSelected
                                                     ]}
                                                     accessibilityRole="button"
-                                                    accessibilityLabel="Select avatar"
+                                                    accessibilityLabel={`Select ${avatar.label} avatar`}
                                                     accessibilityState={{ selected: isSelected }}
                                                     onPress={() => setSelectedAvatarId(avatar.id)}
                                                 >
@@ -163,9 +174,11 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                                             style={[styles.avatarChevron, styles.avatarChevronLeft]}
                                             accessibilityRole="button"
                                             accessibilityLabel="Show earlier avatars"
-                                            onPress={() => avatarScrollRef.current?.scrollTo({ x: Math.max(0, avatarScrollX - 200), animated: true })}
+                                            onPress={() => avatarScrollRef.current?.scrollTo({ x: Math.max(0, scrollXRef.current - 200), animated: true })}
                                         >
-                                            <Text style={styles.avatarChevronText}>‹</Text>
+                                            <View style={styles.avatarChevronButton}>
+                                                <Text style={styles.avatarChevronText}>‹</Text>
+                                            </View>
                                         </Pressable>
                                     )}
                                     {canScrollRight && (
@@ -173,9 +186,11 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                                             style={[styles.avatarChevron, styles.avatarChevronRight]}
                                             accessibilityRole="button"
                                             accessibilityLabel="Show more avatars"
-                                            onPress={() => avatarScrollRef.current?.scrollTo({ x: avatarScrollX + 200, animated: true })}
+                                            onPress={() => avatarScrollRef.current?.scrollTo({ x: scrollXRef.current + 200, animated: true })}
                                         >
-                                            <Text style={styles.avatarChevronText}>›</Text>
+                                            <View style={styles.avatarChevronButton}>
+                                                <Text style={styles.avatarChevronText}>›</Text>
+                                            </View>
                                         </Pressable>
                                     )}
                                 </View>
@@ -273,13 +288,15 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 4,
     },
+    // Outer Pressable is the touch target (≥44dp wide, full strip height); it carries no
+    // visual so the shadow/elevation can live on the inner circle where Android honours it.
     avatarChevron: {
         position: 'absolute',
         top: 0,
         bottom: 0,
-        width: 36,
+        width: 44,
         justifyContent: 'center',
-        alignItems: 'center',
+        zIndex: 2,
     },
     avatarChevronLeft: {
         left: -4,
@@ -289,23 +306,26 @@ const styles = StyleSheet.create({
         right: -4,
         alignItems: 'flex-end',
     },
-    avatarChevronText: {
-        fontSize: 26,
-        fontWeight: '800',
-        color: palette.slate700,
-        backgroundColor: 'rgba(255,255,255,0.92)',
+    avatarChevronButton: {
         width: 34,
         height: 34,
         borderRadius: 17,
-        textAlign: 'center',
-        lineHeight: 32,
-        overflow: 'hidden',
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        justifyContent: 'center',
+        alignItems: 'center',
         // subtle lift so the cue reads as a control floating over the strip
         shadowColor: '#000',
         shadowOpacity: 0.18,
         shadowRadius: 3,
         shadowOffset: { width: 0, height: 1 },
         elevation: 3,
+    },
+    avatarChevronText: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: palette.slate700,
+        textAlign: 'center',
+        includeFontPadding: false,
     },
     avatarItem: {
         width: 80,

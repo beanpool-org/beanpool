@@ -5,6 +5,7 @@
  * place and 🚗 in the other, and 'garden'/'tech' were missing from the detail).
  */
 import { normalizeCategory } from '@beanpool/core';
+export { normalizeCategory };
 
 export const CATEGORY_META: Record<string, { emoji: string; label: string }> = {
     all: { emoji: '🏷️', label: 'All Categories' },

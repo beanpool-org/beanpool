@@ -24,8 +24,7 @@ import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PI
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
-import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
-import { normalizeCategory } from '@beanpool/core';
+import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 
 const CATEGORIES = POST_CATEGORIES;
 

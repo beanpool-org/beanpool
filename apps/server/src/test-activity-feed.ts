@@ -57,7 +57,7 @@ async function main() {
         postId: 'post-1',
         title: 'Fresh Organic Eggs',
         type: 'offer',
-        category: 'food_produce',
+        category: 'food',
         credits: 6
     });
     assert(id2 > id1, 'Records post_created event with metadata');

@@ -75,7 +75,7 @@ async function runTests() {
     assert(getBalance(alice.pubKeyHex).balance === 50, 'Alice has 50 beans initial balance');
 
     // Create active post for Alice
-    const post = createPost('offer', 'food_produce', 'Fresh Organic Tomatoes', 'Fresh tomatoes from the garden', 10, 'fixed', alice.pubKeyHex)!;
+    const post = createPost('offer', 'food', 'Fresh Organic Tomatoes', 'Fresh tomatoes from the garden', 10, 'fixed', alice.pubKeyHex)!;
     assert(Boolean(post && post.id), 'Alice created an offer post');
 
     // Add push token and friend

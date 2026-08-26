@@ -4,15 +4,36 @@ import {
     aggregateObservedPrice,
     DEFAULT_PRICING_CATALOG,
     PRICING_CATEGORIES,
+    normalizeCategory,
 } from '../pricing-catalog.js';
 
 describe('Pricing Catalog & Utilities (#206)', () => {
-    it('contains all 15 valid categories with meta definitions', () => {
-        expect(PRICING_CATEGORIES).toHaveLength(15);
+    it('contains all 16 valid unified marketplace categories with meta definitions', () => {
+        expect(PRICING_CATEGORIES).toHaveLength(16);
         const ids = PRICING_CATEGORIES.map(c => c.id);
-        expect(ids).toContain('food_produce');
-        expect(ids).toContain('skilled_trade');
-        expect(ids).toContain('events_community');
+        expect(ids).toContain('food');
+        expect(ids).toContain('services');
+        expect(ids).toContain('tools');
+        expect(ids).toContain('labour');
+        expect(ids).toContain('general');
+    });
+
+    it('normalizes legacy and compound category strings correctly', () => {
+        expect(normalizeCategory('food_produce')).toBe('food');
+        expect(normalizeCategory('prepared_meals')).toBe('food');
+        expect(normalizeCategory('tools_hardware')).toBe('tools');
+        expect(normalizeCategory('skilled_trade')).toBe('services');
+        expect(normalizeCategory('tech_digital')).toBe('tech');
+        expect(normalizeCategory('housing_space')).toBe('housing');
+        expect(normalizeCategory('education_arts')).toBe('education');
+        expect(normalizeCategory('kids_baby')).toBe('care');
+        expect(normalizeCategory('animals_pet')).toBe('animals');
+        expect(normalizeCategory('plants_garden')).toBe('garden');
+        expect(normalizeCategory('raw_materials')).toBe('goods');
+        expect(normalizeCategory('events_community')).toBe('general');
+        expect(normalizeCategory('food')).toBe('food');
+        expect(normalizeCategory('unknown_xyz')).toBe('general');
+        expect(normalizeCategory(null)).toBe('general');
     });
 
     it('has well-formed seed items with unique IDs, valid categories, and reasonable prices', () => {

@@ -97,7 +97,7 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
 
 export default function ChatScreen() {
     const { theme, colors } = useTheme();
-    const { id, triggerReview, txId: txIdParam, focusTx } = useLocalSearchParams<{ id: string; triggerReview?: string; txId?: string; focusTx?: string }>();
+    const { id, triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ id: string; triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
     const { identity } = useIdentity();
     const [messages, setMessages] = useState<any[]>([]);
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);
@@ -141,6 +141,12 @@ export default function ChatScreen() {
         draftRef.current = text;
         setDraft(text);
     };
+
+    useEffect(() => {
+        if (prefill && typeof prefill === 'string') {
+            updateDraft(prefill);
+        }
+    }, [prefill]);
     // Android's multiline TextInput auto-GROWS on keystrokes but never shrinks
     // after a programmatic clear until the next real keystroke (field report
     // 2026-07-18: box stays tall after send). So JS owns the height: measured

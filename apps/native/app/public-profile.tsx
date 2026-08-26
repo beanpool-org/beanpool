@@ -808,6 +808,59 @@ export default function PublicProfileScreen() {
                                     );
                                 }
 
+                                if (!isSelf && viewerArchetype && !targetArchetype) {
+                                    return (
+                                        <View style={styles.synergyInviteCard}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                                <Text style={{ fontSize: 20, marginRight: 8 }}>✨</Text>
+                                                <Text style={styles.synergyInviteTitle}>Collaboration Chemistry</Text>
+                                            </View>
+                                            <Text style={styles.synergyInviteDesc}>
+                                                {callsignStr || 'This member'} hasn't taken their Archetype quiz yet. Send them a friendly nudge in chat to discover your working style alignment!
+                                            </Text>
+                                            <Pressable
+                                                accessibilityRole="button"
+                                                accessibilityLabel={`Nudge ${callsignStr || 'member'} to take Archetype quiz`}
+                                                style={styles.synergyTakeQuizBtn}
+                                                onPress={() => {
+                                                    if (pubKeyStr) {
+                                                        router.push({
+                                                            pathname: `/chat/${pubKeyStr}`,
+                                                            params: {
+                                                                prefill: `Hey ${callsignStr || 'there'}! Take the 60-second Archetype quiz on your profile so we can unlock our Collaboration Chemistry! ⚡`
+                                                            }
+                                                        });
+                                                    }
+                                                }}
+                                            >
+                                                <Text style={styles.synergyTakeQuizBtnText}>💬 Nudge {callsignStr || 'Member'} in Chat</Text>
+                                            </Pressable>
+                                        </View>
+                                    );
+                                }
+
+                                if (!isSelf && !viewerArchetype && !targetArchetype) {
+                                    return (
+                                        <View style={styles.synergyInviteCard}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                                <Text style={{ fontSize: 20, marginRight: 8 }}>✨</Text>
+                                                <Text style={styles.synergyInviteTitle}>Collaboration Chemistry</Text>
+                                            </View>
+                                            <Text style={styles.synergyInviteDesc}>
+                                                Take the 60-second quiz to discover your working style alignment and project synergy with {callsignStr || 'this member'}.
+                                            </Text>
+                                            <Pressable
+                                                accessibilityRole="button"
+                                                accessibilityLabel="Take 60 second quiz to discover collaboration synergy"
+                                                style={styles.synergyTakeQuizBtn}
+                                                onPress={() => setShowQuizModal(true)}
+                                            >
+                                                <Text style={styles.synergyTakeQuizBtnText}>⚡ Take 60s Quiz</Text>
+                                            </Pressable>
+                                        </View>
+                                    );
+                                }
+
                                 return null;
                             })()}
 

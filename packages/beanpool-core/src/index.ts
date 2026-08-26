@@ -22,3 +22,4 @@ export * from './pairing-crypto.js';
 export * from './pricing-catalog.js';
 export * from './archetypes.js';
 export * from './synonyms.js';
+export * from './groups.js';

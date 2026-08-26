@@ -8,7 +8,8 @@ import {
     getTier,
     grantedCreditForTier,
     parseReachPeers,
-    type PostReach
+    type PostReach,
+    type AudienceScope
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
 
@@ -44,6 +45,16 @@ export interface MarketplacePost {
     reach?: PostReach;
     /** Peer ids named when `reach === 'peers'`. Empty for every other reach. */
     reachPeers?: string[];
+    /** Audience visibility scope ('public' | 'group' | 'direct'). Defaults to 'public'. */
+    audienceScope?: AudienceScope;
+    /** Group ID if audienceScope === 'group'. */
+    targetGroupId?: string | null;
+    /** Target member pubkey if audienceScope === 'direct'. */
+    targetPubkey?: string | null;
+    /** Specific assignee member pubkey (if directly assigned). */
+    assignedTo?: string | null;
+    /** Optional target working styles / archetypes for collaborative matching. */
+    targetArchetypes?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
     authorAvatarUrl?: string | null;
@@ -64,6 +75,14 @@ export interface PostFilter {
     /** #108: exclude listings with a cash outlay — the beans-only browse. */
     beansOnly?: boolean;
     includeInactive?: boolean;
+    /** Filter to a specific target group */
+    targetGroupId?: string;
+    /** Filter to posts assigned to a specific member */
+    assignedTo?: string;
+    /** Filter by audience scope */
+    audienceScope?: AudienceScope;
+    /** Filter by target archetype match */
+    targetArchetype?: string;
 }
 
 // Server-side photo limits. Clients resize to ≤800px JPEG at 0.7 quality.
@@ -139,6 +158,16 @@ export function generateSearchKeywords(title: string, description: string, categ
     return [...expanded].join(' ');
 }
 
+function parseJsonArray(raw: string | null | undefined): string[] {
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
+    } catch {
+        return [];
+    }
+}
+
 export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): MarketplacePost {
     const postPhotos = photosByPost.get(row.id) || [];
     let trustPoints = 0;
@@ -179,6 +208,11 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         // home", and that is the answer the poster is entitled to.
         reach: (row.reach ?? 'local') as PostReach,
         reachPeers: parseReachPeers(row.reach_peers),
+        audienceScope: (row.audience_scope ?? 'public') as AudienceScope,
+        targetGroupId: row.target_group_id || null,
+        targetPubkey: row.target_pubkey || null,
+        assignedTo: row.assigned_to || null,
+        targetArchetypes: parseJsonArray(row.target_archetypes),
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
         authorAvatarUrl: row.author_avatar ?? null
@@ -238,6 +272,29 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     `;
     const params: any[] = [];
 
+    // Audience visibility scoping:
+    // If not a full sync query, enforce private group / direct restrictions
+    if (!filter?.sync) {
+        if (!filter?.viewerPubkey) {
+            // Unauthenticated callers only see public posts
+            query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+        } else {
+            const viewer = filter.viewerPubkey;
+            // Authenticated viewer sees public posts, their own posts, direct posts targeted/assigned to them,
+            // and group posts for groups where they are an active member
+            query += ` AND (
+                p.audience_scope IS NULL 
+                OR p.audience_scope = 'public'
+                OR p.author_pubkey = ?
+                OR (p.audience_scope = 'direct' AND (p.target_pubkey = ? OR p.assigned_to = ?))
+                OR (p.audience_scope = 'group' AND p.target_group_id IN (
+                    SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'
+                ))
+            )`;
+            params.push(viewer, viewer, viewer, viewer);
+        }
+    }
+
     if (!filter?.id && !filter?.updatedAfter && !filter?.sync) {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
         if (!filter?.includeInactive) {
@@ -259,6 +316,11 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
     if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
     if (filter?.authorPubkey) { query += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
+    if (filter?.targetGroupId) { query += " AND p.target_group_id = ?"; params.push(filter.targetGroupId); }
+    if (filter?.assignedTo) { query += " AND p.assigned_to = ?"; params.push(filter.assignedTo); }
+    if (filter?.audienceScope) { query += " AND p.audience_scope = ?"; params.push(filter.audienceScope); }
+    if (filter?.targetArchetype) { query += " AND p.target_archetypes LIKE ?"; params.push(`%"${filter.targetArchetype}"%`); }
+
     // #108: beans-only browse. COALESCE so rows predating the column are treated as beans-only
     // rather than vanishing from the filtered view.
     if (filter?.beansOnly) { query += " AND COALESCE(p.cash_also_needed, 0) = 0"; }

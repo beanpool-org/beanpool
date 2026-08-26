@@ -10,7 +10,7 @@ import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map'
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
-import { getPosts, createPost, getBalance, getMemberProfile, getReachablePeers } from '../../utils/db';
+import { getPosts, createPost, getBalance, getMemberProfile, getReachablePeers, fetchGroups, type GroupItem } from '../../utils/db';
 import { getCanonicalAvatar } from '../../utils/canonical-profile';
 import { useIdentity } from '../IdentityContext';
 import { CurrencyDisplay, useCurrencyString } from '../../components/CurrencyDisplay';
@@ -24,6 +24,15 @@ import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PI
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
+
+export const ARCHETYPES = [
+    { id: 'sage', emoji: '🧭', label: 'Sage' },
+    { id: 'weaver', emoji: '🏛️', label: 'Weaver' },
+    { id: 'artisan', emoji: '🛠️', label: 'Artisan' },
+    { id: 'guardian', emoji: '🛡️', label: 'Guardian' },
+    { id: 'scout', emoji: '🔍', label: 'Scout' },
+    { id: 'steward', emoji: '🌱', label: 'Steward' },
+];
 
 const CATEGORIES = [
     { id: 'food', emoji: '🥕', label: 'Food & Produce' },
@@ -430,6 +439,32 @@ export default function MapScreen() {
         photoAddIcon: { fontSize: 20 },
         photoCount: { color: colors.text.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
 
+        // Audience & Scoping
+        audienceSection: { marginTop: 8, marginBottom: 6 },
+        audienceButtonRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+        audienceButton: {
+            flex: 1, paddingVertical: 8, paddingHorizontal: 6, borderRadius: 12, borderWidth: 1,
+            borderColor: colors.border.default, backgroundColor: colors.surface.app,
+            alignItems: 'center', justifyContent: 'center', minHeight: 40,
+        },
+        audienceButtonActive: {
+            backgroundColor: colors.brand.dark,
+            borderColor: colors.brand.primary,
+        },
+        audienceButtonText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
+        audienceButtonTextActive: { color: '#fff', fontWeight: '700' },
+        archetypeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4, marginBottom: 8 },
+        archetypeChip: {
+            paddingVertical: 6, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1,
+            borderColor: colors.border.default, backgroundColor: colors.surface.app,
+        },
+        archetypeChipActive: {
+            backgroundColor: colors.brand.tint,
+            borderColor: colors.brand.primary,
+        },
+        archetypeChipText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
+        archetypeChipTextActive: { color: colors.brand.primary, fontWeight: '700' },
+
         // Submit
         submitBtn: { paddingVertical: 12, borderRadius: 14, alignItems: 'center', marginBottom: 8, marginTop: 4 },
         submitBtnOffer: { backgroundColor: '#10b981' },
@@ -487,6 +522,12 @@ export default function MapScreen() {
     const [showPricingModal, setShowPricingModal] = useState(false);
     const [showPricingGuideModal, setShowPricingGuideModal] = useState(false);
     const [pricingModalTab, setPricingModalTab] = useState<'guide' | 'tax'>('guide');
+    const [postAudienceScope, setPostAudienceScope] = useState<'public' | 'group' | 'direct'>('public');
+    const [postTargetGroupId, setPostTargetGroupId] = useState<string | null>(null);
+    const [postAssignedTo, setPostAssignedTo] = useState('');
+    const [postTargetArchetypes, setPostTargetArchetypes] = useState<string[]>([]);
+    const [myGroups, setMyGroups] = useState<GroupItem[]>([]);
+    const [showGroupPickerModal, setShowGroupPickerModal] = useState(false);
     const scrollViewRef = useRef<ScrollView>(null);
     const pickerRef = useRef<any>(null);
 
@@ -639,7 +680,20 @@ export default function MapScreen() {
         setPostCredits(''); setPostPriceType('fixed'); setPostRepeatable(false); setPostPhotos([]);
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
         setValidationToast(''); setPostReach('local'); setPostReachPeers([]);
+        setPostAudienceScope('public'); setPostTargetGroupId(null); setPostAssignedTo('');
+        const userArch = (identity as any)?.archetype;
+        setPostTargetArchetypes(userArch ? [userArch] : []);
     };
+
+    // Load groups and auto-tick user's archetype when composer opens
+    useEffect(() => {
+        if (!showNewPost) return;
+        fetchGroups().then(g => setMyGroups(g)).catch(() => {});
+        const userArch = (identity as any)?.archetype;
+        if (userArch && postTargetArchetypes.length === 0) {
+            setPostTargetArchetypes([userArch]);
+        }
+    }, [showNewPost, identity]);
 
     // ── Draft persistence + up-front profile-photo check ──
     // A post used to be lost if the user left the composer to fix something
@@ -657,11 +711,12 @@ export default function MapScreen() {
             const draft = {
                 anchorUrl, postType, postCategory, postTitle, postDescription, postCredits,
                 postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
-                postReach, postReachPeers, savedAt: Date.now(),
+                postReach, postReachPeers, postAudienceScope, postTargetGroupId, postAssignedTo,
+                postTargetArchetypes, savedAt: Date.now(),
             };
             await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
         } catch { /* draft is best-effort */ }
-    }, [postType, postCategory, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
+    }, [postType, postCategory, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers, postAudienceScope, postTargetGroupId, postAssignedTo, postTargetArchetypes]);
 
     const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
 
@@ -679,6 +734,10 @@ export default function MapScreen() {
         setPostLng(typeof d.postLng === 'number' ? d.postLng : null);
         setPostReach(d.postReach === 'peers' || d.postReach === 'everywhere' ? d.postReach : 'local');
         setPostReachPeers(Array.isArray(d.postReachPeers) ? d.postReachPeers : []);
+        setPostAudienceScope(d.postAudienceScope === 'group' || d.postAudienceScope === 'direct' ? d.postAudienceScope : 'public');
+        setPostTargetGroupId(d.postTargetGroupId || null);
+        setPostAssignedTo(d.postAssignedTo || '');
+        setPostTargetArchetypes(Array.isArray(d.postTargetArchetypes) ? d.postTargetArchetypes : []);
     };
 
     // Posting requires a profile photo. Resolve it from this node's row first,
@@ -871,6 +930,13 @@ export default function MapScreen() {
                 // #143 step 4 — per-listing reach (fallback to 'local' if 'peers' selected without chosen targets)
                 reach: (postReach === 'peers' && postReachPeers.length === 0) ? 'local' : postReach,
                 ...(postReach === 'peers' && postReachPeers.length > 0 ? { reachPeers: postReachPeers } : {}),
+                audienceScope: postAudienceScope,
+                ...(postAudienceScope === 'group' && postTargetGroupId ? { targetGroupId: postTargetGroupId } : {}),
+                ...(postAudienceScope === 'direct' && postAssignedTo.trim() ? {
+                    targetPubkey: postAssignedTo.trim(),
+                    assignedTo: postAssignedTo.trim()
+                } : {}),
+                ...(postTargetArchetypes.length > 0 ? { targetArchetypes: postTargetArchetypes } : {}),
             });
             clearDraft();
             setTimeout(() => {
@@ -1410,6 +1476,111 @@ export default function MapScreen() {
                                     Cash is for fuel and consumables you paid for — not your time, not your tools. At cost, no markup. Agree the details in chat; the app never handles the money.
                                 </Text>
                             )}
+
+                            {/* Audience Scoping (Public / Group / Direct) */}
+                            <View style={styles.audienceSection}>
+                                <Text style={styles.sectionLabel}>Audience & Visibility</Text>
+                                <View style={styles.audienceButtonRow}>
+                                    {([
+                                        { value: 'public' as const, label: '🌐 Public' },
+                                        { value: 'group' as const, label: '👥 Group' },
+                                        { value: 'direct' as const, label: '🎯 Direct' },
+                                    ]).map(opt => (
+                                        <Pressable
+                                            key={opt.value}
+                                            accessibilityRole="button"
+                                            accessibilityState={{ selected: postAudienceScope === opt.value }}
+                                            style={[
+                                                styles.audienceButton,
+                                                postAudienceScope === opt.value && styles.audienceButtonActive,
+                                            ]}
+                                            onPress={() => setPostAudienceScope(opt.value)}
+                                        >
+                                            <Text style={[
+                                                styles.audienceButtonText,
+                                                postAudienceScope === opt.value && styles.audienceButtonTextActive,
+                                            ]}>{opt.label}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+
+                                {postAudienceScope === 'group' && (
+                                    <View style={{ marginBottom: 8 }}>
+                                        <Text style={styles.sectionLabelHint}>Select Team or Working Group:</Text>
+                                        <Pressable
+                                            style={styles.pickerWrap}
+                                            onPress={() => setShowGroupPickerModal(true)}
+                                        >
+                                            <Text style={[styles.pickerText, postTargetGroupId ? styles.pickerTextActive : null]}>
+                                                {myGroups.find(g => g.id === postTargetGroupId)?.name || 'Choose a group...'}
+                                            </Text>
+                                            <Text style={styles.pickerArrow}>▼</Text>
+                                        </Pressable>
+                                        <Modal visible={showGroupPickerModal} transparent animationType="slide">
+                                            <Pressable style={styles.categoryModalOverlay} onPress={() => setShowGroupPickerModal(false)}>
+                                                <View style={styles.categorySheet}>
+                                                    <View style={styles.categorySheetHeader}>
+                                                        <Text style={styles.categorySheetTitle}>Select Group</Text>
+                                                    </View>
+                                                    <FlatList
+                                                        data={myGroups}
+                                                        keyExtractor={g => g.id}
+                                                        renderItem={({ item: g }) => (
+                                                            <Pressable
+                                                                style={[styles.categoryRow, postTargetGroupId === g.id && styles.categoryRowActive]}
+                                                                onPress={() => {
+                                                                    setPostTargetGroupId(g.id);
+                                                                    setShowGroupPickerModal(false);
+                                                                }}
+                                                            >
+                                                                <Text style={styles.categoryRowEmoji}>👥</Text>
+                                                                <Text style={styles.categoryRowLabel}>{g.name}</Text>
+                                                                {postTargetGroupId === g.id && <Text style={styles.categoryRowCheck}>✓</Text>}
+                                                            </Pressable>
+                                                        )}
+                                                    />
+                                                </View>
+                                            </Pressable>
+                                        </Modal>
+                                    </View>
+                                )}
+
+                                {postAudienceScope === 'direct' && (
+                                    <View style={{ marginBottom: 8 }}>
+                                        <Text style={styles.sectionLabelHint}>Assignee Callsign or Public Key:</Text>
+                                        <TextInput
+                                            style={styles.titleInputFull}
+                                            placeholder="Recipient public key or callsign..."
+                                            placeholderTextColor={colors.text.muted}
+                                            value={postAssignedTo}
+                                            onChangeText={setPostAssignedTo}
+                                        />
+                                    </View>
+                                )}
+
+                                {/* Recommended Archetypes */}
+                                <Text style={[styles.sectionLabel, { marginTop: 6 }]}>Recommended Archetypes</Text>
+                                <View style={styles.archetypeChipRow}>
+                                    {ARCHETYPES.map(arch => {
+                                        const isSelected = postTargetArchetypes.includes(arch.id);
+                                        return (
+                                            <Pressable
+                                                key={arch.id}
+                                                style={[styles.archetypeChip, isSelected && styles.archetypeChipActive]}
+                                                onPress={() => {
+                                                    setPostTargetArchetypes(prev =>
+                                                        isSelected ? prev.filter(a => a !== arch.id) : [...prev, arch.id]
+                                                    );
+                                                }}
+                                            >
+                                                <Text style={[styles.archetypeChipText, isSelected && styles.archetypeChipTextActive]}>
+                                                    {isSelected ? '✓ ' : ''}{arch.emoji} {arch.label}
+                                                </Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+                            </View>
 
                             {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
                                 trading partners: a reach chooser on a node with no peers is a decision about nothing.

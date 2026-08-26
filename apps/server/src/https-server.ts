@@ -112,6 +112,7 @@ import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
+import { createGroupRoutes } from './routes/groups.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 
@@ -240,6 +241,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/activity/feed',            // living activity waterfall community pulse feed (#208)
+    '/api/groups',                   // public groups / working groups list
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -247,6 +249,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
 // (/api/messages/conversations/:pk, /api/messages/:conversationId) must stay
 // GATED; only the E2E-ciphertext attachment binary is public.
 const PUBLIC_READ_PATTERNS: RegExp[] = [
+    /^\/api\/groups\/[^/]+$/,                               // public group detail
     /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member?
     /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
     /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
@@ -910,6 +913,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),
         createActivityRouter(deps),
+        createGroupRoutes(deps),
         // Temporary Apple `sub` parity probe. Registers nothing unless APPLE_PROBE=1
         // (the domain-association file aside) — see routes/apple-probe.ts.
         createAppleProbeRoutes(),

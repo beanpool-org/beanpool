@@ -211,6 +211,16 @@ run_federation_suites() {
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-idor(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-idor"; fi
     rm -rf "$TMP_DIR"
 
+    # Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM,
+    # preserves metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row.
+    echo "━━━ test-messaging-consolidation ━━━"
+    TMP_DIR=$(mktemp -d)
+    BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-messaging-consolidation.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-consolidation(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-consolidation"; fi
+    rm -rf "$TMP_DIR"
+
     # The recovery WebSocket suite, which asserts the ws path REFUSES an unauthenticated subscriber.
     # Both flags are mandatory — the suite itself exits nonzero without them rather than passing
     # vacuously, which is why it can only ever have been run by hand. Same const-at-import reason as

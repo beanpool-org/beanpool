@@ -93,7 +93,11 @@ router.post('/api/messages/send', async (ctx) => {
 
     // --- FEDERATION RELAY ---
     try {
-        const conv = getConversation(conversationId);
+        // Use the RESOLVED conversation id the message was actually stored under
+        // (sendMessage may remap a legacy/consolidated conversationId to the active
+        // DM). Looking up the raw request `conversationId` here would miss the
+        // participants of a consolidated thread and silently skip cross-node relay.
+        const conv = getConversation(msg.conversationId);
         if (conv && conv.type === 'dm') {
             const otherPubkey = conv.participants.find(p => p !== authorPubkey);
             if (otherPubkey) {

@@ -105,15 +105,37 @@ export function sendMessage(
     // If not found directly, check if conversationId was consolidated into an active DM
     if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) {
         try {
+            // json_valid() guards json_extract via CASE so a single row with malformed
+            // metadata cannot abort the whole SELECT (which the surrounding catch would
+            // then swallow, silently disabling consolidation resolution node-wide).
             const consolidatedMsg = db.prepare(`
                 SELECT conversation_id FROM messages
-                WHERE json_extract(metadata, '$.originalConversationId') = ?
-                   OR json_extract(metadata, '$.originalConversationIds') LIKE ?
+                WHERE metadata IS NOT NULL
+                  AND CASE WHEN json_valid(metadata) THEN (
+                        json_extract(metadata, '$.originalConversationId') = ?
+                        OR json_extract(metadata, '$.originalConversationIds') LIKE ?
+                      ) ELSE 0 END
                 LIMIT 1
             `).get(conversationId, `%${conversationId}%`) as any;
             if (consolidatedMsg?.conversation_id) {
                 effectiveConvId = consolidatedMsg.conversation_id;
                 participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
+
+                // Preserve the ORIGINAL conversation id the sender encrypted against.
+                // DM ciphertext is XChaCha20-Poly1305 with the conversationId as AEAD
+                // associated data (apps/*/e2e-crypto.ts), so a recipient reading the
+                // message under effectiveConvId can only decrypt by retrying with the
+                // original id — which the client fallback finds in metadata.originalConversationId.
+                // Without this, remapped messages are permanently undecryptable.
+                try {
+                    const metaObj = metadata ? JSON.parse(metadata) : {};
+                    if (!metaObj.originalConversationId) {
+                        metaObj.originalConversationId = conversationId;
+                        metadata = JSON.stringify(metaObj);
+                    }
+                } catch {
+                    metadata = JSON.stringify({ originalConversationId: conversationId });
+                }
             }
         } catch (e) {}
     }

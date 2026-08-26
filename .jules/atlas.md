@@ -61,3 +61,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `node-client.ts` helper functions (`normalizeNodeUrl`, `resolveNodeApiUrl`, `buildAdminHeaders`, `isTotpRequired`, TFA session token storage) were untested.
 **Learning:** Testing `resolveNodeApiUrl` requires stubbing `location.origin` with `vi.stubGlobal('location', { origin: '...' })` to test cross-origin proxy routing.
 **Action:** Look for remaining untested helper files in `lib/` or core React components in `components/`.
+
+## 2026-08-09 - [manager tests] ai-client unit tests
+**Gap:** `ai-client.ts` functions (`loadAiConfig`, `saveAiConfig`, `askAiCopilot`) were untested.
+**Learning:** `askAiCopilot` interacts with both local Ollama API endpoints and OpenRouter cloud API endpoints, returning simulated diagnostic fallbacks when network requests fail. Mocking `globalThis.fetch` allowed full coverage of both success responses and fallback diagnostics.
+**Action:** Focus on untested UI components in `apps/manager/src/components/` for future coverage tasks.

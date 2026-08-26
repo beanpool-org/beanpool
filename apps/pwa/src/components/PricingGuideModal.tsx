@@ -201,6 +201,14 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                             </button>
                         );
                     })}
+                {/* Instructions Tip Banner */}
+                <div className="mx-4 mt-3 mb-1 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
+                    <span className="text-sm" aria-hidden="true">💡</span>
+                    <span>
+                        {onSelectOfferItem
+                            ? 'Tap any item to auto-fill your offer listing with community price estimates.'
+                            : 'Community estimates based on local marketplace trades and seasonal averages.'}
+                    </span>
                 </div>
 
                 {/* Items List */}
@@ -223,7 +231,26 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                             return (
                                 <div
                                     key={item.id}
-                                    className="flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 hover:border-emerald-500/30 transition-colors"
+                                    onClick={() => {
+                                        if (onSelectOfferItem) {
+                                            onSelectOfferItem(item, effectivePrice);
+                                            onClose();
+                                        }
+                                    }}
+                                    className={`flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 transition-all ${
+                                        onSelectOfferItem
+                                            ? 'cursor-pointer hover:border-emerald-500/50 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 active:scale-[0.99]'
+                                            : ''
+                                    }`}
+                                    role={onSelectOfferItem ? 'button' : undefined}
+                                    tabIndex={onSelectOfferItem ? 0 : undefined}
+                                    onKeyDown={(e) => {
+                                        if (onSelectOfferItem && (e.key === 'Enter' || e.key === ' ')) {
+                                            e.preventDefault();
+                                            onSelectOfferItem(item, effectivePrice);
+                                            onClose();
+                                        }
+                                    }}
                                 >
                                     {/* Thumbnail / Emoji */}
                                     <div className="w-11 h-11 rounded-xl bg-zinc-200/60 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0 text-2xl overflow-hidden">
@@ -259,20 +286,18 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
 
                                         <div className="flex items-center gap-1 mt-1.5">
                                             {onSelectOfferItem && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        onSelectOfferItem(item, effectivePrice);
-                                                        onClose();
-                                                    }}
-                                                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold transition-colors"
+                                                <span
+                                                    className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[11px] font-semibold pointer-events-none"
                                                 >
                                                     Offer →
-                                                </button>
+                                                </span>
                                             )}
                                             <button
                                                 type="button"
-                                                onClick={() => setReportingItem(item)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setReportingItem(item);
+                                                }}
                                                 className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs transition-colors"
                                                 title="Report price feedback"
                                                 aria-label={`Report price for ${item.name}`}

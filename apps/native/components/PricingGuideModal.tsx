@@ -241,6 +241,27 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                 color: '#ffffff',
                 fontWeight: '700',
             },
+            tipBanner: {
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: theme === 'dark' ? 'rgba(5, 150, 105, 0.15)' : '#ecfdf5',
+                borderWidth: 1,
+                borderColor: theme === 'dark' ? 'rgba(5, 150, 105, 0.3)' : '#a7f3d0',
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+                marginHorizontal: 16,
+                marginTop: 8,
+                marginBottom: 4,
+                gap: 8,
+            },
+            tipBannerText: {
+                flex: 1,
+                fontSize: 12.5,
+                color: theme === 'dark' ? '#34d399' : '#065f46',
+                fontWeight: '600',
+                lineHeight: 17,
+            },
             listContent: {
                 padding: 16,
                 paddingBottom: 40,
@@ -461,7 +482,22 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
             (item.confidenceCount || 0) >= 3 ? palette.emerald500 : (item.confidenceCount || 0) >= 1 ? palette.amber500 : palette.red500;
 
         return (
-            <View style={styles.itemCard}>
+            <Pressable
+                style={({ pressed }) => [
+                    styles.itemCard,
+                    onSelectOfferItem && pressed && { opacity: 0.75, transform: [{ scale: 0.99 }] },
+                ]}
+                onPress={() => {
+                    if (onSelectOfferItem) {
+                        Haptics.selectionAsync();
+                        onSelectOfferItem(item, effectivePrice);
+                        onClose();
+                    }
+                }}
+                disabled={!onSelectOfferItem}
+                accessibilityRole={onSelectOfferItem ? 'button' : undefined}
+                accessibilityLabel={onSelectOfferItem ? `Select ${item.name} for 🫘 ${effectivePrice}` : undefined}
+            >
                 <View style={styles.thumbnailWrap}>
                     {item.thumbnailUrl ? (
                         <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnailImage} resizeMode="cover" />
@@ -491,22 +527,17 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
 
                     <View style={styles.actionsRow}>
                         {onSelectOfferItem && (
-                            <Pressable
-                                style={styles.offerBtn}
-                                onPress={() => {
-                                    onSelectOfferItem(item, effectivePrice);
-                                    onClose();
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Offer ${item.name}`}
-                            >
+                            <View style={styles.offerBtn} pointerEvents="none">
                                 <Text style={styles.offerBtnText}>Offer →</Text>
-                            </Pressable>
+                            </View>
                         )}
                         <Pressable
                             style={styles.reportBtn}
                             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                            onPress={() => setReportingItem(item)}
+                            onPress={(e) => {
+                                e?.stopPropagation?.();
+                                setReportingItem(item);
+                            }}
                             accessibilityRole="button"
                             accessibilityLabel={`Report price estimate for ${item.name}`}
                         >
@@ -514,7 +545,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                         </Pressable>
                     </View>
                 </View>
-            </View>
+            </Pressable>
         );
     }
 
@@ -570,6 +601,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                     onPress={() => setSelectedCategory(cat.id)}
                                     accessibilityRole="button"
                                     accessibilityState={{ selected: active }}
+                                    testID={`category-chip-${cat.id}`}
                                 >
                                     <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
                                         {cat.emoji} {cat.label}
@@ -578,6 +610,16 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                             );
                         }}
                     />
+                </View>
+
+                {/* Instructions Tip Banner */}
+                <View style={styles.tipBanner}>
+                    <Text style={{ fontSize: 16 }}>💡</Text>
+                    <Text style={styles.tipBannerText}>
+                        {onSelectOfferItem
+                            ? 'Tap any item to auto-fill your offer listing with community price estimates.'
+                            : 'Community estimates based on local marketplace trades and seasonal averages.'}
+                    </Text>
                 </View>
 
                 {/* Main Item List */}

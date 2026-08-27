@@ -33,8 +33,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '151a28c4fd1e6ee09768f4226be76b4d' }}
-          command: pages deploy apps/website --project-name=beanpool-org --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '151a28c4fd1e6ee09768f4226be76b4d' }}
+        run: npx wrangler pages deploy apps/website --project-name=beanpool-org --commit-dirty=true

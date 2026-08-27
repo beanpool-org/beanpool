@@ -254,17 +254,19 @@ const styles = StyleSheet.create({
         color: colors.text.heading,
     },
     disconnectBtn: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        minHeight: 44,
+        justifyContent: 'center',
         borderRadius: 6,
         borderWidth: 1,
-        borderColor: colors.feedback.error.border,
+        borderColor: colors.feedback.danger.border,
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
     },
     disconnectText: {
         fontSize: 12,
         fontWeight: '600',
-        color: colors.feedback.error.text,
+        color: colors.feedback.danger.fg,
     },
     buttonSecondary: {
         backgroundColor: 'transparent',

@@ -214,7 +214,124 @@ window.addEventListener('scroll', () => {
     }
 });
 
+// ======================== STEP DEEP DIVE MODAL ========================
+const STEP_DETAILS = [
+    {
+        number: '01',
+        icon: '🏡',
+        tag: 'Infrastructure & Self-Hosting',
+        title: 'Bootstrap a Sovereign Node',
+        subtitle: 'Deploy an independent community exchange gateway for your town or valley with zero corporate intermediaries.',
+        points: [
+            { title: 'Single Docker Deployment', text: 'Run the entire stack (Node engine, SQLite database, P2P syncer, and Web gateway) in seconds with Docker Compose.' },
+            { title: 'Community Data Ownership', text: 'All transaction history, profiles, and trust graphs are stored locally on your node. No subscriptions or third-party cloud lock-in.' },
+            { title: 'Autonomous Fleet Telemetry', text: 'Node runners have access to the built-in Fleet Manager (/manager) with encrypted harvester backups and peer health checks.' }
+        ],
+        primaryAction: { label: 'Start Your Node (Docker) →', href: '#get-started' },
+        secondaryAction: { label: '▶ Watch Setup Tutorial on YouTube', href: 'https://www.youtube.com/@beanpool' }
+    },
+    {
+        number: '02',
+        icon: '🔑',
+        tag: 'Cryptographic Identity',
+        title: 'Sovereign Identity & Dual-Custody',
+        subtitle: 'Own your keys and trust reputation with passkeys and decentralized social recovery.',
+        points: [
+            { title: 'Ed25519 Cryptographic Keys', text: 'Your unique cryptographic identity is generated directly on your mobile device, signed and anchored in the community web of trust.' },
+            { title: 'Dual-Custody Protection', text: 'Hardware passkeys in SecureStore for power users, plus 1-click encrypted Apple/Google SSO backup so everyday members never lose access.' },
+            { title: 'Social Guardian Recovery', text: 'Appoint trusted neighborhood friends/vouchers to hold encrypted recovery shards in case your phone is ever lost or damaged.' }
+        ],
+        primaryAction: { label: 'Read Identity Guide (§3) →', href: 'getting-started.html#3' },
+        secondaryAction: { label: '▶ Watch Mobile Pairing Walkthrough', href: 'https://www.youtube.com/@beanpool' }
+    },
+    {
+        number: '03',
+        icon: '⚖️',
+        tag: 'Zero-Sum Mutual Credit',
+        title: 'Earned Reciprocal Credit & Staking',
+        subtitle: 'Value flows directly from community service to service — no debt, no interest, and no banks.',
+        points: [
+            { title: 'Start at Zero (Zero-Sum)', text: 'No fiat money is ever injected. Every transaction is balanced: one member is debited, another is credited symmetrically.' },
+            { title: 'The Offer Covenant (−200 Beans)', text: 'Posting your first active marketplace offer instantly unlocks a credit line of −200 Beans (≈ 5 hours of community labor).' },
+            { title: 'Escrow Protection & Reputation', text: 'Trades are secured in cryptographic escrow until the buyer confirms completion. Successful trades unlock deeper credit lines down to −2,000 Beans.' }
+        ],
+        primaryAction: { label: 'View Credit Rules (§4) →', href: 'rules.html#4' },
+        secondaryAction: { label: '▶ Watch Mutual Credit Video', href: 'https://www.youtube.com/@beanpool' }
+    },
+    {
+        number: '04',
+        icon: '🌐',
+        tag: 'Federation & Civic Commons',
+        title: 'Keynesian Clearing & Democratic Commons',
+        subtitle: 'Trade between towns without fiat currency, while circulation fees fund democratic local projects.',
+        points: [
+            { title: 'Keynesian Trade Connectors', text: 'Inspired by John Maynard Keynes\' Bancor, autonomous community nodes trade cross-border with multilateral clearing unions and zero currency drain.' },
+            { title: 'Progressive Demurrage', text: 'A gentle progressive circulation incentive on idle surplus balances encourages active spending and prevents speculative hoarding.' },
+            { title: '100% Member-Voted Commons', text: 'Circulation demurrage flows directly into a Community Commons pool, voted on democratically by residents for regenerative local projects.' }
+        ],
+        primaryAction: { label: 'View Federation Rules (§7) →', href: 'rules.html#7' },
+        secondaryAction: { label: '▶ Watch Keynesian Clearing Video', href: 'https://www.youtube.com/@beanpool' }
+    }
+];
+
+function openStepModal(index) {
+    const data = STEP_DETAILS[index];
+    if (!data) return;
+
+    const modal = document.getElementById('step-modal');
+    const content = document.getElementById('step-modal-content');
+
+    const pointsHtml = data.points.map(p => `
+        <div class="modal-point-card">
+            <strong>${p.title}</strong>
+            <p>${p.text}</p>
+        </div>
+    `).join('');
+
+    content.innerHTML = `
+        <div class="modal-step-header">
+            <div class="modal-step-icon">${data.icon}</div>
+            <div>
+                <span class="modal-step-tag">Step ${data.number} &middot; ${data.tag}</span>
+                <h2>${data.title}</h2>
+            </div>
+        </div>
+        <p class="modal-step-subtitle">${data.subtitle}</p>
+        <div class="modal-points-grid">
+            ${pointsHtml}
+        </div>
+        <div class="modal-actions-row">
+            <a href="${data.primaryAction.href}" class="btn btn-primary" onclick="closeStepModal()">${data.primaryAction.label}</a>
+            <a href="${data.secondaryAction.href}" target="_blank" rel="noopener" class="btn btn-ghost" style="border-color: rgba(255, 0, 0, 0.4); color: #ff6666;">${data.secondaryAction.label}</a>
+        </div>
+    `;
+
+    modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeStepModal() {
+    const modal = document.getElementById('step-modal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+}
+
+// Close modal on backdrop click or ESC key
+const stepModal = document.getElementById('step-modal');
+if (stepModal) {
+    stepModal.addEventListener('click', (e) => {
+        if (e.target === stepModal) closeStepModal();
+    });
+}
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeStepModal();
+});
+
 // ======================== INIT ========================
 pollNodes();
 // Re-poll every 5 minutes
 setInterval(pollNodes, 300_000);
+

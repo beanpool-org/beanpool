@@ -195,14 +195,33 @@ section {
     color: var(--text-primary); 
     opacity: 1; 
 }
-.nav-github {
+.nav-social-icons {
     display: flex;
     align-items: center;
-    color: var(--text-muted) !important;
+    gap: 0.85rem;
 }
-.nav-github:hover { 
-    color: var(--text-primary) !important; 
-    transform: scale(1.1);
+.nav-social {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted) !important;
+    transition: var(--transition);
+    padding: 0 !important;
+}
+.nav-social::after {
+    display: none !important;
+}
+.nav-social.nav-youtube:hover {
+    color: #FF0000 !important;
+    transform: scale(1.15);
+}
+.nav-social.nav-reddit:hover {
+    color: #FF4500 !important;
+    transform: scale(1.15);
+}
+.nav-social.nav-github:hover {
+    color: #FFFFFF !important;
+    transform: scale(1.15);
 }
 .nav-cta {
     background: var(--accent) !important;
@@ -523,12 +542,27 @@ section {
     position: relative;
     padding: 2rem 1.75rem;
     border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.step-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(245, 158, 11, 0.4);
+    box-shadow: 0 12px 30px rgba(245, 158, 11, 0.12);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.05), rgba(3, 7, 18, 0.55));
 }
 .step-icon {
     font-size: 2.2rem;
     margin-bottom: 1rem;
     display: inline-block;
     filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
+    transition: transform 0.25s ease;
+}
+.step-card:hover .step-icon {
+    transform: scale(1.15) rotate(-4deg);
 }
 .step-number {
     position: absolute;
@@ -540,6 +574,10 @@ section {
     color: rgba(245, 158, 11, 0.04);
     line-height: 1;
     pointer-events: none;
+    transition: color 0.3s ease;
+}
+.step-card:hover .step-number {
+    color: rgba(245, 158, 11, 0.12);
 }
 .step-card h3 {
     font-family: var(--font-header);
@@ -552,6 +590,150 @@ section {
     font-size: 0.92rem;
     color: var(--text-secondary);
     line-height: 1.6;
+}
+.step-card-tap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 1.15rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+}
+.step-card:hover .step-card-tap {
+    color: #ffffff;
+    transform: translateX(4px);
+}
+
+/* ======================== STEP DEEP-DIVE MODAL ======================== */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(3, 7, 18, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+.modal-dialog {
+    max-width: 680px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: var(--radius-lg);
+    padding: 2.5rem;
+    position: relative;
+    background: rgba(10, 15, 29, 0.95);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(245, 158, 11, 0.1);
+    transform: translateY(20px) scale(0.97);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal-backdrop.active .modal-dialog {
+    transform: translateY(0) scale(1);
+}
+.modal-close {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    line-height: 1;
+}
+.modal-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    transform: scale(1.1);
+}
+.modal-step-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+.modal-step-icon {
+    font-size: 2.75rem;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    line-height: 1;
+}
+.modal-step-tag {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    margin-bottom: 0.35rem;
+    display: inline-block;
+}
+.modal-step-header h2 {
+    font-family: var(--font-header);
+    font-size: 1.65rem;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.25;
+}
+.modal-step-subtitle {
+    font-size: 1.05rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.75rem;
+    line-height: 1.6;
+}
+.modal-points-grid {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.modal-point-card {
+    padding: 1.15rem 1.35rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+}
+.modal-point-card strong {
+    color: #ffffff;
+    display: block;
+    font-size: 0.98rem;
+    margin-bottom: 0.35rem;
+}
+.modal-point-card p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    margin: 0;
+}
+.modal-actions-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
 
 /* ======================== INTERACTIVE CYBERPUNK MAP ======================== */
@@ -743,6 +925,109 @@ section {
 .feature-action-link:hover {
     color: #ffffff;
     transform: translateX(3px);
+}
+
+/* ======================== HIGH-IMPACT BRAND CARDS ======================== */
+.feature-card-brand {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.brand-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.15rem;
+}
+.brand-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    transition: transform 0.25s ease;
+}
+.feature-card-brand:hover .brand-icon-wrapper {
+    transform: scale(1.1) rotate(-3deg);
+}
+.youtube-bg {
+    background: #FF0000;
+}
+.reddit-bg {
+    background: #FF4500;
+}
+.brand-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.youtube-badge {
+    background: rgba(255, 0, 0, 0.14);
+    color: #FF5252;
+    border: 1px solid rgba(255, 0, 0, 0.35);
+}
+.reddit-badge {
+    background: rgba(255, 69, 0, 0.14);
+    color: #FF7043;
+    border: 1px solid rgba(255, 69, 0, 0.35);
+}
+.brand-youtube:hover {
+    border-color: rgba(255, 0, 0, 0.45);
+    background: linear-gradient(135deg, rgba(255, 0, 0, 0.07), rgba(3, 7, 18, 0.6));
+    box-shadow: 0 12px 35px rgba(255, 0, 0, 0.16);
+    transform: translateY(-3px);
+}
+.brand-reddit:hover {
+    border-color: rgba(255, 69, 0, 0.45);
+    background: linear-gradient(135deg, rgba(255, 69, 0, 0.07), rgba(3, 7, 18, 0.6));
+    box-shadow: 0 12px 35px rgba(255, 69, 0, 0.16);
+    transform: translateY(-3px);
+}
+.btn-brand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    margin-top: 1.25rem;
+    padding: 0.65rem 1.25rem;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    width: fit-content;
+}
+.btn-brand-youtube {
+    background: rgba(255, 0, 0, 0.16);
+    color: #FF6666;
+    border: 1px solid rgba(255, 0, 0, 0.4);
+}
+.btn-brand-youtube:hover {
+    background: #FF0000;
+    color: #FFFFFF;
+    border-color: #FF0000;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 0, 0, 0.45);
+}
+.btn-brand-reddit {
+    background: rgba(255, 69, 0, 0.16);
+    color: #FF8555;
+    border: 1px solid rgba(255, 69, 0, 0.4);
+}
+.btn-brand-reddit:hover {
+    background: #FF4500;
+    color: #FFFFFF;
+    border-color: #FF4500;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 69, 0, 0.45);
 }
 
 /* ======================== MONO-STYLED TERMINAL CONSOLE ======================== */
@@ -1046,7 +1331,7 @@ footer {
     .container { padding: 0 1.5rem; }
     .legal-content { padding: 2rem 1.5rem; margin: 100px auto 40px; }
     #navbar { background: rgba(3, 7, 18, 0.95); }
-    .nav-links a:not(.nav-cta):not(.nav-github) { display: none; }
+    .nav-links a:not(.nav-cta):not(.nav-social) { display: none; }
     .hero-actions { flex-direction: column; align-items: center; }
     .btn { width: 100%; max-width: 320px; }
     .store-badges { flex-direction: column; align-items: center; }

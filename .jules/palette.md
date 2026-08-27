@@ -75,3 +75,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-08-26 - CommonsInfoModal Modal Accessibility & Keyboard Navigation
 **Learning:** `CommonsInfoModal.tsx` lacked modal dialog accessibility attributes (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`), an Escape key dismiss listener, explicit `type="button"` on the close button and tab buttons, and proper tablist accessibility attributes (`role="tablist"`, `role="tab"`, `aria-selected`).
 **Action:** Added `useEffect` Escape key dismiss listener, `role="dialog"`, `aria-modal="true"`, `aria-labelledby="commons-modal-title"`, `id="commons-modal-title"`, `role="tablist"`, `aria-label`, `type="button"`, `role="tab"`, and `aria-selected` attributes.
+
+## 2026-08-27 - LedgerPage Medallion Shelf Level Button Accessibility
+**Learning:** `LedgerPage.tsx` medallion shelf level selection buttons lacked explicit `type="button"`, state communication via `aria-pressed`, descriptive `aria-label` text, and visible focus ring indicators for keyboard users.
+**Action:** Added `type="button"`, `aria-pressed={isSel}`, `aria-label={`View ${t.name} level details`}`, and replaced `focus:ring-2` with `focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1`.

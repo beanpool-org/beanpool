@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppState, AppStateStatus, DeviceEventEmitter } from 'react-native';
+import { AppState, AppStateStatus, DeviceEventEmitter, NativeEventSubscription } from 'react-native';
 import { requestSync } from './pillar-sync';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
@@ -8,12 +8,12 @@ import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 class WebSocketSyncClient {
     private ws: WebSocket | null = null;
     private currentUrl: string | null = null;
-    private reconnectTimeoutId: any = null;
-    private pingIntervalId: any = null;
+    private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    private pingIntervalId: ReturnType<typeof setInterval> | null = null;
     private reconnectDelay = 1000;
     private isStarted = false;
     private isConnecting = false; // Fixes the AsyncStorage race condition
-    private appStateSubscription: any = null;
+    private appStateSubscription: NativeEventSubscription | null = null;
 
     public start() {
         if (this.isStarted) return;

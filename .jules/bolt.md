@@ -106,3 +106,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-01 - O(N*C) Category Lookups in PWA Marketplace & Map Components
 **Learning:** Looking up category emoji/labels across marketplace cards, detail headers, and map markers repeatedly invoked `MARKETPLACE_CATEGORIES.find(c => c.id === ...)` inside render loops and array mappings, causing $O(N \times C)$ linear array scans on every render cycle.
 **Action:** Exported `MARKETPLACE_CATEGORIES_BY_ID` Map in `apps/pwa/src/lib/marketplace.ts` and replaced `.find(...)` scans in `MarketplaceCard`, `MarketplacePage`, and `MapPage` with constant-time `MARKETPLACE_CATEGORIES_BY_ID.get(...)` lookups.
+
+## 2026-09-05 - O(C) Category Lookups in Native MarketScreen
+**Learning:** In `apps/native/app/(tabs)/index.tsx`, looking up selected category metadata and mapped interest emojis repeatedly called `MARKETPLACE_CATEGORIES.find(c => c.id === ...)` on render cycles.
+**Action:** Exported `MARKETPLACE_CATEGORIES_BY_ID` Map in `apps/native/app/(tabs)/index.tsx` and replaced `.find(...)` scans with constant-time `MARKETPLACE_CATEGORIES_BY_ID.get(...)` lookups.

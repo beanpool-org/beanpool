@@ -78,6 +78,9 @@ export const MARKETPLACE_CATEGORIES = [
     { id: 'general', emoji: '🌱', label: 'General' },
 ];
 
+// ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
+export const MARKETPLACE_CATEGORIES_BY_ID = new Map(MARKETPLACE_CATEGORIES.map(c => [c.id, c]));
+
 function deg2rad(deg: number) {
     return deg * (Math.PI / 180);
 }
@@ -821,7 +824,7 @@ export default function MarketScreen() {
         return 0;
     });
 
-    const selectedCategory = MARKETPLACE_CATEGORIES.find(c => c.id === categoryFilter);
+    const selectedCategory = MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter);
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
     const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly || searchQuery.trim().length > 0;
 
@@ -1089,7 +1092,7 @@ export default function MarketScreen() {
                                 <Text style={{ fontSize: 13, color: colors.accent.primary, fontWeight: 'bold' }}>★</Text>
                                 <Text style={styles.favSummaryText} numberOfLines={1}>
                                     Prioritizing: {favCategories.length > 0 
-                                        ? favCategories.map(id => MARKETPLACE_CATEGORIES.find(c => c.id === id)?.emoji || '').join(' ')
+                                        ? favCategories.map(id => MARKETPLACE_CATEGORIES_BY_ID.get(id)?.emoji || '').join(' ')
                                         : 'None selected yet'}
                                 </Text>
                             </View>

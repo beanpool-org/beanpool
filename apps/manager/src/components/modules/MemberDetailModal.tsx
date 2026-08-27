@@ -192,7 +192,7 @@ export function MemberDetailModal({
 
                 {/* Active Threat Flags for this user */}
                 <div className="space-y-2">
-                    <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-nature-400 block">
+                    <span className={`text-[10px] font-extrabold uppercase font-mono tracking-wider block ${activeMemberFlags.length > 0 ? 'text-red-400' : 'text-nature-400'}`}>
                         Security Alerts & Flags ({activeMemberFlags.length})
                     </span>
                     {activeMemberFlags.length > 0 ? (

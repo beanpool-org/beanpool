@@ -638,24 +638,40 @@ section {
     }
 }
 
-/* Section App Badges (Center-aligned in App Preview) */
+/* Section App Badges (Center-aligned in App Preview - 80% Larger) */
 .section-app-badges {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 1rem;
-    max-width: 480px;
-    margin: 1.5rem auto 2.5rem auto;
+    gap: 1.5rem;
+    max-width: 600px;
+    margin: 1.75rem auto 2.5rem auto;
     width: 100%;
 }
 .section-app-badges .store-badge {
+    display: inline-flex;
     transition: var(--transition);
     opacity: 0.95;
 }
+.section-app-badges .store-badge svg {
+    width: 243px;
+    height: 72px;
+    display: block;
+}
 .section-app-badges .store-badge:hover {
     opacity: 1;
-    transform: translateY(-2px);
-    filter: drop-shadow(0 6px 16px rgba(245, 158, 11, 0.25));
+    transform: translateY(-3px);
+    filter: drop-shadow(0 8px 24px rgba(245, 158, 11, 0.3));
+}
+@media (max-width: 640px) {
+    .section-app-badges {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .section-app-badges .store-badge svg {
+        width: 216px;
+        height: 64px;
+    }
 }
 
 /* ======================== PREMIUM BUTTONS ======================== */

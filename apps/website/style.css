@@ -675,7 +675,8 @@ section {
 }
 .mockup-img {
     width: 100%;
-    max-width: 1100px;
+    max-width: 1260px;
+    margin-inline: auto;
     height: auto;
     display: block;
     border-radius: var(--radius-md);

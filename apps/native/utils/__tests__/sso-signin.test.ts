@@ -33,6 +33,9 @@ vi.mock('@react-native-google-signin/google-signin', () => ({
         IN_PROGRESS: 'IN_PROGRESS',
     },
 }));
+vi.mock('expo-crypto', () => ({
+    getRandomBytes: vi.fn((len: number) => new Uint8Array(len).fill(9)),
+}));
 vi.mock('expo-web-browser', () => ({
     openAuthSessionAsync: vi.fn(),
 }));
@@ -160,14 +163,37 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
         await expect(signInWithFacebook('test-nonce-fb')).rejects.toThrow('Sign-in was cancelled.');
     });
 
-    it('handles GitHub OAuth code redirect', async () => {
+    it('handles GitHub OAuth code redirect with PKCE token exchange and profile fetch', async () => {
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
             type: 'success',
             url: 'beanpool://auth/github?code=gh_auth_code_123&state=test-nonce-gh',
         });
-        const res = await signInWithGithub('test-nonce-gh');
-        expect(res.idToken).toBe('gh_auth_code_123');
-        expect(res.nonce).toBe('test-nonce-gh');
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = vi.fn(async (url: any) => {
+            if (String(url).includes('login/oauth/access_token')) {
+                return {
+                    ok: true,
+                    json: async () => ({ access_token: 'gho_access_token_abc' }),
+                } as any;
+            }
+            if (String(url).includes('api.github.com/user')) {
+                return {
+                    ok: true,
+                    json: async () => ({ id: 987654, email: 'dev@github.com' }),
+                } as any;
+            }
+            return { ok: false, status: 404 } as any;
+        });
+
+        try {
+            const res = await signInWithGithub('test-nonce-gh');
+            expect(res.idToken).toBe('gho_access_token_abc');
+            expect(res.nonce).toBe('test-nonce-gh');
+            expect(res.sub).toBe('987654');
+            expect(res.email).toBe('dev@github.com');
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
     });
 
     it('handles GitHub cancel', async () => {

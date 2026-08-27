@@ -41,6 +41,9 @@
 import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
+import * as Crypto from 'expo-crypto';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { encodeBase64 } from './crypto';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 
@@ -97,6 +100,10 @@ export interface SsoSignIn {
     idToken: string;
     /** The raw nonce, to be sent back alongside the token so the node can match its own. */
     nonce: string;
+    /**
+     * Subject identifier (user id) if resolved directly by client (e.g. GitHub OAuth).
+     */
+    sub?: string;
     /**
      * Apple returns this on the FIRST authorization only, and never again — so it is absent far
      * more often than it is present, and a keeper list that treated its absence as a failure would
@@ -402,9 +409,22 @@ export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn,
     };
 }
 
+function toBase64Url(bytes: Uint8Array): string {
+    return encodeBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function generatePkcePair(): { verifier: string; challenge: string } {
+    const randomBytes = Crypto.getRandomBytes(32);
+    const verifier = toBase64Url(randomBytes);
+    const challengeBytes = sha256(new TextEncoder().encode(verifier));
+    const challenge = toBase64Url(challengeBytes);
+    return { verifier, challenge };
+}
+
 export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
     const redirectUri = 'beanpool://auth/github';
-    const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,user:email&state=${encodeURIComponent(nonce)}`;
+    const { verifier, challenge } = generatePkcePair();
+    const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,user:email&state=${encodeURIComponent(nonce)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256`;
 
     let result;
     try {
@@ -426,16 +446,70 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
     const hashIndex = url.indexOf('#');
     const paramStr = queryIndex !== -1 ? url.slice(queryIndex + 1) : (hashIndex !== -1 ? url.slice(hashIndex + 1) : '');
     const params = new URLSearchParams(paramStr);
-    const token = params.get('code') || params.get('access_token') || params.get('token');
+    const code = params.get('code');
+    const directToken = params.get('access_token') || params.get('token');
 
-    if (!token) {
+    let accessToken = directToken;
+    if (!accessToken && code) {
+        // Exchange authorization code for access token via PKCE
+        try {
+            const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    client_id: GITHUB_CLIENT_ID,
+                    code,
+                    redirect_uri: redirectUri,
+                    code_verifier: verifier,
+                }),
+            });
+            if (!tokenRes.ok) {
+                throw new Error(`Token exchange failed with status ${tokenRes.status}`);
+            }
+            const tokenData = await tokenRes.json() as { access_token?: string; error?: string; error_description?: string };
+            if (tokenData.error || !tokenData.access_token) {
+                throw new Error(tokenData.error_description || tokenData.error || 'No access token returned');
+            }
+            accessToken = tokenData.access_token;
+        } catch (e: any) {
+            throw new SsoSignInError('provider', `GitHub token exchange failed: ${e.message}`);
+        }
+    }
+
+    if (!accessToken) {
         throw new SsoSignInError('no-token', 'GitHub returned no authorization token.');
     }
 
+    // Fetch user profile to extract user id (sub) and email
+    let sub: string | undefined;
+    let email: string | undefined;
+    try {
+        const userRes = await fetch('https://api.github.com/user', {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'User-Agent': 'BeanPool-App',
+                Accept: 'application/vnd.github.v3+json',
+            },
+        });
+        if (userRes.ok) {
+            const userData = await userRes.json() as { id?: number | string; email?: string };
+            if (userData.id !== undefined && userData.id !== null) {
+                sub = String(userData.id);
+            }
+            email = userData.email || undefined;
+        }
+    } catch (e) {
+        console.warn('[SSO] Could not fetch GitHub user profile:', e);
+    }
+
     return {
-        idToken: token,
+        idToken: accessToken,
         nonce,
-        email: undefined,
+        sub,
+        email,
     };
 }
 

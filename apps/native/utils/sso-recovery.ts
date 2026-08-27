@@ -38,7 +38,8 @@ export interface SsoRecoveryResult {
     provider: SsoProvider;
 }
 
-function parseJwtSub(idToken: string): string {
+function parseJwtSub(idToken: string, fallbackSub?: string): string {
+    if (fallbackSub) return fallbackSub;
     const parts = idToken.split('.');
     if (parts.length < 2) {
         throw new Error('Malformed ID token from sign-in provider.');
@@ -132,7 +133,7 @@ export async function recoverAccountWithSso(options: {
         message: `Signing in with ${providerLabel}...`,
     });
 
-    let signInResult: { idToken: string; nonce: string; email?: string };
+    let signInResult: { idToken: string; nonce: string; email?: string; sub?: string };
     if (options.provider === 'google') {
         signInResult = await signInWithGoogle(nonce);
     } else if (options.provider === 'apple') {
@@ -143,7 +144,7 @@ export async function recoverAccountWithSso(options: {
         signInResult = await signInWithGithub(nonce);
     }
 
-    const sub = parseJwtSub(signInResult.idToken);
+    const sub = parseJwtSub(signInResult.idToken, signInResult.sub);
 
     // 5. Submit SSO verification to Node
     options.onProgress?.({ step: 'releasing-sso', message: 'Verifying sign-in with node...' });

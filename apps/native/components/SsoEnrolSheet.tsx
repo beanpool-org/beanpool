@@ -9,10 +9,11 @@ import { useIdentity } from '../app/IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
 
 /**
- * Decode the `sub` claim from a JWT id_token without signature verification.
- * Follows the same pattern as decodeJwtPayload in apple-probe.tsx.
+ * Decode the `sub` claim from a JWT id_token without signature verification,
+ * or use the directly-resolved `fallbackSub` for OAuth providers (like GitHub).
  */
-function extractSub(idToken: string): string {
+function extractSub(idToken: string, fallbackSub?: string): string {
+    if (fallbackSub) return fallbackSub;
     const parts = idToken?.split('.');
     if (!parts || parts.length !== 3 || !parts[1]) {
         throw new Error('Invalid ID token format.');
@@ -75,7 +76,7 @@ export function SsoEnrolSheet({
             }
 
             const signin = await startSsoSignIn(provider, url, identity);
-            const sub = extractSub(signin.idToken);
+            const sub = extractSub(signin.idToken, signin.sub);
 
             const result = await enrolSsoKeeper({
                 identity,

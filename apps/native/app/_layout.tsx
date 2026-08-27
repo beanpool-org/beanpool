@@ -27,6 +27,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { authenticateUser, getAppLockEnabled } from '../utils/LocalAuth';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
+import * as WebBrowser from 'expo-web-browser';
+
+// Complete any pending browser-based auth sessions (e.g. OAuth redirects)
+try {
+    WebBrowser.maybeCompleteAuthSession();
+} catch {}
 
 LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS', 'has been extracted', 'No route named "apple-probe"', 'No route named "google-probe"']);
 

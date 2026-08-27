@@ -27,6 +27,8 @@ vi.mock('expo-crypto', () => ({
 vi.mock('../sso-signin', () => ({
     signInWithGoogle: vi.fn(),
     signInWithApple: vi.fn(),
+    signInWithFacebook: vi.fn(),
+    signInWithGithub: vi.fn(),
 }));
 
 vi.mock('../node-post', () => ({
@@ -34,7 +36,7 @@ vi.mock('../node-post', () => ({
 }));
 
 import { signedPost } from '../node-post';
-import { signInWithGoogle } from '../sso-signin';
+import { signInWithGoogle, signInWithGithub } from '../sso-signin';
 import { recoverAccountWithSso } from '../sso-recovery';
 import { seedToKeypair } from '../crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -179,5 +181,81 @@ describe('SSO Recovery Service', () => {
             'reconstructing',
             'done',
         ]);
+    });
+
+    it('successfully recovers account using GitHub OAuth (with direct sub)', async () => {
+        const originalSeed = new Uint8Array(32).fill(42);
+        const originalKeypair = await seedToKeypair(originalSeed);
+        const memberCallsign = 'test-github-pilot';
+
+        const { hubShare, otherHalf } = await splitHubAndWhole(originalSeed);
+        const githubSub = '987654321';
+        const ssoSealed = await sealShareToSso(otherHalf, 'github', githubSub);
+        const hubRecorded = recordShareForHub(hubShare);
+
+        (signInWithGithub as any).mockResolvedValue({
+            idToken: 'gho_oauth_token_xyz',
+            nonce: 'github-eph-nonce-456',
+            sub: githubSub,
+            email: 'damo@github.com',
+        });
+
+        (signedPost as any).mockImplementation(async (_url: string, path: string, body: any) => {
+            if (path === '/api/recovery/collect') {
+                return { ok: true, status: 200, json: async () => ({ collectionId: 'coll-gh-1' }) };
+            }
+            if (path === '/api/recovery/collect/sso-nonce') {
+                return { ok: true, status: 200, json: async () => ({ nonce: 'github-eph-nonce-456' }) };
+            }
+            if (path === '/api/recovery/collect/sso') {
+                expect(body.idToken).toBe('gho_oauth_token_xyz');
+                expect(body.provider).toBe('github');
+                return { ok: true, status: 200, json: async () => ({ status: 'sso_verified' }) };
+            }
+            if (path === '/api/recovery/collect/hub') {
+                return { ok: true, status: 200, json: async () => ({ status: 'hub_released' }) };
+            }
+            if (path === '/api/recovery/collect/fragments') {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        collected: 2,
+                        threshold: 2,
+                        enough: true,
+                        fragments: [
+                            {
+                                holderType: 'sso',
+                                shareIndex: 2,
+                                payload: ssoSealed.encryptedShare,
+                                payloadIv: ssoSealed.shareIv,
+                                payloadTag: ssoSealed.shareTag,
+                                kdfParams: ssoSealed.kdfParams,
+                            },
+                            {
+                                holderType: 'hub',
+                                shareIndex: 1,
+                                payload: hubRecorded.encryptedShare,
+                                payloadIv: hubRecorded.shareIv,
+                                payloadTag: hubRecorded.shareTag,
+                                kdfParams: hubRecorded.kdfParams,
+                            },
+                        ],
+                    }),
+                };
+            }
+            throw new Error(`Unexpected path: ${path}`);
+        });
+
+        const result = await recoverAccountWithSso({
+            callsign: memberCallsign,
+            anchorUrl: 'https://test.beanpool.org',
+            provider: 'github',
+        });
+
+        expect(result.identity.publicKey).toEqual(originalKeypair.publicKeyHex);
+        expect(result.identity.privateKey).toEqual(originalKeypair.privateKeyHex);
+        expect(result.identity.callsign).toEqual(memberCallsign);
+        expect(result.provider).toBe('github');
     });
 });

@@ -683,6 +683,7 @@ const BEANPOOL_FACEBOOK_APP_IDS = [
 ].filter(Boolean);
 
 const BEANPOOL_GITHUB_CLIENT_IDS = [
+    'Ov23li8mmDfBr7GyJVRU',
     'Ov23liilgPHDo8VujObM',
     process.env.GITHUB_CLIENT_ID?.trim() || '',
 ].filter(Boolean);

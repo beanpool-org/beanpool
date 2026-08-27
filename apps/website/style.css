@@ -573,7 +573,8 @@ section {
 .hero-principles-banner {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    gap: clamp(1.25rem, 3.2vw, 2.75rem);
     width: 100%;
     max-width: 1040px;
     margin: 1.75rem auto 0 auto;
@@ -597,11 +598,9 @@ section {
     background: linear-gradient(90deg, transparent 5%, var(--accent) 30%, #10b981 70%, transparent 95%);
 }
 .principle-item {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 1;
-    text-align: center;
 }
 .principle-text {
     font-family: var(--font-header);
@@ -620,7 +619,7 @@ section {
     font-size: 1.15rem;
     color: var(--accent);
     text-shadow: 0 0 14px var(--accent-glow);
-    padding: 0 1.25rem;
+    padding: 0;
     flex-shrink: 0;
     user-select: none;
 }

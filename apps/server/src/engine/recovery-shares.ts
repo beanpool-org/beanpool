@@ -233,6 +233,7 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         ).get(ownerPubkey) as { gen: number | null } | undefined;
         const nextGeneration = (row?.gen ?? 0) + 1;
 
+        dropOlder.run(ownerPubkey, nextGeneration);
         for (const s of shares) {
             insert.run(
                 ownerPubkey, s.holderType, s.holderRef, s.shareIndex,
@@ -241,7 +242,6 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
                 s.ssoLookupSalt ?? null, s.kdfParams ?? null, nextGeneration,
             );
         }
-        dropOlder.run(ownerPubkey, nextGeneration);
         return nextGeneration;
     });
 

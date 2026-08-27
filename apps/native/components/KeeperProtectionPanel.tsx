@@ -1,14 +1,3 @@
-/**
- * Step 3's opening — what a new member is told about getting back into their account.
- *
- * Deliberately thin. Every decision it renders comes from `protectionFrom` in
- * `utils/protection-state.ts`, which is tested; this file chooses words and spacing. The split
- * matters because the failure worth guarding against here is a member being told they are
- * covered when they are not, and that is a logic bug wearing a screen's clothes.
- *
- * The copy follows one rule: **it may understate what a member has and may never overstate it.**
- */
-
 import React from 'react';
 import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
 import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
@@ -17,15 +6,106 @@ import type { Protection } from '../utils/protection-state';
 import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from './SsoButton';
 import type { SsoProvider } from '../utils/sso-signin';
 
+const PROVIDER_NAMES: Record<SsoProvider, string> = {
+    apple: 'Apple',
+    google: 'Google',
+    facebook: 'Facebook',
+    github: 'GitHub',
+};
+
 export function KeeperProtectionPanel({ 
     protection,
     onProtectSso,
+    onDisconnectSso,
     onProtectFriends,
 }: { 
     protection: Protection;
-    onProtectSso?: (provider?: SsoProvider) => void;
+    onProtectSso?: (provider: SsoProvider) => void;
+    onDisconnectSso?: (provider: SsoProvider) => void;
     onProtectFriends?: () => void;
 }): React.JSX.Element {
+    const enrolledSso = protection.enrolledSso ?? [];
+    const allProviders: SsoProvider[] = Platform.OS === 'ios'
+        ? ['apple', 'google', 'facebook', 'github']
+        : ['google', 'facebook', 'github'];
+
+    const renderSsoProviders = () => {
+        if (Platform.OS === 'web' || !onProtectSso) return null;
+
+        return (
+            <View style={styles.ssoGroup}>
+                <Text style={styles.ssoGroupTitle}>Sign-In Recovery Providers (1-of-N)</Text>
+                <Text style={styles.ssoGroupSubtitle}>
+                    Connect multiple accounts for redundant backup. Any single connected account can restore your 12 words.
+                </Text>
+
+                {allProviders.map((prov) => {
+                    const isConnected = enrolledSso.includes(prov);
+                    if (isConnected) {
+                        return (
+                            <View key={prov} style={styles.providerConnectedRow}>
+                                <View style={styles.providerInfo}>
+                                    <Text style={styles.tick}>✅</Text>
+                                    <Text style={styles.providerName}>{PROVIDER_NAMES[prov]} Connected</Text>
+                                </View>
+                                {onDisconnectSso && (
+                                    <TouchableOpacity
+                                        style={styles.disconnectBtn}
+                                        onPress={() => onDisconnectSso(prov)}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Disconnect ${PROVIDER_NAMES[prov]}`}
+                                    >
+                                        <Text style={styles.disconnectText}>Disconnect</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        );
+                    }
+
+                    if (prov === 'apple') {
+                        return (
+                            <AppleButton
+                                key="apple"
+                                title="Protect with Apple"
+                                onPress={() => onProtectSso('apple')}
+                                style={{ marginTop: 8 }}
+                            />
+                        );
+                    }
+                    if (prov === 'google') {
+                        return (
+                            <GoogleButton
+                                key="google"
+                                title="Protect with Google"
+                                onPress={() => onProtectSso('google')}
+                                style={{ marginTop: 8 }}
+                            />
+                        );
+                    }
+                    if (prov === 'facebook') {
+                        return (
+                            <FacebookButton
+                                key="facebook"
+                                title="Protect with Facebook"
+                                onPress={() => onProtectSso('facebook')}
+                                style={{ marginTop: 8 }}
+                            />
+                        );
+                    }
+                    return (
+                        <GitHubButton
+                            key="github"
+                            title="Protect with GitHub"
+                            onPress={() => onProtectSso('github')}
+                            style={{ marginTop: 8 }}
+                        />
+                    );
+                })}
+                <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
+            </View>
+        );
+    };
+
     if (protection.state === 'covered') {
         if (protection.tier === 'sso') {
             return (
@@ -38,17 +118,22 @@ export function KeeperProtectionPanel({
                         </View>
                     ))}
                     <Text style={styles.footnote}>
-                        Neither of them can open your account alone — it takes both.
+                        {enrolledSso.length > 1
+                            ? `Protected by ${enrolledSso.length} sign-in accounts + your community hub. Any single account can recover your seed.`
+                            : 'Neither of them can open your account alone — it takes both.'}
                     </Text>
+
+                    {renderSsoProviders()}
+
                     {onProtectFriends && (
                         <TouchableOpacity
                             onPress={onProtectFriends}
                             accessibilityRole="button"
                             accessibilityLabel="Add a trusted friend for extra protection"
-                            style={{ marginTop: 12 }}
+                            style={{ marginTop: 14 }}
                         >
                             <Text style={styles.offer}>
-                                Want extra protection? Add a trusted friend — then you can recover without {Platform.OS === 'ios' ? 'Apple' : 'Google'} too.
+                                Want extra protection? Add a trusted friend — then you can recover without sign-in accounts too.
                             </Text>
                         </TouchableOpacity>
                     )}
@@ -66,10 +151,10 @@ export function KeeperProtectionPanel({
                             <Text style={styles.rowLabel}>{label}</Text>
                         </View>
                     ))}
-                    {/* The hub fragment A is XOR-mandatory and is NEVER counted in a threshold */}
                     <Text style={styles.footnote}>
                         No single piece can open your account — it takes the hub plus any {TWO_LAYER_THRESHOLD} friends.
                     </Text>
+                    {renderSsoProviders()}
                 </View>
             );
         }
@@ -79,14 +164,10 @@ export function KeeperProtectionPanel({
         return (
             <View style={[styles.panel, styles.almost]}>
                 <Text style={styles.heading} accessibilityRole="header">🔑 Almost there</Text>
-                {/*
-                  NOT "almost covered, 2 of 3 ✅". Below threshold nothing has been split, so
-                  nobody is holding anything, and ticking keepers would claim a protection
-                  that does not exist.
-                */}
                 <Text style={styles.body}>
                     You need one more keeper before your account can be split. Until then, these 12 words are how you get back in.
                 </Text>
+                {renderSsoProviders()}
             </View>
         );
     }
@@ -100,34 +181,9 @@ export function KeeperProtectionPanel({
             </Text>
 
             <View style={styles.buttonContainer}>
-                {Platform.OS !== 'web' && onProtectSso && (
-                    <View style={styles.actionBlock}>
-                        {Platform.OS === 'ios' && (
-                            <AppleButton
-                                title="Protect with Apple"
-                                onPress={() => onProtectSso('apple')}
-                            />
-                        )}
-                        <GoogleButton
-                            title="Protect with Google"
-                            onPress={() => onProtectSso('google')}
-                            style={{ marginTop: Platform.OS === 'ios' ? 10 : 0 }}
-                        />
-                        <FacebookButton
-                            title="Protect with Facebook"
-                            onPress={() => onProtectSso('facebook')}
-                            style={{ marginTop: 10 }}
-                        />
-                        <GitHubButton
-                            title="Protect with GitHub"
-                            onPress={() => onProtectSso('github')}
-                            style={{ marginTop: 10 }}
-                        />
-                        <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
-                    </View>
-                )}
+                {renderSsoProviders()}
                 {onProtectFriends && (
-                    <View style={styles.actionBlock}>
+                    <View style={[styles.actionBlock, { marginTop: 12 }]}>
                         <TouchableOpacity
                             style={styles.buttonSecondary}
                             onPress={onProtectFriends}
@@ -145,9 +201,6 @@ export function KeeperProtectionPanel({
 
 const styles = StyleSheet.create({
     panel: { borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1 },
-    // Semantic tokens rather than raw palette steps (CR) — `colors.feedback` is the layer that
-    // survives a theme change, and reaching past it into palette.green50 is how a panel ends up
-    // the only thing on screen still light when everything around it is not.
     covered: { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border },
     almost: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
     wordsOnly: { backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border },
@@ -155,13 +208,64 @@ const styles = StyleSheet.create({
     body: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginBottom: 8 },
     row: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
     tick: { fontSize: 15, marginRight: 8 },
-    // Wraps rather than truncating: these are names, and a long one on a 320dp screen at 1.3×
-    // font must still be readable rather than trailing off into an ellipsis.
     rowLabel: { flex: 1, fontSize: 14, color: colors.text.body, flexWrap: 'wrap' },
-    footnote: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 10 },
-    offer: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginTop: 12 },
-    buttonContainer: { marginTop: 16 },
-    actionBlock: { marginBottom: 12 },
+    footnote: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 10, marginBottom: 4 },
+    offer: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginTop: 8 },
+    buttonContainer: { marginTop: 12 },
+    actionBlock: { marginBottom: 8 },
+    ssoGroup: {
+        marginTop: 14,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    ssoGroupTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: colors.text.heading,
+        marginBottom: 4,
+    },
+    ssoGroupSubtitle: {
+        fontSize: 12,
+        lineHeight: 16,
+        color: colors.text.secondary,
+        marginBottom: 10,
+    },
+    providerConnectedRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: colors.surface.card,
+        borderWidth: 1,
+        borderColor: colors.feedback.success.border,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginTop: 8,
+    },
+    providerInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    providerName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.text.heading,
+    },
+    disconnectBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: colors.feedback.error.border,
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    },
+    disconnectText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.feedback.error.text,
+    },
     buttonSecondary: {
         backgroundColor: 'transparent',
         borderWidth: 1,
@@ -179,10 +283,10 @@ const styles = StyleSheet.create({
         color: colors.text.heading,
     },
     actionNote: {
-        fontSize: 13,
-        lineHeight: 18,
+        fontSize: 12,
+        lineHeight: 16,
         color: colors.text.secondary,
-        marginTop: 6,
+        marginTop: 8,
         textAlign: 'center',
     },
 });

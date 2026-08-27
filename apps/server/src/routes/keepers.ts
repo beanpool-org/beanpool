@@ -46,6 +46,7 @@ import {
     listKeeperTypes,
     countCurrentShares,
     getCurrentGeneration,
+    getCurrentShares,
     getShareForHolder,
     canRemoveKeeper,
     deleteAllShares,
@@ -54,7 +55,7 @@ import {
     type KeeperType,
 } from '../engine/recovery-shares.js';
 import { depositSsoKeeperGeneration, KeeperDepositError } from '../engine/keeper-deposit.js';
-import { issueNonce, SsoVerificationError, SSO_PROVIDERS } from '../sso.js';
+import { issueNonce, SsoVerificationError, SSO_PROVIDERS, isSsoProvider, type SsoProvider } from '../sso.js';
 import type { RouteDeps } from './types.js';
 
 /** Mirrors the CHECK constraint on `recovery_shares.holder_type`. */
@@ -323,16 +324,16 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 idToken: typeof body.idToken === 'string' ? body.idToken : '',
                 nonce: typeof body.nonce === 'string' ? body.nonce : '',
             });
+            const currentShares = getCurrentShares(owner);
             ctx.status = 200;
             ctx.body = {
                 generation: result.generation,
                 provider: result.provider,
-                // Undefined for Apple after the first authorization, which is normal — the keeper
-                // list renders the provider name alone rather than treating it as a failure.
                 email: result.email,
                 shareCount: result.shareCount,
                 threshold: TWO_LAYER_THRESHOLD,
                 keepers: listKeeperTypes(owner),
+                enrolledSso: currentShares.filter(s => s.holderType === 'sso').map(s => s.holderRef),
             };
         } catch (e) {
             // 400 rather than 401/403 throughout: none of these mean "you are not signed in" — the
@@ -440,6 +441,101 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
     });
 
     /**
+     * Disconnect a single SSO provider from this member's recovery set.
+     */
+    router.delete('/api/recovery/shares/sso/:provider', async (ctx) => {
+        const owner = activeSigner(ctx);
+        if (!owner) return unauthenticated(ctx);
+
+        const provider = ctx.params.provider as SsoProvider;
+        if (!isSsoProvider(provider)) {
+            ctx.status = 400;
+            ctx.body = { error: `'${provider}' is not a valid sign-in provider.` };
+            return;
+        }
+
+        const current = getCurrentShares(owner);
+        const ssoShares = current.filter(s => s.holderType === 'sso');
+        const targetShare = ssoShares.find(s => s.holderRef === provider);
+        if (!targetShare) {
+            ctx.status = 404;
+            ctx.body = { error: `Provider '${provider}' is not connected for this account.` };
+            return;
+        }
+
+        const remainingSso = ssoShares.filter(s => s.holderRef !== provider);
+        const memberShares = current.filter(s => s.holderType === 'member');
+        const hubShare = current.find(s => s.holderType === 'hub');
+
+        if (remainingSso.length === 0 && memberShares.length === 0) {
+            deleteAllShares(owner);
+            ctx.status = 200;
+            ctx.body = {
+                removed: provider,
+                generation: 0,
+                enrolledSso: [],
+                keepers: [],
+            };
+            return;
+        }
+
+        let nextIndex = 1;
+        const newShares: KeeperShareInput[] = [];
+        if (hubShare) {
+            newShares.push({
+                holderType: 'hub',
+                holderRef: hubShare.holderRef,
+                shareIndex: nextIndex++,
+                encryptedShare: hubShare.encryptedShare,
+                shareIv: hubShare.shareIv,
+                shareTag: hubShare.shareTag,
+            });
+        }
+        for (const s of remainingSso) {
+            newShares.push({
+                holderType: 'sso',
+                holderRef: s.holderRef,
+                shareIndex: nextIndex++,
+                encryptedShare: s.encryptedShare,
+                shareIv: s.shareIv,
+                shareTag: s.shareTag,
+                ssoLookupHash: s.ssoLookupHash,
+                ssoLookupSalt: s.ssoLookupSalt,
+                kdfParams: s.kdfParams,
+            });
+        }
+        for (const s of memberShares) {
+            newShares.push({
+                holderType: 'member',
+                holderRef: s.holderRef,
+                shareIndex: nextIndex++,
+                encryptedShare: s.encryptedShare,
+                shareIv: s.shareIv,
+                shareTag: s.shareTag,
+                ephemeralPubkey: s.ephemeralPubkey,
+            });
+        }
+
+        try {
+            const nextGen = putShareGeneration(owner, newShares);
+            ctx.status = 200;
+            ctx.body = {
+                removed: provider,
+                generation: nextGen,
+                enrolledSso: remainingSso.map(s => s.holderRef),
+                keepers: listKeeperTypes(owner),
+            };
+        } catch (e) {
+            if (e instanceof RecoveryShareError) {
+                ctx.status = 400;
+                ctx.body = { error: e.message };
+                return;
+            }
+            throw e;
+        }
+    });
+
+    /**
      * Whether the caller could drop one keeper and still be recoverable.
      *
      * Signed POST rather than a GET because `ctx.state.actor` is only populated for GETs when
@@ -454,6 +550,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
 
         const keepers = listKeeperTypes(owner);
         const total = countCurrentShares(owner);
+        const currentShares = getCurrentShares(owner);
+        const enrolledSso = currentShares.filter(s => s.holderType === 'sso').map(s => s.holderRef);
         const countOf = (t: KeeperType) => keepers.find(k => k.holderType === t)?.count ?? 0;
 
         // How many pieces the member can get WITHOUT another person choosing to help.
@@ -478,6 +576,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         ctx.body = {
             generation: getCurrentGeneration(owner),
             keepers,
+            enrolledSso,
             total,
             threshold,
             canAffordToLose: Math.max(0, total - threshold),

@@ -50,8 +50,10 @@ export interface Protection {
     state: ProtectionState;
     /** Which recovery tier this member is on. */
     tier: ProtectionTier;
-    /** Keepers actually holding a piece. Empty in every state but \`covered\`. */
+    /** Keepers actually holding a piece. Empty in every state but `covered`. */
     holding: string[];
+    /** Specific SSO providers enrolled (e.g. ['google', 'github']). */
+    enrolledSso?: string[];
     /** How many more keepers are needed before a split can happen at all. */
     stillNeeded: number;
     /**
@@ -68,7 +70,7 @@ export interface Protection {
 /**
  * Human-readable keeper names, for a screen that must not say "K2" to anybody.
  *
- * \`device\` was retired with the two-layer model (docs/recovery-model.md). The hub is always
+ * `device` was retired with the two-layer model (docs/recovery-model.md). The hub is always
  * present in any split but is XOR-mandatory, not a counted keeper — it shows up as "Your
  * community hub" only when a split exists.
  */
@@ -101,39 +103,51 @@ function tierFrom(enrolled: readonly string[]): ProtectionTier {
 /**
  * Read an enrolment result as a screen state.
  *
- * \`null\` means enrolment has not finished. Treated as \`words-only\` rather than as a spinner
+ * `null` means enrolment has not finished. Treated as `words-only` rather than as a spinner
  * state on purpose: if the result never arrives — a dead node, a request that hangs — the screen
  * still has to say something true, and "here are your words" is true in every case. A member
  * must never sit in front of a screen that is waiting to find out whether they are safe.
  */
 export function protectionFrom(result: KeeperEnrolmentResult | null): Protection {
+    const enrolledSso = result?.enrolledSso ?? [];
     if (!result || result.enrolled.length === 0) {
         const available = result?.available ?? 0;
-        // Under the two-layer model, a member with no enrolled keepers is sovereign.
-        // "almost" only applies if they have available keepers and are one short of the
-        // minimum tier threshold (friend tier: 3, so available >= 2).
-        const threshold = TWO_LAYER_THRESHOLD; // SSO tier is the lowest bar
+        const threshold = TWO_LAYER_THRESHOLD;
         const stillNeeded = Math.max(0, threshold - available);
 
         if (available > 0 && stillNeeded === 1) {
-            return { state: 'almost', tier: 'sovereign', holding: [], stillNeeded, spare: 0, showWords: true };
+            return {
+                state: 'almost',
+                tier: 'sovereign',
+                holding: [],
+                enrolledSso,
+                stillNeeded,
+                spare: 0,
+                showWords: true,
+            };
         }
-        return { state: 'words-only', tier: 'sovereign', holding: [], stillNeeded, spare: 0, showWords: true };
+        return {
+            state: 'words-only',
+            tier: 'sovereign',
+            holding: [],
+            enrolledSso,
+            stillNeeded,
+            spare: 0,
+            showWords: true,
+        };
     }
 
     const threshold = thresholdFor(result.enrolled);
     const tier = tierFrom(result.enrolled);
 
     if (result.enrolled.length < threshold) {
-        // Should be unreachable — enrolment writes nothing below the threshold — but a partial
-        // enrolment reported as "covered" is the exact failure this model exists to prevent, so
-        // it degrades to the honest state rather than trusting an invariant held elsewhere.
         const stillNeeded = threshold - result.enrolled.length;
         if (stillNeeded === 1) {
             return {
                 state: 'almost',
                 tier,
                 holding: result.enrolled.map(k => KEEPER_LABELS[k] ?? k),
+                enrolledSso,
                 stillNeeded,
                 spare: 0,
                 showWords: true,
@@ -143,29 +157,22 @@ export function protectionFrom(result: KeeperEnrolmentResult | null): Protection
             state: 'words-only',
             tier,
             holding: result.enrolled.map(k => KEEPER_LABELS[k] ?? k),
+            enrolledSso,
             stillNeeded,
             spare: 0,
             showWords: true,
         };
     }
 
-    const spare = result.enrolled.length - threshold;
+    const spare = Math.max(0, result.enrolled.length - threshold);
+
     return {
         state: 'covered',
         tier,
         holding: result.enrolled.map(k => KEEPER_LABELS[k] ?? k),
+        enrolledSso,
         stillNeeded: 0,
         spare,
-        /*
-         * SSO-covered members: tuck words behind a tap and offer the add-a-friend upgrade
-         * instead. An SSO member who adds one friend becomes sovereign AND recoverable
-         * (2 friends + hub, no Apple needed).
-         *
-         * Friend-covered with no spare: show words (same reasoning as before — when a member
-         * can actually add a fourth keeper, flip this to offering that instead).
-         *
-         * Friend-covered with spare: tuck words behind a tap.
-         */
         showWords: tier === 'sso' ? false : spare === 0,
     };
 }

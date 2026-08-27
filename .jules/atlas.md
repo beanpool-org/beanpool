@@ -71,3 +71,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `loadActiveProfileId` and `saveActiveProfileId` in `apps/manager/src/lib/profiles.ts` were untested.
 **Learning:** Testing `loadActiveProfileId` and `saveActiveProfileId` required mocking `localStorage` error handling paths to ensure fallback behavior worked properly when storage fails.
 **Action:** Check remaining utility functions in `lib/` for additional edge case tests.
+
+## 2026-08-26 - [manager tests] TopHeader component unit tests
+**Gap:** `TopHeader` component in `apps/manager/src/components/layout/TopHeader.tsx` was untested.
+**Learning:** Testing `TopHeader` required verifying input events, button trigger callbacks, and UI loading states.
+**Action:** Continue adding component tests for layout components in `apps/manager/src/components/layout/`.

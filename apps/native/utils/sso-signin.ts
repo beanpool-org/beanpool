@@ -63,7 +63,7 @@ try {
  */
 export const GOOGLE_WEB_CLIENT_ID = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 export const FACEBOOK_APP_ID = '818892721251369';
-export const GITHUB_CLIENT_ID = 'Ov23liilgPHDo8VujObM';
+export const GITHUB_CLIENT_ID = 'Ov23li8mmDfBr7GyJVRU';
 
 export type SsoProvider = 'apple' | 'google' | 'facebook' | 'github';
 

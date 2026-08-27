@@ -44,11 +44,9 @@ export function createPairingRoutes(deps: RouteDeps): Router {
 
     /**
      * GET /api/pair/poll
-     * Polled by waiting desktop PWA.
+     * Polled by waiting desktop PWA (runs in-memory without auth bucket consumption).
      */
     router.get('/api/pair/poll', async (ctx) => {
-        if (!deps.rateLimit(ctx)) return;
-
         const sessionId = ctx.query.session as string;
         if (!sessionId) {
             ctx.status = 400;
@@ -90,8 +88,6 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      * Cancels an active pairing session.
      */
     router.post('/api/pair/cancel', async (ctx) => {
-        if (!deps.rateLimit(ctx)) return;
-
         const { sessionId } = (ctx.request as any).body || {};
         if (sessionId) {
             cancelPairingSession(sessionId);

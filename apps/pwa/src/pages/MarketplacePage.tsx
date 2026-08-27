@@ -161,8 +161,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         getNodeConfig().then(setNodeConfig).catch(console.error);
     }, []);
 
-    // Layout configuration
-    const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>('list');
+    // Layout configuration — default to 'grid' (Card View)
+    const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>(() => {
+        try {
+            const saved = localStorage.getItem('marketplace_view_mode');
+            if (saved === 'grid' || saved === 'list' || saved === 'compact') return saved;
+        } catch {}
+        return 'grid';
+    });
     const [showFilters, setShowFilters] = useState(false);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
@@ -1715,11 +1721,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                     {/* View Mode Toggle */}
                     <button
-                        onClick={() => setViewMode(v => v === 'list' ? 'grid' : (v === 'grid' ? 'compact' : 'list'))}
+                        onClick={() => setViewMode(v => {
+                            const next = v === 'grid' ? 'list' : (v === 'list' ? 'compact' : 'grid');
+                            try { localStorage.setItem('marketplace_view_mode', next); } catch {}
+                            return next;
+                        })}
                         className="w-9 h-9 rounded-full flex-shrink-0 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-colors shadow-sm flex items-center justify-center text-md hover:shadow-md cursor-pointer"
-                        title={viewMode === 'list' ? "Switch to Grid View" : (viewMode === 'grid' ? "Switch to Compact View" : "Switch to List View")}
+                        title={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
+                        aria-label={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
                     >
-                        {viewMode === 'list' ? '☰' : (viewMode === 'grid' ? '⊞' : '▤')}
+                        {viewMode === 'grid' ? '⊞' : (viewMode === 'list' ? '☰' : '▤')}
                     </button>
                 </div>
 

@@ -6,20 +6,41 @@ Generates realistic iPhone device mockups with Dynamic Island, titanium bezels,
 ambient shadows, and composite showcase for the BeanPool website.
 """
 
+import argparse
 import os
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+import sys
+
+try:
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+except ImportError as e:
+    raise SystemExit(
+        "Missing dependency: Pillow is required to generate website mockups.\n"
+        "Install via: pip install Pillow"
+    ) from e
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 WEBSITE_SCREENSHOTS_DIR = os.path.join(REPO_ROOT, "apps", "website", "assets", "screenshots")
 
-# Uploaded screenshot paths
-UPLOAD_DIR = "/Users/marty/.gemini/antigravity/brain/51829f8c-76d8-4c86-a853-b180d8f09262/.user_uploaded"
-MAP_SCREEN = os.path.join(UPLOAD_DIR, "media_1787822921136.png")
-MARKET_SCREEN = os.path.join(UPLOAD_DIR, "media_1787822758457.png")
-OFFER_SCREEN = os.path.join(UPLOAD_DIR, "media_1787822910684.png")
-LEDGER_SCREEN = os.path.join(UPLOAD_DIR, "media_1787822767761.png")
-TRUST_SCREEN = os.path.join(UPLOAD_DIR, "media_1787822915872.png")
+DEFAULT_FALLBACK_DIR = "/Users/marty/.gemini/antigravity/brain/51829f8c-76d8-4c86-a853-b180d8f09262/.user_uploaded"
+
+def get_font(font_candidates, size):
+    """Attempt to load the first available font from candidates, falling back gracefully."""
+    for path in font_candidates:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except (OSError, IOError):
+                continue
+    for name in ["DejaVuSans-Bold.ttf", "DejaVuSans.ttf", "Arial.ttf", "arial.ttf"]:
+        try:
+            return ImageFont.truetype(name, size)
+        except (OSError, IOError):
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
 
 def render_ios_status_bar(width, height, is_dark_bg=True, time_text="1:22"):
     status = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -28,13 +49,13 @@ def render_ios_status_bar(width, height, is_dark_bg=True, time_text="1:22"):
     text_color = (255, 255, 255, 245) if is_dark_bg else (15, 23, 42, 240)
     icon_color = (255, 255, 255, 235) if is_dark_bg else (15, 23, 42, 220)
     
-    try:
-        font = ImageFont.truetype("/System/Library/Fonts/SFNS.ttf", 19)
-    except:
-        try:
-            font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 18)
-        except:
-            font = ImageFont.load_default()
+    font_candidates = [
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]
+    font = get_font(font_candidates, 18)
 
     # Time (Left side)
     draw.text((36, 18), time_text, fill=text_color, font=font)
@@ -63,16 +84,24 @@ def render_ios_status_bar(width, height, is_dark_bg=True, time_text="1:22"):
     return status
 
 def generate_clean_screen(screen_path, is_light=False, time_str="1:22"):
+    if not os.path.exists(screen_path):
+        raise FileNotFoundError(f"Source screenshot not found: {screen_path}")
+
     img = Image.open(screen_path).convert("RGBA")
     w, h = img.size
     
     if not is_light:
-        # Inpaint Android status bar with foliage texture from screen
-        foliage_patch_left = img.crop((180, 10, 180 + 160, 48))
-        img.paste(foliage_patch_left, (10, 10))
-        
-        foliage_patch_right = img.crop((190, 10, 190 + 135, 48))
-        img.paste(foliage_patch_right, (315, 10))
+        # Inpaint status bar area
+        try:
+            foliage_patch_left = img.crop((180, 10, 180 + 160, 48))
+            img.paste(foliage_patch_left, (10, 10))
+            
+            foliage_patch_right = img.crop((190, 10, 190 + 135, 48))
+            img.paste(foliage_patch_right, (315, 10))
+        except Exception:
+            bg_col = img.getpixel((w // 2, 10))
+            draw_top = ImageDraw.Draw(img)
+            draw_top.rectangle([0, 0, w, 52], fill=bg_col)
     else:
         bg_col = img.getpixel((w // 2, 20))
         draw_top = ImageDraw.Draw(img)
@@ -204,23 +233,29 @@ def render_framed_phone(clean_screen, output_path=None):
     
     return canvas
 
-def generate_all_assets():
+def generate_all_assets(input_dir):
     os.makedirs(WEBSITE_SCREENSHOTS_DIR, exist_ok=True)
+
+    map_screen = os.path.join(input_dir, "media_1787822921136.png")
+    market_screen = os.path.join(input_dir, "media_1787822758457.png")
+    offer_screen = os.path.join(input_dir, "media_1787822910684.png")
+    ledger_screen = os.path.join(input_dir, "media_1787822767761.png")
+    trust_screen = os.path.join(input_dir, "media_1787822915872.png")
     
     print("Generating individual phone mockups...")
-    clean_map = generate_clean_screen(MAP_SCREEN, is_light=False, time_str="1:22")
+    clean_map = generate_clean_screen(map_screen, is_light=False, time_str="1:22")
     phone_map = render_framed_phone(clean_map, os.path.join(WEBSITE_SCREENSHOTS_DIR, "phone_map.png"))
     
-    clean_market = generate_clean_screen(MARKET_SCREEN, is_light=False, time_str="1:23")
+    clean_market = generate_clean_screen(market_screen, is_light=False, time_str="1:23")
     phone_market = render_framed_phone(clean_market, os.path.join(WEBSITE_SCREENSHOTS_DIR, "phone_marketplace.png"))
     
-    clean_offer = generate_clean_screen(OFFER_SCREEN, is_light=True, time_str="1:24")
+    clean_offer = generate_clean_screen(offer_screen, is_light=True, time_str="1:24")
     phone_offer = render_framed_phone(clean_offer, os.path.join(WEBSITE_SCREENSHOTS_DIR, "phone_offer.png"))
     
-    clean_ledger = generate_clean_screen(LEDGER_SCREEN, is_light=False, time_str="1:25")
+    clean_ledger = generate_clean_screen(ledger_screen, is_light=False, time_str="1:25")
     phone_ledger = render_framed_phone(clean_ledger, os.path.join(WEBSITE_SCREENSHOTS_DIR, "phone_ledger.png"))
     
-    clean_trust = generate_clean_screen(TRUST_SCREEN, is_light=True, time_str="1:26")
+    clean_trust = generate_clean_screen(trust_screen, is_light=True, time_str="1:26")
     phone_trust = render_framed_phone(clean_trust, os.path.join(WEBSITE_SCREENSHOTS_DIR, "phone_trust.png"))
     
     # Update dashboard and marketplace single images
@@ -259,16 +294,20 @@ def generate_all_assets():
     comp = Image.alpha_composite(comp, glow_layer)
     
     # 2. Section Header Text
-    try:
-        title_font = ImageFont.truetype("/System/Library/Fonts/SFNS.ttf", 60)
-        sub_font = ImageFont.truetype("/System/Library/Fonts/SFNS.ttf", 26)
-    except:
-        try:
-            title_font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 56)
-            sub_font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 24)
-        except:
-            title_font = ImageFont.load_default()
-            sub_font = ImageFont.load_default()
+    title_candidates = [
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]
+    sub_candidates = [
+        "/System/Library/Fonts/SFNS.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+    title_font = get_font(title_candidates, 56)
+    sub_font = get_font(sub_candidates, 24)
 
     title_text = "Native Mobile Experience"
     sub_text = "A beautifully designed, sovereign native application for iOS and Android that maps your local neighborhood."
@@ -311,5 +350,22 @@ def generate_all_assets():
     comp.save(composite_output_path, "PNG", optimize=True)
     print(f"Generated {composite_output_path} ({comp.size})")
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate device mockups for BeanPool website.")
+    default_dir = os.environ.get(
+        "BEANPOOL_SCREENSHOT_DIR",
+        os.path.join(REPO_ROOT, "apps", "website", "assets", "raw_screenshots")
+    )
+    if not os.path.exists(default_dir) and os.path.exists(DEFAULT_FALLBACK_DIR):
+        default_dir = DEFAULT_FALLBACK_DIR
+
+    parser.add_argument(
+        "--input-dir",
+        default=default_dir,
+        help="Path to directory containing source raw screenshots",
+    )
+    return parser.parse_args()
+
 if __name__ == "__main__":
-    generate_all_assets()
+    args = parse_args()
+    generate_all_assets(args.input_dir)

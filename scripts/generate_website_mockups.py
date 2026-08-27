@@ -265,7 +265,7 @@ def generate_all_assets(input_dir):
     print("Generating 4-phone showcase composite image...")
     # Composite showcase dimensions
     comp_w = 2000
-    comp_h = 1120
+    comp_h = 960
     
     # Scale phones for 4-phone layout
     scale = 0.72
@@ -285,47 +285,19 @@ def generate_all_assets(input_dir):
     glow_layer = Image.new("RGBA", (comp_w, comp_h), (0, 0, 0, 0))
     g_draw = ImageDraw.Draw(glow_layer)
     # Emerald glow on left/center
-    g_draw.ellipse([200, 220, 1100, 950], fill=(16, 185, 129, 32))
+    g_draw.ellipse([200, 100, 1100, 850], fill=(16, 185, 129, 32))
     # Amber/orange glow near center
-    g_draw.ellipse([800, 250, 1400, 900], fill=(245, 158, 11, 20))
+    g_draw.ellipse([800, 120, 1400, 800], fill=(245, 158, 11, 20))
     # Blue/indigo glow on right
-    g_draw.ellipse([1100, 220, 1850, 950], fill=(59, 130, 246, 28))
+    g_draw.ellipse([1100, 100, 1850, 850], fill=(59, 130, 246, 28))
     glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(130))
     comp = Image.alpha_composite(comp, glow_layer)
     
-    # 2. Section Header Text
-    title_candidates = [
-        "/System/Library/Fonts/SFNS.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ]
-    sub_candidates = [
-        "/System/Library/Fonts/SFNS.ttf",
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    ]
-    title_font = get_font(title_candidates, 56)
-    sub_font = get_font(sub_candidates, 24)
-
-    title_text = "Native Mobile Experience"
-    sub_text = "A beautifully designed, sovereign native application for iOS and Android that maps your local neighborhood."
-
-    draw = ImageDraw.Draw(comp)
-    t_bbox = draw.textbbox((0, 0), title_text, font=title_font)
-    t_w = t_bbox[2] - t_bbox[0]
-    draw.text(((comp_w - t_w) // 2, 54), title_text, fill=(255, 255, 255, 255), font=title_font)
-
-    s_bbox = draw.textbbox((0, 0), sub_text, font=sub_font)
-    s_w = s_bbox[2] - s_bbox[0]
-    draw.text(((comp_w - s_w) // 2, 132), sub_text, fill=(148, 163, 184, 255), font=sub_font)
-
-    # 3. Position the 4 phones evenly
+    # 2. Position the 4 phones evenly
     total_phones_w = 4 * new_w
     spacing = (comp_w - total_phones_w - 140) // 3
     start_x = 70
-    start_y = 205
+    start_y = 60
 
     # Frosted cards behind each phone
     for i in range(4):
@@ -348,6 +320,7 @@ def generate_all_assets(input_dir):
 
     composite_output_path = os.path.join(WEBSITE_SCREENSHOTS_DIR, "mockup_composite.png")
     comp.save(composite_output_path, "PNG", optimize=True)
+    print(f"Generated {composite_output_path} ({comp.size})")
     print(f"Generated {composite_output_path} ({comp.size})")
 
 def parse_args():

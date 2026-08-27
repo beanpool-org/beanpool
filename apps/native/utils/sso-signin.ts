@@ -424,7 +424,8 @@ function generatePkcePair(): { verifier: string; challenge: string } {
 export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
     const redirectUri = 'beanpool://auth/github';
     const { verifier, challenge } = generatePkcePair();
-    const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,user:email&state=${encodeURIComponent(nonce)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256`;
+    const scopes = 'read:user user:email';
+    const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${encodeURIComponent(nonce)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256`;
 
     let result;
     try {
@@ -500,6 +501,26 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
                 sub = String(userData.id);
             }
             email = userData.email || undefined;
+        }
+
+        // If email is private on the main profile, fetch from /user/emails
+        if (!email) {
+            const emailsRes = await fetch('https://api.github.com/user/emails', {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'User-Agent': 'BeanPool-App',
+                    Accept: 'application/vnd.github.v3+json',
+                },
+            });
+            if (emailsRes.ok) {
+                const emailsData = await emailsRes.json() as Array<{ email: string; primary?: boolean; verified?: boolean }>;
+                if (Array.isArray(emailsData)) {
+                    const primary = emailsData.find((e) => e.primary) || emailsData[0];
+                    if (primary?.email) {
+                        email = primary.email;
+                    }
+                }
+            }
         }
     } catch (e) {
         console.warn('[SSO] Could not fetch GitHub user profile:', e);

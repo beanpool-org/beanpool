@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { MARKETPLACE_CATEGORIES, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
+import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
@@ -489,7 +489,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // =================== DETAIL VIEW ===================
     if (selectedPost) {
-        const cat = MARKETPLACE_CATEGORIES.find(c => c.id === selectedPost.category);
+        const cat = MARKETPLACE_CATEGORIES_BY_ID.get(selectedPost.category);
         const typeColor = POST_TYPE_COLORS[selectedPost.type];
         const postedDate = new Date(selectedPost.createdAt);
         const ago = getTimeAgo(postedDate);
@@ -1799,9 +1799,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-850 text-nature-600 dark:text-nature-350 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
-                        {(MARKETPLACE_CATEGORIES.find(c => c.id === categoryFilter)?.emoji) || '🏷️'}
+                        {(MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter)?.emoji) || '🏷️'}
                         <span className="truncate">
-                            {categoryFilter !== 'all' ? MARKETPLACE_CATEGORIES.find(c => c.id === categoryFilter)?.label : 'Category'}
+                            {categoryFilter !== 'all' ? MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter)?.label : 'Category'}
                         </span>
                         {categoryFilter !== 'all' ? (
                             <span
@@ -1991,7 +1991,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <span className="text-violet-600 dark:text-violet-400 font-bold">★</span>
                                         <span className="truncate">
                                             Prioritizing: {favCategories.length > 0 
-                                                ? favCategories.map(id => MARKETPLACE_CATEGORIES.find(c => c.id === id)?.emoji || '').join(' ')
+                                                ? favCategories.map(id => MARKETPLACE_CATEGORIES_BY_ID.get(id)?.emoji || '').join(' ')
                                                 : 'None selected yet'}
                                         </span>
                                     </div>

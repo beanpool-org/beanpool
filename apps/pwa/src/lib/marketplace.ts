@@ -23,6 +23,11 @@ export const MARKETPLACE_CATEGORIES = [
     { id: 'general', emoji: '🌱', label: 'General' },
 ] as const;
 
+// ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(N) .find() scans
+export const MARKETPLACE_CATEGORIES_BY_ID = new Map(
+    MARKETPLACE_CATEGORIES.map(c => [c.id as string, c])
+);
+
 export type PostType = 'offer' | 'need';
 
 export const POST_TYPE_COLORS = {

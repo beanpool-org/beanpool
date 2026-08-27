@@ -102,3 +102,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-08-29 - O(N*M) Member Lookups in ThreatReviewModal
 **Learning:** In `apps/manager/src/components/modules/ThreatReviewModal.tsx`, resolving member public keys and rendering flagged entities performed `members.find(...)` across `members` for each involved key, creating an $O(N \times M)$ scan.
 **Action:** Pre-computed `membersMap` using `useMemo` indexed by both full public key and prefix tokens to turn member lookups into $O(1)$ retrievals.
+
+## 2026-09-01 - O(N*C) Category Lookups in PWA Marketplace & Map Components
+**Learning:** Looking up category emoji/labels across marketplace cards, detail headers, and map markers repeatedly invoked `MARKETPLACE_CATEGORIES.find(c => c.id === ...)` inside render loops and array mappings, causing $O(N \times C)$ linear array scans on every render cycle.
+**Action:** Exported `MARKETPLACE_CATEGORIES_BY_ID` Map in `apps/pwa/src/lib/marketplace.ts` and replaced `.find(...)` scans in `MarketplaceCard`, `MarketplacePage`, and `MapPage` with constant-time `MARKETPLACE_CATEGORIES_BY_ID.get(...)` lookups.

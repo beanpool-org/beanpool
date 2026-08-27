@@ -250,12 +250,15 @@ export function WelcomePage({ onComplete }: Props) {
             const session = createPairingSession();
             setPairingSession(session);
             setPairingSecondsLeft(120);
+            await initPairingApi(session.sessionId, session.publicKeyHex);
             setPairingStatus('waiting');
             setShowQrPairing(true);
-            await initPairingApi(session.sessionId, session.publicKeyHex);
         } catch (err: any) {
             console.error('[Pairing] Init error:', err);
             setError(err.message || 'Failed to initialize device pairing on node relay');
+            setPairingStatus('idle');
+            setShowQrPairing(false);
+            setPairingSession(null);
         } finally {
             setLoading(false);
         }
@@ -1369,6 +1372,7 @@ export function WelcomePage({ onComplete }: Props) {
                                     </p>
                                     <button
                                         type="button"
+                                        aria-label="Paste recovery words from clipboard"
                                         onClick={async () => {
                                             try {
                                                 const text = await navigator.clipboard.readText();
@@ -1378,17 +1382,17 @@ export function WelcomePage({ onComplete }: Props) {
                                                 tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase().trim(); });
                                                 setRecoveryWords(updated);
                                             } catch {
-                                                alert('Copy your 12 words first, or paste them into the first box.');
+                                                setError('Unable to read clipboard. Please paste your recovery words directly into the inputs.');
                                             }
                                         }}
-                                        className="bg-blue-50 dark:bg-blue-950/40 border border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                                        className="bg-blue-50 dark:bg-blue-950/40 border border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none transition-colors"
                                         style={{
                                             fontSize: '0.75rem', fontWeight: 600,
                                             padding: '0.35rem 0.75rem', borderRadius: '8px', cursor: 'pointer',
                                             whiteSpace: 'nowrap',
                                         }}
                                     >
-                                        📋 Paste
+                                        <span aria-hidden="true">📋 </span>Paste Words
                                     </button>
                                 </div>
 
@@ -1406,6 +1410,10 @@ export function WelcomePage({ onComplete }: Props) {
                                             aria-label={`Recovery word ${i + 1}`}
                                             type="text"
                                             value={word}
+                                            autoCapitalize="none"
+                                            autoCorrect="off"
+                                            autoComplete="off"
+                                            spellCheck={false}
                                             onPaste={(e) => {
                                                 // A whole phrase pasted into any box fans out across all 12.
                                                 const tokens = (e.clipboardData.getData('text') || '').trim().split(/\s+/).filter(Boolean);
@@ -1429,8 +1437,6 @@ export function WelcomePage({ onComplete }: Props) {
                                                 }
                                             }}
                                             placeholder={`${i + 1}`}
-                                            autoCapitalize="none"
-                                            autoCorrect="off"
                                             className="bg-nature-50/80 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 text-nature-900 dark:text-oat-50 placeholder-nature-400 dark:placeholder-nature-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                                             style={{
                                                 width: '100%',
@@ -1497,18 +1503,12 @@ export function WelcomePage({ onComplete }: Props) {
                             </div>
 
                             {error && (
-                                <div style={{
-                                    background: 'rgba(239, 68, 68, 0.12)',
-                                    border: '1px solid rgba(239, 68, 68, 0.35)',
-                                    color: '#ef4444',
-                                    padding: '0.65rem 0.9rem',
-                                    borderRadius: '12px',
-                                    fontSize: '0.82rem',
-                                    marginBottom: '1rem',
-                                    textAlign: 'center',
-                                    lineHeight: 1.4,
-                                }}>
-                                    ⚠️ {error}
+                                <div
+                                    role="alert"
+                                    aria-live="assertive"
+                                    className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-300 p-2.5 rounded-xl text-xs mb-4 text-center leading-relaxed font-medium"
+                                >
+                                    <span aria-hidden="true">⚠️ </span>{error}
                                 </div>
                             )}
 
@@ -1858,30 +1858,21 @@ export function WelcomePage({ onComplete }: Props) {
                                     </p>
 
                                     {error && (
-                                        <div style={{
-                                            background: 'rgba(239, 68, 68, 0.12)',
-                                            border: '1px solid rgba(239, 68, 68, 0.35)',
-                                            color: '#ef4444',
-                                            padding: '0.65rem 0.9rem',
-                                            borderRadius: '12px',
-                                            fontSize: '0.82rem',
-                                            marginBottom: '1rem',
-                                            textAlign: 'center',
-                                            lineHeight: 1.4,
-                                        }}>
-                                            ⚠️ {error}
+                                        <div
+                                            role="alert"
+                                            aria-live="assertive"
+                                            className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-300 p-2.5 rounded-xl text-xs mb-4 text-center leading-relaxed font-medium"
+                                        >
+                                            <span aria-hidden="true">⚠️ </span>{error}
                                         </div>
                                     )}
 
                                     <button
                                         onClick={handleStartQrPairing}
                                         disabled={loading}
-                                        className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50/90 hover:bg-emerald-100/90 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer"
-                                        onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
-                                        onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                                        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                        className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50/90 hover:bg-emerald-100/90 active:scale-[0.98] dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                                     >
-                                        📲 Link with Mobile App (Scan QR)
+                                        <span aria-hidden="true">📲</span> Link with Mobile App (Scan QR)
                                         <span className="text-[10px] font-extrabold bg-emerald-600 text-white px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
                                             FASTEST
                                         </span>
@@ -1889,22 +1880,18 @@ export function WelcomePage({ onComplete }: Props) {
 
                                     <button
                                         onClick={() => { setShowRecovery(true); setRecoveryMode('words'); setError(null); }}
-                                        className="w-full rounded-2xl border border-amber-500/40 bg-amber-50/90 hover:bg-amber-100/90 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer"
-                                        onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
-                                        onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                                        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                        disabled={loading}
+                                        className="w-full rounded-2xl border border-amber-500/40 bg-amber-50/90 hover:bg-amber-100/90 active:scale-[0.98] dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                                     >
-                                        🔑 Recover with 12 Words
+                                        <span aria-hidden="true">🔑</span> Recover with 12 Words
                                     </button>
 
                                     <button
                                         onClick={() => { setShowRecovery(true); setRecoveryMode('social'); setError(null); }}
-                                        className="w-full rounded-2xl border border-blue-500/40 bg-blue-50/90 hover:bg-blue-100/90 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-900 dark:text-blue-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 py-3.5 px-4 shadow-sm cursor-pointer"
-                                        onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
-                                        onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                                        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                        disabled={loading}
+                                        className="w-full rounded-2xl border border-blue-500/40 bg-blue-50/90 hover:bg-blue-100/90 active:scale-[0.98] dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-900 dark:text-blue-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                                     >
-                                        🛡️ Social Recovery (Guardians)
+                                        <span aria-hidden="true">🛡️</span> Social Recovery (Guardians)
                                     </button>
 
                                     <button

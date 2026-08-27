@@ -373,7 +373,7 @@ export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, '
 }
 
 export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
-    const redirectUri = 'beanpool://auth/facebook';
+    const redirectUri = 'https://beanpool.org/auth/facebook';
     const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${encodeURIComponent(FACEBOOK_APP_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token,id_token&scope=openid,email&nonce=${encodeURIComponent(nonce)}`;
 
     let result;
@@ -422,7 +422,7 @@ function generatePkcePair(): { verifier: string; challenge: string } {
 }
 
 export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
-    const redirectUri = 'beanpool://auth/github';
+    const redirectUri = 'https://beanpool.org/auth/github';
     const { verifier, challenge } = generatePkcePair();
     const scopes = 'read:user user:email';
     const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${encodeURIComponent(nonce)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256`;

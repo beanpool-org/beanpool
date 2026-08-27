@@ -649,9 +649,14 @@ section {
     margin: 1.5rem auto 2.5rem auto;
     width: 100%;
 }
-.section-app-badges .hero-app-btn {
-    flex: 1;
-    min-width: 200px;
+.section-app-badges .store-badge {
+    transition: var(--transition);
+    opacity: 0.95;
+}
+.section-app-badges .store-badge:hover {
+    opacity: 1;
+    transform: translateY(-2px);
+    filter: drop-shadow(0 6px 16px rgba(245, 158, 11, 0.25));
 }
 
 /* ======================== PREMIUM BUTTONS ======================== */

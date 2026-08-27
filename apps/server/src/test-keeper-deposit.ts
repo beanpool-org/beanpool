@@ -23,7 +23,7 @@ import {
     issueNonce, ssoLookupHash, _resetJwksCacheForTests, _clearNoncesForTests, SSO_PROVIDERS,
     type SsoProvider,
 } from './sso.js';
-import { depositSsoKeeperGeneration, maskEmail } from './engine/keeper-deposit.js';
+import { depositSsoKeeperGeneration, KeeperDepositError, maskEmail } from './engine/keeper-deposit.js';
 import { getCurrentShares, findShareBySsoLookup, listKeeperTypes } from './engine/recovery-shares.js';
 import type { KeeperShareInput } from './engine/recovery-shares.js';
 
@@ -346,6 +346,50 @@ async function main(): Promise<void> {
         '...and the active Google lookup continues to resolve — multi-SSO supports 1-of-N redundancy');
     assert(findShareBySsoLookup(afterApple.ssoLookupHash!)?.ownerPubkey === both,
         'and the new Apple lookup resolves to the same member');
+
+    // The hub fragment must survive the second deposit untouched. Under `seed = A ⊕ B` every
+    // sealed fragment is only meaningful against the A it was split from, and a generation stores
+    // one A — so carrying Google's B forward beside a different A silently invalidates it.
+    const hubAfterApple = getCurrentShares(both).find(s => s.holderType === 'hub')!;
+    assert(hubAfterApple.encryptedShare === Buffer.from('share-2').toString('base64'),
+        'the hub fragment is unchanged by the second deposit — the carried-over fragment still pairs with it');
+
+    // ...and a deposit that would change it is refused rather than written. This is the guard that
+    // makes 1-of-N redundancy real: without it, enrolling a second provider strands the first, and
+    // recovery through the first rebuilds a keypair for an account that does not exist. Nothing
+    // downstream catches that — no checksum is stored and combineHubAndWhole is called without one.
+    nonce = issueNonce(both);
+    let refused = false;
+    try {
+        await depositSsoKeeperGeneration({
+            provider: 'google',
+            ownerPubkey: both,
+            shares: generation().map(s => s.holderType === 'hub'
+                ? { ...s, encryptedShare: Buffer.from('a-different-A').toString('base64') }
+                : s),
+            idToken: GOOGLE.mint(GOOGLE.sub, nonce), nonce,
+        });
+    } catch (e) {
+        refused = e instanceof KeeperDepositError && /strand/.test((e as Error).message);
+    }
+    assert(refused, 'a deposit carrying a NEW hub fragment while other providers exist is refused');
+    assert(getCurrentShares(both).find(s => s.holderType === 'hub')!.encryptedShare
+            === Buffer.from('share-2').toString('base64'),
+        '...and the refusal leaves the stored generation exactly as it was');
+
+    // The first split has nothing to stay consistent with, so a fresh A there is correct.
+    prime();
+    const firstEver = memberKey();
+    nonce = issueNonce(firstEver);
+    const fresh = await depositSsoKeeperGeneration({
+        provider: 'google',
+        ownerPubkey: firstEver,
+        shares: generation().map(s => s.holderType === 'hub'
+            ? { ...s, encryptedShare: Buffer.from('brand-new-A').toString('base64') }
+            : s),
+        idToken: GOOGLE.mint(GOOGLE.sub, nonce), nonce,
+    });
+    assert(fresh.generation === 1, 'a first deposit may mint any hub fragment — there is nothing to strand');
 
     // Two different people, one on each provider, must not collide.
     assert(google.ssoRow.ssoLookupHash !== apple.ssoRow.ssoLookupHash,

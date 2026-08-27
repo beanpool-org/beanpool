@@ -44,8 +44,23 @@ export function KeeperProtectionPanel({
                     if (isConnected) {
                         return (
                             <View key={prov} style={styles.providerConnectedRow}>
-                                <View style={styles.providerInfo}>
-                                    <Text style={styles.tick}>✅</Text>
+                                {/*
+                                  * Grouped on the TEXT, not on the row. `accessible` collapses a
+                                  * subtree into one element, so putting it on the row would take
+                                  * the Disconnect button out of the reader's focus order — the
+                                  * control would still be on screen and no longer reachable.
+                                  * The tick is decorative and repeats what the label says.
+                                  */}
+                                <View
+                                    style={styles.providerInfo}
+                                    accessible={true}
+                                    accessibilityLabel={`${PROVIDER_NAMES[prov]} connected as a recovery keeper`}
+                                >
+                                    <Text
+                                        style={styles.tick}
+                                        accessibilityElementsHidden={true}
+                                        importantForAccessibility="no"
+                                    >✅</Text>
                                     <Text style={styles.providerName}>{PROVIDER_NAMES[prov]} Connected</Text>
                                 </View>
                                 {onDisconnectSso && (

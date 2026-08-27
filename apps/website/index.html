@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css?v=1.6">
+    <link rel="stylesheet" href="style.css?v=1.7">
 </head>
 <body>
     <!-- Navigation Bar -->
@@ -106,51 +106,54 @@
                         <a href="#how-it-works" class="btn btn-ghost">Learn How It Works</a>
                     </div>
 
-                    <!-- App Store Badges with White Ring -->
-                    <div class="hero-store-grid">
-                        <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="Download on the App Store">
-                            <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
-                                <rect width="135" height="40" rx="7" fill="#000"/>
-                                <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
-                                <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Download on the</text>
-                                <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
-                                <g transform="translate(10, 6) scale(0.58)">
-                                    <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
-                                    <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
-                                </g>
-                            </svg>
-                        </a>
-                        <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Get it on Google Play">
-                            <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
-                                <rect width="135" height="40" rx="7" fill="#000"/>
-                                <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
-                                <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">GET IT ON</text>
-                                <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
-                                <g transform="translate(10, 7)">
-                                    <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
-                                    <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
-                                    <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
-                                    <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
-                                    <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
-                                </g>
-                            </svg>
-                        </a>
-                    </div>
+                    <!-- Logos & Badges Group (App Stores & Community Badges) -->
+                    <div class="hero-logos-group">
+                        <!-- App Store Badges with White Ring -->
+                        <div class="hero-store-grid">
+                            <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="Download on the App Store">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Download on the</text>
+                                    <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
+                                    <g transform="translate(10, 6) scale(0.58)">
+                                        <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
+                                        <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
+                                    </g>
+                                </svg>
+                            </a>
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Get it on Google Play">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">GET IT ON</text>
+                                    <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
+                                    <g transform="translate(10, 7)">
+                                        <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
+                                        <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
+                                        <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
+                                        <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
+                                        <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
+                                    </g>
+                                </svg>
+                            </a>
+                        </div>
 
-                    <!-- Social & Source Hub (33/33/33) -->
-                    <div class="hero-social-grid">
-                        <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" title="Watch Video Tutorials on YouTube (@beanpool)">
-                            <svg class="social-icon" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                            <span>YouTube</span>
-                        </a>
-                        <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" title="Join Reddit Community (r/beanpool)">
-                            <svg class="social-icon" viewBox="0 0 24 24" fill="#FF4500"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
-                            <span>Reddit</span>
-                        </a>
-                        <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" title="View Source on GitHub">
-                            <svg class="social-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                            <span>GitHub</span>
-                        </a>
+                        <!-- Social & Source Hub (33/33/33) -->
+                        <div class="hero-social-grid">
+                            <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" title="Watch Video Tutorials on YouTube (@beanpool)">
+                                <svg class="social-icon" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                                <span>YouTube</span>
+                            </a>
+                            <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" title="Join Reddit Community (r/beanpool)">
+                                <svg class="social-icon" viewBox="0 0 24 24" fill="#FF4500"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                                <span>Reddit</span>
+                            </a>
+                            <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" title="View Source on GitHub">
+                                <svg class="social-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                                <span>GitHub</span>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -72,6 +72,8 @@ export interface KeeperEnrolmentResult {
      * through SSO sign-in or add-a-friend. Step 3 reads this as "your words are the way back".
      */
     available: number;
+    /** Specific SSO providers currently protecting the account. */
+    enrolledSso?: string[];
     /** Set when enrolment did not happen at all. For logs, never for a member. */
     error?: string;
 }
@@ -97,6 +99,7 @@ export async function enrolKeepers(_identity: BeanPoolIdentity): Promise<KeeperE
         generation: null,
         skipped: [],
         available: 0,
+        enrolledSso: [],
     };
 }
 
@@ -195,15 +198,39 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
             const detail = await res.text().catch(() => '');
             return nothing(`node refused the fragments (${res.status}): ${detail.slice(0, 200)}`);
         }
-        const body = await res.json() as { generation?: number };
+        const body = await res.json() as { generation?: number; enrolledSso?: string[] };
         return {
             enrolled: ['hub', 'sso'],
             generation: body.generation ?? null,
             skipped,
             available: 2,
+            enrolledSso: body.enrolledSso ?? [provider],
         };
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);
+    }
+}
+
+/**
+ * Disconnect a single SSO provider from the node's recovery set.
+ */
+export async function disconnectSsoKeeper(
+    provider: string,
+    identity: BeanPoolIdentity,
+): Promise<{ success: boolean; error?: string; enrolledSso?: string[] }> {
+    const url = await anchorUrl();
+    if (!url) return { success: false, error: 'No node configured.' };
+
+    try {
+        const res = await signedPost(url, `/api/recovery/shares/sso/${encodeURIComponent(provider)}`, {}, identity);
+        if (!res.ok) {
+            const detail = await res.text().catch(() => '');
+            return { success: false, error: `Could not disconnect ${provider}: ${detail.slice(0, 150)}` };
+        }
+        const data = await res.json() as { enrolledSso?: string[] };
+        return { success: true, enrolledSso: data.enrolledSso ?? [] };
+    } catch (e) {
+        return { success: false, error: (e as Error).message };
     }
 }
 

@@ -522,6 +522,7 @@ export default function SettingsScreen() {
             if (!res.ok) { setProtectionLoading(false); return; }
             const body = await res.json() as {
                 keepers: { holderType: string; count: number }[];
+                enrolledSso?: string[];
                 threshold: number;
                 recoverable: boolean;
                 total: number;
@@ -540,6 +541,7 @@ export default function SettingsScreen() {
                 generation: 1,
                 skipped: [],
                 available: body.total,
+                enrolledSso: body.enrolledSso ?? [],
             });
 
             const pinRes = await getPinStatus(url, identity);
@@ -549,6 +551,37 @@ export default function SettingsScreen() {
         } finally {
             setProtectionLoading(false);
         }
+    };
+
+    const handleDisconnectSso = async (provider: SsoProvider) => {
+        if (!identity) return;
+        const provName = provider === 'apple' ? 'Apple' : provider === 'google' ? 'Google' : provider === 'facebook' ? 'Facebook' : 'GitHub';
+        Alert.alert(
+            `Disconnect ${provName}?`,
+            `This sign-in account will no longer be able to restore your 12 recovery words on a new phone.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Disconnect',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setProtectionLoading(true);
+                        try {
+                            const { disconnectSsoKeeper } = await import('../../utils/keeper-enrolment');
+                            const res = await disconnectSsoKeeper(provider, identity);
+                            if (!res.success && res.error) {
+                                Alert.alert('Error', res.error);
+                            }
+                            await fetchProtectionStatus();
+                        } catch (e) {
+                            Alert.alert('Error', (e as Error).message);
+                        } finally {
+                            setProtectionLoading(false);
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     useEffect(() => {
@@ -1904,6 +1937,7 @@ export default function SettingsScreen() {
                                     if (prov) setSsoEnrolProvider(prov);
                                     setShowSsoSheet(true);
                                 } : undefined}
+                                onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
                                 onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                             />
 

@@ -134,6 +134,15 @@ export async function fetchSsoNonce(
     } catch (e) {
         throw new SsoSignInError('nonce', `Could not reach your node: ${(e as Error).message}`);
     }
+    if (res.status === 401) {
+        try {
+            const { performSync } = await import('../services/pillar-sync');
+            await performSync();
+            res = await signedPost(url, '/api/recovery/sso-nonce', {}, identity);
+        } catch (syncErr) {
+            console.warn('[SSO] Self-healing sync retry failed:', syncErr);
+        }
+    }
     if (!res.ok) {
         const detail = await res.text().catch(() => '');
         throw new SsoSignInError('nonce', `Your node would not start a sign-in (${res.status}): ${detail.slice(0, 200)}`);

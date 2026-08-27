@@ -10,6 +10,7 @@ import {
 } from '../sso.js';
 import {
     putShareGeneration,
+    getCurrentShares,
     RecoveryShareError,
     type KeeperShareInput,
 } from './recovery-shares.js';
@@ -116,8 +117,6 @@ export async function depositSsoKeeperGeneration(
     }
 
     const ssoShares = shares.filter(s => s.holderType === 'sso');
-    // Split rather than one message (CR): the two cases need different actions from the caller, and
-    // "got 0" versus "got 2" reads as the same mistake when it is not.
     if (ssoShares.length === 0) {
         throw new KeeperDepositError(
             "This deposit has no 'sso' fragment. Use putShareGeneration directly for a split that "
@@ -133,12 +132,6 @@ export async function depositSsoKeeperGeneration(
     const ssoShare = ssoShares[0];
 
     // Refused, not ignored, and checked across EVERY fragment rather than just the sso one (CR).
-    // Only inspecting `ssoShare` left the invariant enforced on one row out of three: a hash set on
-    // a 'hub' fragment sailed through and was persisted verbatim. That matters because
-    // findShareBySsoLookup matches on `sso_lookup_hash` alone with NO holder_type filter, so a
-    // planted row is returned as the match — the column, not the keeper type, is what a restore
-    // resolves. Whether that is reachable today depends on a restore flow which does not exist yet,
-    // which is exactly why it should not be left for that flow to be written around.
     if (shares.some(s => s.ssoLookupHash || s.ssoLookupSalt)) {
         throw new KeeperDepositError(
             'The lookup hash for a sign-in keeper is derived by the node, not supplied by the client.',
@@ -162,32 +155,61 @@ export async function depositSsoKeeperGeneration(
     }
 
     const salt = newSsoLookupSalt();
-    // identity.provider, not the request's — they are equal here by construction, and writing it
-    // this way keeps them equal if that ever stops being true.
     const lookupHash = await ssoLookupHash(identity.provider, identity.sub, salt);
 
-    const resolved: KeeperShareInput[] = shares.map(s =>
-        s === ssoShare
-            ? {
-                  ...s,
-                  // The provider name rather than the sub: holder_ref is shown to the member and
-                  // takes part in the UNIQUE(owner, generation, holder_type, holder_ref)
-                  // constraint, so it must not carry the identifier the lookup hash exists to keep
-                  // out of the database.
-                  holderRef: identity.provider,
-                  ssoLookupHash: lookupHash,
-                  ssoLookupSalt: salt,
-              }
-            : s,
+    const current = getCurrentShares(ownerPubkey);
+    // Find existing SSO shares for other active providers to carry over
+    const existingOtherSso = current.filter(
+        s => s.holderType === 'sso' && s.holderRef !== identity.provider && s.ssoLookupHash && s.ssoLookupSalt
     );
 
+    let nextIndex = 1;
+    const finalShares: KeeperShareInput[] = [];
+
+    // 1. Hub share
+    const hubShare = shares.find(s => s.holderType === 'hub');
+    if (hubShare) {
+        finalShares.push({ ...hubShare, shareIndex: nextIndex++ });
+    }
+
+    // 2. Newly verified SSO share
+    finalShares.push({
+        ...ssoShare,
+        holderType: 'sso',
+        holderRef: identity.provider,
+        shareIndex: nextIndex++,
+        ssoLookupHash: lookupHash,
+        ssoLookupSalt: salt,
+    });
+
+    // 3. Existing other SSO shares
+    for (const existing of existingOtherSso) {
+        finalShares.push({
+            holderType: 'sso',
+            holderRef: existing.holderRef,
+            shareIndex: nextIndex++,
+            encryptedShare: existing.encryptedShare,
+            shareIv: existing.shareIv,
+            shareTag: existing.shareTag,
+            ssoLookupHash: existing.ssoLookupHash,
+            ssoLookupSalt: existing.ssoLookupSalt,
+            kdfParams: existing.kdfParams,
+        });
+    }
+
+    // 4. Member shares (if any)
+    const memberShares = shares.filter(s => s.holderType === 'member');
+    for (const ms of memberShares) {
+        finalShares.push({ ...ms, shareIndex: nextIndex++ });
+    }
+
     try {
-        const generation = putShareGeneration(ownerPubkey, resolved);
+        const generation = putShareGeneration(ownerPubkey, finalShares);
         return {
             generation,
             provider: identity.provider,
             email: maskEmail(identity.email),
-            shareCount: resolved.length,
+            shareCount: finalShares.length,
         };
     } catch (e) {
         if (e instanceof RecoveryShareError) throw e;

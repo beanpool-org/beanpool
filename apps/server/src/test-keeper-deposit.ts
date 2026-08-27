@@ -341,11 +341,11 @@ async function main(): Promise<void> {
     });
     const afterApple = getCurrentShares(both).find(s => s.holderType === 'sso')!;
 
-    assert(afterApple.holderRef === 'apple', 'depositing Apple after Google leaves Apple as the keeper');
-    assert(findShareBySsoLookup(afterGoogle.ssoLookupHash!) === null,
-        '...and the superseded Google lookup no longer resolves — a second deposit REPLACES, it does not add');
+    assert(afterApple.holderRef === 'apple', 'depositing Apple after Google leaves Apple as a keeper');
+    assert(findShareBySsoLookup(afterGoogle.ssoLookupHash!)?.ownerPubkey === both,
+        '...and the active Google lookup continues to resolve — multi-SSO supports 1-of-N redundancy');
     assert(findShareBySsoLookup(afterApple.ssoLookupHash!)?.ownerPubkey === both,
-        'while the new one does');
+        'and the new Apple lookup resolves to the same member');
 
     // Two different people, one on each provider, must not collide.
     assert(google.ssoRow.ssoLookupHash !== apple.ssoRow.ssoLookupHash,

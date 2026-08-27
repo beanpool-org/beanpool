@@ -110,7 +110,7 @@ class WebSocketSyncClient {
                 return;
             }
 
-            console.log(`[WS Sync] Connecting to: ${wsUrl}`);
+            console.log(`[WS Sync] Connecting to: ${wsUrl.split('?')[0]}`);
 
             // Scope the instance locally to capture it safely in closures
             const socket = new WebSocket(wsUrl);
@@ -118,7 +118,7 @@ class WebSocketSyncClient {
 
             socket.onopen = () => {
                 if (this.ws !== socket) return; // Stale socket guard
-                console.log(`[WS Sync] ✅ Connected to WebSocket: ${wsUrl}`);
+                console.log(`[WS Sync] ✅ Connected to WebSocket: ${wsUrl.split('?')[0]}`);
                 this.reconnectDelay = 1000; 
                 requestSync();
 

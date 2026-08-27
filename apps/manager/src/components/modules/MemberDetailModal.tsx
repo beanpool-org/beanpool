@@ -191,11 +191,11 @@ export function MemberDetailModal({
                 </div>
 
                 {/* Active Threat Flags for this user */}
-                {activeMemberFlags.length > 0 && (
-                    <div className="space-y-2">
-                        <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-red-400 block">
-                            Active Security Alerts ({activeMemberFlags.length})
-                        </span>
+                <div className="space-y-2">
+                    <span className={`text-[10px] font-extrabold uppercase font-mono tracking-wider block ${activeMemberFlags.length > 0 ? 'text-red-400' : 'text-nature-400'}`}>
+                        Security Alerts & Flags ({activeMemberFlags.length})
+                    </span>
+                    {activeMemberFlags.length > 0 ? (
                         <div className="space-y-2 max-h-28 overflow-y-auto">
                             {activeMemberFlags.map((flag: any, idx: number) => (
                                 <div key={idx} className="p-2.5 bg-red-950/60 border border-red-900/60 rounded-xl text-xs space-y-1">
@@ -209,8 +209,13 @@ export function MemberDetailModal({
                                 </div>
                             ))}
                         </div>
-                    </div>
-                )}
+                    ) : (
+                        <div className="p-2.5 bg-nature-900/60 border border-nature-800/80 rounded-xl text-xs text-emerald-400 font-mono flex items-center gap-2">
+                            <span>✓</span>
+                            <span>No security alerts or flags recorded for this member</span>
+                        </div>
+                    )}
+                </div>
 
                 {/* Action Controls */}
                 <div className="space-y-3 border-t border-nature-800 pt-4">

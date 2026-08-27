@@ -88,7 +88,20 @@ async function main(): Promise<void> {
     assert(init.status !== 404, 'POST /api/pair/init is mounted (not a 404)');
     assert(init.body?.error !== 'Missing sessionId or desktopPubHex',
         `the handler saw its body, not {} (got ${init.status} ${init.body?.error ?? 'no error'})`);
-    assert(init.status === 200, `a well-formed pairing init succeeds (got ${init.status})`);
+    assert(init.status === 200, `a well-formed signed pairing init succeeds (got ${init.status})`);
+
+    // ── 1b. an UNSIGNED pairing init (as sent by unauthenticated desktop client) succeeds ─────
+    const unsignedSessionId = crypto.randomBytes(8).toString('hex');
+    const unsignedDesktopPubHex = crypto.randomBytes(32).toString('hex');
+    const unsignedInitRes = await fetch(`${BASE}/api/pair/init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: unsignedSessionId, desktopPubHex: unsignedDesktopPubHex }),
+    });
+    const unsignedInitBody = await unsignedInitRes.json().catch(() => ({}));
+    assert(unsignedInitRes.status === 200,
+        `an unsigned pairing init (pre-auth desktop) succeeds with 200 (got ${unsignedInitRes.status} ${unsignedInitBody?.error ?? ''})`);
+    assert(unsignedInitBody?.success === true, 'unsigned pairing init returns success: true');
 
     // ── 2. and the empty-body default still holds when the field really is absent ──────────────
     // The `|| {}` fallbacks must keep working: a genuinely empty body is a 400, not a crash.

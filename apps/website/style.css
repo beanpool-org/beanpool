@@ -575,8 +575,8 @@ section {
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    max-width: 1240px;
-    margin-top: 2rem;
+    max-width: 1040px;
+    margin: 1.75rem auto 0 auto;
     padding: 1.15rem clamp(1.5rem, 3vw, 3rem);
     background: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(16px);

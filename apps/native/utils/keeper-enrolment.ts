@@ -35,6 +35,7 @@
  */
 
 import {
+    readHubShare,
     recordShareForHub,
     sealShareToMember,
     sealShareToSso,
@@ -42,7 +43,7 @@ import {
     splitHubAndWhole,
     type SealedShare,
 } from '@beanpool/core';
-import { anchorUrl, signedPost } from './node-post';
+import { anchorUrl, signedPost, signedDelete } from './node-post';
 import { hexToBytes } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 
@@ -121,6 +122,53 @@ export interface SsoEnrolmentInput {
 }
 
 /**
+ * `a ⊕ b`, for deriving `B = seed ⊕ A` against a hub fragment that already exists.
+ *
+ * Local rather than imported: core keeps its own `xorBytes` private, and widening a package's
+ * public surface for one caller is a worse trade than four lines that cannot drift.
+ */
+function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+    const out = new Uint8Array(a.length);
+    for (let i = 0; i < a.length; i++) out[i] = a[i] ^ b[i];
+    return out;
+}
+
+/**
+ * The hub fragment this account was already split against, or null if it has none yet.
+ *
+ * A null answer is the normal first-enrolment case, not a failure — so is a node too old to know
+ * the route. Both fall through to a fresh split, which is correct precisely when there is no
+ * earlier fragment to stay consistent with.
+ */
+async function fetchHubFragment(
+    url: string, identity: BeanPoolIdentity,
+): Promise<Uint8Array | null> {
+    let res: Response;
+    try {
+        res = await signedPost(url, '/api/recovery/shares/hub-fragment', {}, identity);
+    } catch {
+        return null;
+    }
+    if (!res.ok) return null;
+    const body = await res.json().catch(() => null) as {
+        hubFragment?: unknown; shareIv?: unknown; shareTag?: unknown; kdfParams?: unknown;
+    } | null;
+    if (!body || typeof body.hubFragment !== 'string' || body.hubFragment.length === 0) return null;
+    try {
+        return readHubShare({
+            encryptedShare: body.hubFragment,
+            shareIv: String(body.shareIv ?? ''),
+            shareTag: String(body.shareTag ?? ''),
+            kdfParams: typeof body.kdfParams === 'string' ? body.kdfParams : undefined,
+        } as SealedShare);
+    } catch {
+        // A fragment this client cannot read must not be silently replaced with a fresh one —
+        // that is the desync this whole path exists to prevent. Let the deposit be refused.
+        throw new Error('the existing hub fragment could not be read');
+    }
+}
+
+/**
  * Split the member's seed into hub + SSO using `splitHubAndWhole`, then deposit
  * through `POST /api/recovery/shares/sso` which verifies the token server-side.
  *
@@ -156,12 +204,32 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         return nothing(`could not read the private key: ${(e as Error).message}`);
     }
 
+    // Reuse the hub fragment if this account already has one, and only mint a fresh one for a
+    // first split.
+    //
+    // Every sealed fragment `B` is only meaningful against the exact `A` it was split from, and
+    // the node stores ONE `A` per generation. Splitting afresh here while the node carries a
+    // previous provider's `B` forward pairs `A_new` with `B_old`, and
+    //   A_new ⊕ B_old = seed ⊕ (A_new ⊕ A_old) ≠ seed
+    // — recovery through the FIRST provider then rebuilds a keypair for an account that does not
+    // exist. Nothing catches it: no checksum is stored and `combineHubAndWhole` is called without
+    // one, so the member simply arrives in an empty account.
+    //
+    // Splitting against the stored `A` instead makes every provider's fragment agree, which is
+    // what 1-of-N redundancy was supposed to mean. The node enforces this independently and
+    // refuses a deposit that would break it, so a stale client fails loudly instead of quietly.
     let hubShare: Uint8Array;
     let otherHalf: Uint8Array;
     try {
-        const result = await splitHubAndWhole(seed);
-        hubShare = result.hubShare;
-        otherHalf = result.otherHalf;
+        const existingHub = await fetchHubFragment(url, identity);
+        if (existingHub) {
+            hubShare = existingHub;
+            otherHalf = xorBytes(seed, existingHub);
+        } else {
+            const result = await splitHubAndWhole(seed);
+            hubShare = result.hubShare;
+            otherHalf = result.otherHalf;
+        }
     } catch (e) {
         return nothing(`could not split the seed: ${(e as Error).message}`);
     }
@@ -222,7 +290,7 @@ export async function disconnectSsoKeeper(
     if (!url) return { success: false, error: 'No node configured.' };
 
     try {
-        const res = await signedPost(url, `/api/recovery/shares/sso/${encodeURIComponent(provider)}`, {}, identity);
+        const res = await signedDelete(url, `/api/recovery/shares/sso/${encodeURIComponent(provider)}`, identity);
         if (!res.ok) {
             const detail = await res.text().catch(() => '');
             return { success: false, error: `Could not disconnect ${provider}: ${detail.slice(0, 150)}` };

@@ -120,6 +120,14 @@ interface NonceResponse {
 }
 
 /**
+ * How long the 401 self-heal may block an interactive sign-in before we give up on it.
+ *
+ * Long enough for a sync on a slow link, short enough that a member watching a spinner does not
+ * conclude the app is broken.
+ */
+const SYNC_RETRY_TIMEOUT_MS = 5000;
+
+/**
  * Ask the node for a nonce bound to this member.
  *
  * Signed, so the node knows who it is minting for — the binding is what stops a caller aiming
@@ -134,12 +142,28 @@ export async function fetchSsoNonce(
     } catch (e) {
         throw new SsoSignInError('nonce', `Could not reach your node: ${(e as Error).message}`);
     }
+    // A 401 here means the node does not recognise this member yet — `activeSigner` found no
+    // member row for the signing key. A sync usually fixes exactly that, so one retry is worth it.
+    //
+    // Bounded, though, because this is an interactive path: the member is looking at a sign-in
+    // sheet. `performSync` pulls history and takes SQLite write locks that this codebase has
+    // already been bitten by (the lock-queue work in #32/#35/#38/#40/#41), and its own timeouts
+    // run to 30s. An auth flow that can sit dead for half a minute reads as a hung app, so the
+    // sync gets SYNC_RETRY_TIMEOUT_MS and then we go on to report the 401 honestly.
     if (res.status === 401) {
         try {
             const { performSync } = await import('../services/pillar-sync');
-            await performSync();
+            await Promise.race([
+                performSync(),
+                new Promise((_, reject) => setTimeout(
+                    () => reject(new Error(`sync did not finish within ${SYNC_RETRY_TIMEOUT_MS}ms`)),
+                    SYNC_RETRY_TIMEOUT_MS,
+                )),
+            ]);
             res = await signedPost(url, '/api/recovery/sso-nonce', {}, identity);
         } catch (syncErr) {
+            // Deliberately swallowed: the 401 below is the real error to report, and a failed
+            // self-heal should not replace it with a message about syncing.
             console.warn('[SSO] Self-healing sync retry failed:', syncErr);
         }
     }

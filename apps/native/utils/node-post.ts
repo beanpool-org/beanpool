@@ -33,6 +33,28 @@ export async function signedPost(
 }
 
 /**
+ * A signed DELETE to the member's own node.
+ *
+ * The signed message is `${method}\n${path}\n${ts}\n${nonce}\n${body}`, so the verb is part of
+ * what is signed — a DELETE route cannot be called with headers built for POST, and the server
+ * rejects the mismatch rather than ignoring it. `signedPost` against `router.delete(...)` does
+ * not fail loudly either; koa-router simply has no POST at that path, so it 404s.
+ *
+ * Empty body rather than no body, so the signed body string matches the `''` the server reads
+ * for a request that carries none.
+ */
+export async function signedDelete(
+    url: string, path: string, identity: BeanPoolIdentity,
+): Promise<Response> {
+    const headers = await buildSignedHeaders(
+        'DELETE', path, '', identity.privateKey, identity.publicKey,
+    );
+    return fetch(`${url.replace(/\/+$/, '')}${path}`, {
+        method: 'DELETE', headers,
+    });
+}
+
+/**
  * Permanently purge the member's account and data from their community node (#99).
  */
 export async function purgeAccountOnNode(identity: BeanPoolIdentity): Promise<{ ok: boolean; message: string }> {

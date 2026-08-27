@@ -298,6 +298,40 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
      * the whole new generation, not just the sign-in piece: fragments from two different splits
      * cannot be recombined, so "add Google as a keeper" is really "re-split and store the new set".
      */
+    /**
+     * Hand the owner back their own hub fragment.
+     *
+     * Needed because adding a SECOND sign-in provider must split the seed against the SAME `A`
+     * the first provider's fragment was split from. Only the member's device holds the seed, so
+     * only it can produce the new `B` — and it cannot do that without `A`. Without this, a client
+     * splits afresh and `depositSsoKeeperGeneration` refuses the deposit (correctly) rather than
+     * silently stranding the first provider.
+     *
+     * Releasing `A` to this caller gives away nothing. The hub fragment is stored in the clear on
+     * purpose (see `recordShareForHub`), it is a one-time-pad half that is useless alone, and the
+     * request is signed — so the caller has already proven possession of the private key, which
+     * IS the seed this fragment helps reconstruct. `/api/recovery/collect/hub` hands the same
+     * bytes to a device holding no key at all, under a collect session.
+     *
+     * POST, not GET, for the reason given on `/api/recovery/shares/status`: `ctx.state.actor` is
+     * only populated for GETs when ENFORCE_READ_AUTH is on, and it is off by default.
+     */
+    router.post('/api/recovery/shares/hub-fragment', async (ctx) => {
+        const owner = activeSigner(ctx);
+        if (!owner) return unauthenticated(ctx);
+
+        const hub = getCurrentShares(owner).find(s => s.holderType === 'hub');
+        ctx.status = 200;
+        ctx.body = hub
+            ? {
+                  hubFragment: hub.encryptedShare,
+                  shareIv: hub.shareIv,
+                  shareTag: hub.shareTag,
+                  kdfParams: hub.kdfParams ?? null,
+              }
+            : { hubFragment: null };
+    });
+
     router.post('/api/recovery/shares/sso', async (ctx) => {
         const owner = activeSigner(ctx);
         if (!owner) return unauthenticated(ctx);
@@ -466,6 +500,32 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         const remainingSso = ssoShares.filter(s => s.holderRef !== provider);
         const memberShares = current.filter(s => s.holderType === 'member');
         const hubShare = current.find(s => s.holderType === 'hub');
+
+        // Removing the last sign-in keeper drops the member from the SSO tier to the non-SSO
+        // tier, and the two tiers do not need the same number of fragments: SSO recovers on
+        // hub + 1 sealed whole, non-SSO needs hub + 2 friend shares. A member with one provider
+        // and one friend sits exactly on that seam — disconnecting leaves hub + 1 friend, which
+        // is one short of the Shamir threshold and therefore not recoverable by anything.
+        //
+        // Writing that generation would be silent: the write succeeds, the UI reports the
+        // provider disconnected, and the account is unrecoverable from that instant. Refuse and
+        // say which keeper is missing. Dropping to ZERO keepers is a different case and is
+        // allowed below — that returns the member to words-only, which is honest and is a state
+        // the model supports.
+        if (remainingSso.length === 0 && memberShares.length > 0) {
+            const needed = memberThreshold(false) - 1; // fragments other than the hub
+            if (memberShares.length < needed) {
+                ctx.status = 400;
+                ctx.body = {
+                    error: `Disconnecting '${provider}' would leave this account unrecoverable. `
+                        + `Without a sign-in keeper, recovery needs ${needed} friend keepers and `
+                        + `this account has ${memberShares.length}. Add another friend keeper `
+                        + 'first, or remove your friend keepers too and go back to using your '
+                        + 'twelve words.',
+                };
+                return;
+            }
+        }
 
         if (remainingSso.length === 0 && memberShares.length === 0) {
             deleteAllShares(owner);

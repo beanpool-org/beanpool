@@ -24,15 +24,19 @@ export default defineConfig({
                     const match = req.url?.match(/^\/proxy\/(https?)\/([^/]+)\/(.*)/);
                     if (match) {
                         const host = match[2].toLowerCase().split(':')[0];
-                        const isBlocked = host === 'localhost' ||
-                            host === '127.0.0.1' ||
-                            host === '::1' ||
-                            host.startsWith('10.') ||
-                            host.startsWith('192.168.') ||
-                            host.startsWith('169.254.') ||
-                            host.endsWith('.internal') ||
-                            host.endsWith('.local') ||
-                            /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+                        // Block the cloud instance-metadata endpoints, which is the SSRF target
+                        // that actually matters here: link-local (169.254.0.0/16 covers AWS/GCP/
+                        // Azure metadata) plus the metadata hostnames.
+                        //
+                        // Loopback and RFC1918 are deliberately NOT blocked. Every node the
+                        // manager talks to that is not its own origin goes through this proxy
+                        // (see resolveNodeApiUrl), and the default profile is the local node at
+                        // https://localhost:8443 — blocking those makes the dashboard unable to
+                        // reach the local node or any node on the operator's LAN.
+                        const isBlocked = host.startsWith('169.254.') ||
+                            host === 'metadata.google.internal' ||
+                            host === 'metadata' ||
+                            host.endsWith('.internal');
                         if (isBlocked) {
                             return 'http://localhost';
                         }

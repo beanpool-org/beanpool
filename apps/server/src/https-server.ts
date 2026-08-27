@@ -240,6 +240,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/activity/feed',            // living activity waterfall community pulse feed (#208)
+    '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -734,6 +735,7 @@ export async function startHttpsServer(port: number): Promise<void> {
             ctx.path.startsWith('/api/local/') ||
             ctx.path.startsWith('/api/admin/') ||
             ctx.path.startsWith('/api/manager/') ||
+            ctx.path.startsWith('/api/pair/') ||
             ctx.path.startsWith('/api/pricing-guide/admin/') ||
             ctx.path.startsWith('/api/pricing-guide/reports') ||
             ctx.path === '/api/pricing-guide/report' ||

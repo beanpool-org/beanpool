@@ -46,6 +46,9 @@ async function main() {
     assert(await verifyPasswordAsync(PW, cfg.adminHash, cfg.salt) === true, 'A2-21: verifyPasswordAsync accepts the correct password');
     assert(await verifyPasswordAsync('wrong', cfg.adminHash, cfg.salt) === false, 'A2-21: verifyPasswordAsync rejects a wrong password');
     assert(await verifyPasswordAsync(PW, 'deadbeef', cfg.salt) === false, 'A2-21: verifyPasswordAsync rejects a malformed/short stored hash (no throw)');
+    assert(await verifyPasswordAsync(null as any, cfg.adminHash, cfg.salt) === false, 'A2-21: verifyPasswordAsync handles null password (no throw)');
+    assert(await verifyPasswordAsync(PW, null as any, cfg.salt) === false, 'A2-21: verifyPasswordAsync handles null hash (no throw)');
+    assert(await verifyPasswordAsync(PW, cfg.adminHash, null as any) === false, 'A2-21: verifyPasswordAsync handles null salt (no throw)');
 
     await initTls();
     initStateEngine();

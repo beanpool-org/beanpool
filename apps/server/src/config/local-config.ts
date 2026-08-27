@@ -171,13 +171,16 @@ export function verifyPassword(password: string, storedHash: string, storedSalt:
  */
 export function verifyPasswordAsync(password: string, storedHash: string, storedSalt: string): Promise<boolean> {
     return new Promise((resolve) => {
-        scrypt(password, storedSalt, 64, (err, derived) => {
-            if (err) { resolve(false); return; }
-            try {
-                const expected = Buffer.from(storedHash, 'hex');
-                resolve(derived.length === expected.length && timingSafeEqual(derived, expected));
-            } catch { resolve(false); }
-        });
+        if (!password || !storedHash || !storedSalt) { resolve(false); return; }
+        try {
+            scrypt(password, storedSalt, 64, (err, derived) => {
+                if (err) { resolve(false); return; }
+                try {
+                    const expected = Buffer.from(storedHash, 'hex');
+                    resolve(derived.length === expected.length && timingSafeEqual(derived, expected));
+                } catch { resolve(false); }
+            });
+        } catch { resolve(false); }
     });
 }
 

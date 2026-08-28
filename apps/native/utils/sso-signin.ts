@@ -408,11 +408,12 @@ export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, '
 
 export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
     const redirectUri = 'https://beanpool.org/auth/facebook';
+    const completionUri = 'beanpool://auth/facebook';
     const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${encodeURIComponent(FACEBOOK_APP_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token,id_token&scope=openid,email&nonce=${encodeURIComponent(nonce)}`;
 
     let result;
     try {
-        result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri, { preferEphemeralSession: true });
+        result = await WebBrowser.openAuthSessionAsync(authUrl, completionUri, { preferEphemeralSession: true });
     } catch (e) {
         throw new SsoSignInError('provider', `Facebook sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -487,13 +488,14 @@ function generatePkcePair(): { verifier: string; challenge: string } {
 
 export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
     const redirectUri = 'https://beanpool.org/auth/github';
+    const completionUri = 'beanpool://auth/github';
     const { verifier, challenge } = generatePkcePair();
     const scopes = 'read:user user:email';
     const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${encodeURIComponent(nonce)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256`;
 
     let result;
     try {
-        result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri, { preferEphemeralSession: true });
+        result = await WebBrowser.openAuthSessionAsync(authUrl, completionUri, { preferEphemeralSession: true });
     } catch (e) {
         throw new SsoSignInError('provider', `GitHub sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -528,6 +530,7 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
                 body: JSON.stringify({
                     code,
                     redirectUri,
+                    codeVerifier: verifier,
                 }),
             });
             if (!tokenRes.ok) {

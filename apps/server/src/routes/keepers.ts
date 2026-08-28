@@ -254,6 +254,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         const code = typeof body.code === 'string' ? body.code.trim() : '';
         const redirectUri = typeof body.redirectUri === 'string' ? body.redirectUri.trim() : 'https://beanpool.org/auth/github';
 
+        const codeVerifier = typeof body.codeVerifier === 'string' ? body.codeVerifier.trim() : undefined;
+
         if (!code) {
             ctx.status = 400;
             ctx.body = { error: 'Authorization code is required' };
@@ -266,23 +268,30 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const exchangePayload: Record<string, string> = {
+                client_id: clientId,
+                client_secret: clientSecret,
+                code,
+                redirect_uri: redirectUri,
+            };
+            if (codeVerifier) {
+                exchangePayload.code_verifier = codeVerifier;
+            }
+
             const res = await fetch('https://github.com/login/oauth/access_token', {
                 method: 'POST',
                 headers: {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    client_id: clientId,
-                    client_secret: clientSecret,
-                    code,
-                    redirect_uri: redirectUri,
-                }),
+                body: JSON.stringify(exchangePayload),
                 signal: controller.signal,
             });
             clearTimeout(timeoutId);
 
             if (!res.ok) {
+                const errText = await res.text().catch(() => '');
+                console.error(`[GitHub OAuth Proxy] Token exchange failed with HTTP ${res.status}:`, errText);
                 ctx.status = res.status;
                 ctx.body = { error: `GitHub token exchange failed (HTTP ${res.status})` };
                 return;
@@ -290,6 +299,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
 
             const data = await res.json() as { access_token?: string; error?: string; error_description?: string };
             if (data.error || !data.access_token) {
+                console.error('[GitHub OAuth Proxy] GitHub returned error:', data);
                 ctx.status = 400;
                 ctx.body = { error: data.error_description || data.error || 'No access token returned from GitHub' };
                 return;

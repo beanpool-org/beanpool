@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Pressable } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Pressable, ScrollView } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../constants/colors';
 import { anchorUrl } from '../utils/node-post';
 import { startSsoSignIn, SsoSignInError } from '../utils/sso-signin';
@@ -58,6 +59,7 @@ export function SsoEnrolSheet({
     const [devicePrompt, setDevicePrompt] = useState<GithubDevicePrompt | null>(null);
     /** Aborts an in-flight device-flow poll: closing the sheet must stop it, not orphan it. */
     const abortRef = React.useRef<AbortController | null>(null);
+    const [codeCopied, setCodeCopied] = useState(false);
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     React.useEffect(() => {
@@ -87,6 +89,7 @@ export function SsoEnrolSheet({
 
         setStep('processing');
         setDevicePrompt(null);
+        setCodeCopied(false);
         abortRef.current?.abort();
         const abort = new AbortController();
         abortRef.current = abort;
@@ -98,7 +101,28 @@ export function SsoEnrolSheet({
                 return;
             }
 
-            const signin = await startSsoSignIn(provider, url, identity, setDevicePrompt, abort.signal);
+            const signin = await startSsoSignIn(provider, url, identity, (prompt) => {
+                setDevicePrompt(prompt);
+                // Copied before the member has done anything. The whole friction was having to
+                // return to the app for the code once GitHub was on screen.
+                // Dash stripped deliberately. GitHub renders eight separate cells; handing them
+                // nine characters is the likeliest reason the paste chip flashed and vanished.
+                // MEASURED 2026-08-28: ~5 failed paste attempts before one landed.
+                Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
+                    () => setCodeCopied(true),
+                    () => setCodeCopied(false),
+                );
+            }, abort.signal);
+
+            // Close GitHub for them. Its own success page says nothing about returning here, and
+            // the "come back" line in this sheet is behind the browser at that moment — so without
+            // this the member is left on a finished web page wondering whether it worked.
+            // MEASURED 2026-08-28: reported as "sitting at the copy screen for a bit" before it
+            // completed. Harmless if no browser is open.
+            try {
+                await WebBrowser.dismissBrowser();
+            } catch {}
+
             const sub = extractSub(signin.idToken, signin.sub);
 
             const result = await enrolSsoKeeper({
@@ -170,7 +194,11 @@ export function SsoEnrolSheet({
             onRequestClose={closeAndStop}
         >
             <View style={styles.overlay}>
-                <View style={styles.sheet}>
+                <ScrollView
+                    style={styles.sheetScroll}
+                    contentContainerStyle={styles.sheet}
+                    keyboardShouldPersistTaps="handled"
+                >
                     {step === 'processing' && (
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             {devicePrompt ? (
@@ -179,19 +207,51 @@ export function SsoEnrolSheet({
                                         Enter this code on GitHub to finish:
                                     </Text>
                                     <Pressable
-                                        onPress={() => Clipboard.setStringAsync(devicePrompt.userCode)}
+                                        onPress={() => {
+                                            Clipboard.setStringAsync(devicePrompt.userCode.replace(/-/g, '')).then(
+                                                () => setCodeCopied(true),
+                                                () => setCodeCopied(false),
+                                            );
+                                        }}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`Copy code ${devicePrompt.userCode.split('').join(' ')}`}
+                                        accessibilityLabel={codeCopied
+                                            ? `Code ${devicePrompt.userCode.split('').join(' ')}, copied to clipboard. Tap to copy again.`
+                                            : `Code ${devicePrompt.userCode.split('').join(' ')}. Tap to copy.`}
                                         style={styles.deviceCodeBox}
                                     >
                                         <Text style={styles.deviceCodeText} selectable>{devicePrompt.userCode}</Text>
-                                        <Text style={styles.deviceCodeHint}>tap to copy</Text>
+                                        <Text style={styles.deviceCodeHint}>
+                                            {codeCopied ? '✓ copied — or just type it, it is 8 characters' : 'tap to copy'}
+                                        </Text>
                                     </Pressable>
+                                    {/* The member taps when they have read the code, rather than the
+                                        browser covering it the instant it appears. */}
+                                    {/* Above the button, not below it. Android floats a clipboard
+                                        preview chip over the bottom-left after a copy, which covered
+                                        this entirely. MEASURED 2026-08-28 on a Pixel 9 Pro. */}
                                     <Text style={styles.deviceCodeSub}>
-                                        {devicePrompt.verificationUri.replace('https://', '')}
+                                        On GitHub, <Text style={styles.deviceCodeEmphasis}>press and hold the first box
+                                        and choose Paste</Text> — tapping the clipboard chip above the keyboard fills
+                                        only one box. Typing the 8 characters works too.
                                     </Text>
-                                    <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 16 }} />
-                                    <Text style={styles.processingText}>Waiting for you to confirm…</Text>
+                                    <TouchableOpacity
+                                        style={[styles.primaryButton, { marginTop: 18, alignSelf: 'stretch' }]}
+                                        onPress={() => {
+                                            // No pre-fill parameter exists. GitHub returns no
+                                            // verification_uri_complete and the device page ignores
+                                            // ?user_code= / ?code= — checked against the live endpoint
+                                            // and the docs. Entry is manual, so send a clean URL.
+                                            WebBrowser.openBrowserAsync(devicePrompt.verificationUri).catch(() => {});
+                                        }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Open GitHub to enter the code"
+                                    >
+                                        <Text style={styles.primaryButtonText}>Open GitHub →</Text>
+                                    </TouchableOpacity>
+                                    <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 14 }} />
+                                    <Text style={styles.deviceCodeSub}>
+                                        Waiting for GitHub… this closes itself.
+                                    </Text>
                                 </>
                             ) : (
                                 <>
@@ -249,7 +309,7 @@ export function SsoEnrolSheet({
                             </TouchableOpacity>
                         </View>
                     )}
-                </View>
+                </ScrollView>
             </View>
         </Modal>
     );
@@ -266,8 +326,18 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         padding: 24,
-        paddingBottom: 40,
+        // Android only: it floats a clipboard preview chip over the bottom-left for a few seconds
+        // after a copy, and this sheet copies automatically, so anything in that band is
+        // unreadable. iOS has no such chip and does not need the clearance — 96px everywhere
+        // pushed content, including Cancel, off a 320dp screen at 1.3x font scale.
+        paddingBottom: Platform.OS === 'android' ? 80 : 40,
         minHeight: 320,
+    },
+    sheetScroll: {
+        // Bounded so the sheet cannot grow past the viewport, and scrollable so a small screen at
+        // large font scale can still reach the Cancel button rather than having it clipped.
+        maxHeight: '90%',
+        flexGrow: 0,
     },
     content: {
         flex: 1,
@@ -334,6 +404,10 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: colors.text.secondary,
         marginTop: 8,
+    },
+    deviceCodeEmphasis: {
+        fontWeight: 'bold',
+        color: colors.text.heading,
     },
     deviceCodeSub: {
         fontSize: 15,

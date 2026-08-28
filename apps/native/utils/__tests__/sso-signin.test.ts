@@ -249,6 +249,22 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
         }
     });
 
+    it('surfaces the code to a caller that supplies no prompt handler — no silent hang', async () => {
+        // Recovery calls this without a sheet. Before onDeviceCode existed, the code went nowhere:
+        // no prompt, no browser, and a fifteen-minute silent poll on the one path these fragments
+        // exist for.
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = githubDeviceFetch([{ access_token: 'gho_device_token' }]) as any;
+        try {
+            const seen: any[] = [];
+            const res = await signInWithGithub('test-nonce-gh', (p) => seen.push(p));
+            expect(res.idToken).toBe('gho_device_token');
+            expect(seen[0].userCode).toBe('ABCD-1234');
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
     it('stops polling when the caller aborts', async () => {
         const originalFetch = globalThis.fetch;
         // Always pending: without an abort this would poll until the code expired, which is

@@ -51,7 +51,7 @@ describe('SSO Recovery Service', () => {
         await expect(recoverAccountWithSso({
             callsign: '',
             anchorUrl: 'https://test.beanpool.org',
-            provider: 'google',
+            provider: 'google', onDeviceCode: () => {},
         })).rejects.toThrow(/callsign/i);
     });
 
@@ -59,7 +59,7 @@ describe('SSO Recovery Service', () => {
         await expect(recoverAccountWithSso({
             callsign: 'Monnunit',
             anchorUrl: '',
-            provider: 'google',
+            provider: 'google', onDeviceCode: () => {},
         })).rejects.toThrow(/node address/i);
     });
 
@@ -157,7 +157,7 @@ describe('SSO Recovery Service', () => {
         const result = await recoverAccountWithSso({
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
-            provider: 'google',
+            provider: 'google', onDeviceCode: () => {},
             onProgress: (p) => progressSteps.push(p.step),
         });
 
@@ -247,10 +247,16 @@ describe('SSO Recovery Service', () => {
             throw new Error(`Unexpected path: ${path}`);
         });
 
+        // Asserted, not a formality: this is the GitHub path, and the device flow cannot finish
+        // unless the member is shown the code. Recovery previously called signInWithGithub with no
+        // handler at all and polled silently for fifteen minutes; this suite passed throughout,
+        // because signInWithGithub is mocked here. The type now makes the omission impossible.
+        const shown: string[] = [];
         const result = await recoverAccountWithSso({
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
             provider: 'github',
+            onDeviceCode: (p) => shown.push(p.userCode),
         });
 
         expect(result.identity.publicKey).toEqual(originalKeypair.publicKeyHex);

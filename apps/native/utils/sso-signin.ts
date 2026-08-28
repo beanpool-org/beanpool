@@ -718,13 +718,15 @@ export async function signInWithGithub(
     console.log(`[SSO] github: device code issued, expires in ${Math.round(deadlineMs / 1000)}s`);
     onPrompt?.({ userCode: start.user_code, verificationUri: start.verification_uri });
 
-    // Opened, not required: the member can type the address themselves, and a device where nothing
-    // handles the URL must not fail the sign-in here.
-    try {
-        await WebBrowser.openBrowserAsync(start.verification_uri);
-    } catch {
-        console.log('[SSO] github: could not open the verification page — member can enter it manually');
-    }
+    // The browser is NOT opened here any more.
+    //
+    // MEASURED 2026-08-28: opening it immediately covered the code the moment it appeared, so the
+    // member had to background the browser, return to the app, copy the code, switch back and
+    // paste. The first attempt of that run was abandoned outright and the second took 40 seconds.
+    // Anyone less patient reads that as broken.
+    //
+    // The sheet now owns the launch: it copies the code, says so, and opens GitHub on a tap — so
+    // the code is read and in the clipboard BEFORE the browser takes the screen.
 
     let waited = 0;
     let accessToken: string | undefined;

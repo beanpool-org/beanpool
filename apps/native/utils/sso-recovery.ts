@@ -25,11 +25,11 @@ import {
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
 import { importIdentity, type BeanPoolIdentity } from './identity';
-import { signInWithGoogle, signInWithApple, signInWithFacebook, signInWithGithub, type SsoProvider } from './sso-signin';
+import { signInWithGoogle, signInWithApple, signInWithFacebook, signInWithGithub, type SsoProvider, type GithubDevicePrompt } from './sso-signin';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
 
 export interface SsoRecoveryProgress {
-    step: 'opening' | 'nonce' | 'signing-in' | 'releasing-sso' | 'releasing-hub' | 'fetching-fragments' | 'reconstructing' | 'done';
+    step: 'opening' | 'nonce' | 'signing-in' | 'awaiting-sso' | 'releasing-sso' | 'releasing-hub' | 'fetching-fragments' | 'reconstructing' | 'done';
     message: string;
 }
 
@@ -64,6 +64,18 @@ export async function recoverAccountWithSso(options: {
     anchorUrl: string;
     provider: SsoProvider;
     onProgress?: (progress: SsoRecoveryProgress) => void;
+    /**
+     * Shown the GitHub device code, and responsible for getting the member to GitHub.
+     *
+     * REQUIRED, not optional. GitHub's device flow has no redirect and cannot complete unless the
+     * member sees the code — a caller that omitted this left recovery polling silently for fifteen
+     * minutes, which is exactly the bug this parameter was added to fix. Optional would leave that
+     * trap open for the next caller; the compiler should refuse instead.
+     *
+     * Never invoked for google, apple or facebook, so an implementation that only handles GitHub
+     * is correct.
+     */
+    onDeviceCode: (prompt: GithubDevicePrompt) => void;
 }): Promise<SsoRecoveryResult> {
     const rawCallsign = options.callsign.trim();
     if (!rawCallsign) {
@@ -143,7 +155,19 @@ export async function recoverAccountWithSso(options: {
     } else if (options.provider === 'facebook') {
         signInResult = await signInWithFacebook(nonce);
     } else {
-        signInResult = await signInWithGithub(nonce);
+        // GitHub is the device flow: it has no redirect and cannot complete unless the member is
+        // SHOWN a code. `signInWithGithub` deliberately does not open a browser itself — the
+        // enrolment sheet owns that, so the code is not buried the instant it appears. Recovery has
+        // no such sheet, so without this the code went nowhere: no prompt, no browser, and a silent
+        // fifteen-minute poll. Recovery is the entire point of these fragments, so it cannot be the
+        // one path that quietly hangs.
+        signInResult = await signInWithGithub(nonce, (prompt) => {
+            options.onDeviceCode(prompt);
+            options.onProgress?.({
+                step: 'awaiting-sso',
+                message: `Enter code ${prompt.userCode} at ${prompt.verificationUri.replace('https://', '')}`,
+            });
+        });
     }
 
     const sub = parseJwtSub(signInResult.idToken, signInResult.sub);

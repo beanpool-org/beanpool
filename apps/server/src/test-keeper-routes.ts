@@ -148,6 +148,9 @@ function primeGoogle(): void {
 }
 
 async function main(): Promise<void> {
+    // Read per request by `githubClientSecret()`, so setting it here suffices — no import-order
+    // dance, and no baked-in fallback for this suite to lean on.
+    process.env.GITHUB_CLIENT_SECRET = 'gh_test_secret';
     console.log('\nKeyholder fragment routes\n');
 
     // ── THE HEADLINE: the general route must not be a way around #220 ─────────────────────────
@@ -659,8 +662,20 @@ async function main(): Promise<void> {
         });
         assert(exchangeRes.status === 200 && exchangeRes.body.success === true && exchangeRes.body.accessToken === 'gho_secret_test_token',
             'successfully exchanges code for accessToken via server secret');
+
+        // The node must not forward an empty secret and let GitHub answer "client_id and/or
+        // client_secret passed are incorrect" — that reads as an app bug and sends the
+        // investigation to the wrong place. Until the secret was required, this suite passed only
+        // because a literal one was baked into the source.
+        delete process.env.GITHUB_CLIENT_SECRET;
+        const unconfigured = await call('POST', '/api/recovery/sso/github-exchange', {
+            body: { code: 'test_gh_code_123', redirectUri: 'https://beanpool.org/auth/github' },
+        });
+        assert(unconfigured.status === 503,
+            'refuses the exchange when GITHUB_CLIENT_SECRET is not configured');
     } finally {
         globalThis.fetch = originalFetch;
+        process.env.GITHUB_CLIENT_SECRET = 'gh_test_secret';
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

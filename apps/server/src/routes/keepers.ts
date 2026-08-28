@@ -62,7 +62,7 @@ import {
     isSsoProvider,
     type SsoProvider,
     BEANPOOL_GITHUB_CLIENT_IDS,
-    BEANPOOL_GITHUB_CLIENT_SECRET,
+    githubClientSecret,
 } from '../sso.js';
 import type { RouteDeps } from './types.js';
 
@@ -263,7 +263,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         }
 
         const clientId = BEANPOOL_GITHUB_CLIENT_IDS[0] || 'Ov23li8mmDfBr7GyJVRU';
-        const clientSecret = BEANPOOL_GITHUB_CLIENT_SECRET;
+        const clientSecret = githubClientSecret();
         // Say which side is misconfigured. Without this the node forwards an empty secret and the
         // member sees GitHub's "client_id and/or client_secret passed are incorrect", which points
         // the investigation at the app rather than at this node's environment.

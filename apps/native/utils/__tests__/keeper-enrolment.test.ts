@@ -16,6 +16,7 @@ vi.mock('../crypto', () => ({
     encodeBase64: (b: Uint8Array) => Buffer.from(b).toString('base64'),
     mnemonicToSeed: vi.fn(async () => new Uint8Array(32).map((_, i) => (i * 7 + 3) & 0xff)),
     hexToBytes: (hex: string) => Uint8Array.from(Buffer.from(hex, 'hex')),
+    bytesToHex: (bytes: Uint8Array) => Buffer.from(bytes).toString('hex'),
 }));
 
 vi.mock('../node-post', () => ({

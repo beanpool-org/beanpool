@@ -27,6 +27,8 @@ import { HAS_MAPS_KEY } from '../../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 
 const CATEGORIES = POST_CATEGORIES;
+// ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
+const CATEGORIES_BY_ID = new Map(CATEGORIES.map(c => [c.id, c]));
 
 // Hide Google Maps POI markers
 const hidePoisStyle = [
@@ -948,7 +950,7 @@ export default function MapScreen() {
 
                         return true;
                     }).map(post => {
-                        const catObj = CATEGORIES.find(c => c.id === post.category) || { id: normalizeCategory(post.category), emoji: categoryEmoji(post.category), label: categoryLabel(post.category) };
+                        const catObj = CATEGORIES_BY_ID.get(post.category) || { id: normalizeCategory(post.category), emoji: categoryEmoji(post.category), label: categoryLabel(post.category) };
                         const safePost = { ...post, lat: Number(post.lat), lng: Number(post.lng) };
                         const isSelected = selectedPostPreview?.id === post.id;
                         return (

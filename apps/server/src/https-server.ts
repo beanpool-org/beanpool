@@ -740,7 +740,8 @@ export async function startHttpsServer(port: number): Promise<void> {
             ctx.path.startsWith('/api/pricing-guide/reports') ||
             ctx.path === '/api/pricing-guide/report' ||
             ctx.path === '/api/invite/redeem' ||
-            ctx.path === '/api/invite/redeem-offline';
+            ctx.path === '/api/invite/redeem-offline' ||
+            ctx.path === '/api/recovery/sso/github-exchange';
 
         if ((!isMutatingApi && !isGatedRead) || isBypassed) {
             return await next();

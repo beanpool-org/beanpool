@@ -113,6 +113,16 @@ export function SsoEnrolSheet({
                     () => setCodeCopied(false),
                 );
             }, abort.signal);
+
+            // Close GitHub for them. Its own success page says nothing about returning here, and
+            // the "come back" line in this sheet is behind the browser at that moment — so without
+            // this the member is left on a finished web page wondering whether it worked.
+            // MEASURED 2026-08-28: reported as "sitting at the copy screen for a bit" before it
+            // completed. Harmless if no browser is open.
+            try {
+                await WebBrowser.dismissBrowser();
+            } catch {}
+
             const sub = extractSub(signin.idToken, signin.sub);
 
             const result = await enrolSsoKeeper({
@@ -227,6 +237,9 @@ export function SsoEnrolSheet({
                                         then come back — this finishes on its own.
                                     </Text>
                                     <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 16 }} />
+                                    <Text style={styles.processingText}>
+                                        Waiting for GitHub… this screen closes itself.
+                                    </Text>
                                 </>
                             ) : (
                                 <>

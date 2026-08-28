@@ -618,6 +618,20 @@ function generatePkcePair(): { verifier: string; challenge: string } {
     return { verifier, challenge };
 }
 
+/** Sleep that gives up early when the caller cancels, so a close is felt at once. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+        if (signal?.aborted) return resolve();
+        const t = setTimeout(done, ms);
+        function done() {
+            clearTimeout(t);
+            signal?.removeEventListener('abort', done);
+            resolve();
+        }
+        signal?.addEventListener('abort', done, { once: true });
+    });
+}
+
 /** What the member has to be shown to complete a device-flow sign-in. */
 export interface GithubDevicePrompt {
     /** The short code the member types at `verificationUri`. */
@@ -660,6 +674,7 @@ export interface GithubDevicePrompt {
 export async function signInWithGithub(
     nonce: string,
     onPrompt?: (prompt: GithubDevicePrompt) => void,
+    signal?: AbortSignal,
 ): Promise<Omit<SsoSignIn, 'provider'>> {
     const scopes = 'read:user user:email';
 
@@ -714,7 +729,11 @@ export async function signInWithGithub(
     let waited = 0;
     let accessToken: string | undefined;
     while (waited < deadlineMs) {
-        await new Promise((r) => setTimeout(r, intervalMs));
+        // Checked around the wait, not just before it: the sheet can close mid-interval, and a
+        // loop nobody is watching would otherwise keep polling GitHub for the full 15 minutes.
+        if (signal?.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+        await sleep(intervalMs, signal);
+        if (signal?.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
         waited += intervalMs;
 
         let poll: { access_token?: string; error?: string; error_description?: string };
@@ -812,6 +831,7 @@ export async function signInWithGithub(
 export async function startSsoSignIn(
     provider: SsoProvider, url: string, identity: BeanPoolIdentity,
     onGithubPrompt?: (prompt: GithubDevicePrompt) => void,
+    signal?: AbortSignal,
 ): Promise<SsoSignIn> {
     const { nonce, providers } = await fetchSsoNonce(url, identity);
     // The node's list, not a local constant: nodes may be configured with different audiences, and
@@ -830,7 +850,7 @@ export async function startSsoSignIn(
         return { provider, ...await signInWithFacebook(nonce) };
     }
     if (provider === 'github') {
-        return { provider, ...await signInWithGithub(nonce, onGithubPrompt) };
+        return { provider, ...await signInWithGithub(nonce, onGithubPrompt, signal) };
     }
     throw new SsoSignInError('unsupported', `Provider ${provider} is not supported on this device.`);
 }

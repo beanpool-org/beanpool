@@ -56,13 +56,27 @@ export function SsoEnrolSheet({
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);
     /** GitHub's device flow has no redirect — the member types this code at github.com/login/device. */
     const [devicePrompt, setDevicePrompt] = useState<GithubDevicePrompt | null>(null);
+    /** Aborts an in-flight device-flow poll: closing the sheet must stop it, not orphan it. */
+    const abortRef = React.useRef<AbortController | null>(null);
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     React.useEffect(() => {
         return () => {
             if (timerRef.current) clearTimeout(timerRef.current);
+            abortRef.current?.abort();
         };
     }, []);
+
+    /**
+     * Close, and stop what is running.
+     *
+     * The device flow polls GitHub on a timer, and the modal stays mounted with `visible={false}`,
+     * so unmount cleanup alone would leave a poll running unseen until the code expired.
+     */
+    const closeAndStop = React.useCallback(() => {
+        abortRef.current?.abort();
+        onClose();
+    }, [onClose]);
 
     const handleConnect = async () => {
         if (!identity) {
@@ -73,6 +87,9 @@ export function SsoEnrolSheet({
 
         setStep('processing');
         setDevicePrompt(null);
+        abortRef.current?.abort();
+        const abort = new AbortController();
+        abortRef.current = abort;
         try {
             const url = await anchorUrl();
             if (!url) {
@@ -81,7 +98,7 @@ export function SsoEnrolSheet({
                 return;
             }
 
-            const signin = await startSsoSignIn(provider, url, identity, setDevicePrompt);
+            const signin = await startSsoSignIn(provider, url, identity, setDevicePrompt, abort.signal);
             const sub = extractSub(signin.idToken, signin.sub);
 
             const result = await enrolSsoKeeper({
@@ -150,7 +167,7 @@ export function SsoEnrolSheet({
             visible={visible}
             animationType="slide"
             transparent={true}
-            onRequestClose={onClose}
+            onRequestClose={closeAndStop}
         >
             <View style={styles.overlay}>
                 <View style={styles.sheet}>
@@ -184,7 +201,7 @@ export function SsoEnrolSheet({
                             )}
                             <TouchableOpacity
                                 style={[styles.secondaryButton, { marginTop: 24, alignSelf: 'stretch' }]}
-                                onPress={onClose}
+                                onPress={closeAndStop}
                                 accessibilityRole="button"
                                 accessibilityLabel="Cancel connection"
                             >

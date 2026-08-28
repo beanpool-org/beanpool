@@ -249,6 +249,22 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
         }
     });
 
+    it('stops polling when the caller aborts', async () => {
+        const originalFetch = globalThis.fetch;
+        // Always pending: without an abort this would poll until the code expired, which is
+        // exactly what closing the sheet used to leave running unseen.
+        globalThis.fetch = githubDeviceFetch(
+            Array.from({ length: 500 }, () => ({ error: 'authorization_pending' })),
+        ) as any;
+        const abort = new AbortController();
+        try {
+            const p = signInWithGithub('test-nonce-gh', () => abort.abort(), abort.signal);
+            await expect(p).rejects.toThrow('Sign-in was cancelled.');
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
     it('names device_flow_disabled rather than reporting an outage', async () => {
         const originalFetch = globalThis.fetch;
         globalThis.fetch = vi.fn(async () => ({

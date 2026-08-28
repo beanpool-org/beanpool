@@ -618,68 +618,163 @@ function generatePkcePair(): { verifier: string; challenge: string } {
     return { verifier, challenge };
 }
 
-export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
-    const redirectUri = 'https://beanpool.org/auth/github';
-    const completionUri = 'beanpool://auth/github';
-    const { verifier, challenge } = generatePkcePair();
+/** Sleep that gives up early when the caller cancels, so a close is felt at once. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+        if (signal?.aborted) return resolve();
+        const t = setTimeout(done, ms);
+        function done() {
+            clearTimeout(t);
+            signal?.removeEventListener('abort', done);
+            resolve();
+        }
+        signal?.addEventListener('abort', done, { once: true });
+    });
+}
+
+/** What the member has to be shown to complete a device-flow sign-in. */
+export interface GithubDevicePrompt {
+    /** The short code the member types at `verificationUri`. */
+    userCode: string;
+    /** Where they type it — `https://github.com/login/device`. */
+    verificationUri: string;
+}
+
+/**
+ * Sign in with GitHub, via the device flow.
+ *
+ * ## Why not the ordinary web flow
+ *
+ * GitHub OAuth Apps are not an OIDC provider. Google and Apple hand back a signed `id_token` that
+ * any node verifies against public JWKS — public keys verify, they do not authorise, so nothing
+ * secret is needed and every node can do it unaided. GitHub hands back an opaque token, and the
+ * only way to get one through the web flow is a code exchange authenticated with the app's
+ * `client_secret`. PKCE does not change that: GitHub's parameter table still lists `client_secret`
+ * as Required, and its July 2025 PKCE changelog says plainly that GitHub "does not distinguish
+ * between public and confidential clients". PKCE is additive there, not a substitute.
+ *
+ * That is fatal for a federated network. A secret the exchange needs is a secret every node needs,
+ * and BeanPool nodes are run by other people. Shipping it to them makes it not a secret, and no
+ * one could rotate it without coordinating every operator at once.
+ *
+ * The device flow's token request takes `client_id`, `device_code` and `grant_type` — no secret at
+ * all. Nothing to distribute, nothing to rotate, and no server proxy in the path: this talks to
+ * GitHub directly and behaves the same on a node we have never heard of.
+ *
+ * It also removes the redirect, which is what all the Custom Tab work was fighting. MEASURED
+ * 2026-08-28: `beanpool.org` is a verified App Link with no path restriction, so the return leg was
+ * captured by MainActivity and the browser reported a spurious `cancel` on every single attempt.
+ * No redirect, no interception, no race.
+ *
+ * The cost is that the member types a short code instead of tapping. For a one-off recovery setup
+ * that is a fair trade, and more legible than being thrown out to a browser and back.
+ *
+ * Requires "Enable Device Flow" on the OAuth app in GitHub's settings.
+ */
+export async function signInWithGithub(
+    nonce: string,
+    onPrompt?: (prompt: GithubDevicePrompt) => void,
+    signal?: AbortSignal,
+): Promise<Omit<SsoSignIn, 'provider'>> {
     const scopes = 'read:user user:email';
-    const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${encodeURIComponent(nonce)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256`;
 
-    const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, nonce, 'github');
-
-    const params = new URLSearchParams(callbackParams(url));
-    const code = params.get('code');
-    const directToken = params.get('access_token') || params.get('token');
-
-    let accessToken = directToken;
-    if (!accessToken && code) {
-        // Exchange authorization code for access token via node exchange proxy
+    console.log('[SSO] github: requesting device code');
+    let start: {
+        device_code?: string; user_code?: string; verification_uri?: string;
+        expires_in?: number; interval?: number; error?: string; error_description?: string;
+    };
+    try {
+        const abort = new AbortController();
+        const t = setTimeout(() => abort.abort(), EXCHANGE_TIMEOUT_MS);
         try {
-            const anchorUrl = (await AsyncStorage.getItem('beanpool_anchor_url')) || 'https://mullum.beanpool.org';
-            // Bounded: an unanswered exchange used to hang the sign-in with no error, no log and no
-            // UI change, which is indistinguishable from success to the member.
+            const res = await fetch('https://github.com/login/device/code', {
+                method: 'POST',
+                signal: abort.signal,
+                headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, scope: scopes }),
+            });
+            start = await res.json();
+        } finally {
+            clearTimeout(t);
+        }
+    } catch (e: any) {
+        throw new SsoSignInError('provider', `Could not reach GitHub: ${e.message}`);
+    }
+
+    if (start.error || !start.device_code || !start.user_code || !start.verification_uri) {
+        // `device_flow_disabled` is worth naming: it is a setting on the OAuth app, nothing the
+        // member did, and it would otherwise read as an outage.
+        const detail = start.error === 'device_flow_disabled'
+            ? 'GitHub sign-in is not enabled for this app yet.'
+            : (start.error_description || start.error || 'GitHub did not issue a device code.');
+        throw new SsoSignInError('provider', detail);
+    }
+
+    const deviceCode = start.device_code;
+    const deadlineMs = (start.expires_in ?? 900) * 1000;
+    // GitHub's own interval, not a guess. Polling faster than this earns `slow_down`.
+    let intervalMs = (start.interval ?? 5) * 1000;
+
+    console.log(`[SSO] github: device code issued, expires in ${Math.round(deadlineMs / 1000)}s`);
+    onPrompt?.({ userCode: start.user_code, verificationUri: start.verification_uri });
+
+    // Opened, not required: the member can type the address themselves, and a device where nothing
+    // handles the URL must not fail the sign-in here.
+    try {
+        await WebBrowser.openBrowserAsync(start.verification_uri);
+    } catch {
+        console.log('[SSO] github: could not open the verification page — member can enter it manually');
+    }
+
+    let waited = 0;
+    let accessToken: string | undefined;
+    while (waited < deadlineMs) {
+        // Checked around the wait, not just before it: the sheet can close mid-interval, and a
+        // loop nobody is watching would otherwise keep polling GitHub for the full 15 minutes.
+        if (signal?.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+        await sleep(intervalMs, signal);
+        if (signal?.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+        waited += intervalMs;
+
+        let poll: { access_token?: string; error?: string; error_description?: string };
+        try {
             const abort = new AbortController();
-            const abortTimer = setTimeout(() => abort.abort(), EXCHANGE_TIMEOUT_MS);
-            let tokenRes: Response;
+            const t = setTimeout(() => abort.abort(), EXCHANGE_TIMEOUT_MS);
             try {
-                console.log(`[SSO] github: exchanging code at ${anchorUrl}`);
-                tokenRes = await fetch(`${anchorUrl}/api/recovery/sso/github-exchange`, {
+                const res = await fetch('https://github.com/login/oauth/access_token', {
                     method: 'POST',
                     signal: abort.signal,
-                    headers: {
-                        Accept: 'application/json',
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        code,
-                        redirectUri,
-                        codeVerifier: verifier,
+                        client_id: GITHUB_CLIENT_ID,
+                        device_code: deviceCode,
+                        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
                     }),
                 });
+                poll = await res.json();
             } finally {
-                clearTimeout(abortTimer);
+                clearTimeout(t);
             }
-            console.log(`[SSO] github: exchange responded ${tokenRes.status}`);
-            if (!tokenRes.ok) {
-                const errData = await tokenRes.json().catch(() => ({ error: `Status ${tokenRes.status}` }));
-                throw new Error(errData.error || `Token exchange failed with status ${tokenRes.status}`);
-            }
-            const tokenData = (await tokenRes.json()) as { accessToken?: string; error?: string };
-            if (tokenData.error || !tokenData.accessToken) {
-                throw new Error(tokenData.error || 'No access token returned');
-            }
-            accessToken = tokenData.accessToken;
-        } catch (e: any) {
-            throw new SsoSignInError('provider', `GitHub token exchange failed: ${e.message}`);
+        } catch {
+            // A dropped poll is not a failed sign-in — the member may still be typing. Try again.
+            continue;
         }
+
+        if (poll.access_token) { accessToken = poll.access_token; break; }
+        if (poll.error === 'authorization_pending') continue;
+        if (poll.error === 'slow_down') { intervalMs += 5_000; continue; }
+        if (poll.error === 'access_denied') {
+            throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+        }
+        if (poll.error === 'expired_token') break;
+        throw new SsoSignInError('provider', poll.error_description || poll.error || 'GitHub refused the sign-in.');
     }
 
     if (!accessToken) {
-        throw new SsoSignInError('no-token', 'GitHub returned no authorization token.');
+        throw new SsoSignInError('provider', 'The GitHub code expired before it was entered.');
     }
+    console.log('[SSO] github: device flow authorised');
 
-    // Fetch user profile to extract user id (sub) and email
-    // (logged below: without a `sub` the seal has nothing to bind to)
     let sub: string | undefined;
     let email: string | undefined;
     try {
@@ -692,13 +787,9 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
         });
         if (userRes.ok) {
             const userData = await userRes.json() as { id?: number | string; email?: string };
-            if (userData.id !== undefined && userData.id !== null) {
-                sub = String(userData.id);
-            }
+            if (userData.id !== undefined && userData.id !== null) sub = String(userData.id);
             email = userData.email || undefined;
         }
-
-        // If email is private on the main profile, fetch from /user/emails
         if (!email) {
             const emailsRes = await fetch('https://api.github.com/user/emails', {
                 headers: {
@@ -708,12 +799,10 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
                 },
             });
             if (emailsRes.ok) {
-                const emailsData = await emailsRes.json() as Array<{ email: string; primary?: boolean; verified?: boolean }>;
+                const emailsData = await emailsRes.json() as Array<{ email: string; primary?: boolean }>;
                 if (Array.isArray(emailsData)) {
                     const primary = emailsData.find((e) => e.primary) || emailsData[0];
-                    if (primary?.email) {
-                        email = primary.email;
-                    }
+                    if (primary?.email) email = primary.email;
                 }
             }
         }
@@ -722,20 +811,14 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
     }
 
     console.log(`[SSO] github: resolved sub=${sub ? 'yes' : 'MISSING'} email=${email ? 'yes' : 'no'}`);
-    // Refuse rather than enrol against a missing subject. `sealShareToSso` derives its key from
-    // `provider:sub`, so an undefined `sub` seals the fragment to the literal string
-    // `github:undefined` — the deposit succeeds, the panel shows a tick, and recovery through
-    // GitHub can never work because the real `sub` derives a different key. A visible failure the
-    // member can retry beats a green tick that is quietly worthless.
+    // Refuse rather than enrol against a missing subject. `sealShareToSso` keys on `provider:sub`,
+    // so an undefined `sub` seals to the literal `github:undefined`: the deposit succeeds, the
+    // panel shows a tick, and recovery can never work because the real `sub` derives another key.
     if (!sub) {
         throw new SsoSignInError('provider', 'GitHub did not return a user id, so this account cannot be protected yet.');
     }
-    return {
-        idToken: accessToken,
-        nonce,
-        sub,
-        email,
-    };
+
+    return { idToken: accessToken, nonce, sub, email };
 }
 
 /**
@@ -747,6 +830,8 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
  */
 export async function startSsoSignIn(
     provider: SsoProvider, url: string, identity: BeanPoolIdentity,
+    onGithubPrompt?: (prompt: GithubDevicePrompt) => void,
+    signal?: AbortSignal,
 ): Promise<SsoSignIn> {
     const { nonce, providers } = await fetchSsoNonce(url, identity);
     // The node's list, not a local constant: nodes may be configured with different audiences, and
@@ -765,7 +850,7 @@ export async function startSsoSignIn(
         return { provider, ...await signInWithFacebook(nonce) };
     }
     if (provider === 'github') {
-        return { provider, ...await signInWithGithub(nonce) };
+        return { provider, ...await signInWithGithub(nonce, onGithubPrompt, signal) };
     }
     throw new SsoSignInError('unsupported', `Provider ${provider} is not supported on this device.`);
 }

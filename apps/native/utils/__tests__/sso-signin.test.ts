@@ -194,49 +194,98 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
         }
     });
 
-    it('handles GitHub OAuth code redirect with PKCE token exchange and profile fetch', async () => {
-        vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
-            type: 'success',
-            url: 'beanpool://auth/github?code=gh_auth_code_123&state=test-nonce-gh',
-        });
-        const originalFetch = globalThis.fetch;
-        globalThis.fetch = vi.fn(async (url: any) => {
-            if (String(url).includes('/api/recovery/sso/github-exchange') || String(url).includes('login/oauth/access_token')) {
-                return {
-                    ok: true,
-                    json: async () => ({ accessToken: 'gho_access_token_abc', access_token: 'gho_access_token_abc' }),
-                } as any;
+    // GitHub is the device flow now: no redirect, no code exchange, no client secret. See the
+    // rationale on `signInWithGithub` — GitHub OAuth Apps are not OIDC, so the web flow needs a
+    // secret on every node, which a federated network cannot have.
+    const githubDeviceFetch = (poll: object[], user: object = { id: 987654, email: 'dev@github.com' }) => {
+        const queue = [...poll];
+        return vi.fn(async (url: any) => {
+            const u = String(url);
+            if (u.includes('login/device/code')) {
+                return { ok: true, json: async () => ({
+                    device_code: 'dev_code_1', user_code: 'ABCD-1234',
+                    verification_uri: 'https://github.com/login/device',
+                    expires_in: 900, interval: 0,
+                }) } as any;
             }
-            if (String(url).includes('api.github.com/user')) {
-                return {
-                    ok: true,
-                    json: async () => ({ id: 987654, email: 'dev@github.com' }),
-                } as any;
+            if (u.includes('login/oauth/access_token')) {
+                return { ok: true, json: async () => queue.shift() ?? { error: 'expired_token' } } as any;
+            }
+            if (u.includes('api.github.com/user')) {
+                return { ok: true, json: async () => user } as any;
             }
             return { ok: false, status: 404 } as any;
         });
+    };
 
+    it('polls past authorization_pending and returns the profile', async () => {
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = githubDeviceFetch([
+            { error: 'authorization_pending' },
+            { access_token: 'gho_device_token' },
+        ]) as any;
         try {
-            const res = await signInWithGithub('test-nonce-gh');
-            expect(res.idToken).toBe('gho_access_token_abc');
-            expect(res.nonce).toBe('test-nonce-gh');
+            const prompts: any[] = [];
+            const res = await signInWithGithub('test-nonce-gh', (p) => prompts.push(p));
+            expect(res.idToken).toBe('gho_device_token');
             expect(res.sub).toBe('987654');
             expect(res.email).toBe('dev@github.com');
+            // The member cannot finish without seeing the code, so surfacing it is part of the contract.
+            expect(prompts).toHaveLength(1);
+            expect(prompts[0].userCode).toBe('ABCD-1234');
+            expect(prompts[0].verificationUri).toBe('https://github.com/login/device');
         } finally {
             globalThis.fetch = originalFetch;
         }
     });
 
-    it('handles GitHub cancel, after the spurious-cancel grace window', async () => {
-        vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'cancel' as any });
-        vi.useFakeTimers();
+    it('treats access_denied as a cancel, not an error', async () => {
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = githubDeviceFetch([{ error: 'access_denied' }]) as any;
         try {
-            const assertion = expect(signInWithGithub('test-nonce-gh'))
-                .rejects.toThrow('Sign-in was cancelled.');
-            await vi.advanceTimersByTimeAsync(11_000);
-            await assertion;
+            await expect(signInWithGithub('test-nonce-gh')).rejects.toThrow('Sign-in was cancelled.');
         } finally {
-            vi.useRealTimers();
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it('stops polling when the caller aborts', async () => {
+        const originalFetch = globalThis.fetch;
+        // Always pending: without an abort this would poll until the code expired, which is
+        // exactly what closing the sheet used to leave running unseen.
+        globalThis.fetch = githubDeviceFetch(
+            Array.from({ length: 500 }, () => ({ error: 'authorization_pending' })),
+        ) as any;
+        const abort = new AbortController();
+        try {
+            const p = signInWithGithub('test-nonce-gh', () => abort.abort(), abort.signal);
+            await expect(p).rejects.toThrow('Sign-in was cancelled.');
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it('names device_flow_disabled rather than reporting an outage', async () => {
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = vi.fn(async () => ({
+            ok: true, json: async () => ({ error: 'device_flow_disabled' }),
+        })) as any;
+        try {
+            await expect(signInWithGithub('test-nonce-gh')).rejects.toThrow('not enabled for this app');
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it('refuses to enrol when GitHub returns no user id', async () => {
+        const originalFetch = globalThis.fetch;
+        // sealShareToSso keys on `provider:sub`; an undefined sub seals to `github:undefined`,
+        // which deposits fine and can never be recovered through.
+        globalThis.fetch = githubDeviceFetch([{ access_token: 'gho_device_token' }], { email: 'dev@github.com' }) as any;
+        try {
+            await expect(signInWithGithub('test-nonce-gh')).rejects.toThrow('did not return a user id');
+        } finally {
+            globalThis.fetch = originalFetch;
         }
     });
 });

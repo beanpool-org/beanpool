@@ -67,7 +67,7 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
 
     if (mode === 'compact') {
         return (
-            <Wrapper {...(navigable ? { onPress: handlePress, accessibilityRole: 'button' as const } : {})} style={styles.compactContainer}>
+            <Wrapper {...(navigable ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: `View ${callsign}'s profile` } : {})} style={styles.compactContainer}>
                 {/* Avatar */}
                 <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={18} />
                 {/* Tier badge */}
@@ -92,7 +92,7 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
 
     // Full mode (list cards)
     return (
-        <Wrapper {...(navigable ? { onPress: handlePress, accessibilityRole: 'button' as const } : {})} style={styles.fullContainer}>
+        <Wrapper {...(navigable ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: `View ${callsign}'s profile` } : {})} style={styles.fullContainer}>
             {/* Avatar */}
             <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={24} />
             {/* Tier badge with label */}

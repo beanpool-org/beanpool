@@ -15,16 +15,18 @@ import type { BeanPoolIdentity } from '../utils/identity';
 function extractSub(idToken: string, fallbackSub?: string): string {
     if (fallbackSub) return fallbackSub;
     const parts = idToken?.split('.');
-    if (!parts || parts.length !== 3 || !parts[1]) {
-        throw new Error('Invalid ID token format.');
+    if (!parts || parts.length < 2 || !parts[1]) {
+        throw new Error('Could not determine user identifier for this sign-in.');
     }
-    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-    const payload = JSON.parse(globalThis.atob(pad)) as Record<string, unknown>;
-    if (typeof payload?.sub !== 'string' || !payload.sub) {
-        throw new Error('ID token missing subject claim (sub).');
-    }
-    return payload.sub;
+    try {
+        const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+        const payload = JSON.parse(globalThis.atob(pad)) as Record<string, unknown>;
+        if (typeof payload?.sub === 'string' && payload.sub) {
+            return payload.sub;
+        }
+    } catch {}
+    throw new Error('ID token missing subject claim (sub).');
 }
 
 export function SsoEnrolSheet({

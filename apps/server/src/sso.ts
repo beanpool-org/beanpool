@@ -500,6 +500,67 @@ export async function verifyIdToken(
         }
     }
 
+    if (provider === 'facebook') {
+        const parts = idToken?.split('.');
+        if (parts && parts.length === 3) {
+            try {
+                const [headerB64, payloadB64, signatureB64] = parts;
+                const header = decodeSegment(headerB64, config.label);
+                if (header.alg === 'RS256' && header.kid) {
+                    const jwk = await getSigningKey(provider, header.kid);
+                    const publicKey = crypto.createPublicKey({ key: jwk as any, format: 'jwk' });
+                    const signed = Buffer.from(`${headerB64}.${payloadB64}`, 'utf-8');
+                    const signature = Buffer.from(signatureB64, 'base64url');
+                    if (crypto.verify('RSA-SHA256', signed, publicKey, signature)) {
+                        const claims = decodeSegment(payloadB64, config.label);
+                        if (claims.sub && consumeNonce(expectedNonce, subject)) {
+                            return {
+                                provider: 'facebook',
+                                sub: String(claims.sub),
+                                email: claims.email ? String(claims.email) : undefined,
+                                emailVerified: coerceBoolean(claims.email_verified),
+                                audience: String(claims.aud || allowedAudiences[0] || 'facebook'),
+                                issuedAt: Number(claims.iat ?? Math.floor(Date.now() / 1000)),
+                                expiresAt: Number(claims.exp ?? Math.floor(Date.now() / 1000) + 3600),
+                            };
+                        }
+                    }
+                }
+            } catch {}
+        }
+
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const res = await fetch(`https://graph.facebook.com/v20.0/me?fields=id,email&access_token=${encodeURIComponent(idToken)}`, {
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+            if (!res.ok) {
+                throw new SsoVerificationError(`Facebook authentication failed (status ${res.status}).`);
+            }
+            const data = await res.json() as { id?: string | number; email?: string };
+            if (!data.id) {
+                throw new SsoVerificationError('Facebook user profile did not return a user id.');
+            }
+            if (!consumeNonce(expectedNonce, subject)) {
+                throw new SsoVerificationError('Facebook sign-in could not be matched to this request.');
+            }
+            return {
+                provider: 'facebook',
+                sub: String(data.id),
+                email: data.email ? String(data.email) : undefined,
+                emailVerified: true,
+                audience: allowedAudiences[0] || 'facebook',
+                issuedAt: Math.floor(Date.now() / 1000),
+                expiresAt: Math.floor(Date.now() / 1000) + 3600,
+            };
+        } catch (err: any) {
+            if (err instanceof SsoVerificationError) throw err;
+            throw new SsoVerificationError(`Failed to verify Facebook token: ${err.message}`);
+        }
+    }
+
     const parts = idToken?.split('.');
     if (!parts || parts.length !== 3) {
         throw new SsoVerificationError(`${config.label} token is malformed.`);

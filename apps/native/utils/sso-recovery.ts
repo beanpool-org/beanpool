@@ -40,21 +40,23 @@ export interface SsoRecoveryResult {
 
 function parseJwtSub(idToken: string, fallbackSub?: string): string {
     if (fallbackSub) return fallbackSub;
-    const parts = idToken.split('.');
-    if (parts.length < 2) {
-        throw new Error('Malformed ID token from sign-in provider.');
+    const parts = idToken?.split('.');
+    if (!parts || parts.length < 2) {
+        throw new Error('Could not determine user identifier for this sign-in.');
     }
-    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4 !== 0) {
-        base64 += '=';
-    }
-    const bytes = decodeBase64(base64);
-    const decoded = new TextDecoder().decode(bytes);
-    const parsed = JSON.parse(decoded);
-    if (!parsed.sub || typeof parsed.sub !== 'string') {
-        throw new Error('Sign-in token does not contain a valid subject claim (sub).');
-    }
-    return parsed.sub;
+    try {
+        let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4 !== 0) {
+            base64 += '=';
+        }
+        const bytes = decodeBase64(base64);
+        const decoded = new TextDecoder().decode(bytes);
+        const parsed = JSON.parse(decoded);
+        if (parsed.sub && typeof parsed.sub === 'string') {
+            return parsed.sub;
+        }
+    } catch {}
+    throw new Error('Sign-in token does not contain a valid subject claim (sub).');
 }
 
 export async function recoverAccountWithSso(options: {

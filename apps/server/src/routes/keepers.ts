@@ -55,7 +55,15 @@ import {
     type KeeperType,
 } from '../engine/recovery-shares.js';
 import { depositSsoKeeperGeneration, KeeperDepositError } from '../engine/keeper-deposit.js';
-import { issueNonce, SsoVerificationError, SSO_PROVIDERS, isSsoProvider, type SsoProvider } from '../sso.js';
+import {
+    issueNonce,
+    SsoVerificationError,
+    SSO_PROVIDERS,
+    isSsoProvider,
+    type SsoProvider,
+    BEANPOOL_GITHUB_CLIENT_IDS,
+    githubClientSecret,
+} from '../sso.js';
 import type { RouteDeps } from './types.js';
 
 /** Mirrors the CHECK constraint on `recovery_shares.holder_type`. */
@@ -233,6 +241,94 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             expiresInSeconds: 600,
             providers: SSO_PROVIDERS,
         };
+    });
+
+    /**
+     * Exchanges a GitHub authorization code for an access token via GitHub's OAuth server.
+     * Keeps the client secret secure on the server side so mobile clients can authenticate with GitHub.
+     */
+    router.post('/api/recovery/sso/github-exchange', async (ctx) => {
+        if (!rateLimit(ctx)) return;
+
+        const body = (ctx as any).requestBody || {};
+        const code = typeof body.code === 'string' ? body.code.trim() : '';
+        const redirectUri = typeof body.redirectUri === 'string' ? body.redirectUri.trim() : 'https://beanpool.org/auth/github';
+
+        const codeVerifier = typeof body.codeVerifier === 'string' ? body.codeVerifier.trim() : undefined;
+
+        if (!code) {
+            ctx.status = 400;
+            ctx.body = { error: 'Authorization code is required' };
+            return;
+        }
+
+        const clientId = BEANPOOL_GITHUB_CLIENT_IDS[0] || 'Ov23li8mmDfBr7GyJVRU';
+        const clientSecret = githubClientSecret();
+        // Say which side is misconfigured. Without this the node forwards an empty secret and the
+        // member sees GitHub's "client_id and/or client_secret passed are incorrect", which points
+        // the investigation at the app rather than at this node's environment.
+        if (!clientSecret) {
+            console.error('[SSO] GITHUB_CLIENT_SECRET is not set — GitHub recovery cannot work on this node.');
+            ctx.status = 503;
+            ctx.body = { error: 'GitHub sign-in is not configured on this node.' };
+            return;
+        }
+
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const exchangePayload: Record<string, string> = {
+                client_id: clientId,
+                client_secret: clientSecret,
+                code,
+                redirect_uri: redirectUri,
+            };
+            if (codeVerifier) {
+                exchangePayload.code_verifier = codeVerifier;
+            }
+
+            // `finally`, not a trailing call: a network or DNS failure throws straight past a
+            // clearTimeout placed after the await, leaving the abort timer live in the event loop.
+            let res: Response;
+            try {
+                res = await fetch('https://github.com/login/oauth/access_token', {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(exchangePayload),
+                    signal: controller.signal,
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+
+            if (!res.ok) {
+                const errText = await res.text().catch(() => '');
+                console.error(`[GitHub OAuth Proxy] Token exchange failed with HTTP ${res.status}:`, errText);
+                ctx.status = res.status;
+                ctx.body = { error: `GitHub token exchange failed (HTTP ${res.status})` };
+                return;
+            }
+
+            const data = await res.json() as { access_token?: string; error?: string; error_description?: string };
+            if (data.error || !data.access_token) {
+                console.error('[GitHub OAuth Proxy] GitHub returned error:', data);
+                ctx.status = 400;
+                ctx.body = { error: data.error_description || data.error || 'No access token returned from GitHub' };
+                return;
+            }
+
+            ctx.status = 200;
+            ctx.body = {
+                success: true,
+                accessToken: data.access_token,
+            };
+        } catch (e: any) {
+            ctx.status = 502;
+            ctx.body = { error: `GitHub connection failed: ${e.message}` };
+        }
     });
 
     /**
@@ -549,6 +645,15 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 encryptedShare: hubShare.encryptedShare,
                 shareIv: hubShare.shareIv,
                 shareTag: hubShare.shareTag,
+                // Carried, not dropped. Omitting this rewrote the stored hub fragment without its
+                // scheme, and `readHubShare` refuses a fragment whose kdfParams will not parse —
+                // so a single disconnect made EVERY later enrolment fail with "the existing hub
+                // fragment could not be read". The sso branch below always copied it; the hub
+                // branch did not. MEASURED 2026-08-28 on device.
+                // `||` not `??`: a row stripped by the old handler carries null, and copying that
+                // forward would perpetuate the damage through every future generation. The scheme
+                // is known — hub fragments are always plaintext-v1 — so heal it here.
+                kdfParams: hubShare.kdfParams || JSON.stringify({ alg: 'plaintext-v1' }),
             });
         }
         for (const s of remainingSso) {

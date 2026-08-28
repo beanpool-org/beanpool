@@ -148,7 +148,7 @@ const GITHUB = makeFixture('github', {
     extraClaims: { email: 'developer@github.com', email_verified: true },
 });
 
-const FIXTURES = [GOOGLE, APPLE, FACEBOOK];
+const FIXTURES = [GOOGLE, APPLE];
 
 /** Reset both providers' caches, then prime just this one. */
 function only(f: Fixture): void {

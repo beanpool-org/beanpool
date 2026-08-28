@@ -1,15 +1,22 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { View, ActivityIndicator, Text, DeviceEventEmitter } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
 
 export default function FacebookAuthCallbackScreen() {
     const router = useRouter();
+    const url = Linking.useURL();
 
     useEffect(() => {
         try {
-            WebBrowser.maybeCompleteAuthSession();
+            if (url) {
+                DeviceEventEmitter.emit('SSO_AUTH_CALLBACK', url);
+            }
+            // Web-only (@platform web), and it never accepted a `url` — that argument was being
+            // silently dropped. On Android the broadcast above is what completes the sign-in.
+            WebBrowser.maybeCompleteAuthSession({ skipRedirectCheck: true });
         } catch (e) {
             console.warn('[Facebook Auth Callback] Error completing auth session:', e);
         }
@@ -21,7 +28,7 @@ export default function FacebookAuthCallbackScreen() {
             }
         }, 300);
         return () => clearTimeout(timer);
-    }, [router]);
+    }, [router, url]);
 
     return (
         <View

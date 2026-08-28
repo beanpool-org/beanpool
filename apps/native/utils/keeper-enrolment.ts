@@ -139,6 +139,14 @@ function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
  * A null answer is the normal first-enrolment case, not a failure — so is a node too old to know
  * the route. Both fall through to a fresh split, which is correct precisely when there is no
  * earlier fragment to stay consistent with.
+ *
+ * "I could not ask" is NOT one of those cases, and conflating the two is why adding a second
+ * provider failed at random. Returning null after a network blink mints a fresh `A`, which the
+ * node then refuses because the existing providers were split against the old one — so a dropped
+ * request surfaced as an unexplained enrolment failure, and the only reliable way out was to
+ * disconnect every provider so that a fresh split became legitimate again. MEASURED 2026-08-28:
+ * the anchor node was failing every WebSocket connect throughout the session, so this call
+ * intermittently not answering is the expected condition, not a rare one.
  */
 async function fetchHubFragment(
     url: string, identity: BeanPoolIdentity,
@@ -146,10 +154,17 @@ async function fetchHubFragment(
     let res: Response;
     try {
         res = await signedPost(url, '/api/recovery/shares/hub-fragment', {}, identity);
-    } catch {
-        return null;
+    } catch (e) {
+        throw new Error(`could not reach the node to read the existing hub fragment: ${(e as Error).message}`);
     }
-    if (!res.ok) return null;
+    // A node too old to know the route has no fragment to stay consistent with, so 404 really is
+    // the first-enrolment case. Any other refusal is a live node declining to answer, and guessing
+    // past it is what breaks the pairing.
+    console.log(`[KEEPER] hub-fragment endpoint responded ${res.status}`);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+        throw new Error(`the node would not return the existing hub fragment (HTTP ${res.status})`);
+    }
     const body = await res.json().catch(() => null) as {
         hubFragment?: unknown; shareIv?: unknown; shareTag?: unknown; kdfParams?: unknown;
     } | null;
@@ -181,8 +196,12 @@ async function fetchHubFragment(
 export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEnrolmentResult> {
     const { identity, provider, sub, idToken, nonce } = input;
     const skipped: { keeper: string; reason: string }[] = [];
-    const nothing = (error: string): KeeperEnrolmentResult =>
-        ({ enrolled: [], generation: null, skipped, available: 0, error });
+    const nothing = (error: string): KeeperEnrolmentResult => {
+        // Logged, not just returned: every enrolment failure to date has been invisible in
+        // logcat, so the only evidence was the member reporting that nothing happened.
+        console.log(`[KEEPER] ${provider}: enrolment failed — ${error}`);
+        return { enrolled: [], generation: null, skipped, available: 0, error };
+    };
 
     const words = identity.mnemonic;
     if (!words || words.length === 0) {
@@ -225,10 +244,17 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         if (existingHub) {
             hubShare = existingHub;
             otherHalf = xorBytes(seed, existingHub);
+            // The node compares the re-encoded fragment byte-for-byte against what it stored, so
+            // log exactly what we are about to send. A difference here is the whole bug.
+            console.log(`[KEEPER] ${provider}: reusing stored hub fragment (${existingHub.length}B -> ${recordShareForHub(existingHub).encryptedShare.slice(0, 16)}...)`);
         } else {
             const result = await splitHubAndWhole(seed);
             hubShare = result.hubShare;
             otherHalf = result.otherHalf;
+            // Logged because its ABSENCE was previously the only signal that a fresh fragment had
+            // been minted, which made "correctly starting from nothing" and "silently replacing the
+            // fragment other providers depend on" indistinguishable in a capture.
+            console.log(`[KEEPER] ${provider}: no stored hub fragment — minting a fresh split`);
         }
     } catch (e) {
         return nothing(`could not split the seed: ${(e as Error).message}`);
@@ -262,6 +288,7 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
             idToken,
             nonce,
         }, identity);
+        console.log(`[KEEPER] ${provider}: deposit responded ${res.status}`);
         if (!res.ok) {
             const detail = await res.text().catch(() => '');
             return nothing(`node refused the fragments (${res.status}): ${detail.slice(0, 200)}`);

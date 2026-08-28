@@ -17,7 +17,26 @@ import { describe, it, expect, vi } from 'vitest';
 
 // react-native and expo-apple-authentication have no life outside a device, so they are stubbed
 // at the module boundary. Platform defaults to ios; the one test that cares overrides it.
-vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
+(globalThis as any).__DEV__ = false;
+vi.mock('react-native', () => ({
+    Platform: { OS: 'ios' },
+    DeviceEventEmitter: {
+        addListener: vi.fn(() => ({ remove: vi.fn() })),
+        emit: vi.fn(),
+    },
+}));
+vi.mock('expo-linking', () => ({
+    addEventListener: vi.fn(() => ({ remove: vi.fn() })),
+    getInitialURL: vi.fn(async () => null),
+    useURL: vi.fn(() => null),
+}));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async () => 'https://test.beanpool.org'),
+        setItem: vi.fn(async () => undefined),
+        removeItem: vi.fn(async () => undefined),
+    },
+}));
 vi.mock('expo-apple-authentication', () => ({
     isAvailableAsync: vi.fn(async () => true),
     signInAsync: vi.fn(),
@@ -38,6 +57,7 @@ vi.mock('expo-crypto', () => ({
 }));
 vi.mock('expo-web-browser', () => ({
     openAuthSessionAsync: vi.fn(),
+    dismissAuthSession: vi.fn(),
 }));
 vi.mock('../node-post', () => ({ signedPost: vi.fn(), anchorUrl: vi.fn() }));
 
@@ -151,16 +171,27 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
     it('handles Facebook OAuth token redirect', async () => {
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
             type: 'success',
-            url: 'beanpool://auth/facebook#id_token=fb.fake.jwt&access_token=fb_token_123',
+            url: 'beanpool://auth/facebook#id_token=fb.fake.jwt&access_token=fb_token_123&state=test-nonce-fb',
         });
         const res = await signInWithFacebook('test-nonce-fb');
         expect(res.idToken).toBe('fb.fake.jwt');
         expect(res.nonce).toBe('test-nonce-fb');
     });
 
-    it('handles Facebook cancel', async () => {
+    // The browser's 'cancel' is not trusted on its own any more: on Android it routinely arrives
+    // while the real callback is still in flight, so the sign-in keeps listening through a grace
+    // window before giving up. These tests advance past that window rather than shorten it.
+    it('handles Facebook cancel, after the spurious-cancel grace window', async () => {
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'cancel' as any });
-        await expect(signInWithFacebook('test-nonce-fb')).rejects.toThrow('Sign-in was cancelled.');
+        vi.useFakeTimers();
+        try {
+            const assertion = expect(signInWithFacebook('test-nonce-fb'))
+                .rejects.toThrow('Sign-in was cancelled.');
+            await vi.advanceTimersByTimeAsync(11_000);
+            await assertion;
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('handles GitHub OAuth code redirect with PKCE token exchange and profile fetch', async () => {
@@ -170,10 +201,10 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
         });
         const originalFetch = globalThis.fetch;
         globalThis.fetch = vi.fn(async (url: any) => {
-            if (String(url).includes('login/oauth/access_token')) {
+            if (String(url).includes('/api/recovery/sso/github-exchange') || String(url).includes('login/oauth/access_token')) {
                 return {
                     ok: true,
-                    json: async () => ({ access_token: 'gho_access_token_abc' }),
+                    json: async () => ({ accessToken: 'gho_access_token_abc', access_token: 'gho_access_token_abc' }),
                 } as any;
             }
             if (String(url).includes('api.github.com/user')) {
@@ -196,8 +227,16 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
         }
     });
 
-    it('handles GitHub cancel', async () => {
+    it('handles GitHub cancel, after the spurious-cancel grace window', async () => {
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'cancel' as any });
-        await expect(signInWithGithub('test-nonce-gh')).rejects.toThrow('Sign-in was cancelled.');
+        vi.useFakeTimers();
+        try {
+            const assertion = expect(signInWithGithub('test-nonce-gh'))
+                .rejects.toThrow('Sign-in was cancelled.');
+            await vi.advanceTimersByTimeAsync(11_000);
+            await assertion;
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

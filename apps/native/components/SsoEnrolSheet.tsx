@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Pressable } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { colors } from '../constants/colors';
 import { anchorUrl } from '../utils/node-post';
 import { startSsoSignIn, SsoSignInError } from '../utils/sso-signin';
-import type { SsoProvider } from '../utils/sso-signin';
+import type { SsoProvider, GithubDevicePrompt } from '../utils/sso-signin';
 import { enrolSsoKeeper, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { useIdentity } from '../app/IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
@@ -53,6 +54,8 @@ export function SsoEnrolSheet({
     const [step, setStep] = useState<'processing' | 'success' | 'error'>('processing');
     const [errorMessage, setErrorMessage] = useState('');
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);
+    /** GitHub's device flow has no redirect — the member types this code at github.com/login/device. */
+    const [devicePrompt, setDevicePrompt] = useState<GithubDevicePrompt | null>(null);
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     React.useEffect(() => {
@@ -69,6 +72,7 @@ export function SsoEnrolSheet({
         }
 
         setStep('processing');
+        setDevicePrompt(null);
         try {
             const url = await anchorUrl();
             if (!url) {
@@ -77,7 +81,7 @@ export function SsoEnrolSheet({
                 return;
             }
 
-            const signin = await startSsoSignIn(provider, url, identity);
+            const signin = await startSsoSignIn(provider, url, identity, setDevicePrompt);
             const sub = extractSub(signin.idToken, signin.sub);
 
             const result = await enrolSsoKeeper({
@@ -152,8 +156,32 @@ export function SsoEnrolSheet({
                 <View style={styles.sheet}>
                     {step === 'processing' && (
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
-                            <ActivityIndicator size="large" color={colors.brand.primary} />
-                            <Text style={styles.processingText}>Connecting with {PROVIDER_NAME}...</Text>
+                            {devicePrompt ? (
+                                <>
+                                    <Text style={styles.processingText}>
+                                        Enter this code on GitHub to finish:
+                                    </Text>
+                                    <Pressable
+                                        onPress={() => Clipboard.setStringAsync(devicePrompt.userCode)}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Copy code ${devicePrompt.userCode.split('').join(' ')}`}
+                                        style={styles.deviceCodeBox}
+                                    >
+                                        <Text style={styles.deviceCodeText} selectable>{devicePrompt.userCode}</Text>
+                                        <Text style={styles.deviceCodeHint}>tap to copy</Text>
+                                    </Pressable>
+                                    <Text style={styles.deviceCodeSub}>
+                                        {devicePrompt.verificationUri.replace('https://', '')}
+                                    </Text>
+                                    <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 16 }} />
+                                    <Text style={styles.processingText}>Waiting for you to confirm…</Text>
+                                </>
+                            ) : (
+                                <>
+                                    <ActivityIndicator size="large" color={colors.brand.primary} />
+                                    <Text style={styles.processingText}>Connecting with {PROVIDER_NAME}...</Text>
+                                </>
+                            )}
                             <TouchableOpacity
                                 style={[styles.secondaryButton, { marginTop: 24, alignSelf: 'stretch' }]}
                                 onPress={onClose}
@@ -262,6 +290,39 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: colors.text.secondary,
         marginTop: 16,
+        textAlign: 'center',
+    },
+    // Sized to stay legible at 320dp and 1.3x font scale: the code is the one thing on this screen
+    // the member has to read off and retype, so it takes the space.
+    deviceCodeBox: {
+        marginTop: 20,
+        paddingVertical: 18,
+        paddingHorizontal: 28,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: colors.brand.primary,
+        backgroundColor: colors.surface.subtle,
+        alignItems: 'center',
+        alignSelf: 'stretch',
+    },
+    deviceCodeText: {
+        fontSize: 34,
+        fontWeight: 'bold',
+        letterSpacing: 6,
+        color: colors.text.heading,
+        fontVariant: ['tabular-nums'],
+        textAlign: 'center',
+    },
+    deviceCodeHint: {
+        fontSize: 12,
+        color: colors.text.secondary,
+        marginTop: 8,
+    },
+    deviceCodeSub: {
+        fontSize: 15,
+        color: colors.text.secondary,
+        marginTop: 14,
+        textAlign: 'center',
     },
     successIconWrapper: {
         alignItems: 'center',

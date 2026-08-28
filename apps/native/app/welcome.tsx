@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useGlobalSearchParams, router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
@@ -688,6 +689,13 @@ export default function WelcomeScreen() {
                 anchorUrl: finalAnchorUrl,
                 provider,
                 onProgress: (p) => setSsoProgressMessage(p.message),
+                // GitHub's device flow cannot finish unless the member sees this. Copy it and open
+                // GitHub for them — during recovery there is no sheet with a button, and the code
+                // stays on screen behind the browser via the progress message above.
+                onDeviceCode: (prompt) => {
+                    Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).catch(() => {});
+                    WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
+                },
             });
             await clearPendingOnboarding();
             setIdentity(result.identity);

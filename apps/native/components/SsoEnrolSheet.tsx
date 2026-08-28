@@ -204,11 +204,15 @@ export function SsoEnrolSheet({
                                     </Text>
                                     <Pressable
                                         onPress={() => {
-                                            Clipboard.setStringAsync(devicePrompt.userCode.replace(/-/g, ''));
-                                            setCodeCopied(true);
+                                            Clipboard.setStringAsync(devicePrompt.userCode.replace(/-/g, '')).then(
+                                                () => setCodeCopied(true),
+                                                () => setCodeCopied(false),
+                                            );
                                         }}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`Code ${devicePrompt.userCode.split('').join(' ')}, copied. Tap to copy again.`}
+                                        accessibilityLabel={codeCopied
+                                            ? `Code ${devicePrompt.userCode.split('').join(' ')}, copied to clipboard. Tap to copy again.`
+                                            : `Code ${devicePrompt.userCode.split('').join(' ')}. Tap to copy.`}
                                         style={styles.deviceCodeBox}
                                     >
                                         <Text style={styles.deviceCodeText} selectable>{devicePrompt.userCode}</Text>

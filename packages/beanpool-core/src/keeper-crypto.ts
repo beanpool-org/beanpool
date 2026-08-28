@@ -484,7 +484,17 @@ export function recordShareForHub(share: Uint8Array): SealedShare {
 }
 
 /** Read back a hub fragment. Present so no caller has to know that K2 is stored in the clear. */
-export function readHubShare(sealed: SealedShare): Uint8Array {
+/**
+ * A stored hub fragment as it may actually come back off a node.
+ *
+ * `SealedShare` requires `kdfParams`, but the disconnect rebuild in
+ * `DELETE /api/recovery/shares/sso/:provider` persisted rows without it, so the type did not
+ * describe what storage can hold. Narrowed here rather than loosening `SealedShare` for every
+ * caller: this is the one reader that has to cope with the damaged shape.
+ */
+export type StoredHubShare = Omit<SealedShare, 'kdfParams'> & { kdfParams?: string };
+
+export function readHubShare(sealed: StoredHubShare): Uint8Array {
     // Fragments written before the disconnect handler carried kdfParams have none: the rebuild in
     // `DELETE /api/recovery/shares/sso/:provider` copied encryptedShare/shareIv/shareTag and
     // dropped it. `parseAlg` then threw on `JSON.parse('')`, so a single disconnect made every

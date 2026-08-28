@@ -28,7 +28,7 @@ import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '.
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 import { recoverAccountWithSso } from '../utils/sso-recovery';
-import { returnToApp } from '../utils/sso-signin';
+import { returnToApp, type GithubDevicePrompt } from '../utils/sso-signin';
 import { type SsoProvider } from '../utils/sso-signin';
 
 
@@ -69,6 +69,9 @@ export default function WelcomeScreen() {
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
     const [ssoCallsign, setSsoCallsign] = useState('');
     const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
+    /** The GitHub device code, held so recovery can show it properly rather than as a sentence. */
+    const [recoveryCode, setRecoveryCode] = useState<GithubDevicePrompt | null>(null);
+    const [recoveryCodeCopied, setRecoveryCodeCopied] = useState(false);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -684,6 +687,8 @@ export default function WelcomeScreen() {
         setLoading(true);
         setError(null);
         setSsoProgressMessage('Connecting to recovery session...');
+        setRecoveryCode(null);
+        setRecoveryCodeCopied(false);
         try {
             const result = await recoverAccountWithSso({
                 callsign: trimmedCallsign,
@@ -694,7 +699,11 @@ export default function WelcomeScreen() {
                 // GitHub for them — during recovery there is no sheet with a button, and the code
                 // stays on screen behind the browser via the progress message above.
                 onDeviceCode: (prompt) => {
-                    Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).catch(() => {});
+                    setRecoveryCode(prompt);
+                    Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
+                        () => setRecoveryCodeCopied(true),
+                        () => setRecoveryCodeCopied(false),
+                    );
                     WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
                 },
             });
@@ -1753,10 +1762,54 @@ export default function WelcomeScreen() {
 
                             {loading && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    <ActivityIndicator size="large" color={palette.blue600} />
-                                    <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        {ssoProgressMessage || 'Verifying sign-in...'}
-                                    </Text>
+                                    {recoveryCode ? (
+                                        <>
+                                            {/* Shown the way the enrolment sheet shows it. As a sentence inside the
+                                                progress line it could not be selected or copied, so it had to be
+                                                written down and retyped — reported from a real recovery. */}
+                                            <Text style={{ color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                                Enter this code on GitHub to finish:
+                                            </Text>
+                                            <Pressable
+                                                onPress={() => {
+                                                    Clipboard.setStringAsync(recoveryCode.userCode.replace(/-/g, '')).then(
+                                                        () => setRecoveryCodeCopied(true),
+                                                        () => setRecoveryCodeCopied(false),
+                                                    );
+                                                }}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={recoveryCodeCopied
+                                                    ? `Code ${recoveryCode.userCode.split('').join(' ')}, copied to clipboard. Tap to copy again.`
+                                                    : `Code ${recoveryCode.userCode.split('').join(' ')}. Tap to copy.`}
+                                                style={{
+                                                    marginTop: 14, paddingVertical: 16, paddingHorizontal: 24,
+                                                    borderRadius: 12, borderWidth: 2, borderColor: palette.blue600,
+                                                    backgroundColor: colors.surface.subtle, alignSelf: 'stretch',
+                                                    alignItems: 'center',
+                                                }}
+                                            >
+                                                <Text selectable style={{
+                                                    fontSize: 30, fontWeight: 'bold', letterSpacing: 5,
+                                                    color: colors.text.heading, textAlign: 'center',
+                                                }}>{recoveryCode.userCode}</Text>
+                                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 8 }}>
+                                                    {recoveryCodeCopied ? '✓ copied — tap to copy again' : 'tap to copy'}
+                                                </Text>
+                                            </Pressable>
+                                            <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 13, textAlign: 'center' }}>
+                                                On GitHub, press and hold the first box and choose Paste. Tapping the
+                                                clipboard chip above the keyboard fills only one box.
+                                            </Text>
+                                            <ActivityIndicator color={palette.blue600} style={{ marginTop: 14 }} />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ActivityIndicator size="large" color={palette.blue600} />
+                                            <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                                {ssoProgressMessage || 'Verifying sign-in...'}
+                                            </Text>
+                                        </>
+                                    )}
                                 </View>
                             )}
 

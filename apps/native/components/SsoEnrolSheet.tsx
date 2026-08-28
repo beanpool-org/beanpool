@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Pressable } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../constants/colors';
 import { anchorUrl } from '../utils/node-post';
 import { startSsoSignIn, SsoSignInError } from '../utils/sso-signin';
@@ -58,6 +59,7 @@ export function SsoEnrolSheet({
     const [devicePrompt, setDevicePrompt] = useState<GithubDevicePrompt | null>(null);
     /** Aborts an in-flight device-flow poll: closing the sheet must stop it, not orphan it. */
     const abortRef = React.useRef<AbortController | null>(null);
+    const [codeCopied, setCodeCopied] = useState(false);
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     React.useEffect(() => {
@@ -87,6 +89,7 @@ export function SsoEnrolSheet({
 
         setStep('processing');
         setDevicePrompt(null);
+        setCodeCopied(false);
         abortRef.current?.abort();
         const abort = new AbortController();
         abortRef.current = abort;
@@ -98,7 +101,15 @@ export function SsoEnrolSheet({
                 return;
             }
 
-            const signin = await startSsoSignIn(provider, url, identity, setDevicePrompt, abort.signal);
+            const signin = await startSsoSignIn(provider, url, identity, (prompt) => {
+                setDevicePrompt(prompt);
+                // Copied before the member has done anything. The whole friction was having to
+                // return to the app for the code once GitHub was on screen.
+                Clipboard.setStringAsync(prompt.userCode).then(
+                    () => setCodeCopied(true),
+                    () => setCodeCopied(false),
+                );
+            }, abort.signal);
             const sub = extractSub(signin.idToken, signin.sub);
 
             const result = await enrolSsoKeeper({
@@ -179,19 +190,39 @@ export function SsoEnrolSheet({
                                         Enter this code on GitHub to finish:
                                     </Text>
                                     <Pressable
-                                        onPress={() => Clipboard.setStringAsync(devicePrompt.userCode)}
+                                        onPress={() => {
+                                            Clipboard.setStringAsync(devicePrompt.userCode);
+                                            setCodeCopied(true);
+                                        }}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`Copy code ${devicePrompt.userCode.split('').join(' ')}`}
+                                        accessibilityLabel={`Code ${devicePrompt.userCode.split('').join(' ')}, copied. Tap to copy again.`}
                                         style={styles.deviceCodeBox}
                                     >
                                         <Text style={styles.deviceCodeText} selectable>{devicePrompt.userCode}</Text>
-                                        <Text style={styles.deviceCodeHint}>tap to copy</Text>
+                                        <Text style={styles.deviceCodeHint}>
+                                            {codeCopied ? '✓ copied — just paste it' : 'tap to copy'}
+                                        </Text>
                                     </Pressable>
+                                    {/* The member taps when they have read the code, rather than the
+                                        browser covering it the instant it appears. */}
+                                    <TouchableOpacity
+                                        style={[styles.primaryButton, { marginTop: 20, alignSelf: 'stretch' }]}
+                                        onPress={() => {
+                                            const uri = `${devicePrompt.verificationUri}?user_code=${encodeURIComponent(devicePrompt.userCode)}`;
+                                            // Best effort: GitHub does not return a verification_uri_complete, but an
+                                            // unrecognised query param is harmless, so pre-fill costs nothing to try.
+                                            WebBrowser.openBrowserAsync(uri).catch(() => {});
+                                        }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Open GitHub to enter the code"
+                                    >
+                                        <Text style={styles.primaryButtonText}>Open GitHub →</Text>
+                                    </TouchableOpacity>
                                     <Text style={styles.deviceCodeSub}>
-                                        {devicePrompt.verificationUri.replace('https://', '')}
+                                        Paste the code on {devicePrompt.verificationUri.replace('https://', '')},
+                                        then come back — this finishes on its own.
                                     </Text>
                                     <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 16 }} />
-                                    <Text style={styles.processingText}>Waiting for you to confirm…</Text>
                                 </>
                             ) : (
                                 <>

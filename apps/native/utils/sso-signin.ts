@@ -39,6 +39,7 @@
  */
 
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as Crypto from 'expo-crypto';
@@ -411,7 +412,7 @@ export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn,
 
     let result;
     try {
-        result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+        result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri, { preferEphemeralSession: true });
     } catch (e) {
         throw new SsoSignInError('provider', `Facebook sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -492,7 +493,7 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
 
     let result;
     try {
-        result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+        result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri, { preferEphemeralSession: true });
     } catch (e) {
         throw new SsoSignInError('provider', `GitHub sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -515,29 +516,29 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
 
     let accessToken = directToken;
     if (!accessToken && code) {
-        // Exchange authorization code for access token via PKCE
+        // Exchange authorization code for access token via node exchange proxy
         try {
-            const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+            const anchorUrl = (await AsyncStorage.getItem('beanpool_anchor_url')) || 'https://mullum.beanpool.org';
+            const tokenRes = await fetch(`${anchorUrl}/api/recovery/sso/github-exchange`, {
                 method: 'POST',
                 headers: {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    client_id: GITHUB_CLIENT_ID,
                     code,
-                    redirect_uri: redirectUri,
-                    code_verifier: verifier,
+                    redirectUri,
                 }),
             });
             if (!tokenRes.ok) {
-                throw new Error(`Token exchange failed with status ${tokenRes.status}`);
+                const errData = await tokenRes.json().catch(() => ({ error: `Status ${tokenRes.status}` }));
+                throw new Error(errData.error || `Token exchange failed with status ${tokenRes.status}`);
             }
-            const tokenData = await tokenRes.json() as { access_token?: string; error?: string; error_description?: string };
-            if (tokenData.error || !tokenData.access_token) {
-                throw new Error(tokenData.error_description || tokenData.error || 'No access token returned');
+            const tokenData = (await tokenRes.json()) as { accessToken?: string; error?: string };
+            if (tokenData.error || !tokenData.accessToken) {
+                throw new Error(tokenData.error || 'No access token returned');
             }
-            accessToken = tokenData.access_token;
+            accessToken = tokenData.accessToken;
         } catch (e: any) {
             throw new SsoSignInError('provider', `GitHub token exchange failed: ${e.message}`);
         }

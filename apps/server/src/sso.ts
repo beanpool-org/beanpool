@@ -743,11 +743,14 @@ const BEANPOOL_FACEBOOK_APP_IDS = [
     process.env.FACEBOOK_APP_ID?.trim() || '',
 ].filter(Boolean);
 
-const BEANPOOL_GITHUB_CLIENT_IDS = [
+export const BEANPOOL_GITHUB_CLIENT_IDS = [
     'Ov23li8mmDfBr7GyJVRU',
     'Ov23liilgPHDo8VujObM',
     process.env.GITHUB_CLIENT_ID?.trim() || '',
 ].filter(Boolean);
+
+export const BEANPOOL_GITHUB_CLIENT_SECRET =
+    process.env.GITHUB_CLIENT_SECRET?.trim() || 'aa7c481c840095eb111023bebbe4af8546507e6d';
 
 /** Env var whose value REPLACES the baked-in list for that provider. */
 const CLIENT_ID_ENV: Record<SsoProvider, string> = {

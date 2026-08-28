@@ -18,6 +18,13 @@ import { describe, it, expect, vi } from 'vitest';
 // react-native and expo-apple-authentication have no life outside a device, so they are stubbed
 // at the module boundary. Platform defaults to ios; the one test that cares overrides it.
 vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async () => 'https://test.beanpool.org'),
+        setItem: vi.fn(async () => undefined),
+        removeItem: vi.fn(async () => undefined),
+    },
+}));
 vi.mock('expo-apple-authentication', () => ({
     isAvailableAsync: vi.fn(async () => true),
     signInAsync: vi.fn(),
@@ -170,10 +177,10 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
         });
         const originalFetch = globalThis.fetch;
         globalThis.fetch = vi.fn(async (url: any) => {
-            if (String(url).includes('login/oauth/access_token')) {
+            if (String(url).includes('/api/recovery/sso/github-exchange') || String(url).includes('login/oauth/access_token')) {
                 return {
                     ok: true,
-                    json: async () => ({ access_token: 'gho_access_token_abc' }),
+                    json: async () => ({ accessToken: 'gho_access_token_abc', access_token: 'gho_access_token_abc' }),
                 } as any;
             }
             if (String(url).includes('api.github.com/user')) {

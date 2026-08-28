@@ -55,7 +55,15 @@ import {
     type KeeperType,
 } from '../engine/recovery-shares.js';
 import { depositSsoKeeperGeneration, KeeperDepositError } from '../engine/keeper-deposit.js';
-import { issueNonce, SsoVerificationError, SSO_PROVIDERS, isSsoProvider, type SsoProvider } from '../sso.js';
+import {
+    issueNonce,
+    SsoVerificationError,
+    SSO_PROVIDERS,
+    isSsoProvider,
+    type SsoProvider,
+    BEANPOOL_GITHUB_CLIENT_IDS,
+    BEANPOOL_GITHUB_CLIENT_SECRET,
+} from '../sso.js';
 import type { RouteDeps } from './types.js';
 
 /** Mirrors the CHECK constraint on `recovery_shares.holder_type`. */
@@ -233,6 +241,69 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             expiresInSeconds: 600,
             providers: SSO_PROVIDERS,
         };
+    });
+
+    /**
+     * Exchanges a GitHub authorization code for an access token via GitHub's OAuth server.
+     * Keeps the client secret secure on the server side so mobile clients can authenticate with GitHub.
+     */
+    router.post('/api/recovery/sso/github-exchange', async (ctx) => {
+        if (!rateLimit(ctx)) return;
+
+        const body = (ctx as any).requestBody || {};
+        const code = typeof body.code === 'string' ? body.code.trim() : '';
+        const redirectUri = typeof body.redirectUri === 'string' ? body.redirectUri.trim() : 'https://beanpool.org/auth/github';
+
+        if (!code) {
+            ctx.status = 400;
+            ctx.body = { error: 'Authorization code is required' };
+            return;
+        }
+
+        const clientId = BEANPOOL_GITHUB_CLIENT_IDS[0] || 'Ov23li8mmDfBr7GyJVRU';
+        const clientSecret = BEANPOOL_GITHUB_CLIENT_SECRET;
+
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const res = await fetch('https://github.com/login/oauth/access_token', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    client_id: clientId,
+                    client_secret: clientSecret,
+                    code,
+                    redirect_uri: redirectUri,
+                }),
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+
+            if (!res.ok) {
+                ctx.status = res.status;
+                ctx.body = { error: `GitHub token exchange failed (HTTP ${res.status})` };
+                return;
+            }
+
+            const data = await res.json() as { access_token?: string; error?: string; error_description?: string };
+            if (data.error || !data.access_token) {
+                ctx.status = 400;
+                ctx.body = { error: data.error_description || data.error || 'No access token returned from GitHub' };
+                return;
+            }
+
+            ctx.status = 200;
+            ctx.body = {
+                success: true,
+                accessToken: data.access_token,
+            };
+        } catch (e: any) {
+            ctx.status = 502;
+            ctx.body = { error: `GitHub connection failed: ${e.message}` };
+        }
     });
 
     /**

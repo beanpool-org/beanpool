@@ -636,6 +636,33 @@ async function main(): Promise<void> {
         '...but is still named, so the UI can show who holds it');
     assert(again.body.generation === 1, '...and the generation reflects the split that happened');
 
+    // ── GitHub token exchange proxy ──────────────────────────────────────────
+    console.log('\n── GitHub token exchange proxy ───────────────────────────');
+    const missingCode = await call('POST', '/api/recovery/sso/github-exchange', { body: {} });
+    assert(missingCode.status === 400 && missingCode.body.error === 'Authorization code is required',
+        'refuses exchange when authorization code is missing');
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: any) => {
+        if (String(url).includes('login/oauth/access_token')) {
+            return {
+                ok: true,
+                json: async () => ({ access_token: 'gho_secret_test_token' }),
+            } as any;
+        }
+        return { ok: false, status: 404 } as any;
+    }) as any;
+
+    try {
+        const exchangeRes = await call('POST', '/api/recovery/sso/github-exchange', {
+            body: { code: 'test_gh_code_123', redirectUri: 'https://beanpool.org/auth/github' },
+        });
+        assert(exchangeRes.status === 200 && exchangeRes.body.success === true && exchangeRes.body.accessToken === 'gho_secret_test_token',
+            'successfully exchanges code for accessToken via server secret');
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Keyholder route checks PASSED.');

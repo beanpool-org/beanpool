@@ -139,6 +139,14 @@ function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
  * A null answer is the normal first-enrolment case, not a failure — so is a node too old to know
  * the route. Both fall through to a fresh split, which is correct precisely when there is no
  * earlier fragment to stay consistent with.
+ *
+ * "I could not ask" is NOT one of those cases, and conflating the two is why adding a second
+ * provider failed at random. Returning null after a network blink mints a fresh `A`, which the
+ * node then refuses because the existing providers were split against the old one — so a dropped
+ * request surfaced as an unexplained enrolment failure, and the only reliable way out was to
+ * disconnect every provider so that a fresh split became legitimate again. MEASURED 2026-08-28:
+ * the anchor node was failing every WebSocket connect throughout the session, so this call
+ * intermittently not answering is the expected condition, not a rare one.
  */
 async function fetchHubFragment(
     url: string, identity: BeanPoolIdentity,
@@ -146,10 +154,16 @@ async function fetchHubFragment(
     let res: Response;
     try {
         res = await signedPost(url, '/api/recovery/shares/hub-fragment', {}, identity);
-    } catch {
-        return null;
+    } catch (e) {
+        throw new Error(`could not reach the node to read the existing hub fragment: ${(e as Error).message}`);
     }
-    if (!res.ok) return null;
+    // A node too old to know the route has no fragment to stay consistent with, so 404 really is
+    // the first-enrolment case. Any other refusal is a live node declining to answer, and guessing
+    // past it is what breaks the pairing.
+    if (res.status === 404) return null;
+    if (!res.ok) {
+        throw new Error(`the node would not return the existing hub fragment (HTTP ${res.status})`);
+    }
     const body = await res.json().catch(() => null) as {
         hubFragment?: unknown; shareIv?: unknown; shareTag?: unknown; kdfParams?: unknown;
     } | null;

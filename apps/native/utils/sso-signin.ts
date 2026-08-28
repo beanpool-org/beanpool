@@ -888,7 +888,20 @@ export async function startSsoSignIn(
         return { provider, ...await signInWithFacebook(nonce) };
     }
     if (provider === 'github') {
-        return { provider, ...await signInWithGithub(nonce, onGithubPrompt, signal) };
+        const signin = await signInWithGithub(nonce, onGithubPrompt, signal);
+        // Re-mint, do not reuse. The node's nonce lives ten minutes, and every other provider
+        // spends seconds between being issued one and depositing against it. The device flow
+        // spends however long the member takes: reading a code, switching apps, signing in to
+        // GitHub, typing eight characters, authorising. MEASURED 2026-08-29 — a run that completed
+        // correctly was refused with "GitHub sign-in could not be matched to this request", which
+        // reads as a rejected sign-in rather than an expired ticket, and the retry a minute later
+        // succeeded.
+        //
+        // Safe because GitHub's device flow never binds the nonce to anything. There is no
+        // id_token and no nonce claim; the value exists purely so the node can see its own
+        // challenge come back, so minting it once the slow part is over is strictly better.
+        const { nonce: fresh } = await fetchSsoNonce(url, identity);
+        return { provider, ...signin, nonce: fresh };
     }
     throw new SsoSignInError('unsupported', `Provider ${provider} is not supported on this device.`);
 }

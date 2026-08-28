@@ -105,7 +105,10 @@ export function SsoEnrolSheet({
                 setDevicePrompt(prompt);
                 // Copied before the member has done anything. The whole friction was having to
                 // return to the app for the code once GitHub was on screen.
-                Clipboard.setStringAsync(prompt.userCode).then(
+                // Dash stripped deliberately. GitHub renders eight separate cells; handing them
+                // nine characters is the likeliest reason the paste chip flashed and vanished.
+                // MEASURED 2026-08-28: ~5 failed paste attempts before one landed.
+                Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
                     () => setCodeCopied(true),
                     () => setCodeCopied(false),
                 );
@@ -191,7 +194,7 @@ export function SsoEnrolSheet({
                                     </Text>
                                     <Pressable
                                         onPress={() => {
-                                            Clipboard.setStringAsync(devicePrompt.userCode);
+                                            Clipboard.setStringAsync(devicePrompt.userCode.replace(/-/g, ''));
                                             setCodeCopied(true);
                                         }}
                                         accessibilityRole="button"
@@ -200,7 +203,7 @@ export function SsoEnrolSheet({
                                     >
                                         <Text style={styles.deviceCodeText} selectable>{devicePrompt.userCode}</Text>
                                         <Text style={styles.deviceCodeHint}>
-                                            {codeCopied ? '✓ copied — just paste it' : 'tap to copy'}
+                                            {codeCopied ? '✓ copied — or just type it, it is 8 characters' : 'tap to copy'}
                                         </Text>
                                     </Pressable>
                                     {/* The member taps when they have read the code, rather than the
@@ -208,10 +211,11 @@ export function SsoEnrolSheet({
                                     <TouchableOpacity
                                         style={[styles.primaryButton, { marginTop: 20, alignSelf: 'stretch' }]}
                                         onPress={() => {
-                                            const uri = `${devicePrompt.verificationUri}?user_code=${encodeURIComponent(devicePrompt.userCode)}`;
-                                            // Best effort: GitHub does not return a verification_uri_complete, but an
-                                            // unrecognised query param is harmless, so pre-fill costs nothing to try.
-                                            WebBrowser.openBrowserAsync(uri).catch(() => {});
+                                            // No pre-fill parameter exists. GitHub returns no
+                                            // verification_uri_complete and the device page ignores
+                                            // ?user_code= / ?code= — checked against the live endpoint
+                                            // and the docs. Entry is manual, so send a clean URL.
+                                            WebBrowser.openBrowserAsync(devicePrompt.verificationUri).catch(() => {});
                                         }}
                                         accessibilityRole="button"
                                         accessibilityLabel="Open GitHub to enter the code"
@@ -219,7 +223,7 @@ export function SsoEnrolSheet({
                                         <Text style={styles.primaryButtonText}>Open GitHub →</Text>
                                     </TouchableOpacity>
                                     <Text style={styles.deviceCodeSub}>
-                                        Paste the code on {devicePrompt.verificationUri.replace('https://', '')},
+                                        Enter it on {devicePrompt.verificationUri.replace('https://', '')},
                                         then come back — this finishes on its own.
                                     </Text>
                                     <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 16 }} />

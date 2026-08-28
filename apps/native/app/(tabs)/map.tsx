@@ -434,7 +434,7 @@ export default function MapScreen() {
     const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
 
-    const params = useLocalSearchParams();
+    const params = useLocalSearchParams<{ newPost?: string }>();
 
     useFocusEffect(
         useCallback(() => {

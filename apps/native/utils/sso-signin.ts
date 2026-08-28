@@ -654,12 +654,17 @@ export async function returnToApp(): Promise<void> {
         } catch {}
         return;
     }
+    // Android only. On web a custom scheme raises a browser protocol prompt, and there is no
+    // Custom Tab to background there in any case — the PWA opens GitHub in a tab the member closes
+    // themselves.
+    if (Platform.OS !== 'android') return;
     try {
         await Linking.openURL('beanpool://foreground');
-    } catch {
-        // Nothing to fall back to. The member is on a page that says it worked, and the sign-in
-        // really did work — worth no more than a log.
-        console.log('[SSO] could not bring the app back to the front');
+    } catch (e) {
+        // Nothing to fall back to: the member is on a page that says it worked, and it did. Logged
+        // with the error because if this fails it will be on some OEM build with its own rules
+        // about background activity starts, and the reason is the only clue anyone will get.
+        console.warn('[SSO] could not bring the app back to the front:', e);
     }
 }
 

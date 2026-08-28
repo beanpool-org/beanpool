@@ -8,10 +8,23 @@ import { DeviceEventEmitter } from 'react-native';
  */
 export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string | null {
     // A no-op link whose only job is to bring the app to the front, backgrounding an Android
-    // Custom Tab that nothing else can close (`WebBrowser.dismissBrowser` is iOS-only). Returning
-    // null cancels navigation, so the member stays on whatever screen they were already on.
-    if (path === 'foreground' || path === '/foreground' || path.endsWith('://foreground')) {
-        return null;
+    // Custom Tab that nothing else can close (`WebBrowser.dismissBrowser` is iOS-only).
+    //
+    // Normalised rather than compared literally: Android intent resolvers and deep-link
+    // normalisers add trailing slashes and query strings freely, and an exact match that missed
+    // would fall through and navigate to a route that does not exist — an Unmatched Route screen
+    // in place of the screen the member was on, which is worse than the problem being solved.
+    const foregroundPath = path
+        .replace(/^[a-zA-Z0-9_-]+:\/\//, '')
+        .split('?')[0]
+        .split('#')[0]
+        .replace(/\/+$/, '')
+        .replace(/^\//, '');
+    if (foregroundPath === 'foreground') {
+        // `null` cancels navigation, which keeps the member where they were — but only makes sense
+        // once something is mounted. On a cold start there is no current route to stay on, so send
+        // them home rather than leaving the stack with nothing.
+        return initial ? '/' : null;
     }
 
     const isAuthCallback =

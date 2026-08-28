@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Pressable } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Pressable, ScrollView } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../constants/colors';
@@ -194,7 +194,11 @@ export function SsoEnrolSheet({
             onRequestClose={closeAndStop}
         >
             <View style={styles.overlay}>
-                <View style={styles.sheet}>
+                <ScrollView
+                    style={styles.sheetScroll}
+                    contentContainerStyle={styles.sheet}
+                    keyboardShouldPersistTaps="handled"
+                >
                     {step === 'processing' && (
                         <View style={styles.centerContent} accessibilityLiveRegion="polite">
                             {devicePrompt ? (
@@ -305,7 +309,7 @@ export function SsoEnrolSheet({
                             </TouchableOpacity>
                         </View>
                     )}
-                </View>
+                </ScrollView>
             </View>
         </Modal>
     );
@@ -322,11 +326,18 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         padding: 24,
-        // Generous, because Android floats a clipboard preview chip over the bottom-left of the
-        // screen for a few seconds after a copy — and this sheet copies the code automatically.
-        // Anything sitting in that band is simply not readable.
-        paddingBottom: 96,
+        // Android only: it floats a clipboard preview chip over the bottom-left for a few seconds
+        // after a copy, and this sheet copies automatically, so anything in that band is
+        // unreadable. iOS has no such chip and does not need the clearance — 96px everywhere
+        // pushed content, including Cancel, off a 320dp screen at 1.3x font scale.
+        paddingBottom: Platform.OS === 'android' ? 80 : 40,
         minHeight: 320,
+    },
+    sheetScroll: {
+        // Bounded so the sheet cannot grow past the viewport, and scrollable so a small screen at
+        // large font scale can still reach the Cancel button rather than having it clipped.
+        maxHeight: '90%',
+        flexGrow: 0,
     },
     content: {
         flex: 1,

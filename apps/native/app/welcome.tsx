@@ -697,6 +697,12 @@ export default function WelcomeScreen() {
                     WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
                 },
             });
+            // Same reason the enrolment sheet does it: GitHub's confirmation page says nothing
+            // about returning, so without this the member is left on a finished web page while
+            // their account is already restored behind it.
+            try {
+                await WebBrowser.dismissBrowser();
+            } catch {}
             await clearPendingOnboarding();
             setIdentity(result.identity);
             setMode('home');

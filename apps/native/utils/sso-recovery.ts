@@ -65,12 +65,17 @@ export async function recoverAccountWithSso(options: {
     provider: SsoProvider;
     onProgress?: (progress: SsoRecoveryProgress) => void;
     /**
-     * Shown the GitHub device code. REQUIRED in practice for GitHub: that flow has no redirect and
-     * cannot complete unless the member sees the code, so a caller that omits this leaves recovery
-     * polling silently for fifteen minutes. Kept optional only because the other three providers
-     * never call it.
+     * Shown the GitHub device code, and responsible for getting the member to GitHub.
+     *
+     * REQUIRED, not optional. GitHub's device flow has no redirect and cannot complete unless the
+     * member sees the code — a caller that omitted this left recovery polling silently for fifteen
+     * minutes, which is exactly the bug this parameter was added to fix. Optional would leave that
+     * trap open for the next caller; the compiler should refuse instead.
+     *
+     * Never invoked for google, apple or facebook, so an implementation that only handles GitHub
+     * is correct.
      */
-    onDeviceCode?: (prompt: GithubDevicePrompt) => void;
+    onDeviceCode: (prompt: GithubDevicePrompt) => void;
 }): Promise<SsoRecoveryResult> {
     const rawCallsign = options.callsign.trim();
     if (!rawCallsign) {
@@ -157,7 +162,7 @@ export async function recoverAccountWithSso(options: {
         // fifteen-minute poll. Recovery is the entire point of these fragments, so it cannot be the
         // one path that quietly hangs.
         signInResult = await signInWithGithub(nonce, (prompt) => {
-            options.onDeviceCode?.(prompt);
+            options.onDeviceCode(prompt);
             options.onProgress?.({
                 step: 'awaiting-sso',
                 message: `Enter code ${prompt.userCode} at ${prompt.verificationUri.replace('https://', '')}`,

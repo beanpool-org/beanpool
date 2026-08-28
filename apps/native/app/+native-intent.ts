@@ -14,11 +14,14 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
 
     if (isAuthCallback) {
         try {
-            WebBrowser.maybeCompleteAuthSession({ skipRedirectCheck: true });
+            let fullUrl = path;
+            if (!path.startsWith('http://') && !path.startsWith('https://') && !path.startsWith('beanpool://')) {
+                fullUrl = `https://beanpool.org${path.startsWith('/') ? '' : '/'}${path}`;
+            }
+            WebBrowser.maybeCompleteAuthSession({ url: fullUrl, skipRedirectCheck: true });
         } catch (e) {
             console.warn('[NativeIntent] Failed to complete auth session:', e);
         }
-        return '/';
     }
 
     return path;

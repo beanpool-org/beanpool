@@ -1,15 +1,21 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, Text } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { colors } from '../../constants/colors';
 
 export default function FacebookAuthCallbackScreen() {
     const router = useRouter();
+    const url = Linking.useURL();
 
     useEffect(() => {
         try {
-            WebBrowser.maybeCompleteAuthSession();
+            if (url) {
+                WebBrowser.maybeCompleteAuthSession({ url, skipRedirectCheck: true });
+            } else {
+                WebBrowser.maybeCompleteAuthSession({ skipRedirectCheck: true });
+            }
         } catch (e) {
             console.warn('[Facebook Auth Callback] Error completing auth session:', e);
         }
@@ -21,7 +27,7 @@ export default function FacebookAuthCallbackScreen() {
             }
         }, 300);
         return () => clearTimeout(timer);
-    }, [router]);
+    }, [router, url]);
 
     return (
         <View

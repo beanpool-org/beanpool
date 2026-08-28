@@ -245,6 +245,9 @@ export function SsoEnrolSheet({
                                         <Text style={styles.primaryButtonText}>Open GitHub →</Text>
                                     </TouchableOpacity>
                                     <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 14 }} />
+                                    <Text style={styles.deviceCodeSub}>
+                                        Waiting for GitHub… this closes itself.
+                                    </Text>
                                 </>
                             ) : (
                                 <>

@@ -16,7 +16,9 @@ import {
     Image,
     KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+// react-native's own SafeAreaView is a no-op on Android, so the header sat under the status
+// bar and the close button collided with the battery. This one applies real insets.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import {
@@ -38,9 +40,6 @@ interface Props {
 
 export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props) {
     const { theme, colors } = useTheme();
-    // Real insets: react-native's own SafeAreaView is iOS-only, so on Android edge-to-edge the
-    // header sat underneath the status bar and the close button collided with the battery icon.
-    const insets = useSafeAreaInsets();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<PricingCategory | 'all'>('all');
@@ -554,9 +553,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
 
     return (
         <Modal visible={isOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-            <SafeAreaView style={styles.modalContainer} edges={['top', 'left', 'right']}>
+            <SafeAreaView style={styles.modalContainer} edges={['top', 'left', 'right', 'bottom']}>
                 {/* Header */}
-                <View style={[styles.header, { paddingTop: Math.max(styles.header.paddingTop ?? 0, insets.top > 0 ? 8 : 16) }]}>
+                <View style={styles.header}>
                     <View style={styles.headerTitleWrap}>
                         <Text style={styles.headerTitle}>💡 Community Pricing Guide</Text>
                         <Text style={styles.headerSubtitle}>

@@ -264,6 +264,15 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
 
         const clientId = BEANPOOL_GITHUB_CLIENT_IDS[0] || 'Ov23li8mmDfBr7GyJVRU';
         const clientSecret = BEANPOOL_GITHUB_CLIENT_SECRET;
+        // Say which side is misconfigured. Without this the node forwards an empty secret and the
+        // member sees GitHub's "client_id and/or client_secret passed are incorrect", which points
+        // the investigation at the app rather than at this node's environment.
+        if (!clientSecret) {
+            console.error('[SSO] GITHUB_CLIENT_SECRET is not set — GitHub recovery cannot work on this node.');
+            ctx.status = 503;
+            ctx.body = { error: 'GitHub sign-in is not configured on this node.' };
+            return;
+        }
 
         try {
             const controller = new AbortController();
@@ -278,16 +287,22 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 exchangePayload.code_verifier = codeVerifier;
             }
 
-            const res = await fetch('https://github.com/login/oauth/access_token', {
-                method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(exchangePayload),
-                signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
+            // `finally`, not a trailing call: a network or DNS failure throws straight past a
+            // clearTimeout placed after the await, leaving the abort timer live in the event loop.
+            let res: Response;
+            try {
+                res = await fetch('https://github.com/login/oauth/access_token', {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(exchangePayload),
+                    signal: controller.signal,
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
 
             if (!res.ok) {
                 const errText = await res.text().catch(() => '');
@@ -635,7 +650,10 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 // so a single disconnect made EVERY later enrolment fail with "the existing hub
                 // fragment could not be read". The sso branch below always copied it; the hub
                 // branch did not. MEASURED 2026-08-28 on device.
-                kdfParams: hubShare.kdfParams,
+                // `||` not `??`: a row stripped by the old handler carries null, and copying that
+                // forward would perpetuate the damage through every future generation. The scheme
+                // is known — hub fragments are always plaintext-v1 — so heal it here.
+                kdfParams: hubShare.kdfParams || JSON.stringify({ alg: 'plaintext-v1' }),
             });
         }
         for (const s of remainingSso) {

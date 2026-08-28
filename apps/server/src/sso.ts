@@ -749,8 +749,19 @@ export const BEANPOOL_GITHUB_CLIENT_IDS = [
     process.env.GITHUB_CLIENT_ID?.trim() || '',
 ].filter(Boolean);
 
-export const BEANPOOL_GITHUB_CLIENT_SECRET =
-    process.env.GITHUB_CLIENT_SECRET?.trim() || 'aa7c481c840095eb111023bebbe4af8546507e6d';
+/**
+ * GitHub OAuth client secret. Environment only — never a baked-in default.
+ *
+ * A literal secret lived here, which meant the credential was in source and in git history, and
+ * any node running without the env var was silently authenticating with it. Paired with the client
+ * ID (which ships inside the app and is public by nature) it let anyone exchange authorization
+ * codes as this application — and the keeper flow binds recovery fragments to the GitHub `sub`,
+ * so that is not cosmetic.
+ *
+ * Empty is a legitimate state: nodes that do not offer GitHub recovery need no secret. The
+ * exchange route reports the misconfiguration rather than failing obscurely against GitHub.
+ */
+export const BEANPOOL_GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET?.trim() || '';
 
 /** Env var whose value REPLACES the baked-in list for that provider. */
 const CLIENT_ID_ENV: Record<SsoProvider, string> = {

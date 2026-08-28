@@ -416,19 +416,39 @@ const AUTH_CALLBACK_TIMEOUT_MS = 120_000;
  * On Android that cancel is frequently a lie. `beanpool.org` is a verified App Link with no path
  * restriction, so the OAuth return leg is delivered straight to MainActivity, which destroys the
  * Custom Tab; `openAuthSessionAsync` then reports `cancel` while the real callback is still in
- * flight. MEASURED 2026-08-28 (Pixel 9 Pro, build 229): across 11 attempts the gap between the
- * spurious cancel and the App Link arriving was under a second every time, so this is generous.
+ * flight. MEASURED 2026-08-28 (Pixel 9 Pro, builds 229–233): across every attempt the gap between
+ * the spurious cancel and the App Link arriving was under a second, so two seconds is ample.
+ *
+ * Zero on iOS: `ASWebAuthenticationSession` reports cancellation deterministically and nothing
+ * can pre-empt it, so waiting there only freezes the UI on a member who genuinely backed out.
+ * The window is a workaround for one Android behaviour, not a general safety margin — every
+ * millisecond of it is paid by someone who pressed Cancel and meant it.
  *
  * It is deliberately NOT long enough to cover the Facebook app hijacking the flow into a separate
  * browser tab, where completion takes however long the member takes. That path is not worth
  * designing around — see the note on `signInWithFacebook`.
  */
-const SPURIOUS_CANCEL_GRACE_MS = 10_000;
+const SPURIOUS_CANCEL_GRACE_MS = Platform.OS === 'ios' ? 0 : 2_000;
 
 /** Give up on a token exchange rather than hanging the sign-in with no error and no UI change. */
 const EXCHANGE_TIMEOUT_MS = 20_000;
 
 const TIMED_OUT = Symbol('sso-timeout');
+
+/**
+ * Every parameter in a callback URL, from the query and the fragment together.
+ *
+ * Slicing from `?` to the end swept a trailing fragment into the last value — and Facebook appends
+ * a bare `#_=_` to its redirects, so `?code=abc#_=_` yielded a code of `abc#_=_` and the exchange
+ * failed. Providers also disagree about which half they use, so read both rather than guessing.
+ */
+function callbackParams(url: string): string {
+    const q = url.indexOf('?');
+    const h = url.indexOf('#');
+    const query = q === -1 ? '' : url.slice(q + 1, h > q ? h : undefined);
+    const fragment = h === -1 ? '' : url.slice(h + 1);
+    return [query, fragment].filter(Boolean).join('&');
+}
 
 /** Read `state` from a callback URL, whether the provider put it in the query or the fragment. */
 function callbackState(url: string): string | null {
@@ -541,10 +561,7 @@ export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn,
 
     const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, nonce, 'facebook');
 
-    const hashIndex = url.indexOf('#');
-    const queryIndex = url.indexOf('?');
-    const paramStr = hashIndex !== -1 ? url.slice(hashIndex + 1) : (queryIndex !== -1 ? url.slice(queryIndex + 1) : '');
-    const params = new URLSearchParams(paramStr);
+    const params = new URLSearchParams(callbackParams(url));
     const idToken = params.get('id_token') || params.get('access_token');
 
     if (!idToken) {
@@ -610,10 +627,7 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
 
     const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, nonce, 'github');
 
-    const queryIndex = url.indexOf('?');
-    const hashIndex = url.indexOf('#');
-    const paramStr = queryIndex !== -1 ? url.slice(queryIndex + 1) : (hashIndex !== -1 ? url.slice(hashIndex + 1) : '');
-    const params = new URLSearchParams(paramStr);
+    const params = new URLSearchParams(callbackParams(url));
     const code = params.get('code');
     const directToken = params.get('access_token') || params.get('token');
 
@@ -708,6 +722,14 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
     }
 
     console.log(`[SSO] github: resolved sub=${sub ? 'yes' : 'MISSING'} email=${email ? 'yes' : 'no'}`);
+    // Refuse rather than enrol against a missing subject. `sealShareToSso` derives its key from
+    // `provider:sub`, so an undefined `sub` seals the fragment to the literal string
+    // `github:undefined` — the deposit succeeds, the panel shows a tick, and recovery through
+    // GitHub can never work because the real `sub` derives a different key. A visible failure the
+    // member can retry beats a green tick that is quietly worthless.
+    if (!sub) {
+        throw new SsoSignInError('provider', 'GitHub did not return a user id, so this account cannot be protected yet.');
+    }
     return {
         idToken: accessToken,
         nonce,

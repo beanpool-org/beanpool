@@ -251,6 +251,10 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
             const result = await splitHubAndWhole(seed);
             hubShare = result.hubShare;
             otherHalf = result.otherHalf;
+            // Logged because its ABSENCE was previously the only signal that a fresh fragment had
+            // been minted, which made "correctly starting from nothing" and "silently replacing the
+            // fragment other providers depend on" indistinguishable in a capture.
+            console.log(`[KEEPER] ${provider}: no stored hub fragment — minting a fresh split`);
         }
     } catch (e) {
         return nothing(`could not split the seed: ${(e as Error).message}`);

@@ -79,3 +79,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-08-27 - LedgerPage Medallion Shelf Level Button Accessibility
 **Learning:** `LedgerPage.tsx` medallion shelf level selection buttons lacked explicit `type="button"`, state communication via `aria-pressed`, descriptive `aria-label` text, and visible focus ring indicators for keyboard users.
 **Action:** Added `type="button"`, `aria-pressed={isSel}`, `aria-label={`View ${t.name} level details`}`, and replaced `focus:ring-2` with `focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1`.
+
+## 2026-08-28 - ProfileGateModal Accessibility & Keyboard Navigation
+**Learning:** `ProfileGateModal.tsx` lacked Escape key dismissal, dynamic focus ring indicators for keyboard focus, explicit `type="button"` attributes on buttons, and title linking (`aria-labelledby` / `id`).
+**Action:** Added `useEffect` Escape key listener, `aria-labelledby="profile-gate-title"`, `id="profile-gate-title"`, explicit `type="button"`, and `focus-visible:ring-2 focus-visible:ring-nature-500` to modal buttons.

@@ -58,3 +58,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** Direct `<a href>` elements pointing to snapshot and history backup endpoints lacked HTTP admin authorization headers.
 **Learning:** Raw anchor tags cannot send custom headers (`X-Admin-Password`), risking authentication bypass or unauthenticated download attempts.
 **Prevention:** Use the `downloadAdminFile()` fetch wrapper for admin file downloads to ensure headers are attached securely.
+
+## 2026-08-26 - IPv6 and Cloud Metadata SSRF Bypass in Dev Proxy
+**Vulnerability:** Vite proxy router checked host strings with `.split(':')[0]`, which returned an empty string for bracketed IPv6 addresses like `[::ffff:169.254.169.254]`, bypassing the metadata blocklist.
+**Learning:** Naive string splitting on colons breaks when parsing IPv6 literals containing colons.
+**Prevention:** Parse bracketed IPv6 hostnames using regex matching before removing port numbers and checking against link-local/cloud metadata blocklists.

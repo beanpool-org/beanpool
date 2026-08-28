@@ -222,8 +222,16 @@ export function SsoEnrolSheet({
                                     </Pressable>
                                     {/* The member taps when they have read the code, rather than the
                                         browser covering it the instant it appears. */}
+                                    {/* Above the button, not below it. Android floats a clipboard
+                                        preview chip over the bottom-left after a copy, which covered
+                                        this entirely. MEASURED 2026-08-28 on a Pixel 9 Pro. */}
+                                    <Text style={styles.deviceCodeSub}>
+                                        On GitHub, <Text style={styles.deviceCodeEmphasis}>press and hold the first box
+                                        and choose Paste</Text> — tapping the clipboard chip above the keyboard fills
+                                        only one box. Typing the 8 characters works too.
+                                    </Text>
                                     <TouchableOpacity
-                                        style={[styles.primaryButton, { marginTop: 20, alignSelf: 'stretch' }]}
+                                        style={[styles.primaryButton, { marginTop: 18, alignSelf: 'stretch' }]}
                                         onPress={() => {
                                             // No pre-fill parameter exists. GitHub returns no
                                             // verification_uri_complete and the device page ignores
@@ -236,14 +244,7 @@ export function SsoEnrolSheet({
                                     >
                                         <Text style={styles.primaryButtonText}>Open GitHub →</Text>
                                     </TouchableOpacity>
-                                    <Text style={styles.deviceCodeSub}>
-                                        Enter it on {devicePrompt.verificationUri.replace('https://', '')},
-                                        then come back — this finishes on its own.
-                                    </Text>
-                                    <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 16 }} />
-                                    <Text style={styles.processingText}>
-                                        Waiting for GitHub… this screen closes itself.
-                                    </Text>
+                                    <ActivityIndicator color={colors.brand.primary} style={{ marginTop: 14 }} />
                                 </>
                             ) : (
                                 <>
@@ -318,7 +319,10 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         padding: 24,
-        paddingBottom: 40,
+        // Generous, because Android floats a clipboard preview chip over the bottom-left of the
+        // screen for a few seconds after a copy — and this sheet copies the code automatically.
+        // Anything sitting in that band is simply not readable.
+        paddingBottom: 96,
         minHeight: 320,
     },
     content: {
@@ -386,6 +390,10 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: colors.text.secondary,
         marginTop: 8,
+    },
+    deviceCodeEmphasis: {
+        fontWeight: 'bold',
+        color: colors.text.heading,
     },
     deviceCodeSub: {
         fontSize: 15,

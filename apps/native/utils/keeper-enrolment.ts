@@ -160,6 +160,7 @@ async function fetchHubFragment(
     // A node too old to know the route has no fragment to stay consistent with, so 404 really is
     // the first-enrolment case. Any other refusal is a live node declining to answer, and guessing
     // past it is what breaks the pairing.
+    console.log(`[KEEPER] hub-fragment endpoint responded ${res.status}`);
     if (res.status === 404) return null;
     if (!res.ok) {
         throw new Error(`the node would not return the existing hub fragment (HTTP ${res.status})`);
@@ -195,8 +196,12 @@ async function fetchHubFragment(
 export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEnrolmentResult> {
     const { identity, provider, sub, idToken, nonce } = input;
     const skipped: { keeper: string; reason: string }[] = [];
-    const nothing = (error: string): KeeperEnrolmentResult =>
-        ({ enrolled: [], generation: null, skipped, available: 0, error });
+    const nothing = (error: string): KeeperEnrolmentResult => {
+        // Logged, not just returned: every enrolment failure to date has been invisible in
+        // logcat, so the only evidence was the member reporting that nothing happened.
+        console.log(`[KEEPER] ${provider}: enrolment failed — ${error}`);
+        return { enrolled: [], generation: null, skipped, available: 0, error };
+    };
 
     const words = identity.mnemonic;
     if (!words || words.length === 0) {
@@ -239,6 +244,9 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         if (existingHub) {
             hubShare = existingHub;
             otherHalf = xorBytes(seed, existingHub);
+            // The node compares the re-encoded fragment byte-for-byte against what it stored, so
+            // log exactly what we are about to send. A difference here is the whole bug.
+            console.log(`[KEEPER] ${provider}: reusing stored hub fragment (${existingHub.length}B -> ${recordShareForHub(existingHub).encryptedShare.slice(0, 16)}...)`);
         } else {
             const result = await splitHubAndWhole(seed);
             hubShare = result.hubShare;
@@ -276,6 +284,7 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
             idToken,
             nonce,
         }, identity);
+        console.log(`[KEEPER] ${provider}: deposit responded ${res.status}`);
         if (!res.ok) {
             const detail = await res.text().catch(() => '');
             return nothing(`node refused the fragments (${res.status}): ${detail.slice(0, 200)}`);

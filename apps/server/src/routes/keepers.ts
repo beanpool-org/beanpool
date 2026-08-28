@@ -630,6 +630,12 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 encryptedShare: hubShare.encryptedShare,
                 shareIv: hubShare.shareIv,
                 shareTag: hubShare.shareTag,
+                // Carried, not dropped. Omitting this rewrote the stored hub fragment without its
+                // scheme, and `readHubShare` refuses a fragment whose kdfParams will not parse —
+                // so a single disconnect made EVERY later enrolment fail with "the existing hub
+                // fragment could not be read". The sso branch below always copied it; the hub
+                // branch did not. MEASURED 2026-08-28 on device.
+                kdfParams: hubShare.kdfParams,
             });
         }
         for (const s of remainingSso) {

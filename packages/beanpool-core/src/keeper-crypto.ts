@@ -485,7 +485,23 @@ export function recordShareForHub(share: Uint8Array): SealedShare {
 
 /** Read back a hub fragment. Present so no caller has to know that K2 is stored in the clear. */
 export function readHubShare(sealed: SealedShare): Uint8Array {
-    parseAlg(sealed.kdfParams, KEEPER_ALG_PLAINTEXT);
+    // Fragments written before the disconnect handler carried kdfParams have none: the rebuild in
+    // `DELETE /api/recovery/shares/sso/:provider` copied encryptedShare/shareIv/shareTag and
+    // dropped it. `parseAlg` then threw on `JSON.parse('')`, so a single disconnect made every
+    // later enrolment fail with "the existing hub fragment could not be read" — and no server-side
+    // fix can heal an account already in that state, because the stored row is already stripped.
+    //
+    // The scheme is still recoverable: `recordShareForHub` writes the algorithm name into shareIv
+    // and shareTag as well. Accept that shape, and only that shape. A kdfParams that IS present is
+    // still parsed strictly — this widens the door for damaged rows, not for wrong schemes.
+    if (!sealed.kdfParams) {
+        const marker = b64(utf8ToBytes(KEEPER_ALG_PLAINTEXT));
+        if (sealed.shareIv !== marker || sealed.shareTag !== marker) {
+            throw new KeeperCryptoError('A recovery fragment has unreadable kdfParams.');
+        }
+    } else {
+        parseAlg(sealed.kdfParams, KEEPER_ALG_PLAINTEXT);
+    }
     return unb64(sealed.encryptedShare, 'encryptedShare');
 }
 

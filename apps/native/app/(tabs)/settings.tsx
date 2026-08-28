@@ -460,6 +460,8 @@ export default function SettingsScreen() {
     const [protectionResult, setProtectionResult] = useState<KeeperEnrolmentResult | null>(null);
     const [protectionLoading, setProtectionLoading] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
+    /** Set before an SSO/friend flow leaves the app, so the return trip does not reset the section. */
+    const skipNextFocusResetRef = React.useRef(false);
     const [ssoEnrolProvider, setSsoEnrolProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
     const [showPinModal, setShowPinModal] = useState(false);
     const [pinSet, setPinSet] = useState<boolean | null>(null);
@@ -635,9 +637,19 @@ export default function SettingsScreen() {
         }
     };
 
-    // Reset to the main menu when settings is focused, or auto-open deep-linked sections
+    // Reset to the main menu when settings is focused, or auto-open deep-linked sections.
+    //
+    // An SSO enrolment leaves the app entirely — Custom Tab, the Google sheet, or the Facebook app
+    // takes the foreground and hands it back — so this screen re-focuses partway through the flow
+    // and the reset threw the member out of Account Protection just as their provider connected.
+    // A ref rather than reading sheet state directly, because focus can arrive after the sheet has
+    // already closed.
     useFocusEffect(
         React.useCallback(() => {
+            if (skipNextFocusResetRef.current) {
+                skipNextFocusResetRef.current = false;
+                return;
+            }
             if (params.section === 'advanced') {
                 setMode('advanced');
             } else if (params.section === 'profile') {
@@ -1935,6 +1947,7 @@ export default function SettingsScreen() {
                                 protection={protectionFrom(protectionResult)}
                                 onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                     if (prov) setSsoEnrolProvider(prov);
+                                    skipNextFocusResetRef.current = true;
                                     setShowSsoSheet(true);
                                 } : undefined}
                                 onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}

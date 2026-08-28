@@ -404,3 +404,26 @@ describe('the whole path a real recovery takes', () => {
         ])).rejects.toThrow();
     });
 });
+
+describe('readHubShare — fragments damaged by the disconnect handler', () => {
+    it('reads a hub fragment whose kdfParams was stripped', () => {
+        const share = new Uint8Array(32).fill(7);
+        const sealed = recordShareForHub(share);
+        // Exactly what `DELETE /api/recovery/shares/sso/:provider` used to persist: every field
+        // carried except kdfParams. Before this was tolerated, one disconnect made every later
+        // enrolment fail with "the existing hub fragment could not be read".
+        const stripped = { ...sealed, kdfParams: undefined };
+        expect(readHubShare(stripped)).toEqual(share);
+    });
+
+    it('still refuses a fragment that is not the plaintext scheme', () => {
+        const sealed = recordShareForHub(new Uint8Array(32).fill(7));
+        const wrong = { ...sealed, kdfParams: undefined, shareIv: 'bm90LXBsYWludGV4dA==' };
+        expect(() => readHubShare(wrong)).toThrow();
+    });
+
+    it('still refuses a present but unparseable kdfParams', () => {
+        const sealed = recordShareForHub(new Uint8Array(32).fill(7));
+        expect(() => readHubShare({ ...sealed, kdfParams: 'not json' })).toThrow();
+    });
+});

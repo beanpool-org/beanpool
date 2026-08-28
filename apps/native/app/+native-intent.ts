@@ -20,7 +20,9 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
                 fullUrl = `https://beanpool.org${path.startsWith('/') ? '' : '/'}${path}`;
             }
             DeviceEventEmitter.emit('SSO_AUTH_CALLBACK', fullUrl);
-            WebBrowser.maybeCompleteAuthSession({ url: fullUrl, skipRedirectCheck: true });
+            // `maybeCompleteAuthSession` is web-only (@platform web) and takes no url — on Android the
+            // deep link broadcast above is what actually completes the sign-in. Kept for the PWA.
+            WebBrowser.maybeCompleteAuthSession({ skipRedirectCheck: true });
         } catch (e) {
             console.warn('[NativeIntent] Failed to complete auth session:', e);
         }

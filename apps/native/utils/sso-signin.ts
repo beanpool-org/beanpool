@@ -407,77 +407,139 @@ export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, '
     };
 }
 
+/** How long to wait for a provider callback before giving up entirely. */
+const AUTH_CALLBACK_TIMEOUT_MS = 120_000;
+
+/**
+ * How long to keep listening after the browser claims the member cancelled.
+ *
+ * On Android that cancel is frequently a lie. `beanpool.org` is a verified App Link with no path
+ * restriction, so the OAuth return leg is delivered straight to MainActivity, which destroys the
+ * Custom Tab; `openAuthSessionAsync` then reports `cancel` while the real callback is still in
+ * flight. MEASURED 2026-08-28 (Pixel 9 Pro, build 229): across 11 attempts the gap between the
+ * spurious cancel and the App Link arriving was under a second every time, so this is generous.
+ *
+ * It is deliberately NOT long enough to cover the Facebook app hijacking the flow into a separate
+ * browser tab, where completion takes however long the member takes. That path is not worth
+ * designing around — see the note on `signInWithFacebook`.
+ */
+const SPURIOUS_CANCEL_GRACE_MS = 10_000;
+
+/** Give up on a token exchange rather than hanging the sign-in with no error and no UI change. */
+const EXCHANGE_TIMEOUT_MS = 20_000;
+
+const TIMED_OUT = Symbol('sso-timeout');
+
+/** Read `state` from a callback URL, whether the provider put it in the query or the fragment. */
+function callbackState(url: string): string | null {
+    for (const marker of ['?', '#']) {
+        const idx = url.indexOf(marker);
+        if (idx === -1) continue;
+        const rest = url.slice(idx + 1);
+        const cut = marker === '?' ? rest.indexOf('#') : -1;
+        const state = new URLSearchParams(cut === -1 ? rest : rest.slice(0, cut)).get('state');
+        if (state) return state;
+    }
+    return null;
+}
+
+/**
+ * Wait for the provider's callback URL, however Android chooses to deliver it.
+ *
+ * Three sources are watched because no single one is reliable: the browser promise (correct only
+ * when the Custom Tab survives), `Linking`'s url event (fires when the App Link foregrounds
+ * MainActivity), and the `SSO_AUTH_CALLBACK` broadcast from `+native-intent.ts` (fires when Expo
+ * Router sees the intent first). MEASURED 2026-08-28: across 11 attempts on build 229 every single
+ * callback arrived via the App Link, and not one via the browser promise.
+ *
+ * ## `state` is what makes the race safe
+ *
+ * Matching on a substring like `auth/github` was not enough, and that is the bug this replaces.
+ * Any URL containing it satisfied the match — including a stale callback from an earlier attempt,
+ * which `Linking.getInitialURL()` hands back for the entire life of the process. So the race could
+ * resolve against an already-consumed authorization code, and which of the stale and fresh URLs
+ * won was pure timing: the same tap succeeded or failed at random, which is exactly what was
+ * observed on device. Comparing `state` against the nonce this attempt was issued fixes that, and
+ * it is the CSRF check OAuth requires of us regardless.
+ *
+ * `getInitialURL()` is no longer consulted. For a process that is already running it can only ever
+ * return a stale URL, so it was pure downside.
+ */
 async function openAuthSessionWithLinkingFallback(
     authUrl: string,
     completionUri: string,
-    redirectKeywords: string[]
+    expectedState: string,
+    provider: SsoProvider
 ): Promise<string> {
-    let capturedUrl: string | null = null;
-    let linkingSub: any = null;
-    let deviceEventSub: any = null;
-
-    const promise = new Promise<string>((resolve) => {
-        const handler = (incomingUrl: string) => {
-            if (incomingUrl && redirectKeywords.some((kw) => incomingUrl.includes(kw))) {
-                capturedUrl = incomingUrl;
-                resolve(incomingUrl);
-            }
-        };
-
-        try {
-            linkingSub = Linking.addEventListener('url', (event) => handler(event.url));
-        } catch {}
-        try {
-            deviceEventSub = DeviceEventEmitter.addListener('SSO_AUTH_CALLBACK', (url: string) => handler(url));
-        } catch {}
-
-        Linking.getInitialURL().then((initUrl) => {
-            if (initUrl) handler(initUrl);
-        }).catch(() => {});
+    let resolveArrival: (url: string) => void = () => {};
+    const arrival = new Promise<string>((resolve) => {
+        resolveArrival = resolve;
     });
 
-    const browserPromise = WebBrowser.openAuthSessionAsync(authUrl, completionUri, { preferEphemeralSession: true })
-        .then((result) => {
+    const accept = (incomingUrl: string | null | undefined, source: string): void => {
+        if (!incomingUrl) return;
+        const state = callbackState(incomingUrl);
+        if (state !== expectedState) {
+            console.log(`[SSO] ${provider}: ignored ${source} callback (state ${state ? 'mismatch' : 'absent'})`);
+            return;
+        }
+        console.log(`[SSO] ${provider}: accepted callback from ${source}`);
+        resolveArrival(incomingUrl);
+    };
+
+    const linkingSub = Linking.addEventListener('url', (event) => accept(event.url, 'Linking'));
+    const deviceEventSub = DeviceEventEmitter.addListener('SSO_AUTH_CALLBACK', (url: string) =>
+        accept(url, 'native-intent')
+    );
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<typeof TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => resolve(TIMED_OUT), AUTH_CALLBACK_TIMEOUT_MS);
+    });
+
+    // Never fails the sign-in on the browser's word alone — it only stops being a candidate once
+    // the grace period has passed without a valid callback landing.
+    const browser = WebBrowser.openAuthSessionAsync(authUrl, completionUri)
+        .then(async (result) => {
             if (result.type === 'success' && result.url) {
-                capturedUrl = result.url;
-                return result.url;
+                accept(result.url, 'browser');
+            } else {
+                console.log(`[SSO] ${provider}: browser said '${result.type}' — may be spurious, still listening`);
             }
+            await new Promise((r) => setTimeout(r, SPURIOUS_CANCEL_GRACE_MS));
             return null;
         })
-        .catch(() => null);
+        .catch((e) => {
+            console.log(`[SSO] ${provider}: browser threw`, e);
+            return null;
+        });
 
-    const resolvedUrl = await Promise.race([
-        promise,
-        browserPromise.then(async (res) => {
-            if (res) return res;
-            for (let i = 0; i < 20; i++) {
-                if (capturedUrl) return capturedUrl;
-                await new Promise((r) => setTimeout(r, 100));
-            }
-            return capturedUrl;
-        }),
-    ]);
-
-    if (linkingSub?.remove) linkingSub.remove();
-    if (deviceEventSub?.remove) deviceEventSub.remove();
-
+    console.log(`[SSO] ${provider}: opening auth session`);
     try {
-        WebBrowser.dismissAuthSession();
-    } catch {}
-
-    if (!resolvedUrl) {
+        const outcome = await Promise.race([arrival, browser, deadline]);
+        if (typeof outcome === 'string') return outcome;
+        if (outcome === TIMED_OUT) {
+            console.log(`[SSO] ${provider}: no callback within ${AUTH_CALLBACK_TIMEOUT_MS}ms`);
+            throw new SsoSignInError('provider', `${provider} sign-in timed out.`);
+        }
+        console.log(`[SSO] ${provider}: no valid callback after browser closed`);
         throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    } finally {
+        linkingSub?.remove?.();
+        deviceEventSub?.remove?.();
+        if (timer) clearTimeout(timer);
+        try {
+            WebBrowser.dismissAuthSession();
+        } catch {}
     }
-
-    return resolvedUrl;
 }
 
 export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
     const redirectUri = 'https://beanpool.org/auth/facebook';
     const completionUri = 'beanpool://auth/facebook';
-    const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${encodeURIComponent(FACEBOOK_APP_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token,id_token&scope=openid,email&nonce=${encodeURIComponent(nonce)}`;
+    const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${encodeURIComponent(FACEBOOK_APP_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token,id_token&scope=openid,email&nonce=${encodeURIComponent(nonce)}&state=${encodeURIComponent(nonce)}`;
 
-    const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, ['auth/facebook', 'beanpool://auth/facebook']);
+    const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, nonce, 'facebook');
 
     const hashIndex = url.indexOf('#');
     const queryIndex = url.indexOf('?');
@@ -518,6 +580,7 @@ export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn,
         }
     }
 
+    console.log(`[SSO] facebook: resolved sub=${sub ? 'yes' : 'MISSING'} email=${email ? 'yes' : 'no'}`);
     return {
         idToken,
         nonce,
@@ -545,7 +608,7 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
     const scopes = 'read:user user:email';
     const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${encodeURIComponent(nonce)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256`;
 
-    const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, ['auth/github', 'beanpool://auth/github']);
+    const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, nonce, 'github');
 
     const queryIndex = url.indexOf('?');
     const hashIndex = url.indexOf('#');
@@ -559,18 +622,30 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
         // Exchange authorization code for access token via node exchange proxy
         try {
             const anchorUrl = (await AsyncStorage.getItem('beanpool_anchor_url')) || 'https://mullum.beanpool.org';
-            const tokenRes = await fetch(`${anchorUrl}/api/recovery/sso/github-exchange`, {
-                method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    code,
-                    redirectUri,
-                    codeVerifier: verifier,
-                }),
-            });
+            // Bounded: an unanswered exchange used to hang the sign-in with no error, no log and no
+            // UI change, which is indistinguishable from success to the member.
+            const abort = new AbortController();
+            const abortTimer = setTimeout(() => abort.abort(), EXCHANGE_TIMEOUT_MS);
+            let tokenRes: Response;
+            try {
+                console.log(`[SSO] github: exchanging code at ${anchorUrl}`);
+                tokenRes = await fetch(`${anchorUrl}/api/recovery/sso/github-exchange`, {
+                    method: 'POST',
+                    signal: abort.signal,
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        code,
+                        redirectUri,
+                        codeVerifier: verifier,
+                    }),
+                });
+            } finally {
+                clearTimeout(abortTimer);
+            }
+            console.log(`[SSO] github: exchange responded ${tokenRes.status}`);
             if (!tokenRes.ok) {
                 const errData = await tokenRes.json().catch(() => ({ error: `Status ${tokenRes.status}` }));
                 throw new Error(errData.error || `Token exchange failed with status ${tokenRes.status}`);
@@ -590,6 +665,7 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
     }
 
     // Fetch user profile to extract user id (sub) and email
+    // (logged below: without a `sub` the seal has nothing to bind to)
     let sub: string | undefined;
     let email: string | undefined;
     try {
@@ -631,6 +707,7 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
         console.warn('[SSO] Could not fetch GitHub user profile:', e);
     }
 
+    console.log(`[SSO] github: resolved sub=${sub ? 'yes' : 'MISSING'} email=${email ? 'yes' : 'no'}`);
     return {
         idToken: accessToken,
         nonce,

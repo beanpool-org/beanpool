@@ -13,10 +13,10 @@ export default function GithubAuthCallbackScreen() {
         try {
             if (url) {
                 DeviceEventEmitter.emit('SSO_AUTH_CALLBACK', url);
-                WebBrowser.maybeCompleteAuthSession({ url, skipRedirectCheck: true });
-            } else {
-                WebBrowser.maybeCompleteAuthSession({ skipRedirectCheck: true });
             }
+            // Web-only (@platform web), and it never accepted a `url` — that argument was being
+            // silently dropped. On Android the broadcast above is what completes the sign-in.
+            WebBrowser.maybeCompleteAuthSession({ skipRedirectCheck: true });
         } catch (e) {
             console.warn('[GitHub Auth Callback] Error completing auth session:', e);
         }

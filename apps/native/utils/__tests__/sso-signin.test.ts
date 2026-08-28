@@ -17,7 +17,19 @@ import { describe, it, expect, vi } from 'vitest';
 
 // react-native and expo-apple-authentication have no life outside a device, so they are stubbed
 // at the module boundary. Platform defaults to ios; the one test that cares overrides it.
-vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
+(globalThis as any).__DEV__ = false;
+vi.mock('react-native', () => ({
+    Platform: { OS: 'ios' },
+    DeviceEventEmitter: {
+        addListener: vi.fn(() => ({ remove: vi.fn() })),
+        emit: vi.fn(),
+    },
+}));
+vi.mock('expo-linking', () => ({
+    addEventListener: vi.fn(() => ({ remove: vi.fn() })),
+    getInitialURL: vi.fn(async () => null),
+    useURL: vi.fn(() => null),
+}));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
         getItem: vi.fn(async () => 'https://test.beanpool.org'),
@@ -45,6 +57,7 @@ vi.mock('expo-crypto', () => ({
 }));
 vi.mock('expo-web-browser', () => ({
     openAuthSessionAsync: vi.fn(),
+    dismissAuthSession: vi.fn(),
 }));
 vi.mock('../node-post', () => ({ signedPost: vi.fn(), anchorUrl: vi.fn() }));
 

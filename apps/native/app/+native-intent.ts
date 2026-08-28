@@ -1,4 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
+import { DeviceEventEmitter } from 'react-native';
 
 /**
  * Intercept incoming native deep links before Expo Router matches routes.
@@ -18,6 +19,7 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
             if (!path.startsWith('http://') && !path.startsWith('https://') && !path.startsWith('beanpool://')) {
                 fullUrl = `https://beanpool.org${path.startsWith('/') ? '' : '/'}${path}`;
             }
+            DeviceEventEmitter.emit('SSO_AUTH_CALLBACK', fullUrl);
             WebBrowser.maybeCompleteAuthSession({ url: fullUrl, skipRedirectCheck: true });
         } catch (e) {
             console.warn('[NativeIntent] Failed to complete auth session:', e);

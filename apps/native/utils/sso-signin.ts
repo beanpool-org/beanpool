@@ -38,10 +38,11 @@
  * when there is a measurement for every provider we ship, not before.
  */
 
-import { Platform } from 'react-native';
+import { Platform, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import * as Crypto from 'expo-crypto';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { encodeBase64 } from './crypto';
@@ -406,27 +407,78 @@ export async function signInWithGoogle(nonce: string): Promise<Omit<SsoSignIn, '
     };
 }
 
+async function openAuthSessionWithLinkingFallback(
+    authUrl: string,
+    completionUri: string,
+    redirectKeywords: string[]
+): Promise<string> {
+    let capturedUrl: string | null = null;
+    let linkingSub: any = null;
+    let deviceEventSub: any = null;
+
+    const promise = new Promise<string>((resolve) => {
+        const handler = (incomingUrl: string) => {
+            if (incomingUrl && redirectKeywords.some((kw) => incomingUrl.includes(kw))) {
+                capturedUrl = incomingUrl;
+                resolve(incomingUrl);
+            }
+        };
+
+        try {
+            linkingSub = Linking.addEventListener('url', (event) => handler(event.url));
+        } catch {}
+        try {
+            deviceEventSub = DeviceEventEmitter.addListener('SSO_AUTH_CALLBACK', (url: string) => handler(url));
+        } catch {}
+
+        Linking.getInitialURL().then((initUrl) => {
+            if (initUrl) handler(initUrl);
+        }).catch(() => {});
+    });
+
+    const browserPromise = WebBrowser.openAuthSessionAsync(authUrl, completionUri, { preferEphemeralSession: true })
+        .then((result) => {
+            if (result.type === 'success' && result.url) {
+                capturedUrl = result.url;
+                return result.url;
+            }
+            return null;
+        })
+        .catch(() => null);
+
+    const resolvedUrl = await Promise.race([
+        promise,
+        browserPromise.then(async (res) => {
+            if (res) return res;
+            for (let i = 0; i < 20; i++) {
+                if (capturedUrl) return capturedUrl;
+                await new Promise((r) => setTimeout(r, 100));
+            }
+            return capturedUrl;
+        }),
+    ]);
+
+    if (linkingSub?.remove) linkingSub.remove();
+    if (deviceEventSub?.remove) deviceEventSub.remove();
+
+    try {
+        WebBrowser.dismissAuthSession();
+    } catch {}
+
+    if (!resolvedUrl) {
+        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    }
+
+    return resolvedUrl;
+}
+
 export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn, 'provider'>> {
     const redirectUri = 'https://beanpool.org/auth/facebook';
     const completionUri = 'beanpool://auth/facebook';
     const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${encodeURIComponent(FACEBOOK_APP_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token,id_token&scope=openid,email&nonce=${encodeURIComponent(nonce)}`;
 
-    let result;
-    try {
-        result = await WebBrowser.openAuthSessionAsync(authUrl, completionUri, { preferEphemeralSession: true });
-    } catch (e) {
-        throw new SsoSignInError('provider', `Facebook sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, ['auth/facebook', 'beanpool://auth/facebook']);
 
-    if (result.type === 'cancel' || result.type === 'dismiss') {
-        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
-    }
-
-    if (result.type !== 'success' || !result.url) {
-        throw new SsoSignInError('no-token', 'Facebook completed the sign-in but returned no response.');
-    }
-
-    const url = result.url;
     const hashIndex = url.indexOf('#');
     const queryIndex = url.indexOf('?');
     const paramStr = hashIndex !== -1 ? url.slice(hashIndex + 1) : (queryIndex !== -1 ? url.slice(queryIndex + 1) : '');
@@ -493,22 +545,8 @@ export async function signInWithGithub(nonce: string): Promise<Omit<SsoSignIn, '
     const scopes = 'read:user user:email';
     const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(GITHUB_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${encodeURIComponent(nonce)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256`;
 
-    let result;
-    try {
-        result = await WebBrowser.openAuthSessionAsync(authUrl, completionUri, { preferEphemeralSession: true });
-    } catch (e) {
-        throw new SsoSignInError('provider', `GitHub sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    const url = await openAuthSessionWithLinkingFallback(authUrl, completionUri, ['auth/github', 'beanpool://auth/github']);
 
-    if (result.type === 'cancel' || result.type === 'dismiss') {
-        throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
-    }
-
-    if (result.type !== 'success' || !result.url) {
-        throw new SsoSignInError('no-token', 'GitHub completed the sign-in but returned no response.');
-    }
-
-    const url = result.url;
     const queryIndex = url.indexOf('?');
     const hashIndex = url.indexOf('#');
     const paramStr = queryIndex !== -1 ? url.slice(queryIndex + 1) : (hashIndex !== -1 ? url.slice(hashIndex + 1) : '');

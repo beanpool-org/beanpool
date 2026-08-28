@@ -23,20 +23,26 @@ export default defineConfig({
                 router: (req) => {
                     const match = req.url?.match(/^\/proxy\/(https?)\/([^/]+)\/(.*)/);
                     if (match) {
-                        const host = match[2].toLowerCase().split(':')[0];
+                        const rawAuthority = match[2].toLowerCase();
+                        const cleanHost = rawAuthority.startsWith('[')
+                            ? (rawAuthority.match(/^\[([^\]]+)\]/)?.[1] || rawAuthority)
+                            : rawAuthority.split(':')[0];
+
                         // Block the cloud instance-metadata endpoints, which is the SSRF target
                         // that actually matters here: link-local (169.254.0.0/16 covers AWS/GCP/
-                        // Azure metadata) plus the metadata hostnames.
+                        // Azure metadata, 100.100.100.100 covers Alibaba Cloud metadata) plus the
+                        // metadata hostnames and IPv6/mapped variants.
                         //
                         // Loopback and RFC1918 are deliberately NOT blocked. Every node the
                         // manager talks to that is not its own origin goes through this proxy
                         // (see resolveNodeApiUrl), and the default profile is the local node at
                         // https://localhost:8443 — blocking those makes the dashboard unable to
                         // reach the local node or any node on the operator's LAN.
-                        const isBlocked = host.startsWith('169.254.') ||
-                            host === 'metadata.google.internal' ||
-                            host === 'metadata' ||
-                            host.endsWith('.internal');
+                        const isBlocked = cleanHost.includes('169.254.') ||
+                            cleanHost === '100.100.100.100' ||
+                            cleanHost === 'metadata.google.internal' ||
+                            cleanHost === 'metadata' ||
+                            cleanHost.endsWith('.internal');
                         if (isBlocked) {
                             return 'http://localhost';
                         }

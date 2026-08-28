@@ -12,7 +12,8 @@ export default defineConfig({
     resolve: {
         alias: {
             '@beanpool/core': path.resolve(__dirname, '../../packages/beanpool-core/src/index.ts'),
-        }
+        },
+        dedupe: ['react', 'react-dom'],
     },
     server: {
         port: 3001,

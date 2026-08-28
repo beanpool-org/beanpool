@@ -435,10 +435,40 @@ export async function signInWithFacebook(nonce: string): Promise<Omit<SsoSignIn,
         throw new SsoSignInError('no-token', 'Facebook returned no authentication token.');
     }
 
+    let sub: string | undefined;
+    let email: string | undefined;
+
+    if (idToken.includes('.')) {
+        try {
+            const parts = idToken.split('.');
+            if (parts.length >= 2) {
+                const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+                const payload = JSON.parse(globalThis.atob(pad));
+                if (payload?.sub) sub = String(payload.sub);
+                if (payload?.email) email = String(payload.email);
+            }
+        } catch {}
+    }
+
+    if (!sub) {
+        try {
+            const userRes = await fetch(`https://graph.facebook.com/v20.0/me?fields=id,email&access_token=${encodeURIComponent(idToken)}`);
+            if (userRes.ok) {
+                const data = await userRes.json() as { id?: string | number; email?: string };
+                if (data.id) sub = String(data.id);
+                if (data.email) email = data.email;
+            }
+        } catch (e) {
+            console.warn('[SSO] Could not fetch Facebook user profile:', e);
+        }
+    }
+
     return {
         idToken,
         nonce,
-        email: undefined,
+        sub,
+        email,
     };
 }
 

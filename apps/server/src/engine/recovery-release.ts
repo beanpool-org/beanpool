@@ -492,30 +492,31 @@ export async function releaseSsoFragmentForIdentity(
     const collection = requireLive(collectionId);
     if (!sub) throw new RecoveryReleaseError('That sign-in did not identify an account.');
 
-    const row = db.prepare(`
+    const rows = db.prepare(`
         SELECT sso_lookup_hash, sso_lookup_salt FROM recovery_shares
-        WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso'
-    `).get(collection.ownerPubkey, collection.generation) as
-        { sso_lookup_hash: string | null; sso_lookup_salt: string | null } | undefined;
+        WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso' AND holder_ref = ?
+    `).all(collection.ownerPubkey, collection.generation, provider) as
+        { sso_lookup_hash: string | null; sso_lookup_salt: string | null }[];
 
-    if (!row?.sso_lookup_hash || !row.sso_lookup_salt) {
+    if (!rows.length || !rows[0].sso_lookup_hash || !rows[0].sso_lookup_salt) {
         throw new RecoveryReleaseError(
-            'This account has no sign-in keeper in the generation being collected.',
+            `This account has no ${provider} sign-in keeper in the generation being collected.`,
         );
     }
 
-    const derived = await ssoLookupHash(provider, sub, row.sso_lookup_salt);
+    const targetRow = rows[0];
+    const derived = await ssoLookupHash(provider, sub, targetRow.sso_lookup_salt!);
     // Constant-time, because a timing difference here leaks which accounts a given provider
     // identity is a keeper for — on an endpoint anyone can reach with their own valid token.
     const a = Buffer.from(derived, 'utf-8');
-    const b = Buffer.from(row.sso_lookup_hash, 'utf-8');
+    const b = Buffer.from(targetRow.sso_lookup_hash!, 'utf-8');
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
         throw new RecoveryReleaseError(
             'That sign-in account is not the keeper for this recovery.',
         );
     }
 
-    return releaseSsoFragment(collectionId, row.sso_lookup_hash);
+    return releaseSsoFragment(collectionId, targetRow.sso_lookup_hash!);
 }
 
 export function releaseSsoFragment(collectionId: string, ssoLookupHash: string): ReleasedFragment {

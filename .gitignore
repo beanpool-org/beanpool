@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+# also match a bare symlink named node_modules — `node_modules/` does not
+node_modules
 .pnpm-store/
 
 # Build output

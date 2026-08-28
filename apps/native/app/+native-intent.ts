@@ -6,7 +6,14 @@ import { DeviceEventEmitter } from 'react-native';
  * Completes WebBrowser auth sessions for OAuth callbacks (e.g. GitHub, Facebook)
  * and prevents unmatched route errors.
  */
-export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string {
+export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string | null {
+    // A no-op link whose only job is to bring the app to the front, backgrounding an Android
+    // Custom Tab that nothing else can close (`WebBrowser.dismissBrowser` is iOS-only). Returning
+    // null cancels navigation, so the member stays on whatever screen they were already on.
+    if (path === 'foreground' || path === '/foreground' || path.endsWith('://foreground')) {
+        return null;
+    }
+
     const isAuthCallback =
         path.includes('auth/github') ||
         path.includes('auth/facebook') ||

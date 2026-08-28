@@ -123,18 +123,21 @@ export async function recoverAccountWithSso(options: {
 
     // 3. Request SSO Nonce bound to ephemeral key
     options.onProgress?.({ step: 'nonce', message: 'Requesting secure sign-in challenge...' });
-    const nonceRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/sso-nonce', {
-        collectionId,
-    }, ephIdentity);
-
-    if (!nonceRes.ok) {
-        const err = await nonceRes.json().catch(() => ({}));
-        throw new Error(err.error || `Could not obtain sign-in challenge (${nonceRes.status})`);
-    }
-    const { nonce } = await nonceRes.json();
-    if (!nonce) {
-        throw new Error('Node returned an empty sign-in nonce.');
-    }
+    const requestNonce = async (): Promise<string> => {
+        const res = await signedPost(finalAnchorUrl, '/api/recovery/collect/sso-nonce', {
+            collectionId,
+        }, ephIdentity);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || `Could not obtain sign-in challenge (${res.status})`);
+        }
+        const body = await res.json();
+        if (!body?.nonce) {
+            throw new Error('Node returned an empty sign-in nonce.');
+        }
+        return body.nonce as string;
+    };
+    const nonce = await requestNonce();
 
     // 4. Sign in with Provider (Google / Apple / Facebook / GitHub)
     const providerLabel = options.provider === 'google' ? 'Google'
@@ -168,6 +171,12 @@ export async function recoverAccountWithSso(options: {
                 message: `Enter code ${prompt.userCode} at ${prompt.verificationUri.replace('https://', '')}`,
             });
         });
+        // Re-mint before depositing. The node's nonce lives ten minutes and this one was issued
+        // before the device flow began — and the device flow spends however long the member takes,
+        // which on a new phone includes signing in to GitHub from scratch. An expired nonce is
+        // reported as "GitHub sign-in could not be matched to this request", which during recovery
+        // reads as "your account is gone". Safe because the device flow never binds it to anything.
+        signInResult = { ...signInResult, nonce: await requestNonce() };
     }
 
     const sub = parseJwtSub(signInResult.idToken, signInResult.sub);

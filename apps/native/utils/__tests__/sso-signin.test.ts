@@ -171,16 +171,27 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
     it('handles Facebook OAuth token redirect', async () => {
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({
             type: 'success',
-            url: 'beanpool://auth/facebook#id_token=fb.fake.jwt&access_token=fb_token_123',
+            url: 'beanpool://auth/facebook#id_token=fb.fake.jwt&access_token=fb_token_123&state=test-nonce-fb',
         });
         const res = await signInWithFacebook('test-nonce-fb');
         expect(res.idToken).toBe('fb.fake.jwt');
         expect(res.nonce).toBe('test-nonce-fb');
     });
 
-    it('handles Facebook cancel', async () => {
+    // The browser's 'cancel' is not trusted on its own any more: on Android it routinely arrives
+    // while the real callback is still in flight, so the sign-in keeps listening through a grace
+    // window before giving up. These tests advance past that window rather than shorten it.
+    it('handles Facebook cancel, after the spurious-cancel grace window', async () => {
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'cancel' as any });
-        await expect(signInWithFacebook('test-nonce-fb')).rejects.toThrow('Sign-in was cancelled.');
+        vi.useFakeTimers();
+        try {
+            const assertion = expect(signInWithFacebook('test-nonce-fb'))
+                .rejects.toThrow('Sign-in was cancelled.');
+            await vi.advanceTimersByTimeAsync(11_000);
+            await assertion;
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('handles GitHub OAuth code redirect with PKCE token exchange and profile fetch', async () => {
@@ -216,8 +227,16 @@ describe('Facebook and GitHub WebBrowser OAuth flows', () => {
         }
     });
 
-    it('handles GitHub cancel', async () => {
+    it('handles GitHub cancel, after the spurious-cancel grace window', async () => {
         vi.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: 'cancel' as any });
-        await expect(signInWithGithub('test-nonce-gh')).rejects.toThrow('Sign-in was cancelled.');
+        vi.useFakeTimers();
+        try {
+            const assertion = expect(signInWithGithub('test-nonce-gh'))
+                .rejects.toThrow('Sign-in was cancelled.');
+            await vi.advanceTimersByTimeAsync(11_000);
+            await assertion;
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

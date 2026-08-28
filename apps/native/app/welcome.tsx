@@ -28,6 +28,7 @@ import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '.
 import { buildSignedHeaders, mnemonicToKeypair, validateMnemonic } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
 import { recoverAccountWithSso } from '../utils/sso-recovery';
+import { returnToApp } from '../utils/sso-signin';
 import { type SsoProvider } from '../utils/sso-signin';
 
 
@@ -697,12 +698,9 @@ export default function WelcomeScreen() {
                     WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
                 },
             });
-            // Same reason the enrolment sheet does it: GitHub's confirmation page says nothing
-            // about returning, so without this the member is left on a finished web page while
-            // their account is already restored behind it.
-            try {
-                await WebBrowser.dismissBrowser();
-            } catch {}
+            // Same reason the enrolment sheet does it, and the same platform trap: GitHub's
+            // confirmation page says nothing about returning, and `dismissBrowser` is iOS-only.
+            await returnToApp();
             await clearPendingOnboarding();
             setIdentity(result.identity);
             setMode('home');

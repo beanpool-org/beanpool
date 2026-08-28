@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../constants/colors';
 import { anchorUrl } from '../utils/node-post';
-import { startSsoSignIn, SsoSignInError } from '../utils/sso-signin';
+import { startSsoSignIn, SsoSignInError, returnToApp } from '../utils/sso-signin';
 import type { SsoProvider, GithubDevicePrompt } from '../utils/sso-signin';
 import { enrolSsoKeeper, KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { useIdentity } from '../app/IdentityContext';
@@ -114,14 +114,10 @@ export function SsoEnrolSheet({
                 );
             }, abort.signal);
 
-            // Close GitHub for them. Its own success page says nothing about returning here, and
-            // the "come back" line in this sheet is behind the browser at that moment — so without
-            // this the member is left on a finished web page wondering whether it worked.
-            // MEASURED 2026-08-28: reported as "sitting at the copy screen for a bit" before it
-            // completed. Harmless if no browser is open.
-            try {
-                await WebBrowser.dismissBrowser();
-            } catch {}
+            // Get them back here. GitHub's success page says nothing about returning, and
+            // `dismissBrowser` is iOS-only — on Android the tab sat on "you're all set" while the
+            // account was already connected behind it. `returnToApp` handles both platforms.
+            await returnToApp();
 
             const sub = extractSub(signin.idToken, signin.sub);
 

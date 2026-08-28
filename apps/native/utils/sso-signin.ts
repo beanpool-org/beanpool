@@ -632,6 +632,42 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     });
 }
 
+/**
+ * Bring BeanPool back to the front once a device-flow sign-in is done.
+ *
+ * `WebBrowser.dismissBrowser()` is `@platform ios`. On Android it throws, so the Custom Tab simply
+ * stayed on GitHub's "Congratulations, you're all set!" page with the member stranded in front of
+ * a finished web page while their account was already connected behind it. MEASURED 2026-08-28.
+ *
+ * Android gives an app no way to close a Custom Tab it launched. What it does allow is bringing our
+ * own activity forward, which backgrounds the tab — and launching our own scheme does exactly that.
+ * It is the same App Link foregrounding that broke the OAuth redirect flow all day; here it is the
+ * mechanism that fixes it.
+ *
+ * `beanpool://foreground` is a no-op route: `+native-intent.ts` returns null for it, so the app
+ * comes forward without navigating the member off whatever screen they were on.
+ */
+export async function returnToApp(): Promise<void> {
+    if (Platform.OS === 'ios') {
+        try {
+            await WebBrowser.dismissBrowser();
+        } catch {}
+        return;
+    }
+    // Android only. On web a custom scheme raises a browser protocol prompt, and there is no
+    // Custom Tab to background there in any case — the PWA opens GitHub in a tab the member closes
+    // themselves.
+    if (Platform.OS !== 'android') return;
+    try {
+        await Linking.openURL('beanpool://foreground');
+    } catch (e) {
+        // Nothing to fall back to: the member is on a page that says it worked, and it did. Logged
+        // with the error because if this fails it will be on some OEM build with its own rules
+        // about background activity starts, and the reason is the only clue anyone will get.
+        console.warn('[SSO] could not bring the app back to the front:', e);
+    }
+}
+
 /** What the member has to be shown to complete a device-flow sign-in. */
 export interface GithubDevicePrompt {
     /** The short code the member types at `verificationUri`. */

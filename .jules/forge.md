@@ -64,3 +64,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `apps/server/src/services/tls.ts` lacked a try/catch and `res.ok` check around its `fetch` for Cloudflare TXT record creation.
 **Learning:** External fetch calls in services (especially API providers) can crash the server if they throw uncaught exceptions or return unexpected formats (like HTML instead of JSON for a 500 error).
 **Pattern:** Look for `await fetch` in service files that lack `try/catch` and missing `if (!res.ok)` before reading `await res.json()`.
+
+## 2026-08-26 - [Idempotent Friend Removal Status Code]
+**Issue:** Attempting to return 404 for missing friend connections broke idempotent retries on mobile app.
+**Learning:** Destructive operations like `removeFriend` are inherently idempotent; returning 4xx on duplicate or missing removals turns idempotent network retries into client-side errors.
+**Pattern:** Do not add 4xx errors to idempotent deletion/removal routes where non-existence is a valid post-state.

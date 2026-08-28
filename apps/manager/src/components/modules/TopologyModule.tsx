@@ -667,8 +667,24 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             {snapshotLoading && <span className="text-xs text-sky-400 animate-pulse">Loading snapshots…</span>}
                         </div>
                         {snapshots.length === 0 ? (
-                            <div className="p-8 text-center text-xs text-nature-400">
-                                No on-device snapshots found for this node yet. Click &quot;Create Snapshot Now&quot; above to take a point-in-time snapshot.
+                            <div className="p-8 text-center space-y-3 font-sans">
+                                <div className="w-12 h-12 rounded-2xl bg-nature-900 border border-nature-800 text-terra-400 flex items-center justify-center text-xl font-bold mx-auto shadow-inner">
+                                    📸
+                                </div>
+                                <div>
+                                    <h5 className="text-sm font-bold text-white m-0">No On-Device Snapshots</h5>
+                                    <p className="text-xs text-nature-400 m-0 mt-1 max-w-sm mx-auto">
+                                        Point-in-time SQLite snapshots allow manual recovery and backup validation for {targetSnapshotNode?.name}.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleCreateSnapshot}
+                                    disabled={creatingSnapshot}
+                                    className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 inline-flex items-center gap-2"
+                                >
+                                    <span>{creatingSnapshot ? '⏳' : '📸'}</span>
+                                    <span>Create First Snapshot</span>
+                                </button>
                             </div>
                         ) : (
                             <table className="w-full text-left text-xs">

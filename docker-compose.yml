@@ -18,6 +18,11 @@ services:
       - CF_RECORD_NAME=${CF_RECORD_NAME}
       - PUBLIC_ADDRESS_AUTO=${PUBLIC_ADDRESS_AUTO:-0}
       - PUBLIC_ADDRESS_NAME=${PUBLIC_ADDRESS_NAME:-}
+      # GitHub recovery. Empty is a valid state — a node that does not offer GitHub sign-in needs
+      # no secret, and the exchange route answers 503 rather than forwarding an empty one. Until
+      # this line existed the value could not reach the container at all, so a literal secret in
+      # source was the only thing making the route work.
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
       # Cutover: role / backup / enforcement (Phase 1 + SRV-20). Empty defaults =
       # primary role, backup puller off, all enforcement flags off — the safe
       # dormant state. Set per node via the node-local .env (preserved across

@@ -27,7 +27,7 @@ const COMMUNITY_DOMAIN = 'beanpool.org';
  * Idempotent for full URLs.
  */
 export function normalizeNodeUrl(raw: string): string {
-    let u = raw.trim();
+    const u = raw.trim();
     if (!u) return '';
     if (u.startsWith('http')) return u;
 

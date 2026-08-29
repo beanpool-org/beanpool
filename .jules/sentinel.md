@@ -171,3 +171,8 @@ These were reviewed and **CLOSED, not merged**: their branches had ~260-file dri
 
 ## 2026-08-20 - [Sentinel] Registrar Admin Secret Timing Comparison & Session Storage
 **Resolved:** Handled in PR #336 (constant-time `crypto.timingSafeEqual` comparison for registrar secrets) and PR #352 (switched registrar admin key from persistent `localStorage` to ephemeral `sessionStorage`). Do not re-raise. Do not widen `checkAdmin` to accept secrets via unauthenticated header transports or inject unescaped inputs into admin HTML.
+
+## 2026-08-28 - [Sentinel] Fix Authorization in Message Reactions
+**Vulnerability:** `toggleMessageReaction` in `apps/server/src/engine/messaging.ts` allowed non-participants of a conversation to modify message reactions on private messages.
+**Learning:** Checking signature identity alone is insufficient if the user is not validated against the participants list of the target resource.
+**Prevention:** Verify that the authenticated initiator (`authorPubkey`) is a participant in `row.conversation_id` before processing mutations.

@@ -84,10 +84,27 @@ function main() {
     assert(findRecoveryCandidates('driftwood').length === 0, 'a callsign held only by a pruned member resolves to nobody');
     assert(findRecoveryCandidates('RIPPLE').length === 1, 'the lookup is case-insensitive');
 
+    // Prefix matching is the whole point of the change: a member given `paul12` because `paul` was
+    // taken will type `paul` months later, and an exact match answers "nobody", which reads as
+    // "your account is gone" rather than "try harder".
+    assert(findRecoveryCandidates('ripp').length >= 1, 'a prefix finds the account whose full callsign the member has forgotten');
+    assert(findRecoveryCandidates('rippleX').length === 0, 'a prefix that matches nobody still returns nobody');
+
     // The response must stay public-safe: this endpoint is unauthenticated.
+    //
+    // Widened deliberately to six. The two additions are BOOLEANS — whether guardian recovery and
+    // whether sign-in recovery are possible — and they exist so the picker can offer only the
+    // routes that will actually work; a member who taps a provider they never enrolled gets a dead
+    // end and reads it as their account being gone.
+    //
+    // What must NOT appear here is which provider. That an account is recoverable is a far weaker
+    // fact than that a named person uses Google, and this endpoint hands its answer to anyone who
+    // can guess a callsign. Note also that the old shape already leaked the guardian fact by
+    // presence — an account only appeared at all once it had enough guardians.
     assert(
-        Object.keys(hits[0] ?? {}).sort().join(',') === 'avatarUrl,callsign,joinedAt,publicKey',
-        'the candidate exposes exactly the four public fields and nothing else',
+        Object.keys(hits[0] ?? {}).sort().join(',')
+            === 'avatarUrl,callsign,canRecoverByGuardians,canRecoverBySso,joinedAt,publicKey',
+        'the candidate exposes exactly the six public fields and nothing else',
     );
 
     // ── 2. The lookup can still use the partial index ──

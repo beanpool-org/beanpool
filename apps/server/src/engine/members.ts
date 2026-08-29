@@ -64,6 +64,8 @@ export function isCallsignAvailable(callsign: string, excludePublicKey?: string)
  * that one and quietly coupling two unrelated schemes.
  */
 const RECOVERY_MIN_GUARDIANS = 3;
+/** Bounded so a one-letter prefix cannot ask the node to serialise the whole member table. */
+const RECOVERY_CANDIDATE_LIMIT = 20;
 
 /** A member offered as a social-recovery target. Deliberately public-safe fields only. */
 export interface RecoveryCandidate {
@@ -71,6 +73,16 @@ export interface RecoveryCandidate {
     callsign: string;
     joinedAt: string | null;
     avatarUrl: string | null;
+    /** Enough guardians to reach the threshold — i.e. guardian recovery can be started. */
+    canRecoverByGuardians: boolean;
+    /**
+     * Holds at least one sign-in fragment — i.e. SSO recovery can be started.
+     *
+     * A boolean, NOT the provider names. Which provider a member uses is not something a public,
+     * unauthenticated endpoint should hand out to anyone who can guess a callsign; that the account
+     * is recoverable at all is enough to build the picker with.
+     */
+    canRecoverBySso: boolean;
 }
 
 /**
@@ -88,18 +100,42 @@ export interface RecoveryCandidate {
 export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
     const norm = callsign.trim().toLowerCase();
     if (!norm) return [];
+    // PREFIX, not exact. Callsigns are unique per node, so the member who wanted `paul` and was
+    // given `paul12` has no reason to remember the digits months later — and an exact match returns
+    // nothing, which reads as "your account is gone" rather than "try harder". Matching on the
+    // prefix and showing avatars lets them recognise themselves instead of recalling a string.
+    //
+    // Enumeration is no cheaper than before in any way that matters: callsigns are public by design
+    // (they are how members find each other) and this endpoint is already rate-limited for exactly
+    // this reason. LIKE 'x%' uses the index; a leading wildcard would not, and is not offered.
+    //
+    // The guardian floor moved out of the WHERE clause: it decides which BUTTON to offer, not
+    // whether the account exists. Filtering on it hid every SSO-only member from a lookup they are
+    // perfectly able to recover through.
     const rows = db.prepare(`
-        SELECT public_key, callsign, joined_at, avatar_url
-        FROM members
-        WHERE lower(callsign) = ? AND status NOT IN ('migrated', 'pruned')
-          AND (SELECT COUNT(*) FROM friends WHERE owner_pubkey = members.public_key AND is_guardian = 1) >= ?
-    `).all(norm, RECOVERY_MIN_GUARDIANS) as any[];
-    return rows.map(r => ({
-        publicKey: r.public_key,
-        callsign: r.callsign,
-        joinedAt: r.joined_at,
-        avatarUrl: r.avatar_url,
-    }));
+        SELECT m.public_key, m.callsign, m.joined_at, m.avatar_url,
+               (SELECT COUNT(*) FROM friends f
+                 WHERE f.owner_pubkey = m.public_key AND f.is_guardian = 1) AS guardian_count,
+               (SELECT COUNT(*) FROM recovery_shares s
+                 WHERE s.owner_pubkey = m.public_key AND s.holder_type = 'sso'
+                   AND s.generation = (SELECT MAX(generation) FROM recovery_shares
+                                        WHERE owner_pubkey = m.public_key)) AS sso_count
+        FROM members m
+        WHERE lower(m.callsign) LIKE ? || '%' AND m.status NOT IN ('migrated', 'pruned')
+        ORDER BY length(m.callsign), m.callsign
+        LIMIT ?
+    `).all(norm, RECOVERY_CANDIDATE_LIMIT) as any[];
+    return rows
+        .map(r => ({
+            publicKey: r.public_key,
+            callsign: r.callsign,
+            joinedAt: r.joined_at,
+            avatarUrl: r.avatar_url,
+            canRecoverByGuardians: Number(r.guardian_count) >= RECOVERY_MIN_GUARDIANS,
+            canRecoverBySso: Number(r.sso_count) > 0,
+        }))
+        // An account with neither is not a recovery target, and listing it only offers a dead end.
+        .filter(c => c.canRecoverByGuardians || c.canRecoverBySso);
 }
 
 /**

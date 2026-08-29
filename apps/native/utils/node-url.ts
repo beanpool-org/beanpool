@@ -4,16 +4,71 @@
  */
 
 /**
- * Add a scheme if the user left it off: http:// for raw IPs and localhost, https://
- * for everything else. Returns '' for blank input. Idempotent for full URLs.
+ * The domain community names expand under.
+ *
+ * Every node that claims a name through the registrar gets `<name>.beanpool.org`, so the expansion
+ * is deterministic rather than a guess. A node on its own domain is unaffected — it is typed in
+ * full and passes through untouched.
  */
+const COMMUNITY_DOMAIN = 'beanpool.org';
+
+/**
+ * A real scheme, not merely a string starting with "http".
+ *
+ * `startsWith('http')` said yes to the community name `httppool`, which then never expanded, and
+ * said no to `HTTP://node.example.com`, which then got a second scheme bolted on the front.
+ */
+const SCHEME = /^https?:\/\//i;
+
+/**
+ * Localhost EXACTLY, optionally with a port.
+ *
+ * `startsWith('localhost')` also matched `localhost.attacker.com`, and the consequence was not
+ * cosmetic: that branch chooses http://, so a public attacker-controlled domain was being
+ * downgraded to cleartext.
+ */
+const LOCALHOST = /^localhost(:\d+)?$/i;
+
+const IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/;
+
+/** A hostname label: alphanumeric ends, hyphens only inside. `mullum-` is not a valid label. */
+const BARE_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
+
+/**
+ * Accept a community name OR a node address, and return a URL.
+ *
+ * A bare word becomes `<name>.beanpool.org`. Anything with a dot, a scheme, a port, an IP or
+ * localhost is treated as an address and only gains a scheme.
+ *
+ * The reason is recovery. A member restoring an account has lost their phone, and asking them to
+ * reproduce `mullum.beanpool.org` exactly is a poor thing to ask at that moment — where "which
+ * community are you part of?" is something they simply know. Bare names were previously rejected
+ * outright by `looksLikeNodeAddress`, which requires a dotted host.
+ *
+ * http:// for raw IPs and localhost, https:// for everything else. Returns '' for blank input.
+ * Idempotent for full URLs.
+ */
+/**
+ * True when `raw` is a bare community name that `normalizeNodeUrl` will expand.
+ *
+ * Exposed so a screen can SHOW the member what it resolved to. The expansion is a guess, and a
+ * wrong guess is dangerous: a community hosted on its own domain — `beans.mycommunity.nz` — has a
+ * name that expands to a `beanpool.org` address which is either nothing, or somebody else's node.
+ * Silently sending a member there while they are recovering is worse than asking them to type more.
+ */
+export function isBareCommunityName(raw: string): boolean {
+    const u = raw.trim();
+    if (!u || SCHEME.test(u) || IPV4.test(u) || LOCALHOST.test(u)) return false;
+    return BARE_NAME.test(u);
+}
+
 export function normalizeNodeUrl(raw: string): string {
-    let u = raw.trim();
-    if (u && !u.startsWith('http')) {
-        const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(u) || u.startsWith('localhost');
-        u = (isIpOrLocal ? 'http://' : 'https://') + u;
-    }
-    return u;
+    const u = raw.trim();
+    if (!u) return '';
+    if (SCHEME.test(u)) return u;
+    if (IPV4.test(u) || LOCALHOST.test(u)) return 'http://' + u;
+    if (BARE_NAME.test(u)) return `https://${u.toLowerCase()}.${COMMUNITY_DOMAIN}`;
+    return 'https://' + u;
 }
 
 /**

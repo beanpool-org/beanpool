@@ -33,7 +33,7 @@ import { type SsoProvider } from '../utils/sso-signin';
 
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
-import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
@@ -405,7 +405,7 @@ export default function WelcomeScreen() {
             return;
         }
         if (!looksLikeNodeAddress(nodeUrl)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
             return;
         }
         if (shouldBlockCleartextNodeUrl(nodeUrl)) {
@@ -597,7 +597,7 @@ export default function WelcomeScreen() {
         }
         const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
@@ -676,7 +676,7 @@ export default function WelcomeScreen() {
         }
         const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
@@ -1356,14 +1356,15 @@ export default function WelcomeScreen() {
                             <>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Community Node URL (e.g. node.yourcommunity.org)"
+                                    placeholder="Community name or address (e.g. mullum)"
                                     placeholderTextColor={colors.text.muted}
                                     value={createAnchorUrl}
                                     onChangeText={setCreateAnchorUrl}
                                     autoCapitalize="none"
                                     autoCorrect={false}
                                     keyboardType="url"
-                                    accessibilityLabel="Community Node URL"
+                                    accessibilityLabel="Community name or node address"
+                                    accessibilityHint="Enter your community name, like mullum, or its full address"
                                 />
                                 <Text style={styles.fieldHint}>
                                     Required — the community node you're joining. Ask whoever invited you if you're unsure.
@@ -1688,9 +1689,10 @@ export default function WelcomeScreen() {
                         </View>
 
                         <TextInput
-                            accessibilityLabel="Community Node URL"
+                            accessibilityLabel="Community name or node address"
+                            accessibilityHint="Enter your community name, like mullum, or its full address"
                             style={styles.input}
-                            placeholder="Community Node URL (e.g. node.yourcommunity.org)"
+                            placeholder="Community name or address (e.g. mullum)"
                             placeholderTextColor={colors.text.muted}
                             value={recoveryAnchorUrl}
                             onChangeText={setRecoveryAnchorUrl}
@@ -1698,6 +1700,15 @@ export default function WelcomeScreen() {
                             autoCorrect={false}
                             keyboardType="url"
                         />
+                        {/* The same preview as the SSO screen. It was missed here, which would have
+                            been the worse place to miss it: 12-word recovery is the route someone
+                            takes when every other one has failed. */}
+                        {isBareCommunityName(recoveryAnchorUrl) && (
+                            <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
+                                Will connect to {normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '')} — if your
+                                community is hosted elsewhere, enter its full address instead.
+                            </Text>
+                        )}
                         <Text style={styles.fieldHint}>
                             Required — the community node that holds your account. Your name and picture come back automatically once you're in. Ask whoever invited you if you're unsure.
                         </Text>
@@ -1748,9 +1759,10 @@ export default function WelcomeScreen() {
                             />
 
                             <TextInput
-                                accessibilityLabel="Community Node URL"
+                                accessibilityLabel="Community name or node address"
+                                accessibilityHint="Enter your community name, like mullum, or its full address"
                                 style={styles.input}
-                                placeholder="Community Node (e.g. test.beanpool.org)"
+                                placeholder="Community name or address (e.g. mullum)"
                                 placeholderTextColor={colors.text.muted}
                                 value={recoveryAnchorUrl}
                                 onChangeText={setRecoveryAnchorUrl}
@@ -1759,6 +1771,14 @@ export default function WelcomeScreen() {
                                 keyboardType="url"
                                 editable={!loading}
                             />
+                            {/* Shown, not assumed — see isBareCommunityName. A community on its
+                                own domain has a name that expands to the wrong address. */}
+                            {isBareCommunityName(recoveryAnchorUrl) && (
+                                <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
+                                    Will connect to {normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '')} — if your
+                                    community is hosted elsewhere, enter its full address instead.
+                                </Text>
+                            )}
 
                             {loading && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">

@@ -110,3 +110,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-05 - O(C) Category Lookups in Native MarketScreen
 **Learning:** In `apps/native/app/(tabs)/index.tsx`, looking up selected category metadata and mapped interest emojis repeatedly called `MARKETPLACE_CATEGORIES.find(c => c.id === ...)` on render cycles.
 **Action:** Exported `MARKETPLACE_CATEGORIES_BY_ID` Map in `apps/native/app/(tabs)/index.tsx` and replaced `.find(...)` scans with constant-time `MARKETPLACE_CATEGORIES_BY_ID.get(...)` lookups.
+
+## 2026-09-10 - Single-pass N-gram Search Keyword Expansion in Engine
+**Learning:** In `packages/beanpool-engine/src/posts.ts`, `generateSearchKeywords` previously re-parsed input strings via `text.split(/\s+/)` and performed nested array loops for 2-gram and 3-gram synonym matching.
+**Action:** Refactored keyword generation to run in a single pass over pre-tokenized words, building n-gram strings inline to eliminate redundant allocations and loop overhead.

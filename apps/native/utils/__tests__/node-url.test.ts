@@ -50,3 +50,31 @@ describe('isBareCommunityName — so a screen can show the guess before making i
         expect(isBareCommunityName('')).toBe(false);
     });
 });
+
+describe('edge cases that were wrong before review', () => {
+    it('does not treat a name merely starting with "http" as a scheme', () => {
+        // startsWith('http') said yes to this, so it never expanded.
+        expect(normalizeNodeUrl('httppool')).toBe('https://httppool.beanpool.org');
+        expect(isBareCommunityName('httppool')).toBe(true);
+    });
+
+    it('handles an uppercase scheme instead of bolting a second one on the front', () => {
+        expect(normalizeNodeUrl('HTTP://node.example.com')).toBe('HTTP://node.example.com');
+        expect(isBareCommunityName('HTTPS://mullum.beanpool.org')).toBe(false);
+    });
+
+    it('does not downgrade a public host that merely begins with "localhost"', () => {
+        // This branch picks http://, so the old prefix check was a cleartext downgrade for an
+        // attacker-controlled domain.
+        expect(normalizeNodeUrl('localhost.attacker.com')).toBe('https://localhost.attacker.com');
+        expect(normalizeNodeUrl('localhost-phish.org')).toBe('https://localhost-phish.org');
+        expect(normalizeNodeUrl('localhost')).toBe('http://localhost');
+        expect(normalizeNodeUrl('localhost:8443')).toBe('http://localhost:8443');
+    });
+
+    it('refuses a name that would build an invalid hostname label', () => {
+        expect(isBareCommunityName('mullum-')).toBe(false);
+        expect(isBareCommunityName('-mullum')).toBe(false);
+        expect(isBareCommunityName('mull-um')).toBe(true);
+    });
+});

@@ -13,6 +13,28 @@
 const COMMUNITY_DOMAIN = 'beanpool.org';
 
 /**
+ * A real scheme, not merely a string starting with "http".
+ *
+ * `startsWith('http')` said yes to the community name `httppool`, which then never expanded, and
+ * said no to `HTTP://node.example.com`, which then got a second scheme bolted on the front.
+ */
+const SCHEME = /^https?:\/\//i;
+
+/**
+ * Localhost EXACTLY, optionally with a port.
+ *
+ * `startsWith('localhost')` also matched `localhost.attacker.com`, and the consequence was not
+ * cosmetic: that branch chooses http://, so a public attacker-controlled domain was being
+ * downgraded to cleartext.
+ */
+const LOCALHOST = /^localhost(:\d+)?$/i;
+
+const IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/;
+
+/** A hostname label: alphanumeric ends, hyphens only inside. `mullum-` is not a valid label. */
+const BARE_NAME = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
+
+/**
  * Accept a community name OR a node address, and return a URL.
  *
  * A bare word becomes `<name>.beanpool.org`. Anything with a dot, a scheme, a port, an IP or
@@ -36,23 +58,16 @@ const COMMUNITY_DOMAIN = 'beanpool.org';
  */
 export function isBareCommunityName(raw: string): boolean {
     const u = raw.trim();
-    if (!u || u.startsWith('http')) return false;
-    if (/^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(u) || u.startsWith('localhost')) return false;
-    return /^[a-z0-9][a-z0-9-]*$/i.test(u);
+    if (!u || SCHEME.test(u) || IPV4.test(u) || LOCALHOST.test(u)) return false;
+    return BARE_NAME.test(u);
 }
 
 export function normalizeNodeUrl(raw: string): string {
     const u = raw.trim();
     if (!u) return '';
-    if (u.startsWith('http')) return u;
-
-    const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(u) || u.startsWith('localhost');
-    if (isIpOrLocal) return 'http://' + u;
-
-    // A bare community name: no dot, no port, no path. Anything else is already an address.
-    if (/^[a-z0-9][a-z0-9-]*$/i.test(u)) {
-        return `https://${u.toLowerCase()}.${COMMUNITY_DOMAIN}`;
-    }
+    if (SCHEME.test(u)) return u;
+    if (IPV4.test(u) || LOCALHOST.test(u)) return 'http://' + u;
+    if (BARE_NAME.test(u)) return `https://${u.toLowerCase()}.${COMMUNITY_DOMAIN}`;
     return 'https://' + u;
 }
 

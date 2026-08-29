@@ -238,7 +238,8 @@ export default function RecoverIdentityScreen() {
                                 autoCapitalize="none"
                             />
                             <TextInput
-                                accessibilityLabel="Community Node URL"
+                                accessibilityLabel="Community name or node address"
+                                accessibilityHint="Enter your community name, like mullum, or its full address"
                                 style={styles.input}
                                 placeholder="Community name or address (e.g. mullum)"
                                 placeholderTextColor={colors.text.muted}
@@ -252,7 +253,7 @@ export default function RecoverIdentityScreen() {
                                 community on its own domain it is the wrong one — so the member
                                 sees the address before it is used, and can correct it. */}
                             {isBareCommunityName(anchorUrl) && (
-                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: -8, marginBottom: 12, marginLeft: 4 }}>
+                                <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -8, marginBottom: 12, marginLeft: 4 }}>
                                     Will connect to {normalizeNodeUrl(anchorUrl).replace('https://', '')} — if your
                                     community is hosted elsewhere, enter its full address instead.
                                 </Text>

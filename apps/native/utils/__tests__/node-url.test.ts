@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeNodeUrl, looksLikeNodeAddress } from '../node-url';
+import { normalizeNodeUrl, looksLikeNodeAddress, isBareCommunityName } from '../node-url';
 
 describe('normalizeNodeUrl — community name or node address', () => {
     it('expands a bare community name', () => {
@@ -32,5 +32,21 @@ describe('normalizeNodeUrl — community name or node address', () => {
     it('produces something looksLikeNodeAddress accepts, which a bare name did not before', () => {
         expect(looksLikeNodeAddress(normalizeNodeUrl('mullum'))).toBe(true);
         expect(looksLikeNodeAddress(normalizeNodeUrl('localhost:8443'))).toBe(true);
+    });
+});
+
+describe('isBareCommunityName — so a screen can show the guess before making it', () => {
+    it('flags bare names, which are the only ones that get expanded', () => {
+        expect(isBareCommunityName('mullum')).toBe(true);
+        expect(isBareCommunityName('yarra-valley')).toBe(true);
+    });
+
+    it('does not flag anything already an address', () => {
+        // A community on its own domain must never be silently redirected to beanpool.org.
+        expect(isBareCommunityName('beans.mycommunity.nz')).toBe(false);
+        expect(isBareCommunityName('https://mullum.beanpool.org')).toBe(false);
+        expect(isBareCommunityName('192.168.1.10:8443')).toBe(false);
+        expect(isBareCommunityName('localhost:8443')).toBe(false);
+        expect(isBareCommunityName('')).toBe(false);
     });
 });

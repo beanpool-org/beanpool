@@ -26,6 +26,21 @@ const COMMUNITY_DOMAIN = 'beanpool.org';
  * http:// for raw IPs and localhost, https:// for everything else. Returns '' for blank input.
  * Idempotent for full URLs.
  */
+/**
+ * True when `raw` is a bare community name that `normalizeNodeUrl` will expand.
+ *
+ * Exposed so a screen can SHOW the member what it resolved to. The expansion is a guess, and a
+ * wrong guess is dangerous: a community hosted on its own domain — `beans.mycommunity.nz` — has a
+ * name that expands to a `beanpool.org` address which is either nothing, or somebody else's node.
+ * Silently sending a member there while they are recovering is worse than asking them to type more.
+ */
+export function isBareCommunityName(raw: string): boolean {
+    const u = raw.trim();
+    if (!u || u.startsWith('http')) return false;
+    if (/^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(u) || u.startsWith('localhost')) return false;
+    return /^[a-z0-9][a-z0-9-]*$/i.test(u);
+}
+
 export function normalizeNodeUrl(raw: string): string {
     const u = raw.trim();
     if (!u) return '';

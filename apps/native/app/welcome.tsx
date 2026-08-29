@@ -33,7 +33,7 @@ import { type SsoProvider } from '../utils/sso-signin';
 
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
-import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
@@ -1759,6 +1759,14 @@ export default function WelcomeScreen() {
                                 keyboardType="url"
                                 editable={!loading}
                             />
+                            {/* Shown, not assumed — see isBareCommunityName. A community on its
+                                own domain has a name that expands to the wrong address. */}
+                            {isBareCommunityName(recoveryAnchorUrl) && (
+                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
+                                    Will connect to {normalizeNodeUrl(recoveryAnchorUrl).replace('https://', '')} — if your
+                                    community is hosted elsewhere, enter its full address instead.
+                                </Text>
+                            )}
 
                             {loading && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">

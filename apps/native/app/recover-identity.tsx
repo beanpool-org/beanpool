@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lookupRecoveryCallsign } from '../utils/db';
-import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName } from '../utils/node-url';
 import { colors } from '../constants/colors';
 import { useIdentity } from './IdentityContext';
 import { verifyRecoveryPin } from '../utils/pin';
@@ -248,6 +248,15 @@ export default function RecoverIdentityScreen() {
                                 autoCorrect={false}
                                 keyboardType="url"
                             />
+                            {/* Shown, not assumed. Expanding a bare name is a guess, and for a
+                                community on its own domain it is the wrong one — so the member
+                                sees the address before it is used, and can correct it. */}
+                            {isBareCommunityName(anchorUrl) && (
+                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: -8, marginBottom: 12, marginLeft: 4 }}>
+                                    Will connect to {normalizeNodeUrl(anchorUrl).replace('https://', '')} — if your
+                                    community is hosted elsewhere, enter its full address instead.
+                                </Text>
+                            )}
                             <Text style={styles.fieldHint}>
                                 Required — the community node that holds your account. Ask whoever invited you if you're unsure.
                             </Text>

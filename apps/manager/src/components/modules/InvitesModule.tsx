@@ -101,12 +101,18 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
         handleCopy(text, 'all_links');
     };
 
+    const escapeHtml = (str?: string) =>
+        (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
     const handlePrintCards = () => {
         const printWindow = window.open('', '_blank');
         if (!printWindow) {
             alert('Please allow popups to view printable invite cards.');
             return;
         }
+
+        const safeNodeName = escapeHtml(activeNode?.name || 'Sovereign Node');
+        const safeNodeUrl = escapeHtml(activeNode?.url || '');
 
         const cardsHtml = generatedTokens
             .map(
@@ -115,11 +121,11 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #15803d; padding-bottom: 10px; margin-bottom: 15px;">
                     <div>
                         <strong style="color: #4ade80; font-size: 16px; text-transform: uppercase;">🌱 SOVEREIGN BEANPOOL ONBOARDING PASS</strong>
-                        <div style="font-size: 12px; color: #86efac; margin-top: 2px;">Target Node: ${activeNode?.name || 'Sovereign Node'} (${activeNode?.url})</div>
+                        <div style="font-size: 12px; color: #86efac; margin-top: 2px;">Target Node: ${safeNodeName} (${safeNodeUrl})</div>
                     </div>
                     <div style="text-align: right;">
                         <span style="background: #15803d; color: #ffffff; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: bold;">
-                            ${getTierBadge(item.tier)}
+                            ${escapeHtml(getTierBadge(item.tier))}
                         </span>
                     </div>
                 </div>
@@ -131,12 +137,12 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
                     <div style="flex: 1; space-y: 8px;">
                         <div style="font-size: 11px; color: #86efac; text-transform: uppercase; letter-spacing: 1px;">Single-Use Onboarding Code:</div>
-                        <div style="font-size: 22px; font-weight: 900; color: #4ade80; letter-spacing: 2px;">${item.code}</div>
+                        <div style="font-size: 22px; font-weight: 900; color: #4ade80; letter-spacing: 2px;">${escapeHtml(item.code)}</div>
                         <div style="font-size: 11px; color: #a7f3d0; margin-top: 8px;">
                             Scan the QR code with your camera or open this URL in your web browser:
                         </div>
                         <div style="font-size: 11px; color: #6ee7b7; word-break: break-all; font-weight: bold; background: rgba(0,0,0,0.3); padding: 6px 10px; border-radius: 6px; border: 1px solid #15803d;">
-                            ${item.fullUrl}
+                            ${escapeHtml(item.fullUrl)}
                         </div>
                     </div>
                 </div>
@@ -154,7 +160,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
             <!DOCTYPE html>
             <html>
                 <head>
-                    <title>BeanPool Onboarding Passes — ${activeNode?.name || 'Sovereign Node'}</title>
+                    <title>BeanPool Onboarding Passes — ${safeNodeName}</title>
                     <style>
                         body { background: #022c22; color: #fff; padding: 40px; }
                         @media print {

@@ -63,3 +63,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** Vite proxy router checked host strings with `.split(':')[0]`, which returned an empty string for bracketed IPv6 addresses like `[::ffff:169.254.169.254]`, bypassing the metadata blocklist.
 **Learning:** Naive string splitting on colons breaks when parsing IPv6 literals containing colons.
 **Prevention:** Parse bracketed IPv6 hostnames using regex matching before removing port numbers and checking against link-local/cloud metadata blocklists.
+
+## 2026-08-26 - Un-sanitized HTML Interpolation in Printable Onboarding Passes
+**Vulnerability:** Node name, node URL, invite code, full URL, and tier badge were interpolated into HTML string template without entity escaping before document.write in printable invite card generation.
+**Learning:** Writing raw string templates into document.write allows DOM-based XSS when dynamic values contain HTML tags or quotes.
+**Prevention:** Always sanitize dynamic strings using HTML entity escaping before interpolating into HTML template strings rendered via document.write.

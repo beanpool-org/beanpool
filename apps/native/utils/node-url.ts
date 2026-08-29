@@ -4,16 +4,41 @@
  */
 
 /**
- * Add a scheme if the user left it off: http:// for raw IPs and localhost, https://
- * for everything else. Returns '' for blank input. Idempotent for full URLs.
+ * The domain community names expand under.
+ *
+ * Every node that claims a name through the registrar gets `<name>.beanpool.org`, so the expansion
+ * is deterministic rather than a guess. A node on its own domain is unaffected — it is typed in
+ * full and passes through untouched.
+ */
+const COMMUNITY_DOMAIN = 'beanpool.org';
+
+/**
+ * Accept a community name OR a node address, and return a URL.
+ *
+ * A bare word becomes `<name>.beanpool.org`. Anything with a dot, a scheme, a port, an IP or
+ * localhost is treated as an address and only gains a scheme.
+ *
+ * The reason is recovery. A member restoring an account has lost their phone, and asking them to
+ * reproduce `mullum.beanpool.org` exactly is a poor thing to ask at that moment — where "which
+ * community are you part of?" is something they simply know. Bare names were previously rejected
+ * outright by `looksLikeNodeAddress`, which requires a dotted host.
+ *
+ * http:// for raw IPs and localhost, https:// for everything else. Returns '' for blank input.
+ * Idempotent for full URLs.
  */
 export function normalizeNodeUrl(raw: string): string {
     let u = raw.trim();
-    if (u && !u.startsWith('http')) {
-        const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(u) || u.startsWith('localhost');
-        u = (isIpOrLocal ? 'http://' : 'https://') + u;
+    if (!u) return '';
+    if (u.startsWith('http')) return u;
+
+    const isIpOrLocal = /^(?:\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(u) || u.startsWith('localhost');
+    if (isIpOrLocal) return 'http://' + u;
+
+    // A bare community name: no dot, no port, no path. Anything else is already an address.
+    if (/^[a-z0-9][a-z0-9-]*$/i.test(u)) {
+        return `https://${u.toLowerCase()}.${COMMUNITY_DOMAIN}`;
     }
-    return u;
+    return 'https://' + u;
 }
 
 /**

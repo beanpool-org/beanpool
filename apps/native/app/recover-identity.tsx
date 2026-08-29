@@ -58,7 +58,7 @@ export default function RecoverIdentityScreen() {
         }
         const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
@@ -240,7 +240,7 @@ export default function RecoverIdentityScreen() {
                             <TextInput
                                 accessibilityLabel="Community Node URL"
                                 style={styles.input}
-                                placeholder="Community Node URL (e.g. node.yourcommunity.org)"
+                                placeholder="Community name or address (e.g. mullum)"
                                 placeholderTextColor={colors.text.muted}
                                 value={anchorUrl}
                                 onChangeText={setAnchorUrl}

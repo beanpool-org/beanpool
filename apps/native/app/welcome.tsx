@@ -405,7 +405,7 @@ export default function WelcomeScreen() {
             return;
         }
         if (!looksLikeNodeAddress(nodeUrl)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
             return;
         }
         if (shouldBlockCleartextNodeUrl(nodeUrl)) {
@@ -597,7 +597,7 @@ export default function WelcomeScreen() {
         }
         const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
@@ -676,7 +676,7 @@ export default function WelcomeScreen() {
         }
         const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError("That node address doesn't look right. Use something like node.yourcommunity.org");
+            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
@@ -1750,7 +1750,7 @@ export default function WelcomeScreen() {
                             <TextInput
                                 accessibilityLabel="Community Node URL"
                                 style={styles.input}
-                                placeholder="Community Node (e.g. test.beanpool.org)"
+                                placeholder="Community name or address (e.g. mullum)"
                                 placeholderTextColor={colors.text.muted}
                                 value={recoveryAnchorUrl}
                                 onChangeText={setRecoveryAnchorUrl}

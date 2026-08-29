@@ -75,11 +75,19 @@ export default function WelcomeScreen() {
     /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
     const [ssoCandidates, setSsoCandidates] = useState<any[]>([]);
     const [ssoLookupBusy, setSsoLookupBusy] = useState(false);
+    /** Set when a candidate is tapped, so the write to ssoCallsign does not re-open the picker. */
+    const skipNextSsoLookupRef = useRef(false);
 
     // Look up as they type, on the prefix. A member given `paul12` because `paul` was taken has no
     // reason to remember the digits months later, and being told "no account" reads as "it is gone".
     // Debounced because this fires per keystroke against a node that may be a Raspberry Pi.
     useEffect(() => {
+        // Tapping a candidate writes the full callsign here, which matches itself on the server and
+        // would put the list straight back up under the member's finger.
+        if (skipNextSsoLookupRef.current) {
+            skipNextSsoLookupRef.current = false;
+            return;
+        }
         const typed = ssoCallsign.trim();
         const anchor = normalizeNodeUrl(recoveryAnchorUrl.trim());
         if (typed.length < 2 || !looksLikeNodeAddress(anchor)) {
@@ -1787,16 +1795,22 @@ export default function WelcomeScreen() {
                                 chose months ago — and the node only lists accounts that actually
                                 have a sign-in fragment, so none of these is a dead end. */}
                             {!loading && ssoCandidates.length > 0 && (
-                                <View style={{ marginTop: -6, marginBottom: 12 }}>
+                                <View accessibilityLiveRegion="polite" style={{ marginTop: -6, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6, marginLeft: 4 }}>
                                         {ssoCandidates.length === 1 ? 'Is this you?' : 'Which one is you?'}
                                     </Text>
                                     {ssoCandidates.map((c: any) => (
                                         <Pressable
                                             key={c.publicKey}
-                                            onPress={() => { setSsoCallsign(c.callsign); setSsoCandidates([]); }}
+                                            onPress={() => {
+                                                skipNextSsoLookupRef.current = true;
+                                                setSsoCallsign(c.callsign);
+                                                setSsoCandidates([]);
+                                            }}
+                                            accessible
                                             accessibilityRole="button"
-                                            accessibilityLabel={`Recover the account ${c.callsign}`}
+                                            accessibilityLabel={`Select the account ${c.callsign}`}
+                                            accessibilityHint="Uses this account for recovery"
                                             style={{
                                                 flexDirection: 'row', alignItems: 'center', gap: 10,
                                                 paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
@@ -1810,7 +1824,7 @@ export default function WelcomeScreen() {
                                 </View>
                             )}
                             {!loading && ssoLookupBusy && ssoCandidates.length === 0 && (
-                                <Text style={{ fontSize: 12, color: colors.text.muted, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
+                                <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.muted, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
                                     Looking for your account…
                                 </Text>
                             )}

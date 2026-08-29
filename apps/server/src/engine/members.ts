@@ -112,30 +112,40 @@ export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
     // The guardian floor moved out of the WHERE clause: it decides which BUTTON to offer, not
     // whether the account exists. Filtering on it hid every SSO-only member from a lookup they are
     // perfectly able to recover through.
+    // `%` and `_` are LIKE wildcards. Bound straight in, a caller could send `%` and enumerate the
+    // whole node from an unauthenticated endpoint — which is precisely what the rate limit on this
+    // route exists to bound, so leaving it would have undone that.
+    const escaped = norm.replace(/[\\%_]/g, c => '\\' + c);
+
+    // Eligibility is decided in SQL, not afterwards in JS. With the filter applied after LIMIT,
+    // twenty matching-but-unrecoverable accounts consumed the whole limit and the caller got an
+    // empty list — hiding a recoverable member behind namesakes who happen to sort earlier.
     const rows = db.prepare(`
-        SELECT m.public_key, m.callsign, m.joined_at, m.avatar_url,
-               (SELECT COUNT(*) FROM friends f
-                 WHERE f.owner_pubkey = m.public_key AND f.is_guardian = 1) AS guardian_count,
-               (SELECT COUNT(*) FROM recovery_shares s
-                 WHERE s.owner_pubkey = m.public_key AND s.holder_type = 'sso'
-                   AND s.generation = (SELECT MAX(generation) FROM recovery_shares
-                                        WHERE owner_pubkey = m.public_key)) AS sso_count
-        FROM members m
-        WHERE lower(m.callsign) LIKE ? || '%' AND m.status NOT IN ('migrated', 'pruned')
-        ORDER BY length(m.callsign), m.callsign
+        SELECT * FROM (
+            SELECT m.public_key, m.callsign, m.joined_at, m.avatar_url,
+                   (SELECT COUNT(*) FROM friends f
+                     WHERE f.owner_pubkey = m.public_key AND f.is_guardian = 1) AS guardian_count,
+                   (SELECT COUNT(*) FROM recovery_shares s
+                     WHERE s.owner_pubkey = m.public_key AND s.holder_type = 'sso'
+                       AND s.generation = (SELECT MAX(generation) FROM recovery_shares
+                                            WHERE owner_pubkey = m.public_key)) AS sso_count
+            FROM members m
+            WHERE lower(m.callsign) LIKE ? ESCAPE '\\'
+              AND m.status NOT IN ('migrated', 'pruned')
+        )
+        WHERE guardian_count >= ? OR sso_count > 0
+        ORDER BY length(callsign), callsign
         LIMIT ?
-    `).all(norm, RECOVERY_CANDIDATE_LIMIT) as any[];
-    return rows
-        .map(r => ({
-            publicKey: r.public_key,
-            callsign: r.callsign,
-            joinedAt: r.joined_at,
-            avatarUrl: r.avatar_url,
-            canRecoverByGuardians: Number(r.guardian_count) >= RECOVERY_MIN_GUARDIANS,
-            canRecoverBySso: Number(r.sso_count) > 0,
-        }))
-        // An account with neither is not a recovery target, and listing it only offers a dead end.
-        .filter(c => c.canRecoverByGuardians || c.canRecoverBySso);
+    `).all(escaped + '%', RECOVERY_MIN_GUARDIANS, RECOVERY_CANDIDATE_LIMIT) as any[];
+
+    return rows.map(r => ({
+        publicKey: r.public_key,
+        callsign: r.callsign,
+        joinedAt: r.joined_at,
+        avatarUrl: r.avatar_url,
+        canRecoverByGuardians: Number(r.guardian_count) >= RECOVERY_MIN_GUARDIANS,
+        canRecoverBySso: Number(r.sso_count) > 0,
+    }));
 }
 
 /**

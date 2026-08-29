@@ -90,6 +90,12 @@ function main() {
     assert(findRecoveryCandidates('ripp').length >= 1, 'a prefix finds the account whose full callsign the member has forgotten');
     assert(findRecoveryCandidates('rippleX').length === 0, 'a prefix that matches nobody still returns nobody');
 
+    // A LIKE wildcard bound straight in would let an unauthenticated caller enumerate the node,
+    // which is exactly what the rate limit on this route exists to bound.
+    assert(findRecoveryCandidates('%').length === 0, 'a bare % is a literal, not a wildcard');
+    assert(findRecoveryCandidates('_').length === 0, 'a bare _ is a literal, not a wildcard');
+    assert(findRecoveryCandidates('rip%').length === 0, 'a trailing % does not widen the match');
+
     // The response must stay public-safe: this endpoint is unauthenticated.
     //
     // Widened deliberately to six. The two additions are BOOLEANS — whether guardian recovery and

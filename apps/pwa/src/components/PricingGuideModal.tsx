@@ -154,14 +154,14 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                             placeholder="Search produce, services, trades, gear..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-8 py-2 text-sm rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full pl-9 pr-10 py-2 text-sm rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                         {searchQuery && (
                             <button
                                 type="button"
                                 aria-label="Clear search"
                                 onClick={() => setSearchQuery('')}
-                                className="absolute right-3 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
+                                className="absolute right-1.5 p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 ✕
                             </button>

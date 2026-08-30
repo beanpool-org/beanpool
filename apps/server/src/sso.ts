@@ -444,25 +444,6 @@ export async function verifyIdToken(
     }
 
     if (provider === 'github') {
-        const parts = idToken?.split('.');
-        if (parts && parts.length === 3) {
-            const [, payloadB64] = parts;
-            const claims = decodeSegment(payloadB64, config.label);
-            if (!claims.sub) throw new SsoVerificationError('GitHub token has no subject.');
-            if (!consumeNonce(expectedNonce, subject)) {
-                throw new SsoVerificationError('GitHub sign-in could not be matched to this request.');
-            }
-            return {
-                provider: 'github',
-                sub: String(claims.sub),
-                email: claims.email ? String(claims.email) : undefined,
-                emailVerified: coerceBoolean(claims.email_verified),
-                audience: String(claims.aud || allowedAudiences[0] || 'github'),
-                issuedAt: Number(claims.iat ?? Math.floor(Date.now() / 1000)),
-                expiresAt: Number(claims.exp ?? Math.floor(Date.now() / 1000) + 3600),
-            };
-        }
-
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 8000);

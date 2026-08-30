@@ -687,6 +687,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                                     -- attached to the dead key and the chips vanish from the
                                     -- member's profile after a recovery.
                                     owner_pubkey      = excluded.owner_pubkey,
+                                    -- platform is scrubbed to 'deleted' by deleteChannel, so it
+                                    -- has to converge like the rest. Omitted, a replica that held
+                                    -- the live row keeps its original platform forever after
+                                    -- importing its tombstone.
+                                    platform          = excluded.platform,
                                     url               = excluded.url,
                                     handle            = excluded.handle,
                                     category          = excluded.category,

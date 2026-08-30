@@ -57,7 +57,10 @@ function canAutolist(platform: ChannelPlatform, url: string): boolean {
         // Only the channel-shaped forms have an RSS feed behind them.
         return /\/(channel|c|user)\/|\/@|\/feeds\/videos\.xml/.test(url);
     }
-    return true;
+    // A site root pasted under "Blog / RSS" is a website, not a feed. Phase 2's resolver can run
+    // feed autodiscovery and flip this on once it has actually found one; until then, promising
+    // "Updates itself" is a promise nothing here can keep.
+    return /(\/feed\b|\/rss\b|\/atom\b|\.xml(\?|$)|\.rss(\?|$)|\/feeds?\/)/i.test(url);
 }
 
 /** Platforms that carry video, and so can collide when a creator cross-posts. */
@@ -388,6 +391,11 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
         parsed.pathname = '/profile.php';
+    } else if (platform === 'facebook' && FB_PREFIX_DEPTH.has(segments[0] || '') && !segments[1]) {
+        // `/groups/`, `/share/`, `/pages/` with nothing after them fell through to the generic
+        // branch and stored `facebook.com/groups` with handle `groups` — a dead link that every
+        // such paste then collided with.
+        throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
     } else if (platform === 'facebook' && /^profile\.php$/i.test(segments[0] || '')) {
         // Reached only when there was no `id` to keep — `/profile.php` alone identifies nobody, and
         // storing it would put a dead link on the profile with "profile.php" as the handle.
@@ -529,7 +537,7 @@ export function addChannel(input: {
 
     const existing = listChannels(input.ownerPubkey);
     if (existing.length >= MAX_CHANNELS_PER_MEMBER) {
-        throw new ChannelError('TOO_MANY', `You can have up to ${MAX_CHANNELS_PER_MEMBER} channels.`);
+        throw new ChannelError('AT_LIMIT', `You can have up to ${MAX_CHANNELS_PER_MEMBER} channels. Remove one first.`);
     }
     // Tombstones are NEVER hard-deleted. The delta exporter selects on `updated_at >= since` and
     // the importer is upsert-only, so a row removed here is a row a lagging replica never hears

@@ -35,6 +35,9 @@ function channelErrorStatus(code: string): number {
         case 'NOT_FOUND': return 404;
         case 'NOT_YOURS': return 403;
         case 'DUPLICATE': return 409;
+        // A standing limit, not a rate: 429 would invite the client to retry, and retrying never
+        // helps — the member has to remove a channel first.
+        case 'AT_LIMIT': return 409;
         case 'TOO_MANY': return 429;
         default: return 400;
     }

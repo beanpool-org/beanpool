@@ -305,7 +305,16 @@ export default function ChannelsScreen() {
                                     <Text style={styles.cardMeta}>
                                         {channel.supportsAutolist
                                             ? 'Updates itself'
-                                            : LISTING_LABEL[platformMeta(channel.platform).listing]}
+                                            // Never fall back to the platform's own label here: a
+                                            // youtu.be link is stored on YouTube with
+                                            // supports_autolist = 0, and YouTube's static label is
+                                            // "updates itself" — the exact claim the server just
+                                            // declined to make.
+                                            : LISTING_LABEL[
+                                                platformMeta(channel.platform).listing === 'auto'
+                                                    ? 'manual'
+                                                    : platformMeta(channel.platform).listing
+                                            ]}
                                         {channel.isPrimaryVideo ? ' · main video channel' : ''}
                                     </Text>
 

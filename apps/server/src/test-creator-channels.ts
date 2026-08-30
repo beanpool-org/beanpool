@@ -242,6 +242,14 @@ async function main(): Promise<void> {
     const chanUrl = addChannel({ ownerPubkey: marty, platform: 'youtube', raw: 'https://www.youtube.com/channel/UCabc123def456ghi789jk', category: 'craft' });
     assert(chanUrl.supportsAutolist === true, 'a youtube channel URL is auto-listing');
 
+    // A site root under "Blog / RSS" is a website, not a feed, and must not promise to update itself.
+    const siteRoot = addChannel({ ownerPubkey: marty, platform: 'rss', raw: 'https://blog.example.org/', category: 'art' });
+    assert(siteRoot.supportsAutolist === false, 'a site root added as RSS is not auto-listing');
+    const realFeed = addChannel({ ownerPubkey: marty, platform: 'rss', raw: 'https://blog.example.org/feed', category: 'art' });
+    assert(realFeed.supportsAutolist === true, 'an actual feed URL is auto-listing');
+    assertThrows(() => normaliseChannelInput('facebook', 'https://www.facebook.com/groups/'),
+        'NO_HANDLE', 'a facebook prefix with nothing after it is not an account');
+
     // ── 3. Primary switching ────────────────────────────────────────────────────────────────
     updateChannel(kayla, yt.id, { isPrimaryVideo: true });
     const afterSwitch = listChannels(kayla);
@@ -330,9 +338,18 @@ async function main(): Promise<void> {
     assert(exportedTomb?.url === null, 'the exported tombstone carries no URL');
 
     // ── 8. Import converges, and never resurrects a deleted link ────────────────────────────
-    // Wipe locally, then import the payload back as a backup node would.
-    db.prepare(`DELETE FROM creator_channels`).run();
-    assert(listChannels(kayla).length === 0, 'local channels cleared before the import test');
+    // Deliberately NOT wiped first for the tombstone: a replica that already holds the LIVE row and
+    // then imports its tombstone takes the ON CONFLICT path, which is where a missing column in the
+    // update set list hides. Restore the live row, then import over it.
+    db.prepare(
+        `UPDATE creator_channels
+            SET deleted_at = NULL, url = ?, handle = ?, platform = 'instagram', category = 'craft',
+                updated_at = '2000-01-01T00:00:00.000Z'
+          WHERE id = ?`
+    ).run('https://www.instagram.com/mullum_ceramics/', '@mullum_ceramics', ig.id);
+    const preConflict = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(ig.id) as any;
+    assert(preConflict.platform === 'instagram' && preConflict.url !== null,
+        'the live row is staged so the import takes the conflict path, not the insert path');
 
     setNodeRole('backup');
     await importRemoteState(payload as any);
@@ -342,6 +359,8 @@ async function main(): Promise<void> {
     const reimportedTomb = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(ig.id) as any;
     assert(!!reimportedTomb?.deleted_at, 'the deleted channel imports as a tombstone, not as a live channel');
     assert(reimportedTomb?.url === null, 'the deleted URL is NOT resurrected by a restore');
+    assert(reimportedTomb?.platform === 'deleted' && reimportedTomb?.handle === null,
+        'the scrub converges over an existing live row — not only on the insert path');
 
     // A stale copy of the row must lose to the newer local one, or a lagging backup could revive
     // a channel the member deleted after the snapshot was taken.

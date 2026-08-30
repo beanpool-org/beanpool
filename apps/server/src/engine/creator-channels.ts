@@ -126,6 +126,51 @@ const CANONICAL_HOST: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
  */
 const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set(['youtu.be', 'vm.tiktok.com', 'fb.me', 'instagr.am']);
 
+/** Tracking parameters that differ per share and would defeat de-duplication. */
+const TRACKING_PARAMS = [/^utm_/i, /^fbclid$/i, /^igsh(id)?$/i, /^gclid$/i, /^si$/i, /^mc_[ce]id$/i];
+
+/**
+ * Reject anything that resolves inside the node's own network.
+ *
+ * A member-supplied `website`/`rss` URL is stored on a publicly-readable profile row and, from
+ * Phase 2, is fetched by the node's resolver. A stored `http://169.254.169.254/latest/meta-data/`
+ * would make that resolver read cloud metadata on the Binary Lane VMs, and `http://localhost:…`
+ * would point it at the node's own admin surface.
+ *
+ * This is input validation, not the fetch-time guard — the resolver must still resolve DNS and
+ * re-check the address, because a public hostname can point anywhere. Rejecting the obvious cases
+ * here means they never reach the database in the first place.
+ */
+function assertPublicHostname(hostname: string): void {
+    const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+
+    if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
+        host.endsWith('.internal') || host.endsWith('.home.arpa')) {
+        throw new ChannelError('PRIVATE_HOST', 'That address is not reachable from the internet.');
+    }
+    // IPv6 loopback, link-local (fe80::/10) and unique-local (fc00::/7).
+    if (host === '::1' || host === '::' || /^fe[89ab][0-9a-f]:/i.test(host) || /^f[cd][0-9a-f]{2}:/i.test(host)) {
+        throw new ChannelError('PRIVATE_HOST', 'That address is not reachable from the internet.');
+    }
+    const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (v4) {
+        const [a, b] = [Number(v4[1]), Number(v4[2])];
+        if (a === 0 || a === 10 || a === 127 ||
+            (a === 169 && b === 254) ||               // link-local, incl. cloud metadata
+            (a === 172 && b >= 16 && b <= 31) ||
+            (a === 192 && b === 168) ||
+            (a === 100 && b >= 64 && b <= 127) ||     // carrier-grade NAT
+            a >= 224) {                                // multicast and reserved
+            throw new ChannelError('PRIVATE_HOST', 'That address is not reachable from the internet.');
+        }
+        return;
+    }
+    // A hostname with no dot is a bare machine name on the local network, not a website.
+    if (!host.includes('.')) {
+        throw new ChannelError('BAD_URL', 'That does not look like a website address.');
+    }
+}
+
 function hostMatches(host: string, allowed: string[]): boolean {
     const h = host.toLowerCase().replace(/^www\./, '');
     return allowed.some(a => h === a || h.endsWith('.' + a));
@@ -192,6 +237,7 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
             parsed.hostname = CANONICAL_HOST[platform];
         }
     } else {
+        assertPublicHostname(parsed.hostname);
         parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
     }
 
@@ -201,7 +247,19 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     const fbProfileId = (platform === 'facebook' && /^\/profile\.php\/?$/i.test(parsed.pathname))
         ? parsed.searchParams.get('id')
         : null;
-    parsed.search = fbProfileId ? `?id=${encodeURIComponent(fbProfileId)}` : '';
+    if (platform === 'website' || platform === 'rss') {
+        // A feed URL's identity often lives in the query string —
+        // `youtube.com/feeds/videos.xml?channel_id=UC…` is the autolist path itself, and
+        // `?feed=rss2` vs `?feed=atom` are different feeds on the same blog. Dropping it would
+        // store the homepage as the feed and make two distinct feeds collide as duplicates.
+        // Only the tracking parameters go.
+        for (const key of [...parsed.searchParams.keys()]) {
+            if (TRACKING_PARAMS.some(re => re.test(key))) parsed.searchParams.delete(key);
+        }
+        parsed.searchParams.sort();   // stable ordering, so one feed is one string
+    } else {
+        parsed.search = fbProfileId ? `?id=${encodeURIComponent(fbProfileId)}` : '';
+    }
     parsed.hash = '';
     parsed.protocol = 'https:';
 
@@ -222,6 +280,12 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     } else if (platform === 'youtube' && segments[0]?.startsWith('@')) {
         handle = segments[0].toLowerCase();
         parsed.pathname = `/${handle}`;
+    } else if (platform === 'youtube' && ['channel', 'c', 'user'].includes(segments[0]) && segments[1]) {
+        // `/channel/UC…` is the form that maps to the channel RSS feed the autolist path needs, so
+        // it must be accepted — and `/c/` and `/user/` are still all over people's bios. The ID is
+        // case-sensitive here, unlike an @handle.
+        handle = segments[0] === 'channel' ? segments[1] : `@${segments[1]}`;
+        parsed.pathname = `/${segments[0]}/${segments[1]}`;
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
         parsed.pathname = '/profile.php';
@@ -380,7 +444,7 @@ export function updateChannel(
         if (patch.isPrimaryVideo === true) {
             db.prepare(
                 `UPDATE creator_channels SET is_primary_video = 0, updated_at = ?
-                  WHERE owner_pubkey = ? AND deleted_at IS NULL AND id != ?`
+                  WHERE owner_pubkey = ? AND deleted_at IS NULL AND id != ? AND is_primary_video = 1`
             ).run(now, ownerPubkey, id);
         }
         db.prepare(

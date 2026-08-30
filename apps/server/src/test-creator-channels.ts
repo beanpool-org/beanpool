@@ -111,6 +111,37 @@ async function main(): Promise<void> {
     assertThrows(() => normaliseChannelInput('instagram', 'instagram.com'),
         'NO_HANDLE', 'a bare platform domain is rejected — it points at no account');
 
+    // Feed URLs carry their identity in the query string — dropping it stored the homepage as the
+    // feed, and made two distinct feeds on one blog collide as duplicates.
+    assert(normaliseChannelInput('rss', 'https://www.youtube.com/feeds/videos.xml?channel_id=UC123').url
+            .includes('channel_id=UC123'),
+        'an RSS feed keeps its query string — it is the feed identity');
+    assert(normaliseChannelInput('rss', 'https://example.com/?feed=rss2').url
+            !== normaliseChannelInput('rss', 'https://example.com/?feed=atom').url,
+        'two feeds on one blog stay distinct');
+    assert(!normaliseChannelInput('website', 'https://example.com/?utm_source=x&page=2').url.includes('utm_source'),
+        'tracking parameters still go, even on a website');
+
+    // YouTube's non-@ forms, one of which is the only path to the channel RSS feed.
+    assert(normaliseChannelInput('youtube', 'https://www.youtube.com/channel/UCabc123').handle === 'UCabc123',
+        'youtube /channel/UC… is accepted — it is what the autolist feed is built from');
+    assert(normaliseChannelInput('youtube', 'https://www.youtube.com/c/SomeName').handle === '@SomeName',
+        'youtube /c/Name is accepted');
+
+    // These become server-side fetch targets in Phase 2; they must never reach the database.
+    for (const [addr, label] of [
+        ['http://169.254.169.254/latest/meta-data/', 'cloud metadata'],
+        ['http://localhost:8080/admin', 'localhost'],
+        ['http://192.168.1.1/', 'a private LAN address'],
+        ['http://10.0.0.5/', 'a private 10.x address'],
+        ['http://127.0.0.1:3000/', 'loopback'],
+    ] as const) {
+        assertThrows(() => normaliseChannelInput('website', addr),
+            'PRIVATE_HOST', `${label} is refused as a website`);
+    }
+    assertThrows(() => normaliseChannelInput('website', 'notadomain'),
+        'BAD_URL', 'a bare machine name is refused as a website');
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');

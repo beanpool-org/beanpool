@@ -284,7 +284,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -666,6 +666,49 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         ar.createdAt,
                         ar.status || 'pending',
                         ar.updatedAt || ar.createdAt
+                    );
+                }
+            }
+
+            if (remote.creatorChannels) {
+                for (const cc of remote.creatorChannels) {
+                    // Last-write-wins on `updated_at`, same as members and abuse_reports. A delete
+                    // is just a row whose deleted_at is set and whose url/handle are already NULL,
+                    // so it converges through the identical path — no separate tombstone needed,
+                    // and a replica can never resurrect a link the member removed.
+                    db.prepare(`INSERT INTO creator_channels
+                                    (id, owner_pubkey, platform, url, handle, category, is_primary_video,
+                                     supports_autolist, oauth_verified_at, post_count_seen, autopublish,
+                                     syndicate_to_node, created_at, updated_at, deleted_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ON CONFLICT(id) DO UPDATE SET
+                                    url               = excluded.url,
+                                    handle            = excluded.handle,
+                                    category          = excluded.category,
+                                    is_primary_video  = excluded.is_primary_video,
+                                    supports_autolist = excluded.supports_autolist,
+                                    oauth_verified_at = excluded.oauth_verified_at,
+                                    post_count_seen   = excluded.post_count_seen,
+                                    autopublish       = excluded.autopublish,
+                                    syndicate_to_node = excluded.syndicate_to_node,
+                                    deleted_at        = excluded.deleted_at,
+                                    updated_at        = excluded.updated_at
+                                WHERE excluded.updated_at > creator_channels.updated_at`).run(
+                        cc.id,
+                        cc.ownerPubkey,
+                        cc.platform,
+                        cc.url ?? null,
+                        cc.handle ?? null,
+                        cc.category,
+                        cc.isPrimaryVideo ? 1 : 0,
+                        cc.supportsAutolist ? 1 : 0,
+                        cc.oauthVerifiedAt ?? null,
+                        cc.postCountSeen ?? null,
+                        cc.autopublish ? 1 : 0,
+                        cc.syndicateToNode ? 1 : 0,
+                        cc.createdAt,
+                        cc.updatedAt,
+                        cc.deletedAt ?? null
                     );
                 }
             }

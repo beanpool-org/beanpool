@@ -87,6 +87,25 @@ export interface SyncAbuseReport {
     updatedAt?: string | null;
 }
 
+export interface SyncCreatorChannel {
+    id: string;
+    ownerPubkey: string;
+    platform: string;
+    /** NULL once deleted — the tombstone carries the fact, never the link. */
+    url: string | null;
+    handle: string | null;
+    category: string;
+    isPrimaryVideo: boolean;
+    supportsAutolist: boolean;
+    oauthVerifiedAt: string | null;
+    postCountSeen: number | null;
+    autopublish: boolean;
+    syndicateToNode: boolean;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt: string | null;
+}
+
 export interface SyncRecoveryRequest {
     id: string;
     oldPubkey: string;
@@ -215,6 +234,7 @@ export interface SyncPayload {
     messages?: Message[];
     commonsBalance?: number;
     abuseReports?: SyncAbuseReport[];
+    creatorChannels?: SyncCreatorChannel[];
     recoveryRequests?: SyncRecoveryRequest[];
     recoveryApprovals?: SyncRecoveryApproval[];
     recoveryShares?: SyncRecoveryShare[];
@@ -399,6 +419,28 @@ export function exportSyncState(
         updatedAt: row.updated_at || row.created_at,
     }));
 
+    // Deleted rows are exported too, and must be: a backup that never hears about the deletion
+    // restores the channel. `url`/`handle` are already NULL by then (see deleteChannel), so the
+    // tombstone travels without the link travelling with it.
+    const channelRows = sel('creator_channels', 'updated_at');
+    const creatorChannels: SyncCreatorChannel[] = channelRows.map(row => ({
+        id: row.id,
+        ownerPubkey: row.owner_pubkey,
+        platform: row.platform,
+        url: row.url ?? null,
+        handle: row.handle ?? null,
+        category: row.category,
+        isPrimaryVideo: row.is_primary_video === 1,
+        supportsAutolist: row.supports_autolist === 1,
+        oauthVerifiedAt: row.oauth_verified_at ?? null,
+        postCountSeen: row.post_count_seen ?? null,
+        autopublish: row.autopublish === 1,
+        syndicateToNode: row.syndicate_to_node === 1,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        deletedAt: row.deleted_at ?? null,
+    }));
+
     const recoveryReqRows = sel('recovery_requests', 'updated_at');
     const recoveryRequests: SyncRecoveryRequest[] = recoveryReqRows.map(row => ({
         id: row.id,
@@ -503,6 +545,7 @@ export function exportSyncState(
         // primary's books, and after promotion it would reverse trades using a figure it never held.
         commonsBalance,
         abuseReports,
+        creatorChannels,
         recoveryRequests,
         recoveryApprovals,
         recoveryShares,

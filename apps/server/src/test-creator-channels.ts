@@ -1,0 +1,198 @@
+/**
+ * Creator channel tests (The Pulse, Phase 1).
+ *
+ * Three properties matter enough to pin down, because getting any of them wrong is not a cosmetic
+ * bug:
+ *
+ *   1. NORMALISATION — a member pastes `@handle`, a bare domain, or a share-sheet URL with an
+ *      `?igsh=` tail. All three are the same channel. If they are not collapsed, the duplicate
+ *      check never fires and the same person appears twice on their own feed.
+ *
+ *   2. OWNERSHIP — only the signer may touch their channels. Without it anyone can attach a
+ *      neighbour's handle to their own profile, and the feed shows cards attributed to someone who
+ *      never consented.
+ *
+ *   3. DELETION DOES NOT PRESERVE THE LINK — the tombstone must replicate (or a backup restores
+ *      the channel) while the URL must not (or a member's removed Instagram handle survives on a
+ *      mirror forever).
+ *
+ * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-creator-channels.ts
+ */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+import crypto from 'node:crypto';
+import { db } from './db/db.js';
+import {
+    addChannel, listChannels, listPublicChannels, updateChannel, deleteChannel,
+    normaliseChannelInput, otherVideoChannels, ChannelError,
+} from './engine/creator-channels.js';
+import { exportSyncState, importRemoteState, setNodeRole, initStateEngine, signSyncPayload } from './state-engine.js';
+import { startP2P } from './p2p.js';
+import { addConnector } from './connector-manager.js';
+
+let run = 0, passed = 0;
+function assert(cond: boolean, msg: string): void {
+    run++;
+    if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
+}
+function assertThrows(fn: () => unknown, code: string, msg: string): void {
+    run++;
+    try {
+        fn();
+        console.error(`✗ ${msg} (expected ${code}, nothing thrown)`);
+    } catch (e: any) {
+        if (e instanceof ChannelError && e.code === code) { passed++; console.log(`✓ ${msg}`); }
+        else console.error(`✗ ${msg} (expected ${code}, got ${e?.code ?? e?.message})`);
+    }
+}
+
+function makeMember(callsign: string): string {
+    const { publicKey } = crypto.generateKeyPairSync('ed25519');
+    const pub = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    db.prepare(
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, updated_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+    ).run(pub, callsign);
+    return pub;
+}
+
+async function main(): Promise<void> {
+    // The sync round-trip below needs a signed payload, and signing needs the node's peer
+    // identity — so p2p comes up, exactly as test-backup-topology does it.
+    initStateEngine();
+    const p2pNode = await startP2P(4032, 4033);
+    // Import also requires the signer to be a trusted peer, so the node trusts itself for the
+    // round-trip — the same shape test-backup-topology uses.
+    const nodeId = p2pNode.peerId.toString();
+    addConnector(`/ip4/127.0.0.1/tcp/4033/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+
+    const kayla = makeMember('Kayla');
+    const marty = makeMember('Marty');
+
+    // ── 1. Normalisation ────────────────────────────────────────────────────────────────────
+    const bare = normaliseChannelInput('instagram', '@mullum_ceramics');
+    const full = normaliseChannelInput('instagram', 'https://www.instagram.com/mullum_ceramics/');
+    const tracked = normaliseChannelInput('instagram', 'https://www.instagram.com/mullum_ceramics/?igsh=abc123&utm_source=x');
+    assert(bare.url === full.url && full.url === tracked.url,
+        'handle, URL and tracking-param URL all normalise to one canonical URL');
+    assert(bare.handle === '@mullum_ceramics', 'handle is extracted for display');
+    assert(!tracked.url.includes('igsh'), 'tracking parameters are stripped');
+
+    assert(normaliseChannelInput('tiktok', '@nicholasisbarefoot').url === 'https://www.tiktok.com/@nicholasisbarefoot',
+        'tiktok bare handle expands to a profile URL');
+    assert(normaliseChannelInput('website', 'barefootbotanicals.com.au').url.startsWith('https://'),
+        'a bare domain is upgraded to https');
+
+    // A URL claiming to be one platform must actually be that platform, or the resolver would
+    // later fetch a YouTube page believing it holds an Instagram profile.
+    assertThrows(() => normaliseChannelInput('instagram', 'https://www.youtube.com/@someone'),
+        'WRONG_HOST', 'a YouTube URL is rejected for the instagram platform');
+    // `new URL` accepts these happily, and they end up as tappable links in the UI.
+    assertThrows(() => normaliseChannelInput('website', 'javascript:alert(1)'),
+        'BAD_SCHEME', 'javascript: URLs are rejected');
+    assertThrows(() => normaliseChannelInput('website', 'data:text/html,<script>'),
+        'BAD_SCHEME', 'data: URLs are rejected');
+    assertThrows(() => normaliseChannelInput('instagram', ''),
+        'EMPTY', 'an empty input is rejected');
+
+    // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
+    const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
+    assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');
+    assert(ig.supportsAutolist === false, 'instagram cannot be auto-listed');
+    assert(ig.isPrimaryVideo === true, 'the first video channel becomes the primary by default');
+
+    // The same channel via a different paste must collide — that is what normalisation buys.
+    assertThrows(
+        () => addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: 'instagram.com/mullum_ceramics/?igsh=zzz', category: 'craft' }),
+        'DUPLICATE', 'the same channel pasted differently is caught as a duplicate');
+
+    const yt = addChannel({ ownerPubkey: kayla, platform: 'youtube', raw: '@mullumceramics', category: 'craft' });
+    assert(yt.supportsAutolist === true, 'youtube can be auto-listed');
+    assert(otherVideoChannels(kayla, yt.id).length === 1, 'the cross-post warning sees the other video channel');
+
+    assertThrows(() => addChannel({ ownerPubkey: kayla, platform: 'nope' as any, raw: '@x', category: 'craft' }),
+        'BAD_PLATFORM', 'an unknown platform is rejected');
+    assertThrows(() => addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@y', category: 'nope' as any }),
+        'BAD_CATEGORY', 'an unknown category is rejected');
+
+    // ── 3. Primary switching ────────────────────────────────────────────────────────────────
+    updateChannel(kayla, yt.id, { isPrimaryVideo: true });
+    const afterSwitch = listChannels(kayla);
+    assert(afterSwitch.filter(c => c.isPrimaryVideo).length === 1, 'exactly one primary video channel survives a switch');
+    assert(afterSwitch.find(c => c.id === yt.id)?.isPrimaryVideo === true, 'the newly chosen channel is the primary');
+
+    // ── 4. Ownership ────────────────────────────────────────────────────────────────────────
+    assertThrows(() => updateChannel(marty, ig.id, { category: 'food' }),
+        'NOT_YOURS', 'another member cannot update your channel');
+    assertThrows(() => deleteChannel(marty, ig.id),
+        'NOT_YOURS', 'another member cannot delete your channel');
+    assert(listChannels(marty).length === 0, "another member's channels do not leak into your list");
+
+    // ── 5. Syndication toggle ───────────────────────────────────────────────────────────────
+    updateChannel(kayla, ig.id, { syndicateToNode: false });
+    assert(listChannels(kayla).length === 2, 'a switched-off channel still shows in your own management view');
+    assert(listPublicChannels(kayla).length === 1, 'a switched-off channel is hidden from the public profile');
+    updateChannel(kayla, ig.id, { syndicateToNode: true });
+
+    // ── 6. Deletion keeps the tombstone, discards the link ──────────────────────────────────
+    const removed = deleteChannel(kayla, ig.id);
+    assert(removed, 'delete reports success');
+    assert(listChannels(kayla).length === 1, 'a deleted channel leaves the list');
+
+    const tomb = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(ig.id) as any;
+    assert(!!tomb && !!tomb.deleted_at, 'the row survives as a tombstone so the deletion can replicate');
+    assert(tomb.url === null && tomb.handle === null,
+        'the deleted link and handle are NULLed — a removed Instagram handle must not survive on a mirror');
+
+    // ── 7. Sync export carries the tombstone ────────────────────────────────────────────────
+    const payload = await exportSyncState(nodeId);
+    assert(!!payload.signature && !!payload.publicKey, 'the exported payload is signed');
+    const exported = payload.creatorChannels ?? [];
+    assert(exported.length >= 2, 'creator channels appear in the sync payload at all');
+    const exportedTomb = exported.find(c => c.id === ig.id);
+    assert(!!exportedTomb?.deletedAt, 'the deletion is exported, so a backup learns about it');
+    assert(exportedTomb?.url === null, 'the exported tombstone carries no URL');
+
+    // ── 8. Import converges, and never resurrects a deleted link ────────────────────────────
+    // Wipe locally, then import the payload back as a backup node would.
+    db.prepare(`DELETE FROM creator_channels`).run();
+    assert(listChannels(kayla).length === 0, 'local channels cleared before the import test');
+
+    setNodeRole('backup');
+    await importRemoteState(payload as any);
+
+    const reimported = listChannels(kayla);
+    assert(reimported.length === 1, 'the live channel is restored by the import');
+    const reimportedTomb = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(ig.id) as any;
+    assert(!!reimportedTomb?.deleted_at, 'the deleted channel imports as a tombstone, not as a live channel');
+    assert(reimportedTomb?.url === null, 'the deleted URL is NOT resurrected by a restore');
+
+    // A stale copy of the row must lose to the newer local one, or a lagging backup could revive
+    // a channel the member deleted after the snapshot was taken.
+    // Rebuilt without the previous signature and re-signed: the import verifies over the payload
+    // minus signature/publicKey, so a mutated copy has to be signed afresh.
+    const { signature: _sig, publicKey: _pk, ...unsigned } = payload as any;
+    const stale = await signSyncPayload({
+        ...unsigned,
+        creatorChannels: [{
+            ...exportedTomb!,
+            url: 'https://www.instagram.com/mullum_ceramics/',
+            handle: '@mullum_ceramics',
+            deletedAt: null,
+            updatedAt: '2000-01-01T00:00:00.000Z',
+        }],
+    } as any);
+    await importRemoteState(stale as any);
+    const afterStale = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(ig.id) as any;
+    assert(!!afterStale?.deleted_at && afterStale?.url === null,
+        'an older payload cannot undo a newer deletion (last-write-wins on updated_at)');
+
+    setNodeRole('primary');
+
+    await p2pNode.stop();
+
+    console.log(`\n${passed}/${run} passed`);
+    if (passed !== run) process.exit(1);
+}
+
+main().catch(e => { console.error(e); process.exit(1); });

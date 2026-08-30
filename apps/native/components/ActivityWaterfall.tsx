@@ -135,10 +135,12 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
 
                     let emoji = '✨';
                     let content = null;
+                    let summaryText = '';
 
                     switch (item.eventType) {
                         case 'member_joined':
                             emoji = '🎉';
+                            summaryText = `${actorName} joined the community`;
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
                                     <Text style={styles.bold}>{actorName}</Text> joined the community
@@ -147,6 +149,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                             break;
                         case 'trade_completed':
                             emoji = '✅';
+                            summaryText = `${actorName} traded with ${targetName}${item.metadata?.credits ? ` for ${item.metadata.credits} Beans` : ''}`;
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
                                     <Text style={styles.bold}>{actorName}</Text> traded with{' '}
@@ -160,6 +163,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                         case 'rating_given': {
                             const starCount = Math.max(1, Math.min(5, Math.round(Number(item.metadata?.stars) || 5)));
                             emoji = '⭐️';
+                            summaryText = `${actorName} rated ${targetName} ${starCount} out of 5 stars`;
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
                                     <Text style={styles.bold}>{actorName}</Text> rated{' '}
@@ -176,6 +180,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                         }
                         case 'post_created':
                             emoji = '📍';
+                            summaryText = `${actorName} posted "${item.metadata?.title || 'Listing'}"`;
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
                                     <Text style={styles.bold}>{actorName}</Text> posted{' '}
@@ -188,6 +193,8 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                     return (
                         <View
                             key={item.id}
+                            accessible={true}
+                            accessibilityLabel={`${summaryText}, ${timeStr}`}
                             style={[
                                 styles.card,
                                 {

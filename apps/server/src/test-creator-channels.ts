@@ -182,6 +182,12 @@ async function main(): Promise<void> {
             === 'https://www.facebook.com/constructor',
         'a prototype-named path is treated as an ordinary page, not a prefix');
 
+    // Round-six regressions.
+    assertThrows(() => normaliseChannelInput('website', 'http://localhost./'),
+        'PRIVATE_HOST', 'a trailing-dot localhost is still refused');
+    assertThrows(() => normaliseChannelInput('website', 'http://foo.internal./'),
+        'PRIVATE_HOST', 'a trailing-dot internal name is still refused');
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');
@@ -242,10 +248,24 @@ async function main(): Promise<void> {
     assert(listPublicChannels(kayla).length === 2, 'a switched-off channel is hidden from the public profile');
     updateChannel(kayla, ig.id, { syndicateToNode: true });
 
+    // A blog is legitimately both a card and a feed, so the duplicate key includes the platform.
+    const blogCard = addChannel({ ownerPubkey: kayla, platform: 'website', raw: 'blog.example.com', category: 'art' });
+    const blogFeed = addChannel({ ownerPubkey: kayla, platform: 'rss', raw: 'blog.example.com', category: 'art' });
+    assert(blogCard.url === blogFeed.url && blogCard.id !== blogFeed.id,
+        'the same URL can be both a website card and an RSS feed');
+
+    // The public projection must not carry private fields to other members.
+    const publicView = listPublicChannels(kayla) as any[];
+    assert(publicView.length > 0 && !('autopublish' in publicView[0]) && !('postCountSeen' in publicView[0]),
+        'the public listing carries no private preference or watermark fields');
+    assert('isVerified' in publicView[0] && !('oauthVerifiedAt' in publicView[0]),
+        'the public listing exposes whether a channel is verified, not when');
+
     // ── 6. Deletion keeps the tombstone, discards the link ──────────────────────────────────
+    const beforeDelete = listChannels(kayla).length;
     const removed = deleteChannel(kayla, ig.id);
     assert(removed, 'delete reports success');
-    assert(listChannels(kayla).length === 2, 'a deleted channel leaves the list');
+    assert(listChannels(kayla).length === beforeDelete - 1, 'a deleted channel leaves the list');
 
     // Deleting the PRIMARY specifically — the inheritance path. Deleting a non-primary channel
     // would leave the flag untouched and prove nothing, and there has to be a survivor to inherit.
@@ -261,8 +281,11 @@ async function main(): Promise<void> {
     assert(!!tomb && !!tomb.deleted_at, 'the row survives as a tombstone so the deletion can replicate');
     assert(tomb.url === null && tomb.handle === null,
         'the deleted link and handle are NULLed — a removed Instagram handle must not survive on a mirror');
+    assert(tomb.platform === 'deleted' && tomb.category === 'other' && tomb.post_count_seen === null,
+        'the tombstone carries nothing about what was deleted, not even the platform');
 
     // ── 7. Sync export carries the tombstone ────────────────────────────────────────────────
+    const liveBeforeExport = listChannels(kayla).length;
     const payload = await exportSyncState(nodeId);
     assert(!!payload.signature && !!payload.publicKey, 'the exported payload is signed');
     const exported = payload.creatorChannels ?? [];
@@ -280,7 +303,7 @@ async function main(): Promise<void> {
     await importRemoteState(payload as any);
 
     const reimported = listChannels(kayla);
-    assert(reimported.length === 2, 'the live channels are restored by the import');
+    assert(reimported.length === liveBeforeExport, 'the live channels are restored by the import');
     const reimportedTomb = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(ig.id) as any;
     assert(!!reimportedTomb?.deleted_at, 'the deleted channel imports as a tombstone, not as a live channel');
     assert(reimportedTomb?.url === null, 'the deleted URL is NOT resurrected by a restore');

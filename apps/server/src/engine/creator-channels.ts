@@ -52,20 +52,13 @@ const MAX_HANDLE_LENGTH = 100;
 /** Generous enough for anyone real; low enough that nobody can bloat the members table. */
 const MAX_CHANNELS_PER_MEMBER = 12;
 /**
- * Live rows plus tombstones. Bounds add/delete cycling, which the live cap alone does not — every
- * tombstone replicates to the backup and stays there.
- */
-const MAX_ROWS_PER_MEMBER = 60;
-/**
- * How long a tombstone is kept before being dropped outright.
+ * Live rows plus tombstones — a runaway guard, not a working limit.
  *
- * Long enough that the deletion has certainly reached every backup (delta sync runs continuously
- * and a full snapshot far more often than this), after which the row conveys nothing — the link
- * was NULLed at deletion, so all that remains is an id nobody references.
+ * Tombstones are permanent (removing one un-deletes the channel on any replica that missed it, see
+ * `addChannel`), so this is what bounds the table. Reaching it takes ~190 deliberate add/delete
+ * cycles through signed, rate-limited requests, and the scrubbed rows are three columns wide.
  */
-const TOMBSTONE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
-/** The floor under reclamation: a tombstone younger than this is never dropped early. */
-const TOMBSTONE_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_ROWS_PER_MEMBER = 200;
 
 export interface CreatorChannel {
     id: string;
@@ -173,7 +166,9 @@ const TRACKING_PARAMS = [/^utm_/i, /^fbclid$/i, /^igsh(id)?$/i, /^gclid$/i, /^si
  * here means they never reach the database in the first place.
  */
 function assertPublicHostname(hostname: string): void {
-    const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    // `localhost.` and `foo.internal.` are valid absolute forms that resolve identically and
+    // matched none of the comparisons below.
+    const host = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
 
     if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
         host.endsWith('.internal') || host.endsWith('.home.arpa')) {
@@ -403,7 +398,40 @@ export function listChannels(ownerPubkey: string): CreatorChannel[] {
  * Separate from `listChannels` so the owner's own management view can show a channel they have
  * switched off without that switch meaning nothing.
  */
-export function listPublicChannels(ownerPubkey: string): CreatorChannel[] {
+/**
+ * The display-only projection of a channel.
+ *
+ * `autopublish` is a private preference and `postCountSeen` is an engagement watermark; neither is
+ * anyone else's business, and reusing the full row on the one endpoint other members read would
+ * have handed both over.
+ */
+export interface PublicCreatorChannel {
+    id: string;
+    platform: ChannelPlatform;
+    url: string | null;
+    handle: string | null;
+    category: ChannelCategory;
+    isPrimaryVideo: boolean;
+    supportsAutolist: boolean;
+    isVerified: boolean;
+}
+
+function rowToPublicChannel(row: any): PublicCreatorChannel {
+    return {
+        id: row.id,
+        platform: row.platform,
+        url: row.url,
+        handle: row.handle,
+        category: row.category,
+        isPrimaryVideo: row.is_primary_video === 1,
+        supportsAutolist: row.supports_autolist === 1,
+        // A boolean, not the timestamp: whether the claim is proven is the useful fact, and when
+        // they connected is not.
+        isVerified: !!row.oauth_verified_at,
+    };
+}
+
+export function listPublicChannels(ownerPubkey: string): PublicCreatorChannel[] {
     // Joined to `members.status` rather than trusting the channel rows: `actionReport` suspends a
     // member and pauses their posts, and their external links have to go the same way. Without
     // this the one endpoint that serves unauthenticated keeps publishing them.
@@ -414,7 +442,7 @@ export function listPublicChannels(ownerPubkey: string): CreatorChannel[] {
             AND m.status = 'active'
           ORDER BY c.created_at ASC`
     ).all(ownerPubkey) as any[];
-    return rows.map(rowToChannel);
+    return rows.map(rowToPublicChannel);
 }
 
 export function getChannel(id: string): CreatorChannel | null {
@@ -451,40 +479,23 @@ export function addChannel(input: {
     const member = db.prepare(`SELECT public_key FROM members WHERE public_key = ?`).get(input.ownerPubkey);
     if (!member) throw new ChannelError('NO_MEMBER', 'Member not found.');
 
-    // Tombstones are permanent and fully replicated, so a live-row cap alone lets add/delete
-    // cycling grow the table without bound. Two bounds: retire tombstones old enough to have
-    // certainly reached every backup, then cap what remains.
-    db.prepare(
-        `DELETE FROM creator_channels
-          WHERE owner_pubkey = ? AND deleted_at IS NOT NULL AND deleted_at < ?`
-    ).run(input.ownerPubkey, new Date(Date.now() - TOMBSTONE_RETENTION_MS).toISOString());
-
     const existing = listChannels(input.ownerPubkey);
     if (existing.length >= MAX_CHANNELS_PER_MEMBER) {
         throw new ChannelError('TOO_MANY', `You can have up to ${MAX_CHANNELS_PER_MEMBER} channels.`);
     }
-    // If the ceiling is reached, reclaim the oldest tombstones rather than locking the member out
-    // for the rest of the retention window — they cannot free space by deleting, since deleting is
-    // what created the rows. A week is kept regardless, which is far longer than convergence takes.
-    let totalRows = (db.prepare(
+    // Tombstones are NEVER hard-deleted. The delta exporter selects on `updated_at >= since` and
+    // the importer is upsert-only, so a row removed here is a row a lagging replica never hears
+    // about — it would keep the deleted channel, with its URL, permanently, and only an operator
+    // force-resync could clear it. Deleting the oldest tombstones first, as a pressure-relief
+    // scheme would, targets exactly the ones a replica is most likely to have missed.
+    //
+    // They are cheap instead: `deleteChannel` scrubs every field that says anything, leaving an id
+    // and two timestamps. The ceiling below is a runaway guard, not a working limit.
+    const totalRows = (db.prepare(
         `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?`
     ).get(input.ownerPubkey) as any).c as number;
     if (totalRows >= MAX_ROWS_PER_MEMBER) {
-        db.prepare(
-            `DELETE FROM creator_channels
-              WHERE id IN (
-                SELECT id FROM creator_channels
-                 WHERE owner_pubkey = ? AND deleted_at IS NOT NULL AND deleted_at < ?
-                 ORDER BY deleted_at ASC LIMIT ?
-              )`
-        ).run(input.ownerPubkey, new Date(Date.now() - TOMBSTONE_MIN_AGE_MS).toISOString(),
-              totalRows - MAX_ROWS_PER_MEMBER + 1);
-        totalRows = (db.prepare(
-            `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?`
-        ).get(input.ownerPubkey) as any).c as number;
-    }
-    if (totalRows >= MAX_ROWS_PER_MEMBER) {
-        throw new ChannelError('TOO_MANY', 'You have changed channels too many times this week. Try again in a few days.');
+        throw new ChannelError('TOO_MANY', 'You have added and removed too many channels. Ask your community admin.');
     }
 
     const { url, handle } = normaliseChannelInput(platform, input.raw);
@@ -492,7 +503,9 @@ export function addChannel(input: {
     // Normalisation is what makes this check work — the same channel pasted as a handle and as a
     // share-sheet URL with tracking params must collide, or a member ends up double-posting to
     // their own feed.
-    if (existing.some(c => c.url === url)) {
+    // Keyed on (platform, url), not url alone: a blog normalises the same as `website` and as
+    // `rss`, and a member is entitled to both — one as a card, one as the autolisting feed.
+    if (existing.some(c => c.url === url && c.platform === platform)) {
         throw new ChannelError('DUPLICATE', 'You have already added that channel.');
     }
 
@@ -617,9 +630,19 @@ export function deleteChannel(ownerPubkey: string, id: string): boolean {
     let changed = 0;
 
     db.transaction(() => {
+        // Everything that says anything goes, not just the link: `platform` and `category` would
+        // otherwise sit in every backup announcing that this member once ran a craft video
+        // channel. What survives is an id, an owner (needed to scope the row and satisfy the
+        // foreign key) and two timestamps — enough to converge, and nothing else.
+        //
+        // The placeholders are NOT NULL columns; every read filters on `deleted_at IS NULL`, so
+        // they are never shown or matched.
         changed = db.prepare(
             `UPDATE creator_channels
-                SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0, updated_at = ?
+                SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0,
+                    platform = 'deleted', category = 'other', supports_autolist = 0,
+                    autopublish = 0, syndicate_to_node = 0, post_count_seen = NULL,
+                    oauth_verified_at = NULL, last_error = NULL, updated_at = ?
               WHERE id = ? AND owner_pubkey = ? AND deleted_at IS NULL`
         ).run(now, now, id, ownerPubkey).changes;
 

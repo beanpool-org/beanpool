@@ -201,6 +201,20 @@ async function main(): Promise<void> {
             !== normaliseChannelInput('facebook', 'https://www.facebook.com/share/p/1a2b3c4d/').url,
         'facebook share ids keep their case — they are opaque and case-sensitive');
 
+    // Round-nine regressions.
+    // Rejected rather than interpolated: the fast path used to build `instagram.com/../` from this.
+    assertThrows(() => normaliseChannelInput('instagram', '@..'),
+        'WRONG_HOST', 'a handle of only dots is refused rather than becoming /../');
+    assertThrows(() => normaliseChannelInput('instagram', '@.'),
+        'WRONG_HOST', 'a single-dot handle is refused');
+    assertThrows(() => normaliseChannelInput('facebook', 'https://www.facebook.com/profile.php'),
+        'NO_HANDLE', 'facebook profile.php with no id is not an account');
+    assert(normaliseChannelInput('youtube', 'https://www.youtu.be/abc123').url
+            === normaliseChannelInput('youtube', 'https://youtu.be/abc123').url,
+        'www. is stripped from short links so one link is one string');
+    assert(normaliseChannelInput('rss', 'https://example.com/feed?si=keepme').url.includes('si=keepme'),
+        "a feed's own si parameter survives — platform share params are dropped wholesale anyway");
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');
@@ -220,6 +234,13 @@ async function main(): Promise<void> {
         'BAD_PLATFORM', 'an unknown platform is rejected');
     assertThrows(() => addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@y', category: 'nope' as any }),
         'BAD_CATEGORY', 'an unknown category is rejected');
+
+    // Auto-listing is a property of the URL, not the platform: a youtu.be link is one video with
+    // no feed behind it, and claiming "Updates itself" is a promise nothing can keep.
+    const oneVideo = addChannel({ ownerPubkey: marty, platform: 'youtube', raw: 'https://youtu.be/abc123', category: 'craft' });
+    assert(oneVideo.supportsAutolist === false, 'a single youtu.be video is not an auto-listing channel');
+    const chanUrl = addChannel({ ownerPubkey: marty, platform: 'youtube', raw: 'https://www.youtube.com/channel/UCabc123def456ghi789jk', category: 'craft' });
+    assert(chanUrl.supportsAutolist === true, 'a youtube channel URL is auto-listing');
 
     // ── 3. Primary switching ────────────────────────────────────────────────────────────────
     updateChannel(kayla, yt.id, { isPrimaryVideo: true });
@@ -253,7 +274,8 @@ async function main(): Promise<void> {
         'NOT_YOURS', 'another member cannot update your channel');
     assertThrows(() => deleteChannel(marty, ig.id),
         'NOT_YOURS', 'another member cannot delete your channel');
-    assert(listChannels(marty).length === 0, "another member's channels do not leak into your list");
+    assert(listChannels(marty).every(c => c.ownerPubkey === marty), "another member's channels do not leak into your list");
+    assert(!listChannels(marty).some(c => c.id === ig.id), "kayla's channels are absent from marty's list");
 
     // ── 5. Syndication toggle ───────────────────────────────────────────────────────────────
     updateChannel(kayla, ig.id, { syndicateToNode: false });

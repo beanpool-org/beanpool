@@ -44,6 +44,22 @@ export const CHANNEL_CATEGORIES: readonly ChannelCategory[] =
  */
 const AUTOLIST_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set<ChannelPlatform>(['youtube', 'rss']);
 
+/**
+ * Whether this specific URL can be listed, not just its platform.
+ *
+ * A `youtu.be/<videoid>` is one video, not a channel — there is no feed behind it, so promising
+ * "Updates itself" in the UI would be a lie the member only discovers when nothing ever appears.
+ * Platform alone was too coarse for exactly that case.
+ */
+function canAutolist(platform: ChannelPlatform, url: string): boolean {
+    if (!AUTOLIST_PLATFORMS.has(platform)) return false;
+    if (platform === 'youtube') {
+        // Only the channel-shaped forms have an RSS feed behind them.
+        return /\/(channel|c|user)\/|\/@|\/feeds\/videos\.xml/.test(url);
+    }
+    return true;
+}
+
 /** Platforms that carry video, and so can collide when a creator cross-posts. */
 const VIDEO_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set<ChannelPlatform>(['youtube', 'tiktok', 'instagram', 'facebook']);
 
@@ -153,7 +169,10 @@ const CANONICAL_HOST: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
 const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set(['youtu.be', 'vm.tiktok.com', 'fb.me']);
 
 /** Tracking parameters that differ per share and would defeat de-duplication. */
-const TRACKING_PARAMS = [/^utm_/i, /^fbclid$/i, /^igsh(id)?$/i, /^gclid$/i, /^si$/i, /^mc_[ce]id$/i];
+// Deliberately excludes `si`: it is a YouTube share parameter, and platform query strings are
+// dropped wholesale anyway — so the only URLs this pattern could ever touch are website/rss ones,
+// where the query string IS the feed's identity.
+const TRACKING_PARAMS = [/^utm_/i, /^fbclid$/i, /^igsh(id)?$/i, /^gclid$/i, /^mc_[ce]id$/i];
 
 /**
  * Reject anything that resolves inside the node's own network.
@@ -233,7 +252,9 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     // Handles may contain dots (`@my.ceramics` is a valid Instagram handle), so a dot alone cannot
     // disqualify one. What does: a dotted string with NO leading `@` is a domain someone typed —
     // otherwise `instagram.com` silently becomes `instagram.com/instagram.com/`.
-    const bareHandle = input.match(/^@?([A-Za-z0-9._-]{1,100})$/);
+    // At least one alphanumeric, or `@..` interpolates straight into `instagram.com/../` — the
+    // fast path returns a built string without ever round-tripping through `new URL`.
+    const bareHandle = input.match(/^@?((?=[A-Za-z0-9._-]{1,100}$)[A-Za-z0-9._-]*[A-Za-z0-9][A-Za-z0-9._-]*)$/);
     const looksLikeDomain = !input.startsWith('@') && input.includes('.');
     if (bareHandle && !looksLikeDomain && platform !== 'website' && platform !== 'rss') {
         // Handles are case-insensitive on all four platforms, so `@Mullum_Ceramics` and
@@ -290,6 +311,11 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
             parsed.hostname = CANONICAL_HOST[platform];
             // The port has to go with the host. `instagram.com:8443/foo/` rewritten to
             // `www.instagram.com:8443/foo/` is a dead link that also slips past the duplicate check.
+            parsed.port = '';
+        } else {
+            // Short links are matched with `www.` stripped, so they must be STORED that way too —
+            // otherwise `www.youtu.be/x` and `youtu.be/x` are two strings for one link.
+            parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
             parsed.port = '';
         }
     } else {
@@ -362,6 +388,10 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
         parsed.pathname = '/profile.php';
+    } else if (platform === 'facebook' && /^profile\.php$/i.test(segments[0] || '')) {
+        // Reached only when there was no `id` to keep — `/profile.php` alone identifies nobody, and
+        // storing it would put a dead link on the profile with "profile.php" as the handle.
+        throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
     } else if (platform === 'facebook' && FB_PREFIX_DEPTH.has(segments[0]) && segments[1]) {
         // These prefixes carry the identity BELOW the first segment, and how far below differs:
         // `/groups/<id>` is one deep, while `/people/<name>/<id>` and `/share/p/<id>` are two.
@@ -533,7 +563,7 @@ export function addChannel(input: {
 
     const id = `chan_${crypto.randomBytes(12).toString('hex')}`;
     const now = new Date().toISOString();
-    const supportsAutolist = AUTOLIST_PLATFORMS.has(platform) ? 1 : 0;
+    const supportsAutolist = canAutolist(platform, url) ? 1 : 0;
 
     // The first video channel is the primary by default. Being explicit beats leaving every
     // channel unmarked and having the feed pick arbitrarily.

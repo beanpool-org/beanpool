@@ -155,7 +155,7 @@ export default function ChannelsScreen() {
             // The server hands back the member's other video channels precisely so this can be
             // asked now, while they are still thinking about it.
             const others: Channel[] = data.otherVideoChannels || [];
-            if (VIDEO_PLATFORMS.includes(platform) && others.length > 0) {
+            if (VIDEO_PLATFORMS.includes(platform) && others.length > 0 && data.channel?.id) {
                 // Each button describes ITS OWN channel. Deriving the "(updates itself)" note from
                 // any autolisting channel in the list put it on the wrong button as soon as a
                 // member had three — the exact opposite of what this screen exists to tell them.
@@ -187,8 +187,16 @@ export default function ChannelsScreen() {
         }
     };
 
-    const patch = async (id: string, body: Record<string, unknown>) => {
+    /**
+     * @param optimistic applied locally before the round trip, so a toggle does not visibly snap
+     *   back while a signed POST and a full re-fetch complete. Reverted if the write fails.
+     */
+    const patch = async (id: string, body: Record<string, unknown>, optimistic?: Partial<Channel>) => {
         if (!identity) { setError('No identity on this device yet.'); return; }
+        const before = channels;
+        if (optimistic) {
+            setChannels(cs => cs.map(c => (c.id === id ? { ...c, ...optimistic } : c)));
+        }
         try {
             // Inside the try: AsyncStorage can reject, and a switch that snaps back with no
             // message reads as the app ignoring the tap.
@@ -201,6 +209,7 @@ export default function ChannelsScreen() {
             }
             await load();
         } catch (e: any) {
+            if (optimistic) setChannels(before);
             setError(e?.message || 'Could not save that change.');
         }
     };
@@ -304,7 +313,7 @@ export default function ChannelsScreen() {
                                         <Text style={styles.rowLabel}>Show on the local feed</Text>
                                         <Switch
                                             value={channel.syndicateToNode}
-                                            onValueChange={v => patch(channel.id, { syndicateToNode: v })}
+                                            onValueChange={v => patch(channel.id, { syndicateToNode: v }, { syndicateToNode: v })}
                                             accessibilityLabel={`Show ${meta.label} on the local feed`}
                                         />
                                     </View>

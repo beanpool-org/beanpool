@@ -767,7 +767,7 @@ export default function PublicProfileScreen() {
                                             <Text style={styles.synergySummary}>{synergy.summary}</Text>
 
                                             <View style={styles.synergyStrengthsWrap}>
-                                                {synergy.strengths.map((str, idx) => (
+                                                {synergy.strengths.map((str: string, idx: number) => (
                                                     <View key={idx} style={styles.synergyStrengthRow}>
                                                         <Text style={styles.synergyBullet}>✓</Text>
                                                         <Text style={styles.synergyStrengthText}>{str}</Text>

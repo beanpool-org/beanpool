@@ -64,6 +64,8 @@ const MAX_ROWS_PER_MEMBER = 60;
  * was NULLed at deletion, so all that remains is an id nobody references.
  */
 const TOMBSTONE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+/** The floor under reclamation: a tombstone younger than this is never dropped early. */
+const TOMBSTONE_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface CreatorChannel {
     id: string;
@@ -206,9 +208,9 @@ function assertPublicHostname(hostname: string): void {
  * `/groups/<id>` is one; `/people/<name>/<id>` and `/share/p/<id>` are two — truncating those to
  * one stores `facebook.com/share/p`, a dead link that also collides with every other share URL.
  */
-const FB_PREFIX_DEPTH: Record<string, number> = {
-    groups: 1, g: 1, pages: 2, people: 2, share: 2, profile: 1,
-};
+const FB_PREFIX_DEPTH: ReadonlyMap<string, number> = new Map([
+    ['groups', 1], ['g', 1], ['pages', 2], ['people', 2], ['share', 2], ['profile', 1],
+]);
 
 function hostMatches(host: string, allowed: string[]): boolean {
     const h = host.toLowerCase().replace(/^www\./, '');
@@ -312,7 +314,12 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         parsed.search = fbProfileId ? `?id=${encodeURIComponent(fbProfileId)}` : '';
     }
     parsed.hash = '';
-    parsed.protocol = 'https:';
+    // The four platforms are https-only, so normalising their scheme is safe and helps
+    // de-duplication. A member's own site is not ours to rewrite — an http-only site stored as
+    // https is a link that does not resolve, with nothing at add time to say why.
+    if (platform !== 'website' && platform !== 'rss') {
+        parsed.protocol = 'https:';
+    }
 
     // Short links have opaque paths that only resolve on their own host, so they are stored
     // verbatim — there is nothing to canonicalise and guessing would break them.
@@ -350,12 +357,14 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
         parsed.pathname = '/profile.php';
-    } else if (platform === 'facebook' && FB_PREFIX_DEPTH[segments[0]] && segments[1]) {
+    } else if (platform === 'facebook' && FB_PREFIX_DEPTH.has(segments[0]) && segments[1]) {
         // These prefixes carry the identity BELOW the first segment, and how far below differs:
         // `/groups/<id>` is one deep, while `/people/<name>/<id>` and `/share/p/<id>` are two.
         // Keeping only the first segment collapsed every group to `facebook.com/groups`, so
         // distinct channels collided as duplicates and the chip linked to a generic page.
-        const depth = FB_PREFIX_DEPTH[segments[0]];
+        // A Map, not an object literal: `/constructor/…` and `/__proto__/…` are real paths, and an
+        // unguarded index would give them an inherited value, a NaN slice, and a dead stored URL.
+        const depth = FB_PREFIX_DEPTH.get(segments[0])!;
         const tail = segments.slice(1, 1 + depth).filter(Boolean);
         handle = `${segments[0]}/${tail.join('/')}`;
         parsed.pathname = `/${segments[0]}/${tail.join('/')}`;
@@ -454,11 +463,28 @@ export function addChannel(input: {
     if (existing.length >= MAX_CHANNELS_PER_MEMBER) {
         throw new ChannelError('TOO_MANY', `You can have up to ${MAX_CHANNELS_PER_MEMBER} channels.`);
     }
-    const totalRows = (db.prepare(
+    // If the ceiling is reached, reclaim the oldest tombstones rather than locking the member out
+    // for the rest of the retention window — they cannot free space by deleting, since deleting is
+    // what created the rows. A week is kept regardless, which is far longer than convergence takes.
+    let totalRows = (db.prepare(
         `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?`
     ).get(input.ownerPubkey) as any).c as number;
     if (totalRows >= MAX_ROWS_PER_MEMBER) {
-        throw new ChannelError('TOO_MANY', 'You have changed channels too many times recently. Try again in a few days.');
+        db.prepare(
+            `DELETE FROM creator_channels
+              WHERE id IN (
+                SELECT id FROM creator_channels
+                 WHERE owner_pubkey = ? AND deleted_at IS NOT NULL AND deleted_at < ?
+                 ORDER BY deleted_at ASC LIMIT ?
+              )`
+        ).run(input.ownerPubkey, new Date(Date.now() - TOMBSTONE_MIN_AGE_MS).toISOString(),
+              totalRows - MAX_ROWS_PER_MEMBER + 1);
+        totalRows = (db.prepare(
+            `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?`
+        ).get(input.ownerPubkey) as any).c as number;
+    }
+    if (totalRows >= MAX_ROWS_PER_MEMBER) {
+        throw new ChannelError('TOO_MANY', 'You have changed channels too many times this week. Try again in a few days.');
     }
 
     const { url, handle } = normaliseChannelInput(platform, input.raw);

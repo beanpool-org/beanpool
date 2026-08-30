@@ -173,6 +173,15 @@ async function main(): Promise<void> {
     assert(normaliseChannelInput('instagram', 'https://instagr.am/mullum_ceramics/').url === bare.url,
         'instagr.am canonicalises to the same channel as instagram.com — its path is a username');
 
+    // Round-five regressions.
+    assert(normaliseChannelInput('website', 'http://oldsite.example.com/').url.startsWith('http://'),
+        "a member's http-only site keeps its scheme rather than being rewritten to a dead https URL");
+    assert(normaliseChannelInput('instagram', 'http://www.instagram.com/mullum_ceramics/').url.startsWith('https://'),
+        'platform URLs are still normalised to https');
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/constructor/x').url
+            === 'https://www.facebook.com/constructor',
+        'a prototype-named path is treated as an ordinary page, not a prefix');
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');

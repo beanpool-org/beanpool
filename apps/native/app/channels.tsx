@@ -142,17 +142,25 @@ export default function ChannelsScreen() {
             // asked now, while they are still thinking about it.
             const others: Channel[] = data.otherVideoChannels || [];
             if (VIDEO_PLATFORMS.includes(platform) && others.length > 0) {
-                const auto = others.find(o => o.supportsAutolist);
+                // Each button describes ITS OWN channel. Deriving the "(updates itself)" note from
+                // any autolisting channel in the list put it on the wrong button as soon as a
+                // member had three — the exact opposite of what this screen exists to tell them.
+                const rival = others[0];
+                const label = (p: Platform, autoLists: boolean) =>
+                    platformMeta(p).label + (autoLists ? ' (updates itself)' : '');
                 Alert.alert(
                     'You post video in two places',
                     `If you put the same videos on ${platformMeta(platform).label} and ` +
-                    `${platformMeta(others[0].platform).label}, they'd show up twice on the feed.\n\n` +
+                    `${platformMeta(rival.platform).label}, they'd show up twice on the feed.\n\n` +
                     'Which should the feed use?',
                     [
-                        { text: platformMeta(platform).label, onPress: () => setPrimary(data.channel.id) },
                         {
-                            text: platformMeta(others[0].platform).label + (auto ? ' (updates itself)' : ''),
-                            onPress: () => setPrimary(others[0].id),
+                            text: label(platform, data.channel?.supportsAutolist === true),
+                            onPress: () => setPrimary(data.channel.id),
+                        },
+                        {
+                            text: label(rival.platform, rival.supportsAutolist === true),
+                            onPress: () => setPrimary(rival.id),
                         },
                         { text: 'Both — I post different things', style: 'cancel' },
                     ],
@@ -166,10 +174,12 @@ export default function ChannelsScreen() {
     };
 
     const patch = async (id: string, body: Record<string, unknown>) => {
-        if (!identity) return;
-        const url = await anchorUrl();
-        if (!url) return;
+        if (!identity) { setError('No identity on this device yet.'); return; }
         try {
+            // Inside the try: AsyncStorage can reject, and a switch that snaps back with no
+            // message reads as the app ignoring the tap.
+            const url = await anchorUrl();
+            if (!url) throw new Error('No community node yet.');
             const res = await signedPost(url, `/api/member/channels/${id}`, body, identity);
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
@@ -192,10 +202,10 @@ export default function ChannelsScreen() {
                 {
                     text: 'Remove', style: 'destructive',
                     onPress: async () => {
-                        if (!identity) return;
-                        const url = await anchorUrl();
-                        if (!url) return;
+                        if (!identity) { setError('No identity on this device yet.'); return; }
                         try {
+                            const url = await anchorUrl();
+                            if (!url) throw new Error('No community node yet.');
                             const res = await signedPost(url, `/api/member/channels/${channel.id}/delete`, {}, identity);
                             if (!res.ok) throw new Error('Could not remove that channel.');
                             await load();

@@ -125,8 +125,8 @@ async function main(): Promise<void> {
     // YouTube's non-@ forms, one of which is the only path to the channel RSS feed.
     assert(normaliseChannelInput('youtube', 'https://www.youtube.com/channel/UCabc123').handle === 'UCabc123',
         'youtube /channel/UC… is accepted — it is what the autolist feed is built from');
-    assert(normaliseChannelInput('youtube', 'https://www.youtube.com/c/SomeName').handle === '@somename',
-        'youtube /c/Name is accepted, case-folded like an @handle');
+    assert(normaliseChannelInput('youtube', 'https://www.youtube.com/c/SomeName').handle === 'somename',
+        'a /c/ custom URL is shown verbatim, not fabricated into an @handle from another namespace');
 
     // These become server-side fetch targets in Phase 2; they must never reach the database.
     for (const [addr, label] of [
@@ -249,6 +249,35 @@ async function main(): Promise<void> {
     assert(realFeed.supportsAutolist === true, 'an actual feed URL is auto-listing');
     assertThrows(() => normaliseChannelInput('facebook', 'https://www.facebook.com/groups/'),
         'NO_HANDLE', 'a facebook prefix with nothing after it is not an account');
+
+    // The two write bounds. Nothing exercised them, so an inverted comparison would have kept the
+    // suite green while leaving the table unbounded.
+    const capped = makeMember('Capped');
+    for (let i = 0; i < 12; i++) {
+        addChannel({ ownerPubkey: capped, platform: 'website', raw: `https://site${i}.example.com/`, category: 'other' });
+    }
+    assert(listChannels(capped).length === 12, 'a member can hold the full complement of channels');
+    assertThrows(
+        () => addChannel({ ownerPubkey: capped, platform: 'website', raw: 'https://one-too-many.example.com/', category: 'other' }),
+        'AT_LIMIT', 'the standing channel limit is enforced');
+
+    // Deleting frees a live slot, but the tombstones still count against the churn window.
+    deleteChannel(capped, listChannels(capped)[0].id);
+    addChannel({ ownerPubkey: capped, platform: 'website', raw: 'https://replacement.example.com/', category: 'other' });
+    assert(listChannels(capped).length === 12, 'removing a channel frees a slot for another');
+
+    const churner = makeMember('Churner');
+    let churnBlocked = false;
+    for (let i = 0; i < 70; i++) {
+        try {
+            const c = addChannel({ ownerPubkey: churner, platform: 'website', raw: `https://churn${i}.example.com/`, category: 'other' });
+            deleteChannel(churner, c.id);
+        } catch (e: any) {
+            churnBlocked = e instanceof ChannelError && e.code === 'TOO_MANY';
+            break;
+        }
+    }
+    assert(churnBlocked, 'add/delete cycling is bounded by the churn window, not just the live cap');
 
     // ── 3. Primary switching ────────────────────────────────────────────────────────────────
     updateChannel(kayla, yt.id, { isPrimaryVideo: true });

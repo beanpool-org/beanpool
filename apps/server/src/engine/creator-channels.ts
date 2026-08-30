@@ -386,7 +386,11 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         // this cannot. The cross-post warning covers the visible symptom in the meantime.
         const isChannelId = segments[0] === 'channel';
         const ident = isChannelId ? segments[1] : segments[1].toLowerCase();
-        handle = isChannelId ? ident : `@${ident}`;
+        // Displayed verbatim, NOT as `@ident`: the legacy custom-URL namespace (`/c/`, `/user/`)
+        // is distinct from the @handle namespace, so `youtube.com/c/foo` and `youtube.com/@foo`
+        // can be different channels. Fabricating the @ form would put another channel's handle on
+        // this member's chip.
+        handle = ident;
         parsed.pathname = `/${segments[0]}/${ident}`;
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
@@ -555,7 +559,7 @@ export function addChannel(input: {
         `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ? AND created_at >= ?`
     ).get(input.ownerPubkey, new Date(Date.now() - CHURN_WINDOW_MS).toISOString()) as any).c as number;
     if (recentRows >= MAX_ROWS_PER_WINDOW) {
-        throw new ChannelError('TOO_MANY', 'You have added and removed a lot of channels lately. Try again in a few days.');
+        throw new ChannelError('TOO_MANY', 'You have added and removed a lot of channels this month. Remove one you are not using, or try again later.');
     }
 
     const { url, handle } = normaliseChannelInput(platform, input.raw);

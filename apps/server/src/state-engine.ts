@@ -3068,7 +3068,12 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // row has to survive so the removal replicates to the backup, but a member who has just
         // erased their profile should not leave their Instagram handle behind on a mirror.
         try {
-            db.prepare("UPDATE creator_channels SET deleted_at = ?, url = NULL, handle = NULL, syndicate_to_node = 0, updated_at = ? WHERE owner_pubkey = ? AND deleted_at IS NULL").run(now, now, publicKey);
+            db.prepare(`UPDATE creator_channels
+                           SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0,
+                               platform = 'deleted', category = 'other', supports_autolist = 0,
+                               autopublish = 0, syndicate_to_node = 0, post_count_seen = NULL,
+                               oauth_verified_at = NULL, last_error = NULL, updated_at = ?
+                         WHERE owner_pubkey = ? AND deleted_at IS NULL`).run(now, now, publicKey);
         } catch { }
         try {
             db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)").run(publicKey, publicKey);

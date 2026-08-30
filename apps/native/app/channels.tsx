@@ -135,7 +135,10 @@ export default function ChannelsScreen() {
             setValue('');
             setAdding(false);
             setError(null);
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            // Fire-and-forget, as every other Haptics call site in the app is. Awaited inside the
+            // try, a haptics rejection would surface as "Could not add that channel" after a
+            // successful add, and skip the cross-post prompt below.
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
             await load();
 
             // The server hands back the member's other video channels precisely so this can be

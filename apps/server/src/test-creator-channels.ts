@@ -147,7 +147,7 @@ async function main(): Promise<void> {
             !== normaliseChannelInput('facebook', 'https://www.facebook.com/groups/987654321').url,
         'two facebook groups stay distinct');
     assert(normaliseChannelInput('facebook', 'https://www.facebook.com/people/Some-Name/61553').handle
-            === 'people/Some-Name/61553',
+            === 'people/some-name/61553',
         'a modern facebook profile URL keeps its id');
     assert(normaliseChannelInput('website', 'https://www.example.com/feed').url.includes('www.example.com'),
         'www. is kept on a website — some hosts only serve on it');
@@ -187,6 +187,19 @@ async function main(): Promise<void> {
         'PRIVATE_HOST', 'a trailing-dot localhost is still refused');
     assertThrows(() => normaliseChannelInput('website', 'http://foo.internal./'),
         'PRIVATE_HOST', 'a trailing-dot internal name is still refused');
+
+    // Round-seven regressions.
+    assert(normaliseChannelInput('youtube', 'UCabc123def456ghi789jk').url
+            === 'https://www.youtube.com/channel/UCabc123def456ghi789jk',
+        'a bare YouTube channel ID becomes /channel/, keeping its case');
+    assert(normaliseChannelInput('instagram', 'https://instagram.com:8443/mullum_ceramics/').url === bare.url,
+        'a port is dropped when the host is rewritten, not left behind on a dead link');
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/people/Some-Name/61553').url
+            === normaliseChannelInput('facebook', 'https://www.facebook.com/people/some-name/61553').url,
+        'facebook vanity slugs are case-folded like every other identity form');
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/share/p/1A2b3C4d/').url
+            !== normaliseChannelInput('facebook', 'https://www.facebook.com/share/p/1a2b3c4d/').url,
+        'facebook share ids keep their case — they are opaque and case-sensitive');
 
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });

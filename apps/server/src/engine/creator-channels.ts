@@ -237,6 +237,11 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         // Handles are case-insensitive on all four platforms, so `@Mullum_Ceramics` and
         // `@mullum_ceramics` must produce one URL — otherwise the duplicate check misses and the
         // member appears twice on their own feed.
+        // `UCabc…` is a channel ID, not a handle — folding it into `/@ucabc…` produced a 404, and
+        // channel IDs are case-sensitive so it could not be recovered afterwards.
+        if (platform === 'youtube' && /^UC[A-Za-z0-9_-]{20,24}$/.test(bareHandle[1])) {
+            return { url: `https://www.youtube.com/channel/${bareHandle[1]}`, handle: bareHandle[1] };
+        }
         const h = bareHandle[1].toLowerCase();
         switch (platform) {
             case 'instagram': return { url: `https://www.instagram.com/${h}/`, handle: `@${h}` };
@@ -281,6 +286,9 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         }
         if (!SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase().replace(/^www\./, ''))) {
             parsed.hostname = CANONICAL_HOST[platform];
+            // The port has to go with the host. `instagram.com:8443/foo/` rewritten to
+            // `www.instagram.com:8443/foo/` is a dead link that also slips past the duplicate check.
+            parsed.port = '';
         }
     } else {
         assertPublicHostname(parsed.hostname);
@@ -360,7 +368,15 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         // A Map, not an object literal: `/constructor/…` and `/__proto__/…` are real paths, and an
         // unguarded index would give them an inherited value, a NaN slice, and a dead stored URL.
         const depth = FB_PREFIX_DEPTH.get(segments[0])!;
-        const tail = segments.slice(1, 1 + depth).filter(Boolean);
+        // Folded like every other identity form, or `/people/Some-Name/61553` and
+        // `/people/some-name/61553` are two rows for one page.
+        //
+        // NOT for `/share/`, whose ids are opaque and case-SENSITIVE — folding `1A2b3C4d` to
+        // `1a2b3c4d` produces a dead link that cannot be recovered from what was stored. Slugs and
+        // numeric ids fold safely; opaque ids never do.
+        const foldable = segments[0] !== 'share';
+        const tail = segments.slice(1, 1 + depth).filter(Boolean)
+            .map(x => (foldable ? x.toLowerCase() : x));
         handle = `${segments[0]}/${tail.join('/')}`;
         parsed.pathname = `/${segments[0]}/${tail.join('/')}`;
     } else if (platform === 'facebook' && segments.length >= 1) {
@@ -495,7 +511,7 @@ export function addChannel(input: {
         `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?`
     ).get(input.ownerPubkey) as any).c as number;
     if (totalRows >= MAX_ROWS_PER_MEMBER) {
-        throw new ChannelError('TOO_MANY', 'You have added and removed too many channels. Ask your community admin.');
+        throw new ChannelError('TOO_MANY', 'You have added and removed too many channels on this account.');
     }
 
     const { url, handle } = normaliseChannelInput(platform, input.raw);

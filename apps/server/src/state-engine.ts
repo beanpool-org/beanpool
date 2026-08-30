@@ -2967,6 +2967,17 @@ export function adminPruneUser(publicKey: string) {
         // client the member was pruned while the database reverted.
         setUserStatusRow(publicKey, 'pruned');
         db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
+        // Same scrub as purgeMemberSelf, and it has to happen here rather than being left to the
+        // member: a pruned account can no longer sign a request, deleteChannel is owner-scoped, and
+        // there is no admin route for it — so anything left behind stays on every mirror and backup
+        // permanently, with nobody able to remove it.
+        const prunedAt = new Date().toISOString();
+        db.prepare(`UPDATE creator_channels
+                       SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0,
+                           platform = 'deleted', category = 'other', supports_autolist = 0,
+                           autopublish = 0, syndicate_to_node = 0, post_count_seen = NULL,
+                           oauth_verified_at = NULL, last_error = NULL, updated_at = ?
+                     WHERE owner_pubkey = ? AND deleted_at IS NULL`).run(prunedAt, prunedAt, publicKey);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });

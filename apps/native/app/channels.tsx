@@ -30,6 +30,17 @@ import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
 
+/**
+ * Parse a response body without letting a non-JSON one mask the real failure.
+ *
+ * Behind Cloudflare a 502/524 returns an HTML error page, so an unguarded `res.json()` throws
+ * "JSON Parse error: Unexpected character: <" before the status is ever checked — and that is what
+ * the member reads instead of "Could not load your channels."
+ */
+async function readJson(res: Response): Promise<any> {
+    return res.json().catch(() => ({}));
+}
+
 type Platform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'website' | 'rss';
 type Category = 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
 
@@ -108,7 +119,7 @@ export default function ChannelsScreen() {
             const url = await anchorUrl();
             if (!url) { setError('No community node yet.'); setLoading(false); return; }
             const res = await signedPost(url, '/api/channels/mine', {}, identity);
-            const data = await res.json();
+            const data = await readJson(res);
             if (!res.ok) throw new Error(data?.message || data?.error || 'Could not load your channels.');
             setChannels(data.channels || []);
             setError(null);
@@ -129,7 +140,7 @@ export default function ChannelsScreen() {
             if (!url) throw new Error('No community node yet.');
             const res = await signedPost(url, '/api/member/channels',
                 { platform, url: value.trim(), category }, identity);
-            const data = await res.json();
+            const data = await readJson(res);
             if (!res.ok) throw new Error(data?.message || 'Could not add that channel.');
 
             setValue('');
@@ -185,7 +196,7 @@ export default function ChannelsScreen() {
             if (!url) throw new Error('No community node yet.');
             const res = await signedPost(url, `/api/member/channels/${id}`, body, identity);
             if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
+                const data = await readJson(res);
                 throw new Error(data?.message || 'Could not save that change.');
             }
             await load();

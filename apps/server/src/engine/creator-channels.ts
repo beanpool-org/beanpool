@@ -52,13 +52,15 @@ const MAX_HANDLE_LENGTH = 100;
 /** Generous enough for anyone real; low enough that nobody can bloat the members table. */
 const MAX_CHANNELS_PER_MEMBER = 12;
 /**
- * Live rows plus tombstones — a runaway guard, not a working limit.
+ * Rows created per member within CHURN_WINDOW_MS — a runaway guard, not a working limit.
  *
  * Tombstones are permanent (removing one un-deletes the channel on any replica that missed it, see
- * `addChannel`), so this is what bounds the table. Reaching it takes ~190 deliberate add/delete
- * cycles through signed, rate-limited requests, and the scrubbed rows are three columns wide.
+ * `addChannel`), so a lifetime count would brick an account that ever reached it. Reaching this
+ * takes 60 deliberate add/delete cycles in a month, through signed and rate-limited requests, on
+ * rows scrubbed down to three meaningful columns.
  */
-const MAX_ROWS_PER_MEMBER = 200;
+const MAX_ROWS_PER_WINDOW = 60;
+const CHURN_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface CreatorChannel {
     id: string;
@@ -507,11 +509,15 @@ export function addChannel(input: {
     //
     // They are cheap instead: `deleteChannel` scrubs every field that says anything, leaving an id
     // and two timestamps. The ceiling below is a runaway guard, not a working limit.
-    const totalRows = (db.prepare(
-        `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?`
-    ).get(input.ownerPubkey) as any).c as number;
-    if (totalRows >= MAX_ROWS_PER_MEMBER) {
-        throw new ChannelError('TOO_MANY', 'You have added and removed too many channels on this account.');
+    // A ROLLING WINDOW, not a lifetime total. Tombstones are permanent by design, so counting them
+    // forever meant an account that hit the ceiling could never add a channel again — no admin
+    // route, no self-service reset, nothing to prune. A window bounds burst abuse just as well and
+    // heals on its own.
+    const recentRows = (db.prepare(
+        `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ? AND created_at >= ?`
+    ).get(input.ownerPubkey, new Date(Date.now() - CHURN_WINDOW_MS).toISOString()) as any).c as number;
+    if (recentRows >= MAX_ROWS_PER_WINDOW) {
+        throw new ChannelError('TOO_MANY', 'You have added and removed a lot of channels lately. Try again in a few days.');
     }
 
     const { url, handle } = normaliseChannelInput(platform, input.raw);

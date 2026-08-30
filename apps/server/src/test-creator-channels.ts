@@ -95,6 +95,22 @@ async function main(): Promise<void> {
     assertThrows(() => normaliseChannelInput('instagram', ''),
         'EMPTY', 'an empty input is rejected');
 
+    // Regressions from review, all of which produced a broken link or a missed duplicate:
+    assert(normaliseChannelInput('instagram', '@Mullum_Ceramics').url === bare.url,
+        'handles are case-folded, so @Mullum_Ceramics collides with @mullum_ceramics');
+    assert(normaliseChannelInput('youtube', 'https://youtu.be/dQw4w9WgXcQ').url === 'https://youtu.be/dQw4w9WgXcQ',
+        'youtu.be short links keep their host (rewriting it 404s)');
+    assert(normaliseChannelInput('tiktok', 'https://vm.tiktok.com/ZSabc123/').url.includes('vm.tiktok.com'),
+        'vm.tiktok.com short links keep their host');
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/profile.php?id=100064123').url
+            === 'https://www.facebook.com/profile.php?id=100064123',
+        'facebook profile.php keeps its id — it is the only address such a page has');
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/mypage/posts/123').url
+            === normaliseChannelInput('facebook', '@mypage').url,
+        'facebook paths canonicalise to the page, so one page is one channel');
+    assertThrows(() => normaliseChannelInput('instagram', 'instagram.com'),
+        'NO_HANDLE', 'a bare platform domain is rejected — it points at no account');
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');
@@ -121,6 +137,15 @@ async function main(): Promise<void> {
     assert(afterSwitch.filter(c => c.isPrimaryVideo).length === 1, 'exactly one primary video channel survives a switch');
     assert(afterSwitch.find(c => c.id === yt.id)?.isPrimaryVideo === true, 'the newly chosen channel is the primary');
 
+    // A website cannot be the video primary — allowing it demoted every real video channel and
+    // left the feed with no cross-post winner.
+    const site = addChannel({ ownerPubkey: kayla, platform: 'website', raw: 'mullumceramics.com.au', category: 'craft' });
+    assert(site.isPrimaryVideo === false, 'a non-video channel is never marked primary on add');
+    assertThrows(() => updateChannel(kayla, site.id, { isPrimaryVideo: true }),
+        'NOT_VIDEO', 'a website cannot be made the main video channel');
+    assert(listChannels(kayla).filter(c => c.isPrimaryVideo).length === 1,
+        'the video primary survives an attempt to move it to a website');
+
     // ── 4. Ownership ────────────────────────────────────────────────────────────────────────
     assertThrows(() => updateChannel(marty, ig.id, { category: 'food' }),
         'NOT_YOURS', 'another member cannot update your channel');
@@ -130,14 +155,19 @@ async function main(): Promise<void> {
 
     // ── 5. Syndication toggle ───────────────────────────────────────────────────────────────
     updateChannel(kayla, ig.id, { syndicateToNode: false });
-    assert(listChannels(kayla).length === 2, 'a switched-off channel still shows in your own management view');
-    assert(listPublicChannels(kayla).length === 1, 'a switched-off channel is hidden from the public profile');
+    assert(listChannels(kayla).length === 3, 'a switched-off channel still shows in your own management view');
+    assert(listPublicChannels(kayla).length === 2, 'a switched-off channel is hidden from the public profile');
     updateChannel(kayla, ig.id, { syndicateToNode: true });
 
     // ── 6. Deletion keeps the tombstone, discards the link ──────────────────────────────────
     const removed = deleteChannel(kayla, ig.id);
     assert(removed, 'delete reports success');
-    assert(listChannels(kayla).length === 1, 'a deleted channel leaves the list');
+    assert(listChannels(kayla).length === 2, 'a deleted channel leaves the list');
+
+    // Deleting the primary must hand the flag on, or the member keeps video channels with no
+    // cross-post winner — the state the primary exists to prevent.
+    assert(listChannels(kayla).some(c => c.isPrimaryVideo),
+        'deleting a channel leaves a video primary behind');
 
     const tomb = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(ig.id) as any;
     assert(!!tomb && !!tomb.deleted_at, 'the row survives as a tombstone so the deletion can replicate');
@@ -162,7 +192,7 @@ async function main(): Promise<void> {
     await importRemoteState(payload as any);
 
     const reimported = listChannels(kayla);
-    assert(reimported.length === 1, 'the live channel is restored by the import');
+    assert(reimported.length === 2, 'the live channels are restored by the import');
     const reimportedTomb = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(ig.id) as any;
     assert(!!reimportedTomb?.deleted_at, 'the deleted channel imports as a tombstone, not as a live channel');
     assert(reimportedTomb?.url === null, 'the deleted URL is NOT resurrected by a restore');
@@ -192,7 +222,9 @@ async function main(): Promise<void> {
     await p2pNode.stop();
 
     console.log(`\n${passed}/${run} passed`);
-    if (passed !== run) process.exit(1);
+    // Explicit exit, as test-backup-topology does: p2p leaves handles open, so without this the
+    // process idles after the last assertion and test-all.sh records a TIMEOUT on a green suite.
+    process.exit(passed === run ? 0 : 1);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

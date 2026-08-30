@@ -682,6 +682,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                                      syndicate_to_node, created_at, updated_at, deleted_at)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
+                                    -- Included because executeRecovery repoints channels at the
+                                    -- member's NEW key. Without it a promoted backup keeps them
+                                    -- attached to the dead key and the chips vanish from the
+                                    -- member's profile after a recovery.
+                                    owner_pubkey      = excluded.owner_pubkey,
                                     url               = excluded.url,
                                     handle            = excluded.handle,
                                     category          = excluded.category,

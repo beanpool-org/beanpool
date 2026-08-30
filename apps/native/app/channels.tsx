@@ -46,16 +46,28 @@ interface Channel {
 }
 
 /**
- * `autoLists` is the honest answer to "will this look after itself?", and it is fixed by what each
- * platform actually publishes rather than by preference. See the file header.
+ * How each platform behaves once added, in the member's terms.
+ *
+ * Three states, not two — and they must match the server's `AUTOLIST_PLATFORMS`, which is
+ * `{youtube, rss}`. A website is neither: it has no stream of items to pull, it shows as a single
+ * card. Labelling it "updates itself" would contradict the card rendered directly above, which
+ * reads its `supportsAutolist` from the server and would say the opposite.
  */
-const PLATFORMS: { id: Platform; icon: string; label: string; autoLists: boolean; hint: string }[] = [
-    { id: 'youtube', icon: '🎥', label: 'YouTube', autoLists: true, hint: 'youtube.com/@you' },
-    { id: 'instagram', icon: '📷', label: 'Instagram', autoLists: false, hint: '@yourhandle' },
-    { id: 'tiktok', icon: '🎵', label: 'TikTok', autoLists: false, hint: '@yourhandle' },
-    { id: 'website', icon: '🌐', label: 'Website', autoLists: true, hint: 'yoursite.com' },
-    { id: 'facebook', icon: '📘', label: 'Facebook', autoLists: false, hint: 'facebook.com/yourpage' },
-    { id: 'rss', icon: '✍️', label: 'Blog / RSS', autoLists: true, hint: 'yourblog.com/feed' },
+type Listing = 'auto' | 'manual' | 'card';
+
+const LISTING_LABEL: Record<Listing, string> = {
+    auto: 'updates itself',
+    manual: 'a tap per post',
+    card: 'shows as a card',
+};
+
+const PLATFORMS: { id: Platform; icon: string; label: string; listing: Listing; hint: string }[] = [
+    { id: 'youtube', icon: '🎥', label: 'YouTube', listing: 'auto', hint: 'youtube.com/@you' },
+    { id: 'instagram', icon: '📷', label: 'Instagram', listing: 'manual', hint: '@yourhandle' },
+    { id: 'tiktok', icon: '🎵', label: 'TikTok', listing: 'manual', hint: '@yourhandle' },
+    { id: 'website', icon: '🌐', label: 'Website', listing: 'card', hint: 'yoursite.com' },
+    { id: 'facebook', icon: '📘', label: 'Facebook', listing: 'manual', hint: 'facebook.com/yourpage' },
+    { id: 'rss', icon: '✍️', label: 'Blog / RSS', listing: 'auto', hint: 'yourblog.com/feed' },
 ];
 
 const CATEGORIES: { id: Category; icon: string; label: string }[] = [
@@ -89,7 +101,9 @@ export default function ChannelsScreen() {
     const [adding, setAdding] = useState(false);
 
     const load = useCallback(async () => {
-        if (!identity) return;
+        // Clear the spinner rather than returning into it — an identity that never arrives would
+        // otherwise leave the screen loading forever with nothing to explain why.
+        if (!identity) { setError('No identity on this device yet.'); setLoading(false); return; }
         try {
             const url = await anchorUrl();
             if (!url) { setError('No community node yet.'); setLoading(false); return; }
@@ -256,7 +270,9 @@ export default function ChannelsScreen() {
                                     </View>
 
                                     <Text style={styles.cardMeta}>
-                                        {channel.supportsAutolist ? 'Updates itself' : 'Add posts with a tap each'}
+                                        {channel.supportsAutolist
+                                            ? 'Updates itself'
+                                            : LISTING_LABEL[platformMeta(channel.platform).listing]}
                                         {channel.isPrimaryVideo ? ' · main video channel' : ''}
                                     </Text>
 
@@ -306,13 +322,11 @@ export default function ChannelsScreen() {
                                                 style={[styles.tile, active && styles.tileActive]}
                                                 accessibilityRole="radio"
                                                 accessibilityState={{ selected: active }}
-                                                accessibilityLabel={`${p.label}, ${p.autoLists ? 'updates itself' : 'a tap per post'}`}
+                                                accessibilityLabel={`${p.label}, ${LISTING_LABEL[p.listing]}`}
                                             >
                                                 <Text style={styles.tileIcon}>{p.icon}</Text>
                                                 <Text style={[styles.tileLabel, active && styles.tileLabelActive]}>{p.label}</Text>
-                                                <Text style={styles.tileHint}>
-                                                    {p.autoLists ? 'updates itself' : 'a tap per post'}
-                                                </Text>
+                                                <Text style={styles.tileHint}>{LISTING_LABEL[p.listing]}</Text>
                                             </Pressable>
                                         );
                                     })}

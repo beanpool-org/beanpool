@@ -242,6 +242,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/activity/feed',            // living activity waterfall community pulse feed (#208)
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
+    '/api/channels/options',         // the platform/category vocabulary the channel form renders
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -260,6 +261,9 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     // identities, and rate-limited in the handler — it is a membership oracle by necessity, which
     // ONBOARDING Part 9 accepts and records rather than pretends away.
     /^\/api\/recovery\/keepers\/[^/]+$/,
+    // A member's published channels — the link chips on their public profile. Contains only what
+    // they explicitly switched on for syndication, so it is public in the same sense the profile is.
+    /^\/api\/members\/[^/]+\/channels$/,
     // A2-16: /api/recovery/pending/:guardian is deliberately NOT public — it lists a
     // guardian's wards' recovery requests. It is gated under ENFORCE_READ_AUTH and the
     // route additionally requires the verified signer to BE that guardian.

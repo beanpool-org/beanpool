@@ -117,6 +117,15 @@ const CANONICAL_HOST: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
     facebook: 'www.facebook.com',
 };
 
+/**
+ * Short-link hosts, which must be left exactly as they are.
+ *
+ * These are what the share sheets actually copy, and their paths are opaque IDs that only resolve
+ * on the short domain — rewriting `youtu.be/abc` to `www.youtube.com/abc` produces a 404, and the
+ * member has no way to tell why the link they pasted stopped working.
+ */
+const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set(['youtu.be', 'vm.tiktok.com', 'fb.me', 'instagr.am']);
+
 function hostMatches(host: string, allowed: string[]): boolean {
     const h = host.toLowerCase().replace(/^www\./, '');
     return allowed.some(a => h === a || h.endsWith('.' + a));
@@ -137,9 +146,17 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     if (input.length > MAX_URL_LENGTH) throw new ChannelError('TOO_LONG', 'That link is too long.');
 
     // A bare @handle only makes sense for the platforms that have handles.
+    //
+    // Handles may contain dots (`@my.ceramics` is a valid Instagram handle), so a dot alone cannot
+    // disqualify one. What does: a dotted string with NO leading `@` is a domain someone typed —
+    // otherwise `instagram.com` silently becomes `instagram.com/instagram.com/`.
     const bareHandle = input.match(/^@?([A-Za-z0-9._-]{1,100})$/);
-    if (bareHandle && platform !== 'website' && platform !== 'rss') {
-        const h = bareHandle[1];
+    const looksLikeDomain = !input.startsWith('@') && input.includes('.');
+    if (bareHandle && !looksLikeDomain && platform !== 'website' && platform !== 'rss') {
+        // Handles are case-insensitive on all four platforms, so `@Mullum_Ceramics` and
+        // `@mullum_ceramics` must produce one URL — otherwise the duplicate check misses and the
+        // member appears twice on their own feed.
+        const h = bareHandle[1].toLowerCase();
         switch (platform) {
             case 'instagram': return { url: `https://www.instagram.com/${h}/`, handle: `@${h}` };
             case 'tiktok': return { url: `https://www.tiktok.com/@${h}`, handle: `@${h}` };
@@ -171,31 +188,57 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         if (!hostMatches(parsed.hostname, allowed)) {
             throw new ChannelError('WRONG_HOST', `That is not a ${platform} link.`);
         }
-        parsed.hostname = CANONICAL_HOST[platform];
+        if (!SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase().replace(/^www\./, ''))) {
+            parsed.hostname = CANONICAL_HOST[platform];
+        }
     } else {
         parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
     }
 
-    // Tracking parameters differ per share and would defeat de-duplication.
-    parsed.search = '';
+    // Tracking parameters differ per share and would defeat de-duplication — but
+    // `facebook.com/profile.php?id=100064…` carries its identity IN the query string, and is the
+    // only addressable form for a page with no vanity URL. Keep that one parameter, drop the rest.
+    const fbProfileId = (platform === 'facebook' && /^\/profile\.php\/?$/i.test(parsed.pathname))
+        ? parsed.searchParams.get('id')
+        : null;
+    parsed.search = fbProfileId ? `?id=${encodeURIComponent(fbProfileId)}` : '';
     parsed.hash = '';
     parsed.protocol = 'https:';
 
+    // Short links have opaque paths that only resolve on their own host, so they are stored
+    // verbatim — there is nothing to canonicalise and guessing would break them.
+    const isShortLink = SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase().replace(/^www\./, ''));
     const segments = parsed.pathname.split('/').filter(Boolean);
     let handle: string | null = null;
-    if (platform === 'instagram' && segments.length >= 1 && !['p', 'reel', 'reels', 'tv'].includes(segments[0])) {
-        handle = `@${segments[0]}`;
-        parsed.pathname = `/${segments[0]}/`;
+    if (isShortLink) {
+        handle = null;
+    } else if (platform === 'instagram' && segments.length >= 1 && !['p', 'reel', 'reels', 'tv'].includes(segments[0])) {
+        const h = segments[0].toLowerCase();
+        handle = `@${h}`;
+        parsed.pathname = `/${h}/`;
     } else if (platform === 'tiktok' && segments[0]?.startsWith('@')) {
-        handle = segments[0];
-        parsed.pathname = `/${segments[0]}`;
+        handle = segments[0].toLowerCase();
+        parsed.pathname = `/${handle}`;
     } else if (platform === 'youtube' && segments[0]?.startsWith('@')) {
-        handle = segments[0];
-        parsed.pathname = `/${segments[0]}`;
+        handle = segments[0].toLowerCase();
+        parsed.pathname = `/${handle}`;
+    } else if (platform === 'facebook' && fbProfileId) {
+        handle = `profile.php?id=${fbProfileId}`;
+        parsed.pathname = '/profile.php';
     } else if (platform === 'facebook' && segments.length >= 1) {
-        handle = segments[0];
+        // Canonicalised like the others, or `@mypage`, `/mypage/` and `/mypage/posts/123` become
+        // three separate rows for one page and the duplicate check never fires.
+        const h = segments[0].toLowerCase();
+        handle = h;
+        parsed.pathname = `/${h}`;
     } else if (platform === 'website' || platform === 'rss') {
         handle = parsed.hostname.replace(/^www\./, '');
+    }
+
+    // `instagram.com` on its own parses, passes the host check, and yields no handle — a valid URL
+    // that points at no account. Storing it would put an empty chip on the member's profile.
+    if (!handle && !isShortLink && platform !== 'website' && platform !== 'rss') {
+        throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
     }
 
     const url = parsed.toString();
@@ -278,12 +321,16 @@ export function addChannel(input: {
 
     // The first video channel is the primary by default. Being explicit beats leaving every
     // channel unmarked and having the feed pick arbitrarily.
-    const isPrimary = input.isPrimaryVideo !== undefined
-        ? (input.isPrimaryVideo ? 1 : 0)
-        : (VIDEO_PLATFORMS.has(platform) && otherVideoChannels(input.ownerPubkey).length === 0 ? 1 : 0);
+    // Only a video channel can be the video primary. Honouring the flag on a website would set it
+    // without clearing the others (that step is video-guarded), leaving two rows marked primary.
+    const isPrimary = !VIDEO_PLATFORMS.has(platform)
+        ? 0
+        : input.isPrimaryVideo !== undefined
+            ? (input.isPrimaryVideo ? 1 : 0)
+            : (otherVideoChannels(input.ownerPubkey).length === 0 ? 1 : 0);
 
     db.transaction(() => {
-        if (isPrimary === 1 && VIDEO_PLATFORMS.has(platform)) {
+        if (isPrimary === 1) {
             db.prepare(
                 `UPDATE creator_channels SET is_primary_video = 0, updated_at = ?
                   WHERE owner_pubkey = ? AND deleted_at IS NULL AND is_primary_video = 1`
@@ -321,6 +368,11 @@ export function updateChannel(
 
     if (patch.category !== undefined && !CHANNEL_CATEGORIES.includes(patch.category as ChannelCategory)) {
         throw new ChannelError('BAD_CATEGORY', 'Unknown category.');
+    }
+    // Without this a website could be made "primary video", demoting every real video channel and
+    // leaving the feed with no cross-post winner at all.
+    if (patch.isPrimaryVideo === true && !VIDEO_PLATFORMS.has(row.platform as ChannelPlatform)) {
+        throw new ChannelError('NOT_VIDEO', 'Only a video channel can be your main one.');
     }
 
     const now = new Date().toISOString();
@@ -363,17 +415,28 @@ export function deleteChannel(ownerPubkey: string, id: string): boolean {
     if (!row) return false;
     if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
 
+    const wasPrimary = getChannel(id)?.isPrimaryVideo === true;
     const now = new Date().toISOString();
-    const res = db.prepare(
-        `UPDATE creator_channels
-            SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0, updated_at = ?
-          WHERE id = ? AND owner_pubkey = ? AND deleted_at IS NULL`
-    ).run(now, now, id, ownerPubkey);
-    return res.changes > 0;
-}
+    let changed = 0;
 
-/** Repoint every channel of a member at a new key — used by the identity-migration path. */
-export function reassignChannels(oldPubkey: string, newPubkey: string): void {
-    db.prepare(`UPDATE creator_channels SET owner_pubkey = ?, updated_at = ? WHERE owner_pubkey = ?`)
-        .run(newPubkey, new Date().toISOString(), oldPubkey);
+    db.transaction(() => {
+        changed = db.prepare(
+            `UPDATE creator_channels
+                SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0, updated_at = ?
+              WHERE id = ? AND owner_pubkey = ? AND deleted_at IS NULL`
+        ).run(now, now, id, ownerPubkey).changes;
+
+        // Deleting the primary would otherwise leave the member with video channels and no
+        // cross-post winner, which is the state the primary exists to prevent. The oldest
+        // survivor inherits it — the same rule that made the first one primary.
+        if (changed > 0 && wasPrimary) {
+            const heir = otherVideoChannels(ownerPubkey, id)[0];
+            if (heir) {
+                db.prepare(`UPDATE creator_channels SET is_primary_video = 1, updated_at = ? WHERE id = ?`)
+                    .run(now, heir.id);
+            }
+        }
+    })();
+
+    return changed > 0;
 }

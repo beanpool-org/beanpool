@@ -63,3 +63,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-08-25 - Add loading state and spinner for AiServicesModule
 **Learning:** Async operations like asking AI Copilot lacked visual loading feedback, leaving the user unsure if the query was processing.
 **Action:** Add explicit loading state banners and animated spinners to async submit buttons and result panels.
+
+## 2026-08-25 - Add loading spinner and distinct empty state for MembersModule
+**Learning:** `MembersModule.tsx` showed plain static text without a loading spinner while fetching node member data and did not distinguish between zero members on the node vs no search filter matches.
+**Action:** Add animated loading spinners during fetch operations and check `members.length === 0` to show an accurate empty state message when no members exist yet.

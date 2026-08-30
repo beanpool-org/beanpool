@@ -793,16 +793,23 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                             </div>
                         ) : (
                             <div className="p-8 text-center text-nature-500 text-xs">
-                                No member records match the filter query.
+                                {members.length === 0
+                                    ? 'No members recorded on this node yet.'
+                                    : 'No member records match the filter query.'}
                             </div>
                         )}
                     </div>
                 </div>
             ) : (
-                <div className="p-12 text-center text-nature-400 text-xs">
-                    {nodeDataLoading
-                        ? 'Fetching node member roster from target API...'
-                        : 'Authenticate with Admin Password to view node member standing and trust calculations.'}
+                <div className="p-12 text-center text-nature-400 text-xs flex flex-col items-center justify-center gap-2">
+                    {nodeDataLoading ? (
+                        <>
+                            <span className="text-xl animate-spin">🔄</span>
+                            <span>Fetching node member roster from target API...</span>
+                        </>
+                    ) : (
+                        <span>Authenticate with Admin Password to view node member standing and trust calculations.</span>
+                    )}
                 </div>
             )}
 

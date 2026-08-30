@@ -228,17 +228,29 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
         throw new ChannelError('BAD_SCHEME', 'Links must start with https://');
     }
+    // `https://user:pass@example.com/feed` would otherwise be stored verbatim on a publicly
+    // readable row, mirrored and backed up, while the chip shows only the hostname.
+    if (parsed.username || parsed.password) {
+        throw new ChannelError('HAS_CREDENTIALS', 'Please paste a link without a username or password in it.');
+    }
     if (platform !== 'website' && platform !== 'rss') {
         const allowed = PLATFORM_HOSTS[platform];
         if (!hostMatches(parsed.hostname, allowed)) {
-            throw new ChannelError('WRONG_HOST', `That is not a ${platform} link.`);
+            // `my.ceramics` parses as a hostname, so the bare-handle branch declined it and we land
+            // here. Say what actually fixes it rather than "that is not an instagram link".
+            const looksLikeHandle = /^[A-Za-z0-9._-]+$/.test(input) && !/^https?:/i.test(input);
+            throw new ChannelError('WRONG_HOST', looksLikeHandle
+                ? `If that is your ${platform} handle, put an @ in front of it.`
+                : `That is not a ${platform} link.`);
         }
         if (!SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase().replace(/^www\./, ''))) {
             parsed.hostname = CANONICAL_HOST[platform];
         }
     } else {
         assertPublicHostname(parsed.hostname);
-        parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
+        // Lowercased but NOT de-www'd: plenty of sites serve only on the www host, and rewriting
+        // a member's own address into one that 404s is worse than a redundant prefix.
+        parsed.hostname = parsed.hostname.toLowerCase();
     }
 
     // Tracking parameters differ per share and would defeat de-duplication — but
@@ -270,7 +282,8 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     let handle: string | null = null;
     if (isShortLink) {
         handle = null;
-    } else if (platform === 'instagram' && segments.length >= 1 && !['p', 'reel', 'reels', 'tv'].includes(segments[0])) {
+    } else if (platform === 'instagram' && segments.length >= 1
+               && !['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct'].includes(segments[0])) {
         const h = segments[0].toLowerCase();
         handle = `@${h}`;
         parsed.pathname = `/${h}/`;
@@ -282,13 +295,30 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         parsed.pathname = `/${handle}`;
     } else if (platform === 'youtube' && ['channel', 'c', 'user'].includes(segments[0]) && segments[1]) {
         // `/channel/UC…` is the form that maps to the channel RSS feed the autolist path needs, so
-        // it must be accepted — and `/c/` and `/user/` are still all over people's bios. The ID is
-        // case-sensitive here, unlike an @handle.
-        handle = segments[0] === 'channel' ? segments[1] : `@${segments[1]}`;
-        parsed.pathname = `/${segments[0]}/${segments[1]}`;
+        // it must be accepted, and `/c/` and `/user/` are still all over people's bios.
+        //
+        // A `/channel/` ID is case-SENSITIVE and must be preserved byte for byte. `/c/` and
+        // `/user/` names are not, so they are folded like an @handle — otherwise `/c/Foo` and
+        // `/c/foo` are two rows for one channel.
+        //
+        // What this still cannot collapse is the same channel added as both `/c/Foo` and `@foo`:
+        // deciding they are the same requires resolving them, which Phase 2's resolver can do and
+        // this cannot. The cross-post warning covers the visible symptom in the meantime.
+        const isChannelId = segments[0] === 'channel';
+        const ident = isChannelId ? segments[1] : segments[1].toLowerCase();
+        handle = isChannelId ? ident : `@${ident}`;
+        parsed.pathname = `/${segments[0]}/${ident}`;
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
         parsed.pathname = '/profile.php';
+    } else if (platform === 'facebook' && ['groups', 'pages', 'people', 'share', 'g'].includes(segments[0]) && segments[1]) {
+        // These prefixes carry the identity in the SECOND segment. Keeping only the first collapsed
+        // every group to `facebook.com/groups`, so distinct channels collided as duplicates and the
+        // profile chip linked to a generic page. `/people/Some-Name/61553…` is the modern default
+        // profile URL, so its trailing id is kept too.
+        const tail = segments[0] === 'people' ? segments.slice(1, 3) : [segments[1]];
+        handle = `${segments[0]}/${tail.join('/')}`;
+        parsed.pathname = `/${segments[0]}/${tail.join('/')}`;
     } else if (platform === 'facebook' && segments.length >= 1) {
         // Canonicalised like the others, or `@mypage`, `/mypage/` and `/mypage/posts/123` become
         // three separate rows for one page and the duplicate check never fires.
@@ -325,10 +355,15 @@ export function listChannels(ownerPubkey: string): CreatorChannel[] {
  * switched off without that switch meaning nothing.
  */
 export function listPublicChannels(ownerPubkey: string): CreatorChannel[] {
+    // Joined to `members.status` rather than trusting the channel rows: `actionReport` suspends a
+    // member and pauses their posts, and their external links have to go the same way. Without
+    // this the one endpoint that serves unauthenticated keeps publishing them.
     const rows = db.prepare(
-        `SELECT * FROM creator_channels
-          WHERE owner_pubkey = ? AND deleted_at IS NULL AND syndicate_to_node = 1
-          ORDER BY created_at ASC`
+        `SELECT c.* FROM creator_channels c
+           JOIN members m ON m.public_key = c.owner_pubkey
+          WHERE c.owner_pubkey = ? AND c.deleted_at IS NULL AND c.syndicate_to_node = 1
+            AND m.status = 'active'
+          ORDER BY c.created_at ASC`
     ).all(ownerPubkey) as any[];
     return rows.map(rowToChannel);
 }
@@ -446,6 +481,16 @@ export function updateChannel(
                 `UPDATE creator_channels SET is_primary_video = 0, updated_at = ?
                   WHERE owner_pubkey = ? AND deleted_at IS NULL AND id != ? AND is_primary_video = 1`
             ).run(now, ownerPubkey, id);
+        }
+        // Demoting the current primary hands it on, the same way deleting it does — otherwise the
+        // member is left with video channels and no cross-post winner, which is the state the flag
+        // exists to prevent.
+        if (patch.isPrimaryVideo === false && row.is_primary_video === 1) {
+            const heir = otherVideoChannels(ownerPubkey, id)[0];
+            if (heir) {
+                db.prepare(`UPDATE creator_channels SET is_primary_video = 1, updated_at = ? WHERE id = ?`)
+                    .run(now, heir.id);
+            }
         }
         db.prepare(
             `UPDATE creator_channels SET

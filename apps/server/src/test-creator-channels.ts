@@ -125,8 +125,8 @@ async function main(): Promise<void> {
     // YouTube's non-@ forms, one of which is the only path to the channel RSS feed.
     assert(normaliseChannelInput('youtube', 'https://www.youtube.com/channel/UCabc123').handle === 'UCabc123',
         'youtube /channel/UC… is accepted — it is what the autolist feed is built from');
-    assert(normaliseChannelInput('youtube', 'https://www.youtube.com/c/SomeName').handle === '@SomeName',
-        'youtube /c/Name is accepted');
+    assert(normaliseChannelInput('youtube', 'https://www.youtube.com/c/SomeName').handle === '@somename',
+        'youtube /c/Name is accepted, case-folded like an @handle');
 
     // These become server-side fetch targets in Phase 2; they must never reach the database.
     for (const [addr, label] of [
@@ -141,6 +141,25 @@ async function main(): Promise<void> {
     }
     assertThrows(() => normaliseChannelInput('website', 'notadomain'),
         'BAD_URL', 'a bare machine name is refused as a website');
+
+    // Round-three regressions.
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/groups/123456789').url
+            !== normaliseChannelInput('facebook', 'https://www.facebook.com/groups/987654321').url,
+        'two facebook groups stay distinct');
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/people/Some-Name/61553').handle
+            === 'people/Some-Name/61553',
+        'a modern facebook profile URL keeps its id');
+    assert(normaliseChannelInput('website', 'https://www.example.com/feed').url.includes('www.example.com'),
+        'www. is kept on a website — some hosts only serve on it');
+    assertThrows(() => normaliseChannelInput('website', 'https://user:pass@example.com/feed'),
+        'HAS_CREDENTIALS', 'a URL carrying credentials is refused');
+    assert(normaliseChannelInput('youtube', 'https://www.youtube.com/c/Foo').url
+            === normaliseChannelInput('youtube', 'https://www.youtube.com/c/foo').url,
+        'youtube /c/ names are case-folded');
+    assert(normaliseChannelInput('youtube', 'https://www.youtube.com/channel/UCabc123').url.includes('UCabc123'),
+        'a youtube channel ID keeps its case — it is case-sensitive');
+    assertThrows(() => normaliseChannelInput('instagram', 'https://www.instagram.com/stories/someone/123'),
+        'NO_HANDLE', 'an instagram story link is not an account');
 
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
@@ -176,6 +195,13 @@ async function main(): Promise<void> {
         'NOT_VIDEO', 'a website cannot be made the main video channel');
     assert(listChannels(kayla).filter(c => c.isPrimaryVideo).length === 1,
         'the video primary survives an attempt to move it to a website');
+
+    // Demoting the primary must hand it on, just as deleting it does.
+    const ytPrimary = listChannels(kayla).find(c => c.isPrimaryVideo)!;
+    updateChannel(kayla, ytPrimary.id, { isPrimaryVideo: false });
+    assert(listChannels(kayla).filter(c => c.isPrimaryVideo).length === 1,
+        'demoting the primary promotes an heir rather than leaving none');
+    updateChannel(kayla, ytPrimary.id, { isPrimaryVideo: true });
 
     // ── 4. Ownership ────────────────────────────────────────────────────────────────────────
     assertThrows(() => updateChannel(marty, ig.id, { category: 'food' }),

@@ -273,17 +273,19 @@ export const CLUSTER_ANCHOR = { x: 0.5, y: 0.5 };
 // buildVariantList — extract unique pin variants from posts
 // ═══════════════════════════════════════════════════════
 
+// ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans inside post mapping loop
 export function buildVariantList(
   posts: any[],
   categories: any[],
 ): CaptureRequest[] {
   const seen = new Set<string>();
   const result: CaptureRequest[] = [];
+  const categoriesMap = new Map((categories || []).map((c: any) => [c.id, c]));
 
   for (const post of posts) {
     const isOffer = (post.type || '').toLowerCase() === 'offer';
     const bgColor = isOffer ? '#10b981' : '#ea580c';
-    const catObj = categories.find((c: any) => c.id === post.category);
+    const catObj = categoriesMap.get(post.category);
     const emoji = catObj?.emoji || (isOffer ? '📦' : '❤️');
     const isElder = (post.author_energy_cycled || 0) >= 10000;
     const key = pinCacheKey(emoji, bgColor, isElder);

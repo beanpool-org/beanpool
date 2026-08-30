@@ -111,6 +111,10 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 **Learning:** In `apps/native/app/(tabs)/index.tsx`, looking up selected category metadata and mapped interest emojis repeatedly called `MARKETPLACE_CATEGORIES.find(c => c.id === ...)` on render cycles.
 **Action:** Exported `MARKETPLACE_CATEGORIES_BY_ID` Map in `apps/native/app/(tabs)/index.tsx` and replaced `.find(...)` scans with constant-time `MARKETPLACE_CATEGORIES_BY_ID.get(...)` lookups.
 
+## 2026-09-06 - O(P*C) Category Lookups in Native buildVariantList
+**Learning:** In `apps/native/components/UnifiedMapPin.tsx`, `buildVariantList` iterated over `posts` and executed `categories.find(c => c.id === post.category)` for every item, creating an $O(P \times C)$ linear array scan when constructing map pin variant requests.
+**Action:** Pre-computed a `categoriesMap` indexed by `id` before mapping over `posts`, reducing category metadata resolution to an $O(1)$ lookup per post ($O(P + C)$ total).
+
 ## 2026-09-10 - Single-pass N-gram Search Keyword Expansion in Engine
 **Learning:** In `packages/beanpool-engine/src/posts.ts`, `generateSearchKeywords` previously re-parsed input strings via `text.split(/\s+/)` and performed nested array loops for 2-gram and 3-gram synonym matching.
 **Action:** Refactored keyword generation to run in a single pass over pre-tokenized words, building n-gram strings inline to eliminate redundant allocations and loop overhead.

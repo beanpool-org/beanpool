@@ -1209,7 +1209,12 @@ router.post('/api/friends/remove', async (ctx) => {
         return;
     }
     const ok = removeFriend(ownerPubkey, friendPubkey);
-    ctx.body = { success: ok };
+    if (!ok) {
+        ctx.status = 400;
+        ctx.body = { error: 'Failed to remove friend — friend relationship not found' };
+        return;
+    }
+    ctx.body = { success: true };
 });
 
 router.post('/api/friends/guardian', async (ctx) => {

@@ -12,11 +12,14 @@
  * So the owner is only ever `ctx.state.actor`, and a request without one is a 401 rather than a
  * best guess.
  *
- * ## Reads are public, writes are not
+ * ## Reads are gated like the profile they belong to
  *
- * `GET /api/members/:publicKey/channels` returns the channels a member chose to syndicate. That is
- * deliberately unauthenticated within the node — it is the data behind the link chips on a public
- * profile, and it contains nothing the member has not explicitly published.
+ * `GET /api/members/:publicKey/channels` returns the channels a member chose to syndicate — the
+ * link chips on their profile. It is NOT on the public-read allowlist, because
+ * `GET /api/profile/:publicKey` is not either: under ENFORCE_READ_AUTH the profile requires a
+ * member identity, and a member's external handles are no less identifying than the profile that
+ * carries them. Syndication is a choice about what other *members* see, not a decision to publish
+ * to anyone who can reach the node.
  */
 
 import Router from '@koa/router';

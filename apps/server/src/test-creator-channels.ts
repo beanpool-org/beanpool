@@ -161,6 +161,18 @@ async function main(): Promise<void> {
     assertThrows(() => normaliseChannelInput('instagram', 'https://www.instagram.com/stories/someone/123'),
         'NO_HANDLE', 'an instagram story link is not an account');
 
+    // Round-four regressions.
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/share/p/1A2b3C4d/').url
+            .includes('share/p/1A2b3C4d'),
+        'a facebook share link keeps the id below the prefix');
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/share/p/AAAA/').url
+            !== normaliseChannelInput('facebook', 'https://www.facebook.com/share/p/BBBB/').url,
+        'two facebook share links stay distinct');
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/pages/Foo/123456').url.includes('123456'),
+        'a facebook /pages/ URL keeps its page id');
+    assert(normaliseChannelInput('instagram', 'https://instagr.am/mullum_ceramics/').url === bare.url,
+        'instagr.am canonicalises to the same channel as instagram.com — its path is a username');
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');
@@ -203,6 +215,11 @@ async function main(): Promise<void> {
         'demoting the primary promotes an heir rather than leaving none');
     updateChannel(kayla, ytPrimary.id, { isPrimaryVideo: true });
 
+    assertThrows(() => updateChannel(kayla, site.id, { isPrimaryVideo: 1 as any }),
+        'BAD_FIELD', 'a non-boolean isPrimaryVideo is refused, not coerced');
+    assertThrows(() => updateChannel(kayla, site.id, { syndicateToNode: 'yes' as any }),
+        'BAD_FIELD', 'a non-boolean syndicateToNode is refused');
+
     // ── 4. Ownership ────────────────────────────────────────────────────────────────────────
     assertThrows(() => updateChannel(marty, ig.id, { category: 'food' }),
         'NOT_YOURS', 'another member cannot update your channel');
@@ -221,10 +238,15 @@ async function main(): Promise<void> {
     assert(removed, 'delete reports success');
     assert(listChannels(kayla).length === 2, 'a deleted channel leaves the list');
 
-    // Deleting the primary must hand the flag on, or the member keeps video channels with no
-    // cross-post winner — the state the primary exists to prevent.
-    assert(listChannels(kayla).some(c => c.isPrimaryVideo),
-        'deleting a channel leaves a video primary behind');
+    // Deleting the PRIMARY specifically — the inheritance path. Deleting a non-primary channel
+    // would leave the flag untouched and prove nothing, and there has to be a survivor to inherit.
+    addChannel({ ownerPubkey: kayla, platform: 'tiktok', raw: '@mullumceramics', category: 'craft' });
+    const primaryBeforeDelete = listChannels(kayla).find(c => c.isPrimaryVideo)!;
+    assert(primaryBeforeDelete.id !== ig.id, 'the primary is a different channel from the one deleted above');
+    deleteChannel(kayla, primaryBeforeDelete.id);
+    const heirs = listChannels(kayla).filter(c => c.isPrimaryVideo);
+    assert(heirs.length === 1 && heirs[0].id !== primaryBeforeDelete.id,
+        'deleting the primary promotes a surviving video channel');
 
     const tomb = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(ig.id) as any;
     assert(!!tomb && !!tomb.deleted_at, 'the row survives as a tombstone so the deletion can replicate');

@@ -51,6 +51,19 @@ const MAX_URL_LENGTH = 500;
 const MAX_HANDLE_LENGTH = 100;
 /** Generous enough for anyone real; low enough that nobody can bloat the members table. */
 const MAX_CHANNELS_PER_MEMBER = 12;
+/**
+ * Live rows plus tombstones. Bounds add/delete cycling, which the live cap alone does not — every
+ * tombstone replicates to the backup and stays there.
+ */
+const MAX_ROWS_PER_MEMBER = 60;
+/**
+ * How long a tombstone is kept before being dropped outright.
+ *
+ * Long enough that the deletion has certainly reached every backup (delta sync runs continuously
+ * and a full snapshot far more often than this), after which the row conveys nothing — the link
+ * was NULLed at deletion, so all that remains is an id nobody references.
+ */
+const TOMBSTONE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 export interface CreatorChannel {
     id: string;
@@ -67,6 +80,22 @@ export interface CreatorChannel {
     syndicateToNode: boolean;
     createdAt: string;
     updatedAt: string;
+}
+
+/**
+ * A patch field must be a real boolean.
+ *
+ * The guards read `patch.x === true`, but the writes read `patch.x ? 1 : 0` — so a JSON `1` would
+ * skip the NOT_VIDEO check and the demote-others step while still setting the flag, leaving two
+ * rows marked primary. Rejecting the wrong type is safer than making the two ends agree, because
+ * the next field added would have to remember the same trick.
+ */
+function asBool(value: unknown, field: string): boolean | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'boolean') {
+        throw new ChannelError('BAD_FIELD', `${field} must be true or false.`);
+    }
+    return value;
 }
 
 export class ChannelError extends Error {
@@ -124,7 +153,7 @@ const CANONICAL_HOST: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
  * on the short domain — rewriting `youtu.be/abc` to `www.youtube.com/abc` produces a 404, and the
  * member has no way to tell why the link they pasted stopped working.
  */
-const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set(['youtu.be', 'vm.tiktok.com', 'fb.me', 'instagr.am']);
+const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set(['youtu.be', 'vm.tiktok.com', 'fb.me']);
 
 /** Tracking parameters that differ per share and would defeat de-duplication. */
 const TRACKING_PARAMS = [/^utm_/i, /^fbclid$/i, /^igsh(id)?$/i, /^gclid$/i, /^si$/i, /^mc_[ce]id$/i];
@@ -170,6 +199,16 @@ function assertPublicHostname(hostname: string): void {
         throw new ChannelError('BAD_URL', 'That does not look like a website address.');
     }
 }
+
+/**
+ * Facebook path prefixes and how many segments below them carry the identity.
+ *
+ * `/groups/<id>` is one; `/people/<name>/<id>` and `/share/p/<id>` are two — truncating those to
+ * one stores `facebook.com/share/p`, a dead link that also collides with every other share URL.
+ */
+const FB_PREFIX_DEPTH: Record<string, number> = {
+    groups: 1, g: 1, pages: 2, people: 2, share: 2, profile: 1,
+};
 
 function hostMatches(host: string, allowed: string[]): boolean {
     const h = host.toLowerCase().replace(/^www\./, '');
@@ -311,12 +350,13 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
         parsed.pathname = '/profile.php';
-    } else if (platform === 'facebook' && ['groups', 'pages', 'people', 'share', 'g'].includes(segments[0]) && segments[1]) {
-        // These prefixes carry the identity in the SECOND segment. Keeping only the first collapsed
-        // every group to `facebook.com/groups`, so distinct channels collided as duplicates and the
-        // profile chip linked to a generic page. `/people/Some-Name/61553…` is the modern default
-        // profile URL, so its trailing id is kept too.
-        const tail = segments[0] === 'people' ? segments.slice(1, 3) : [segments[1]];
+    } else if (platform === 'facebook' && FB_PREFIX_DEPTH[segments[0]] && segments[1]) {
+        // These prefixes carry the identity BELOW the first segment, and how far below differs:
+        // `/groups/<id>` is one deep, while `/people/<name>/<id>` and `/share/p/<id>` are two.
+        // Keeping only the first segment collapsed every group to `facebook.com/groups`, so
+        // distinct channels collided as duplicates and the chip linked to a generic page.
+        const depth = FB_PREFIX_DEPTH[segments[0]];
+        const tail = segments.slice(1, 1 + depth).filter(Boolean);
         handle = `${segments[0]}/${tail.join('/')}`;
         parsed.pathname = `/${segments[0]}/${tail.join('/')}`;
     } else if (platform === 'facebook' && segments.length >= 1) {
@@ -389,9 +429,11 @@ export function addChannel(input: {
     platform: string;
     raw: string;
     category: string;
-    syndicateToNode?: boolean;
-    isPrimaryVideo?: boolean;
+    syndicateToNode?: unknown;
+    isPrimaryVideo?: unknown;
 }): CreatorChannel {
+    const syndicateToNode = asBool(input.syndicateToNode, 'syndicateToNode');
+    const wantsPrimary = asBool(input.isPrimaryVideo, 'isPrimaryVideo');
     const platform = input.platform as ChannelPlatform;
     const category = input.category as ChannelCategory;
     if (!CHANNEL_PLATFORMS.includes(platform)) throw new ChannelError('BAD_PLATFORM', 'Unknown platform.');
@@ -400,9 +442,23 @@ export function addChannel(input: {
     const member = db.prepare(`SELECT public_key FROM members WHERE public_key = ?`).get(input.ownerPubkey);
     if (!member) throw new ChannelError('NO_MEMBER', 'Member not found.');
 
+    // Tombstones are permanent and fully replicated, so a live-row cap alone lets add/delete
+    // cycling grow the table without bound. Two bounds: retire tombstones old enough to have
+    // certainly reached every backup, then cap what remains.
+    db.prepare(
+        `DELETE FROM creator_channels
+          WHERE owner_pubkey = ? AND deleted_at IS NOT NULL AND deleted_at < ?`
+    ).run(input.ownerPubkey, new Date(Date.now() - TOMBSTONE_RETENTION_MS).toISOString());
+
     const existing = listChannels(input.ownerPubkey);
     if (existing.length >= MAX_CHANNELS_PER_MEMBER) {
         throw new ChannelError('TOO_MANY', `You can have up to ${MAX_CHANNELS_PER_MEMBER} channels.`);
+    }
+    const totalRows = (db.prepare(
+        `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ?`
+    ).get(input.ownerPubkey) as any).c as number;
+    if (totalRows >= MAX_ROWS_PER_MEMBER) {
+        throw new ChannelError('TOO_MANY', 'You have changed channels too many times recently. Try again in a few days.');
     }
 
     const { url, handle } = normaliseChannelInput(platform, input.raw);
@@ -424,8 +480,8 @@ export function addChannel(input: {
     // without clearing the others (that step is video-guarded), leaving two rows marked primary.
     const isPrimary = !VIDEO_PLATFORMS.has(platform)
         ? 0
-        : input.isPrimaryVideo !== undefined
-            ? (input.isPrimaryVideo ? 1 : 0)
+        : wantsPrimary !== undefined
+            ? (wantsPrimary ? 1 : 0)
             : (otherVideoChannels(input.ownerPubkey).length === 0 ? 1 : 0);
 
     db.transaction(() => {
@@ -441,7 +497,7 @@ export function addChannel(input: {
                  supports_autolist, syndicate_to_node, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(id, input.ownerPubkey, platform, url, handle, category, isPrimary,
-              supportsAutolist, input.syndicateToNode === false ? 0 : 1, now, now);
+              supportsAutolist, syndicateToNode === false ? 0 : 1, now, now);
     })();
 
     return getChannel(id)!;
@@ -457,8 +513,14 @@ export function addChannel(input: {
 export function updateChannel(
     ownerPubkey: string,
     id: string,
-    patch: { category?: string; syndicateToNode?: boolean; isPrimaryVideo?: boolean; autopublish?: boolean }
+    rawPatch: { category?: string; syndicateToNode?: unknown; isPrimaryVideo?: unknown; autopublish?: unknown }
 ): CreatorChannel {
+    const patch = {
+        category: rawPatch.category,
+        syndicateToNode: asBool(rawPatch.syndicateToNode, 'syndicateToNode'),
+        isPrimaryVideo: asBool(rawPatch.isPrimaryVideo, 'isPrimaryVideo'),
+        autopublish: asBool(rawPatch.autopublish, 'autopublish'),
+    };
     const row = db.prepare(
         `SELECT * FROM creator_channels WHERE id = ? AND deleted_at IS NULL`
     ).get(id) as any;

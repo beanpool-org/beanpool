@@ -114,6 +114,7 @@ import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
 import { createPulseRoutes } from './routes/pulse.js';
+import { startPulseScheduler } from './engine/pulse-resolver.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 
@@ -926,6 +927,16 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // Start auto-pricing background aggregator
     startPricingAggregatorWorker();
+
+    // The Pulse: poll syndicated creator feeds and prune items past 30 days.
+    // On by default — an unstarted scheduler means channels resolve never and the
+    // feed stays permanently empty, which is exactly the built-but-unreachable
+    // trap. PULSE_SCHEDULER=0 disables it per node for a quiet rollout.
+    if (process.env.PULSE_SCHEDULER !== '0') {
+        startPulseScheduler();
+    } else {
+        logger.info('SYS', '[Pulse] Scheduler disabled by PULSE_SCHEDULER=0 — feeds will not refresh');
+    }
     for (const mod of routeModules) {
         router.use(mod.routes());
         router.use(mod.allowedMethods());

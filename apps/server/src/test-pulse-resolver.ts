@@ -43,6 +43,8 @@ import {
     scrubPulseItems,
     prunePulseItems,
     getPulseFeed,
+    encodePulseCursor,
+    decodePulseCursor,
     setPulseItemMute,
     PulseError,
     SsrfSecurityError,
@@ -375,6 +377,57 @@ async function main(): Promise<void> {
     const page2 = getPulseFeed({ cursor: page1.nextCursor!, limit: 2 });
     assert(page2.items.length === 1, 'Page 2 returns remaining 1 item');
     assert(page2.items[0].id === 'item_1', 'Page 2 item is item_1');
+
+    // Keyset pagination: a batch sharing one timestamp must not be skipped.
+    // This is the regression the review caught — `published_at < cursor` dropped
+    // every same-timestamp item that did not fit on the page.
+    const tieNow = new Date().toISOString();
+    const tieStamp = '2026-08-29T09:00:00.000Z';
+    for (const n of ['a', 'b', 'c', 'd', 'e']) {
+        insertStmt.run(`item_tie_${n}`, ch.id, kayla, 'youtube', `vid_tie_${n}`,
+            `https://youtube.com/watch?v=vid_tie_${n}`, `Batch ${n}`, null,
+            tieStamp, 'craft', tieNow, tieNow);
+    }
+    const seen = new Set<string>();
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+        const page: { items: { id: string }[]; nextCursor: string | null } =
+            getPulseFeed({ limit: 2, cursor: cursor ?? undefined });
+        for (const it of page.items) seen.add(it.id);
+        cursor = page.nextCursor;
+        pages++;
+    } while (cursor && pages < 20);
+    const tieSeen = ['a', 'b', 'c', 'd', 'e'].filter(n => seen.has(`item_tie_${n}`));
+    assert(tieSeen.length === 5, `All 5 same-timestamp items paginated (saw ${tieSeen.length}/5)`);
+    assert(pages < 20, 'Pagination terminated rather than looping');
+
+    // A NULL published_at must still be reachable past page 1. Under the old
+    // clause `NULL < cursor` is NULL, so these rows were invisible forever.
+    insertStmt.run('item_nodate', ch.id, kayla, 'website', 'nodate_1',
+        'https://example.org/post', 'Undated post', null, null, 'craft', tieNow, tieNow);
+    const undatedSeen = new Set<string>();
+    let c2: string | null = null;
+    let p2 = 0;
+    do {
+        const page: { items: { id: string }[]; nextCursor: string | null } =
+            getPulseFeed({ limit: 2, cursor: c2 ?? undefined });
+        for (const it of page.items) undatedSeen.add(it.id);
+        c2 = page.nextCursor;
+        p2++;
+    } while (c2 && p2 < 20);
+    assert(undatedSeen.has('item_nodate'), 'NULL-dated item is reachable through pagination');
+
+    // Cursor round-trip, including the tolerant legacy (id-less) form.
+    assert(decodePulseCursor(encodePulseCursor('2026-08-31T10:00:00.000Z', 'item_9')).id === 'item_9',
+        'Cursor round-trips the id');
+    assert(decodePulseCursor(encodePulseCursor(null, 'item_9')).sortKey === '',
+        'NULL published_at encodes as an empty sort key');
+    assert(decodePulseCursor('2026-08-31T10:00:00.000Z').id === null,
+        'Timestamp-only cursor decodes with a null id');
+
+    // Clean up the pagination fixtures so later row-count assertions stand.
+    db.prepare("DELETE FROM pulse_items WHERE id LIKE 'item_tie_%' OR id = 'item_nodate'").run();
 
     // Visibility: Suspended member items are hidden
     db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(kayla);

@@ -1474,7 +1474,7 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                     item.url,
                     item.title,
                     item.thumbnailUrl,
-                    item.publishedAt,
+                    item.publishedAt || now,
                     channel.category,
                     now,
                     now
@@ -1613,6 +1613,30 @@ export interface PulseFeedOptions {
     limit?: number;
 }
 
+/**
+ * The feed's sort key. NULL published_at sorts as '' — last under DESC — so an
+ * item the source gave no date for still has a stable, reachable position.
+ * The two feed indexes in schema.sql index this exact expression; change one and
+ * you must change the other or the feed silently starts scanning.
+ */
+const FEED_SORT_KEY = "COALESCE(i.published_at, '')";
+
+/** Cursor is `<sort key>|<id>` — ISO timestamps carry no '|' and ids are hex. */
+export function encodePulseCursor(publishedAt: string | null, id: string): string {
+    return `${publishedAt ?? ''}|${id}`;
+}
+
+/**
+ * Tolerant of a cursor with no id: that page boundary is then timestamp-only,
+ * which is the pre-keyset behaviour and merely risks repeating an item rather
+ * than skipping one.
+ */
+export function decodePulseCursor(cursor: string): { sortKey: string; id: string | null } {
+    const sep = cursor.lastIndexOf('|');
+    if (sep === -1) return { sortKey: cursor, id: null };
+    return { sortKey: cursor.slice(0, sep), id: cursor.slice(sep + 1) || null };
+}
+
 export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeedCard[]; nextCursor: string | null } {
     const limit = Math.min(50, Math.max(1, typeof options.limit === 'number' ? options.limit : 20));
     const conditions: string[] = [
@@ -1629,9 +1653,20 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
         params.push(options.category);
     }
 
+    // Keyset pagination on (published_at, id), not published_at alone. A feed
+    // routinely publishes a batch of items with one identical timestamp, and
+    // `published_at < cursor` drops every one of them that did not fit on the
+    // page. COALESCE keeps NULL-dated items reachable too: `NULL < cursor` is
+    // NULL, so under the old clause they could never appear past page 1.
     if (options.cursor && typeof options.cursor === 'string') {
-        conditions.push('i.published_at < ?');
-        params.push(options.cursor);
+        const { sortKey, id } = decodePulseCursor(options.cursor);
+        if (id === null) {
+            conditions.push(`${FEED_SORT_KEY} < ?`);
+            params.push(sortKey);
+        } else {
+            conditions.push(`(${FEED_SORT_KEY} < ? OR (${FEED_SORT_KEY} = ? AND i.id < ?))`);
+            params.push(sortKey, sortKey, id);
+        }
     }
 
     const rows = db.prepare(
@@ -1642,13 +1677,14 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
            JOIN creator_channels c ON c.id = i.channel_id
            JOIN members m ON m.public_key = i.owner_pubkey
           WHERE ${conditions.join(' AND ')}
-          ORDER BY i.published_at DESC
+          ORDER BY ${FEED_SORT_KEY} DESC, i.id DESC
           LIMIT ?`
     ).all(...params, limit + 1) as any[];
 
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
-    const nextCursor = hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1].published_at : null;
+    const last = hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1] : null;
+    const nextCursor = last ? encodePulseCursor(last.published_at, last.id) : null;
 
     const items: PulseFeedCard[] = pageRows.map(r => ({
         id: r.id,

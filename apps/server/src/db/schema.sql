@@ -1005,7 +1005,7 @@ CREATE INDEX IF NOT EXISTS idx_creator_channels_updated ON creator_channels(upda
 -- Non-negotiable rules (CONTRACTS.md §2):
 -- 1. Deleting an item does not preserve the item: Set deleted_at and NULL url, title, and
 --    thumbnail_url in the same statement. The row survives so deletion replicates; content does not.
--- 2. Index coverage for feed queries (published_at DESC WHERE deleted_at IS NULL AND muted = 0),
+-- 2. Index coverage for feed queries, keyed on the same (published_at, id) sort the
 --    deduplication (channel_id, external_id WHERE external_id IS NOT NULL AND deleted_at IS NULL),
 --    owner queries, and sync watermark (updated_at).
 CREATE TABLE IF NOT EXISTS pulse_items (
@@ -1028,8 +1028,17 @@ CREATE TABLE IF NOT EXISTS pulse_items (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pulse_items_dedupe
     ON pulse_items(channel_id, external_id) WHERE external_id IS NOT NULL AND deleted_at IS NULL;
+-- The feed sorts on COALESCE(published_at,'') so a NULL-dated item still has a
+-- position, and breaks ties on id so keyset pagination cannot skip rows. Both
+-- indexes must match that expression exactly or the feed falls back to a scan.
 CREATE INDEX IF NOT EXISTS idx_pulse_items_feed
-    ON pulse_items(published_at DESC) WHERE deleted_at IS NULL AND muted = 0;
+    ON pulse_items(COALESCE(published_at, '') DESC, id DESC)
+    WHERE deleted_at IS NULL AND muted = 0;
+-- Category browsing needs category leading, or ?category=craft scans every
+-- unmuted item on the node.
+CREATE INDEX IF NOT EXISTS idx_pulse_items_category_feed
+    ON pulse_items(category, COALESCE(published_at, '') DESC, id DESC)
+    WHERE deleted_at IS NULL AND muted = 0;
 CREATE INDEX IF NOT EXISTS idx_pulse_items_owner
     ON pulse_items(owner_pubkey) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_pulse_items_updated ON pulse_items(updated_at);

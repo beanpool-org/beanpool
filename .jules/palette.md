@@ -87,3 +87,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-08-29 - InstallPrompt Banner Accessibility & Focus Ring Styling
 **Learning:** `InstallPrompt.tsx` floating banner lacked region ARIA semantics (`role="region"`, `aria-label="App installation prompt"`), decorative emoji hiding (`aria-hidden="true"`), explicit `type="button"` attributes on close and action buttons, disclosure state (`aria-expanded`), and focus-visible ring styling for keyboard users.
 **Action:** Added `role="region"`, `aria-label="App installation prompt"`, `aria-hidden="true"` on emoji, explicit `type="button"`, `aria-label="Dismiss install prompt"`, `aria-expanded={showSteps}`, and `focus-visible:ring-2` focus rings to all buttons.
+
+## 2026-08-30 - SyncStatus ARIA Status & Live Region Accessibility
+**Learning:** `SyncStatus.tsx` displayed network status and last sync time visually, but lacked ARIA status semantics (`role="status"`, `aria-live="polite"`), descriptive screen-reader `aria-label`, and decorative element hiding (`aria-hidden="true"` on the dot indicator).
+**Action:** Added `role="status"`, `aria-live="polite"`, dynamic `aria-label` announcing status and sync time, and `aria-hidden="true"` to the indicator dot.

@@ -1674,6 +1674,15 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/pulse')} accessibilityRole="button" accessibilityLabel="The Pulse community feed">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🗞️</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>The Pulse</Text>
+                            <Text style={styles.menuSub}>What your neighbours are creating and posting</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/channels')} accessibilityRole="button" accessibilityLabel="Channels and showcase">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📡</Text></View>
                         <View style={{ flex: 1 }}>

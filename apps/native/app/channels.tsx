@@ -340,247 +340,247 @@ export default function ChannelsScreen() {
             </View>
 
             <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={64} style={{ flex: 1 }}>
-            <ScrollView ref={scrollRef} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-                {loading ? (
-                    <ActivityIndicator style={{ marginTop: 32 }} color={colors.brand.primary} />
-                ) : (
-                    <>
-                        {error && !adding && (
-                            <View style={styles.errorBox} accessibilityRole="alert">
-                                <Text style={styles.errorText}>{error}</Text>
-                            </View>
-                        )}
+                <ScrollView ref={scrollRef} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+                    {loading ? (
+                        <ActivityIndicator style={{ marginTop: 32 }} color={colors.brand.primary} />
+                    ) : (
+                        <>
+                            {error && !adding && (
+                                <View style={styles.errorBox} accessibilityRole="alert">
+                                    <Text style={styles.errorText}>{error}</Text>
+                                </View>
+                            )}
 
-                        {channels.length === 0 && !adding && (
-                            <View style={styles.empty}>
-                                <Text style={styles.emptyTitle}>Already posting your work somewhere?</Text>
-                                <Text style={styles.emptyBody}>
-                                    Add it here so your neighbours can find it — and trade with you.
-                                    You won't have to post twice.
-                                </Text>
-                            </View>
-                        )}
-
-                        {showCrossPostBanner && (
-                            <View style={styles.banner}>
-                                <Text style={styles.bannerText}>
-                                    {primary
-                                        ? `You post video in more than one place. The feed uses your ${platformMeta(primary.platform).label} as the main one.`
-                                        : 'You post video in more than one place. Pick which one the feed should use.'}
-                                </Text>
-                            </View>
-                        )}
-
-                        {channels.map(channel => {
-                            const meta = platformMeta(channel.platform);
-                            return (
-                                <View key={channel.id} style={styles.card}>
-                                    <View style={styles.cardTop}>
-                                        <Text style={styles.cardTitle}>
-                                            {meta.icon} {meta.label}
-                                            {channel.handle ? ` · ${channel.handle}` : ''}
-                                        </Text>
-                                        {channel.oauthVerifiedAt ? <Text style={styles.verified}>✅</Text> : null}
-                                    </View>
-
-                                    <Text style={styles.cardMeta}>
-                                        {channel.supportsAutolist
-                                            ? 'Updates itself'
-                                            // Never fall back to the platform's own label here: a
-                                            // youtu.be link is stored on YouTube with
-                                            // supports_autolist = 0, and YouTube's static label is
-                                            // "updates itself" — the exact claim the server just
-                                            // declined to make.
-                                            : LISTING_LABEL[
-                                                platformMeta(channel.platform).listing === 'auto'
-                                                    ? 'manual'
-                                                    : platformMeta(channel.platform).listing
-                                            ]}
-                                        {channel.isPrimaryVideo ? ' · main video channel' : ''}
+                            {channels.length === 0 && !adding && (
+                                <View style={styles.empty}>
+                                    <Text style={styles.emptyTitle}>Already posting your work somewhere?</Text>
+                                    <Text style={styles.emptyBody}>
+                                        Add it here so your neighbours can find it — and trade with you.
+                                        You won't have to post twice.
                                     </Text>
+                                </View>
+                            )}
 
-                                    <View style={styles.row}>
-                                        <Text style={styles.rowLabel}>Show on the local feed</Text>
-                                        <Switch
-                                            value={channel.syndicateToNode}
-                                            onValueChange={v => patch(channel.id, { syndicateToNode: v }, { syndicateToNode: v })}
-                                            accessibilityLabel={`Show ${meta.label} on the local feed`}
-                                        />
-                                    </View>
+                            {showCrossPostBanner && (
+                                <View style={styles.banner}>
+                                    <Text style={styles.bannerText}>
+                                        {primary
+                                            ? `You post video in more than one place. The feed uses your ${platformMeta(primary.platform).label} as the main one.`
+                                            : 'You post video in more than one place. Pick which one the feed should use.'}
+                                    </Text>
+                                </View>
+                            )}
 
-                                    {/* Category is the only editable field: updateChannel cannot
-                                        change a link, because the URL is the channel's identity —
-                                        a different URL is a different channel. Fixing a typo is
-                                        still Remove and re-add. */}
-                                    <View style={styles.row}>
-                                        <Text style={styles.rowLabel}>
-                                            {categoryMeta(channel.category).icon} {categoryMeta(channel.category).label}
-                                        </Text>
-                                        <Pressable
-                                            onPress={() => setEditingId(editingId === channel.id ? null : channel.id)}
-                                            hitSlop={8}
-                                            accessibilityRole="button"
-                                            accessibilityLabel={editingId === channel.id
-                                                ? `Stop changing the category for ${meta.label}`
-                                                : `Change the category for ${meta.label}`}
-                                        >
-                                            <Text style={styles.editLink}>
-                                                {editingId === channel.id ? 'Done' : 'Change'}
+                            {channels.map(channel => {
+                                const meta = platformMeta(channel.platform);
+                                return (
+                                    <View key={channel.id} style={styles.card}>
+                                        <View style={styles.cardTop}>
+                                            <Text style={styles.cardTitle}>
+                                                {meta.icon} {meta.label}
+                                                {channel.handle ? ` · ${channel.handle}` : ''}
                                             </Text>
-                                        </Pressable>
+                                            {channel.oauthVerifiedAt ? <Text style={styles.verified}>✅</Text> : null}
+                                        </View>
+
+                                        <Text style={styles.cardMeta}>
+                                            {channel.supportsAutolist
+                                                ? 'Updates itself'
+                                                // Never fall back to the platform's own label here: a
+                                                // youtu.be link is stored on YouTube with
+                                                // supports_autolist = 0, and YouTube's static label is
+                                                // "updates itself" — the exact claim the server just
+                                                // declined to make.
+                                                : LISTING_LABEL[
+                                                    platformMeta(channel.platform).listing === 'auto'
+                                                        ? 'manual'
+                                                        : platformMeta(channel.platform).listing
+                                                ]}
+                                            {channel.isPrimaryVideo ? ' · main video channel' : ''}
+                                        </Text>
+
+                                        <View style={styles.row}>
+                                            <Text style={styles.rowLabel}>Show on the local feed</Text>
+                                            <Switch
+                                                value={channel.syndicateToNode}
+                                                onValueChange={v => patch(channel.id, { syndicateToNode: v }, { syndicateToNode: v })}
+                                                accessibilityLabel={`Show ${meta.label} on the local feed`}
+                                            />
+                                        </View>
+
+                                        {/* Category is the only editable field: updateChannel cannot
+                                            change a link, because the URL is the channel's identity —
+                                            a different URL is a different channel. Fixing a typo is
+                                            still Remove and re-add. */}
+                                        <View style={styles.row}>
+                                            <Text style={styles.rowLabel}>
+                                                {categoryMeta(channel.category).icon} {categoryMeta(channel.category).label}
+                                            </Text>
+                                            <Pressable
+                                                onPress={() => setEditingId(editingId === channel.id ? null : channel.id)}
+                                                hitSlop={8}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={editingId === channel.id
+                                                    ? `Stop changing the category for ${meta.label}`
+                                                    : `Change the category for ${meta.label}`}
+                                            >
+                                                <Text style={styles.editLink}>
+                                                    {editingId === channel.id ? 'Done' : 'Change'}
+                                                </Text>
+                                            </Pressable>
+                                        </View>
+
+                                        {editingId === channel.id && (
+                                            <View style={styles.chips}>
+                                                {CATEGORIES.map(c => {
+                                                    const on = c.id === channel.category;
+                                                    return (
+                                                        <Pressable
+                                                            key={c.id}
+                                                            onPress={() => changeCategory(channel.id, c.id)}
+                                                            style={[styles.chip, on && styles.chipActive]}
+                                                            accessibilityRole="radio"
+                                                            accessibilityState={{ selected: on }}
+                                                            accessibilityLabel={c.label}
+                                                        >
+                                                            <Text style={[styles.chipText, on && styles.chipTextActive]}>
+                                                                {c.icon} {c.label}
+                                                            </Text>
+                                                        </Pressable>
+                                                    );
+                                                })}
+                                            </View>
+                                        )}
+
+                                        <View style={styles.cardActions}>
+                                            {VIDEO_PLATFORMS.includes(channel.platform) && !channel.isPrimaryVideo && videoChannels.length > 1 && (
+                                                <Pressable
+                                                    onPress={() => setPrimary(channel.id)}
+                                                    style={styles.secondaryBtn}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`Make ${meta.label} the main video channel`}
+                                                >
+                                                    <Text style={styles.secondaryBtnText}>Make main</Text>
+                                                </Pressable>
+                                            )}
+                                            <Pressable
+                                                onPress={() => remove(channel)}
+                                                style={styles.removeBtn}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={`Remove ${meta.label}`}
+                                            >
+                                                <Text style={styles.removeBtnText}>Remove</Text>
+                                            </Pressable>
+                                        </View>
+                                    </View>
+                                );
+                            })}
+
+                            {adding ? (
+                                <View style={styles.card}>
+                                    <Text style={styles.sectionLabel}>Where do you post?</Text>
+                                    <View style={styles.tiles}>
+                                        {PLATFORMS.map(p => {
+                                            const active = p.id === platform;
+                                            return (
+                                                <Pressable
+                                                    key={p.id}
+                                                    onPress={() => setPlatform(p.id)}
+                                                    style={[styles.tile, active && styles.tileActive]}
+                                                    accessibilityRole="radio"
+                                                    accessibilityState={{ selected: active }}
+                                                    accessibilityLabel={`${p.label}, ${LISTING_LABEL[p.listing]}`}
+                                                >
+                                                    <Text style={styles.tileIcon}>{p.icon}</Text>
+                                                    <Text style={[styles.tileLabel, active && styles.tileLabelActive]}>{p.label}</Text>
+                                                    <Text style={styles.tileHint}>{LISTING_LABEL[p.listing]}</Text>
+                                                </Pressable>
+                                            );
+                                        })}
                                     </View>
 
-                                    {editingId === channel.id && (
-                                        <View style={styles.chips}>
-                                            {CATEGORIES.map(c => {
-                                                const on = c.id === channel.category;
-                                                return (
-                                                    <Pressable
-                                                        key={c.id}
-                                                        onPress={() => changeCategory(channel.id, c.id)}
-                                                        style={[styles.chip, on && styles.chipActive]}
-                                                        accessibilityRole="radio"
-                                                        accessibilityState={{ selected: on }}
-                                                        accessibilityLabel={c.label}
-                                                    >
-                                                        <Text style={[styles.chipText, on && styles.chipTextActive]}>
-                                                            {c.icon} {c.label}
-                                                        </Text>
-                                                    </Pressable>
-                                                );
-                                            })}
+                                    <Text style={styles.sectionLabel}>Your link or handle</Text>
+                                    <TextInput
+                                        value={value}
+                                        // Whitespace stripped as it arrives. autoCorrect={false} does not
+                                        // stop Android's gesture typing and suggestion strip inserting a
+                                        // space mid-string — "bean pool.org" is a link a member typed
+                                        // correctly and the parser then rejected.
+                                        onChangeText={t => setValue(t.replace(/\s/g, ''))}
+                                        placeholder={platformMeta(platform).hint}
+                                        placeholderTextColor={colors.text.muted}
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        spellCheck={false}
+                                        // A URL keyboard: no space bar suggestions, and / and . are
+                                        // on the primary layer.
+                                        keyboardType="url"
+                                        style={styles.input}
+                                        accessibilityLabel="Your link or handle"
+                                    />
+
+                                    <Text style={styles.sectionLabel}>What's it about?</Text>
+                                    <View style={styles.chips}>
+                                        {CATEGORIES.map(c => {
+                                            const active = c.id === category;
+                                            return (
+                                                <Pressable
+                                                    key={c.id}
+                                                    onPress={() => setCategory(c.id)}
+                                                    style={[styles.chip, active && styles.chipActive]}
+                                                    accessibilityRole="radio"
+                                                    accessibilityState={{ selected: active }}
+                                                    accessibilityLabel={c.label}
+                                                >
+                                                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                                                        {c.icon} {c.label}
+                                                    </Text>
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </View>
+
+                                    {/* Beside the button that caused it. The page-top banner is
+                                        off-screen by the time a member has scrolled down to this form,
+                                        so an add failure read as nothing happening at all. */}
+                                    {error && (
+                                        <View style={styles.errorBox} accessibilityRole="alert">
+                                            <Text style={styles.errorText}>{error}</Text>
                                         </View>
                                     )}
 
                                     <View style={styles.cardActions}>
-                                        {VIDEO_PLATFORMS.includes(channel.platform) && !channel.isPrimaryVideo && videoChannels.length > 1 && (
-                                            <Pressable
-                                                onPress={() => setPrimary(channel.id)}
-                                                style={styles.secondaryBtn}
-                                                accessibilityRole="button"
-                                                accessibilityLabel={`Make ${meta.label} the main video channel`}
-                                            >
-                                                <Text style={styles.secondaryBtnText}>Make main</Text>
-                                            </Pressable>
-                                        )}
                                         <Pressable
-                                            onPress={() => remove(channel)}
-                                            style={styles.removeBtn}
+                                            onPress={() => { setAdding(false); setValue(''); setCategory(null); setError(null); }}
+                                            style={styles.secondaryBtn}
                                             accessibilityRole="button"
-                                            accessibilityLabel={`Remove ${meta.label}`}
                                         >
-                                            <Text style={styles.removeBtnText}>Remove</Text>
+                                            <Text style={styles.secondaryBtnText}>Cancel</Text>
+                                        </Pressable>
+                                        <Pressable
+                                            onPress={add}
+                                            disabled={saving || !value.trim() || !category}
+                                            style={[styles.primaryBtn, (saving || !value.trim() || !category) && styles.primaryBtnDisabled]}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Add channel"
+                                        >
+                                            <Text style={styles.primaryBtnText}>{saving ? 'Adding…' : 'Add channel'}</Text>
                                         </Pressable>
                                     </View>
                                 </View>
-                            );
-                        })}
-
-                        {adding ? (
-                            <View style={styles.card}>
-                                <Text style={styles.sectionLabel}>Where do you post?</Text>
-                                <View style={styles.tiles}>
-                                    {PLATFORMS.map(p => {
-                                        const active = p.id === platform;
-                                        return (
-                                            <Pressable
-                                                key={p.id}
-                                                onPress={() => setPlatform(p.id)}
-                                                style={[styles.tile, active && styles.tileActive]}
-                                                accessibilityRole="radio"
-                                                accessibilityState={{ selected: active }}
-                                                accessibilityLabel={`${p.label}, ${LISTING_LABEL[p.listing]}`}
-                                            >
-                                                <Text style={styles.tileIcon}>{p.icon}</Text>
-                                                <Text style={[styles.tileLabel, active && styles.tileLabelActive]}>{p.label}</Text>
-                                                <Text style={styles.tileHint}>{LISTING_LABEL[p.listing]}</Text>
-                                            </Pressable>
-                                        );
-                                    })}
-                                </View>
-
-                                <Text style={styles.sectionLabel}>Your link or handle</Text>
-                                <TextInput
-                                    value={value}
-                                    // Whitespace stripped as it arrives. autoCorrect={false} does not
-                                    // stop Android's gesture typing and suggestion strip inserting a
-                                    // space mid-string — "bean pool.org" is a link a member typed
-                                    // correctly and the parser then rejected.
-                                    onChangeText={t => setValue(t.replace(/\s/g, ''))}
-                                    placeholder={platformMeta(platform).hint}
-                                    placeholderTextColor={colors.text.muted}
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    spellCheck={false}
-                                    // A URL keyboard: no space bar suggestions, and / and . are
-                                    // on the primary layer.
-                                    keyboardType="url"
-                                    style={styles.input}
-                                    accessibilityLabel="Your link or handle"
-                                />
-
-                                <Text style={styles.sectionLabel}>What's it about?</Text>
-                                <View style={styles.chips}>
-                                    {CATEGORIES.map(c => {
-                                        const active = c.id === category;
-                                        return (
-                                            <Pressable
-                                                key={c.id}
-                                                onPress={() => setCategory(c.id)}
-                                                style={[styles.chip, active && styles.chipActive]}
-                                                accessibilityRole="radio"
-                                                accessibilityState={{ selected: active }}
-                                                accessibilityLabel={c.label}
-                                            >
-                                                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                                                    {c.icon} {c.label}
-                                                </Text>
-                                            </Pressable>
-                                        );
-                                    })}
-                                </View>
-
-                                {/* Beside the button that caused it. The page-top banner is
-                                    off-screen by the time a member has scrolled down to this form,
-                                    so an add failure read as nothing happening at all. */}
-                                {error && (
-                                    <View style={styles.errorBox} accessibilityRole="alert">
-                                        <Text style={styles.errorText}>{error}</Text>
-                                    </View>
-                                )}
-
-                                <View style={styles.cardActions}>
-                                    <Pressable
-                                        onPress={() => { setAdding(false); setValue(''); setCategory(null); setError(null); }}
-                                        style={styles.secondaryBtn}
-                                        accessibilityRole="button"
-                                    >
-                                        <Text style={styles.secondaryBtnText}>Cancel</Text>
-                                    </Pressable>
-                                    <Pressable
-                                        onPress={add}
-                                        disabled={saving || !value.trim() || !category}
-                                        style={[styles.primaryBtn, (saving || !value.trim() || !category) && styles.primaryBtnDisabled]}
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Add channel"
-                                    >
-                                        <Text style={styles.primaryBtnText}>{saving ? 'Adding…' : 'Add channel'}</Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        ) : (
-                            <Pressable
-                                onPress={() => { setAdding(true); setError(null); }}
-                                style={styles.addBtn}
-                                accessibilityRole="button"
-                                accessibilityLabel="Add a channel"
-                            >
-                                <Text style={styles.addBtnText}>+ Add a channel</Text>
-                            </Pressable>
-                        )}
-                    </>
-                )}
-            </ScrollView>
+                            ) : (
+                                <Pressable
+                                    onPress={() => { setAdding(true); setError(null); }}
+                                    style={styles.addBtn}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Add a channel"
+                                >
+                                    <Text style={styles.addBtnText}>+ Add a channel</Text>
+                                </Pressable>
+                            )}
+                        </>
+                    )}
+                </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

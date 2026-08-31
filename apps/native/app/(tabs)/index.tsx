@@ -883,6 +883,8 @@ export default function MarketScreen() {
                     onPress={() => setShowDealsSheet(true)}
                     style={styles.dealsIconBtn}
                     accessibilityRole="button"
+                    accessibilityLabel={pendingCount > 0 ? `My Deals, ${pendingCount} pending` : 'My Deals'}
+                    accessibilityHint="Opens your active and pending deals sheet"
                 >
                     <Text style={{ fontSize: 18, marginBottom: -2 }}>🤝</Text>
                     <Text style={{ fontSize: 11, fontWeight: '800', color: palette.amber700 }}>My Deals</Text>

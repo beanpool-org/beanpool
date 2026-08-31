@@ -74,3 +74,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-08-21 - Add accessible container and label to SyncStatus component
 **Learning:** Grouped visual status indicators like `SyncStatus` combine dot indicators and text stacks without grouping, making screen readers read disjointed chunks.
 **Action:** Add `accessible={true}` and a comprehensive `accessibilityLabel` on container `<View>` elements that summarize child status components.
+
+## 2026-08-28 - Add accessibilityLabel and hint to My Deals button in marketplace header
+**Learning:** Header buttons with badges like 'My Deals' read disjointed badge counts to screen readers unless explicit dynamic labels are provided.
+**Action:** Include dynamic state summaries (e.g. `My Deals, 2 pending`) in `accessibilityLabel` and concise guidance in `accessibilityHint`.

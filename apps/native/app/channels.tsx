@@ -48,8 +48,17 @@ async function readJson(res: Response): Promise<any> {
     return res.json().catch(() => ({}));
 }
 
-type Platform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'website' | 'rss';
-type Category = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
+import {
+    type ChannelPlatform as Platform,
+    type ChannelCategory as Category,
+    type Listing,
+    LISTING_LABEL,
+    PLATFORMS,
+    CATEGORIES,
+    VIDEO_PLATFORMS,
+    platformMeta,
+    categoryMeta,
+} from '@beanpool/core';
 
 interface Channel {
     id: string;
@@ -63,64 +72,6 @@ interface Channel {
     syndicateToNode: boolean;
 }
 
-/**
- * How each platform behaves once added, in the member's terms.
- *
- * Three states, not two — and they must match the server's `AUTOLIST_PLATFORMS`, which is
- * `{youtube, rss}`. A website is neither: it has no stream of items to pull, it shows as a single
- * card. Labelling it "updates itself" would contradict the card rendered directly above, which
- * reads its `supportsAutolist` from the server and would say the opposite.
- */
-type Listing = 'auto' | 'manual' | 'card';
-
-const LISTING_LABEL: Record<Listing, string> = {
-    auto: 'updates itself',
-    manual: 'a tap per post',
-    card: 'shows as a card',
-};
-
-const PLATFORMS: { id: Platform; icon: string; label: string; listing: Listing; hint: string }[] = [
-    { id: 'youtube', icon: '🎥', label: 'YouTube', listing: 'auto', hint: 'youtube.com/@you' },
-    { id: 'instagram', icon: '📷', label: 'Instagram', listing: 'manual', hint: '@yourhandle' },
-    { id: 'tiktok', icon: '🎵', label: 'TikTok', listing: 'manual', hint: '@yourhandle' },
-    { id: 'website', icon: '🌐', label: 'Website', listing: 'card', hint: 'yoursite.com' },
-    { id: 'facebook', icon: '📘', label: 'Facebook', listing: 'manual', hint: 'facebook.com/yourpage' },
-    { id: 'rss', icon: '✍️', label: 'Blog / RSS', listing: 'auto', hint: 'yourblog.com/feed' },
-];
-
-/**
- * What the content is ABOUT — not what the member sells.
- *
- * These were the marketplace categories, which left a community org, a project account or the
- * BeanPool account itself with nowhere to go but "Other", under a prompt asking "What do you make?".
- * Only `community` is new server-side; the rest keep their ids and their stored rows.
- */
-const CATEGORIES: { id: Category; icon: string; label: string }[] = [
-    { id: 'community', icon: '📣', label: 'Community' },
-    { id: 'food', icon: '🌱', label: 'Food & growing' },
-    { id: 'craft', icon: '🔨', label: 'Making & craft' },
-    { id: 'repair', icon: '🔧', label: 'Repair & reuse' },
-    { id: 'art', icon: '🎨', label: 'Art & music' },
-    { id: 'business', icon: '☕', label: 'Business' },
-    { id: 'other', icon: '✨', label: 'Other' },
-];
-
-const VIDEO_PLATFORMS: Platform[] = ['youtube', 'tiktok', 'instagram', 'facebook'];
-
-/**
- * Falling back to PLATFORMS[0] meant an unrecognised platform rendered as "🎥 YouTube · updates
- * itself" — the wrong name attached to an autolist promise nothing would keep. A platform this
- * build does not know about is labelled as exactly that, and `card` is the only honest listing for
- * something whose capabilities are unknown.
- */
-function platformMeta(id: Platform): { id: Platform; icon: string; label: string; listing: Listing; hint: string } {
-    return PLATFORMS.find(p => p.id === id) ?? { id, icon: '🔗', label: 'Link', listing: 'card', hint: '' };
-}
-
-/** Never falls back to CATEGORIES[0] — an unknown id must not render as "Community". */
-function categoryMeta(id: Category): { id: Category; icon: string; label: string } {
-    return CATEGORIES.find(c => c.id === id) ?? { id, icon: '✨', label: 'Other' };
-}
 
 export default function ChannelsScreen() {
     const { colors } = useTheme();

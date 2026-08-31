@@ -9,8 +9,10 @@ import { blockUser } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
 import { getCanonicalProfile } from '../utils/canonical-profile';
+import { ChannelChips } from '../components/ChannelChips';
+import { fetchPublicChannels } from '../utils/channels';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from '../utils/crypto';
 import { colors, palette } from '../constants/colors';
@@ -365,6 +367,7 @@ export default function PublicProfileScreen() {
     const [editingReview, setEditingReview] = useState<any | null>(null);
     const [viewerProfile, setViewerProfile] = useState<any>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
+    const [channels, setChannels] = useState<PublicCreatorChannel[]>([]);
 
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
     const isSelf = !!identity?.publicKey && identity.publicKey === pubKeyStr;
@@ -450,13 +453,23 @@ export default function PublicProfileScreen() {
     };
 
     useEffect(() => {
+        let cancelled = false;
         if (!pubKeyStr) {
             setLoading(false);
             setRatingsLoading(false);
             setTrustLoading(false);
             setGivenLoading(false);
+            setChannels([]);
             return;
         }
+
+        // Fetch syndicated creator channels (The Pulse, Phase 1). Clear first, so tapping
+        // from one member to another never shows the previous member's chips, and drop a
+        // reply that lands after we have navigated on.
+        setChannels([]);
+        fetchPublicChannels(pubKeyStr)
+            .then(list => { if (!cancelled) setChannels(list); })
+            .catch(() => { if (!cancelled) setChannels([]); });
 
         // 1. Load local first-class database items instantly
         setLoading(true);
@@ -523,6 +536,7 @@ export default function PublicProfileScreen() {
             setGivenLoading(false);
             setGiven([]);
         }
+        return () => { cancelled = true; };
     }, [pubKeyStr, isSelf, identity?.publicKey]);
 
     const renderStars = (avg: number) => {
@@ -665,6 +679,8 @@ export default function PublicProfileScreen() {
                     {profile?.bio && (
                         <Text style={styles.bioText}>"{profile.bio}"</Text>
                     )}
+                    {/* Syndicated Creator Channels (The Pulse, Phase 1) */}
+                    <ChannelChips channels={channels} />
                 </View>
 
                 {/* Trust & safety (other members only) — the "is this person safe to trade with?" panel */}

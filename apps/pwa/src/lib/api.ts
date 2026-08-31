@@ -4,15 +4,18 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity } from './identity';
-import { toEd25519Pkcs8 } from '@beanpool/core';
+import { toEd25519Pkcs8, type PublicCreatorChannel } from '@beanpool/core';
+
+export type { PublicCreatorChannel };
 
 export function getNodeApiUrl(): string {
-    const custom = localStorage.getItem('bp_node_url') || ((import.meta as any).env?.VITE_BEANPOOL_NODE_URL as string);
+    const custom = (typeof localStorage !== 'undefined' ? localStorage.getItem('bp_node_url') : null) || ((import.meta as any).env?.VITE_BEANPOOL_NODE_URL as string);
     if (custom) return custom.trim().replace(/\/+$/, '');
     return ''; // Same-origin fallback
 }
 
 export function setNodeApiUrl(url: string | null): void {
+    if (typeof localStorage === 'undefined') return;
     if (url && url.trim()) {
         const sanitized = url.trim().replace(/\/+$/, '');
         localStorage.setItem('bp_node_url', sanitized);
@@ -297,6 +300,14 @@ export async function getMemberProfile(publicKey: string, requester?: string): P
     if (requester) params.set('requester', requester);
     params.set('_t', Date.now().toString());
     return request('GET', `/api/profile/${encodeURIComponent(publicKey)}?${params}`);
+}
+
+/**
+ * Fetch a member's syndicated channels (The Pulse, Phase 1).
+ * Gated like the profile itself. Returns PublicCreatorChannel[].
+ */
+export async function getPublicChannels(publicKey: string): Promise<{ channels: PublicCreatorChannel[] }> {
+    return request('GET', `/api/members/${encodeURIComponent(publicKey)}/channels`);
 }
 
 // ===================== MESSAGING =====================

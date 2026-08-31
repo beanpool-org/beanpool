@@ -308,6 +308,9 @@ Addressed 5 code review findings and additions on PR #562:
 
 ## SSRF CustomLookup Node 22 Fix & Test Blind Spot Audit (2026-09-01)
 
+PR: #565
+Status: complete
+
 ### 1. Root Cause Analysis
 In `apps/server/src/engine/pulse-resolver.ts` (~line 507), `customLookup` was implemented as:
 ```ts

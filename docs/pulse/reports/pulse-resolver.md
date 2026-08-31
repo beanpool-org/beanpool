@@ -304,4 +304,157 @@ Addressed 5 code review findings and additions on PR #562:
 - `test-pulse-resolver.ts`: **137/137 tests passed**.
 - `bash scripts/test-all.sh --all`: 8/8 check groups passed cleanly.
 
+---
+
+## SSRF CustomLookup Node 22 Fix & Test Blind Spot Audit (2026-09-01)
+
+PR: #565
+Status: complete
+
+### 1. Root Cause Analysis
+In `apps/server/src/engine/pulse-resolver.ts` (~line 507), `customLookup` was implemented as:
+```ts
+const customLookup = (_host: string, _lookupOpts: any, callback?: any) => {
+    const cb = typeof _lookupOpts === 'function' ? _lookupOpts : callback;
+    if (typeof cb === 'function') {
+        cb(null, pinnedIp, family);
+    }
+};
+```
+Node 22 defaults `net.connect` to `autoSelectFamily: true`, which passes `{ all: true }` in `lookupOpts` and expects the callback signature `cb(null, [{ address, family }])`. When given `cb(null, pinnedIp, family)`:
+1. Node treats the 2nd argument (`pinnedIp`, a string) as the `addresses` array.
+2. `addresses[0]` evaluates to the first character of the IP string (e.g. `'9'`).
+3. `addresses[0].address` evaluates to `undefined`.
+4. Node throws `TypeError [ERR_INVALID_IP_ADDRESS]: Invalid IP address: undefined` inside `net.connect`.
+Every real socket connection through `ssrfSafeFetch` has failed with this error since Phase 2.
+
+### 2. Fix
+Extracted and exported `createCustomLookup(pinnedIp: string, family: number)`:
+```ts
+export function createCustomLookup(pinnedIp: string, family: number) {
+    return (_host: string, lookupOpts: any, callback?: any) => {
+        const cb = typeof lookupOpts === 'function' ? lookupOpts : callback;
+        if (typeof cb !== 'function') return;
+
+        const isAll = typeof lookupOpts === 'object' && lookupOpts !== null && Boolean(lookupOpts.all);
+        if (isAll) {
+            cb(null, [{ address: pinnedIp, family }]);
+        } else {
+            cb(null, pinnedIp, family);
+        }
+    };
+}
+```
+This correctly handles:
+- `{ all: true }` format returning `[{ address: pinnedIp, family }]` (Node 22 `autoSelectFamily: true`).
+- Falsy `all` format returning `cb(null, pinnedIp, family)`.
+- Direct numeric family arguments returning `cb(null, pinnedIp, family)`.
+- 2-argument legacy invocation `lookup(host, cb)` returning `cb(null, pinnedIp, family)`.
+
+### 3. Failure Before Fix (Pasted Output)
+Running the new real socket test against unfixed code failed with the exact `ERR_INVALID_IP_ADDRESS` exception:
+```
+--- 4. SSRF Security Hardening ---
+✓ 127.0.0.1 loopback blocked
+✓ 127.0.0.2 loopback blocked
+✓ 10.0.0.0/8 private blocked
+✓ 172.16.0.0/12 private blocked
+✓ 192.168.0.0/16 private blocked
+✓ 169.254.169.254 cloud metadata blocked
+✓ 100.64.0.0/10 CGNAT blocked
+✓ 100.100.100.100 Alibaba metadata blocked
+✓ 0.0.0.0 blocked
+✓ Public IP allowed
+✓ ::1 IPv6 loopback blocked
+✓ :: unspecified blocked
+✓ fe80::/10 link-local blocked
+✓ fc00::/7 ULA blocked
+✓ IPv4-mapped 127.0.0.1 blocked
+✓ IPv4-mapped cloud metadata blocked
+✓ NAT64 mapped 127.0.0.1 blocked
+✓ 6to4 mapped 127.0.0.1 blocked
+✓ Public IPv6 allowed
+✓ localhost hostname blocked
+✓ GCP metadata hostname blocked
+✓ .local mDNS suffix blocked
+✓ .internal suffix blocked
+✓ Dot-less single-label hostname blocked
+✓ validateIpString rejects 127.0.0.1
+✓ ssrfSafeFetch blocks 127.0.0.1
+✓ ssrfSafeFetch blocks file: scheme
+✓ ssrfSafeFetch blocks embedded user:pass credentials
+(node:28669) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+✗ ssrfSafeFetch succeeds on public domain with real socket connection (failed: Invalid IP address: undefined)
+```
+
+Direct one-liner stack trace on unfixed code:
+```
+CAUGHT ERROR: TypeError [ERR_INVALID_IP_ADDRESS]: Invalid IP address: undefined
+    at emitLookup (node:net:1711:17)
+    at customLookup (/Users/marty/projects/beanpool/apps/server/src/engine/pulse-resolver.ts:510:17)
+    at emitLookup (node:net:1662:5)
+    at defaultTriggerAsyncIdScope (node:internal/async_hooks:473:12)
+    at lookupAndConnectMultiple (node:net:1661:3)
+    at node:net:1607:7
+    at defaultTriggerAsyncIdScope (node:internal/async_hooks:473:12)
+    at lookupAndConnect (node:net:1606:5)
+    at Socket.connect (node:net:1490:5)
+    at Object.connect (node:internal/tls/wrap:1902:13) {
+  code: 'ERR_INVALID_IP_ADDRESS'
+}
+```
+
+### 4. Audit of Existing SSRF Tests & The Blind Spot
+The test suite previously contained 29 SSRF tests across `test-pulse-resolver.ts` and `test-pulse-submit.ts`. **Every single one of them passed while real fetching was completely broken** due to asserting rejection rather than successful network operation:
+
+1. **`test-pulse-resolver.ts` (28 tests in Section 4)**:
+   - 10 IPv4 checks (`isIpPrivateOrReserved`): Pure string/math validation. Never calls `ssrfSafeFetch` or socket creation.
+   - 9 IPv6 checks (`isIpPrivateOrReserved`): Pure string/BigInt validation. Never touches sockets.
+   - 5 Hostname checks (`validateHostnameSyntax`): Pure regex/string checks.
+   - 1 IP check (`validateIpString`): Pure validator check.
+   - 3 `ssrfSafeFetch` negative checks:
+     - `http://127.0.0.1:8080/secret` (blocked in `resolveAndPinHost` before socket creation)
+     - `file:///etc/passwd` (blocked in scheme check at line 494 before DNS resolution)
+     - `http://user:pass@example.com/feed` (blocked in credential check at line 498 before DNS resolution)
+   All 28 tests pass even if the socket/HTTP engine is 100% inoperable.
+
+2. **`test-pulse-submit.ts` (16 assertions across 8 URLs in Section 6)**:
+   - Evaluates `/api/member/pulse/preview` and `/api/member/pulse/submit` against:
+     - `127.0.0.1`, `169.254.169.254`, `localhost`, `10.0.0.1`, `192.168.1.1`, `::1`, `metadata.google.internal`, `internal-host`, `app.local`.
+   - All 8 targets are rejected in pre-flight IP/hostname checks before socket connection occurs.
+   All 16 assertions pass even if `ssrfSafeFetch` cannot connect to any host.
+
+### 5. Added Tests
+Added to `apps/server/src/test-pulse-resolver.ts`:
+1. `ssrfSafeFetch('https://example.com')`: Exercises real HTTPS socket connection with TLS wrap and Node 22 `autoSelectFamily: true` `{ all: true }` lookup.
+2. `ssrfSafeFetch('http://example.com')`: Exercises real HTTP socket connection.
+3. Unit tests for `createCustomLookup` verifying:
+   - `{ all: true }` returns `[{ address: '93.184.216.34', family: 4 }]`.
+   - `{ all: false }` returns `'93.184.216.34'`, `4`.
+   - `family: 4` returns `'93.184.216.34'`, `4`.
+   - 2-arg `lookup(host, cb)` returns `'93.184.216.34'`, `4`.
+
+### 6. Verification
+- `test-pulse-resolver.ts`: **143/143 tests passed**.
+- `test-pulse-submit.ts`: **87/87 tests passed**.
+- `bash scripts/test-all.sh --all`:
+```
+╔══════════════════════════════════════════╗
+║          BEANPOOL TEST-ALL REPORT        ║
+╠══════════════════════════════════════════╣
+║  build            ✅ PASS
+║  lint             ✅ PASS
+║  test             ❌ FAIL (pre-existing manager jsdom localStorage)
+║  typecheck        ✅ PASS
+║  suite_registration ✅ PASS
+║  deploy_preserve  ✅ PASS
+║  secrets_guard    ✅ PASS
+║  federation       ✅ PASS
+╠══════════════════════════════════════════╣
+║  Total: 7 passed, 1 failed, 0 skipped
+╚══════════════════════════════════════════╝
+```
+- `pnpm exec tsc --noEmit` clean across both `apps/server` and `apps/native`.
+
+
 

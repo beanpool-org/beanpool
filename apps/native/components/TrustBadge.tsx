@@ -82,8 +82,18 @@ export function TrustBadge({
     const C = 2 * Math.PI * RING_R;
     const dash = Math.max(0, Math.min(1, ringPct)) * C;
 
+    const labelText = `${level.charAt(0).toUpperCase() + level.slice(1)} trust badge${locked ? ' (locked)' : ''}`;
+
     return (
-        <Svg width={size} height={size} viewBox="0 0 120 120" opacity={locked ? 0.5 : 1}>
+        <Svg
+            width={size}
+            height={size}
+            viewBox="0 0 120 120"
+            opacity={locked ? 0.5 : 1}
+            accessible={true}
+            accessibilityRole="image"
+            accessibilityLabel={labelText}
+        >
             <Defs>
                 <RadialGradient id={fid} cx="38%" cy="30%" r="75%">
                     <Stop offset="0" stopColor={g.face[0]} />

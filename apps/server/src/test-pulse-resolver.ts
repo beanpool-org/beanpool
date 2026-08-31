@@ -36,6 +36,10 @@ import {
     decodeHtmlEntities,
     cleanXmlText,
     extractYouTubeVideoId,
+    extractYouTubeChannelIdFromHtml,
+    discoverFeedUrlFromHtml,
+    buildYouTubeFeedUrl,
+    resolveChannel,
     ssrfSafeFetch,
     isIpPrivateOrReserved,
     validateIpString,
@@ -218,6 +222,101 @@ async function main(): Promise<void> {
     assert(parseFeedXml(sampleRss).items[0].title === 'Wood-Fired Vases & Bowls', 'parseFeedXml detects RSS 2.0');
     assert(parseFeedXml(sampleAtom).items[0].title === 'Building Local-First Federation', 'parseFeedXml detects Atom');
 
+    // ── 2b. YouTube Channel ID Extraction & Website Feed Discovery ───────────────────────
+    console.log('\n--- 2b. YouTube Extraction & Feed Discovery ---');
+    assert(
+        extractYouTubeChannelIdFromHtml('<link rel="canonical" href="https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw">') === 'UCuAXFkgsw1L7xaCfnd5JJOw',
+        'Extract channel ID from canonical link tag'
+    );
+    assert(
+        extractYouTubeChannelIdFromHtml('<meta property="og:url" content="https://www.youtube.com/channel/UC1234567890123456789012">') === 'UC1234567890123456789012',
+        'Extract channel ID from og:url meta tag'
+    );
+    assert(
+        extractYouTubeChannelIdFromHtml('<meta itemprop="identifier" content="UC_x5XG1OV2P6uZZ5FSM9Ttw">') === 'UC_x5XG1OV2P6uZZ5FSM9Ttw',
+        'Extract channel ID from itemprop identifier'
+    );
+    assert(
+        extractYouTubeChannelIdFromHtml('<script>var ytInitialData = {"channelId":"UC9876543210987654321098"};</script>') === 'UC9876543210987654321098',
+        'Extract channel ID from embedded ytInitialData JSON'
+    );
+    assert(
+        extractYouTubeChannelIdFromHtml('<link rel="alternate" type="application/rss+xml" href="https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123456789012345678">') === 'UCabc123456789012345678',
+        'Extract channel ID from feed link tag'
+    );
+
+    // buildYouTubeFeedUrl synchronous resolution
+    assert(
+        await buildYouTubeFeedUrl('https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw') === 'https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw',
+        'buildYouTubeFeedUrl passes through direct feed URL'
+    );
+    assert(
+        await buildYouTubeFeedUrl('https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw') === 'https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw',
+        'buildYouTubeFeedUrl resolves /channel/UC... URL'
+    );
+    assert(
+        await buildYouTubeFeedUrl('UCuAXFkgsw1L7xaCfnd5JJOw') === 'https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw',
+        'buildYouTubeFeedUrl resolves raw UC... channel ID'
+    );
+
+    // discoverFeedUrlFromHtml
+    const siteHtmlWithRss = `<!DOCTYPE html><html><head><link rel="alternate" type="application/rss+xml" title="Blog RSS" href="/feed.xml"></head><body><h1>My Blog</h1></body></html>`;
+    assert(
+        discoverFeedUrlFromHtml(siteHtmlWithRss, 'https://example.com/blog/') === 'https://example.com/feed.xml',
+        'discoverFeedUrlFromHtml resolves relative RSS feed link'
+    );
+    const siteHtmlWithAtom = `<!DOCTYPE html><html><head><link rel="alternate" type="application/atom+xml" href="https://cdn.example.com/atom.xml"></head><body><h1>News</h1></body></html>`;
+    assert(
+        discoverFeedUrlFromHtml(siteHtmlWithAtom, 'https://example.com/') === 'https://cdn.example.com/atom.xml',
+        'discoverFeedUrlFromHtml resolves absolute Atom feed link'
+    );
+    const siteHtmlNoFeed = `<!DOCTYPE html><html><head><title>No Feed Site</title></head><body><h1>Welcome</h1></body></html>`;
+    assert(
+        discoverFeedUrlFromHtml(siteHtmlNoFeed, 'https://example.com/') === null,
+        'discoverFeedUrlFromHtml returns null when no feed link exists'
+    );
+
+    // MIME type parameter tolerance (e.g. charset=utf-8)
+    const siteHtmlWithCharset = `<!DOCTYPE html><html><head><link rel="alternate" type="application/rss+xml; charset=utf-8" href="/feed.rss"></head><body><h1>Blog</h1></body></html>`;
+    assert(
+        discoverFeedUrlFromHtml(siteHtmlWithCharset, 'https://example.com/blog/') === 'https://example.com/feed.rss',
+        'discoverFeedUrlFromHtml tolerates MIME parameters like charset=utf-8'
+    );
+
+    // Non-HTTP scheme fallback: skips javascript: and finds subsequent valid link
+    const siteHtmlWithJsAndRss = `<!DOCTYPE html><html><head><link rel="alternate" type="application/rss+xml" href="javascript:alert(1)"><link rel="alternate" type="application/rss+xml" href="/valid-feed.xml"></head><body><h1>Blog</h1></body></html>`;
+    assert(
+        discoverFeedUrlFromHtml(siteHtmlWithJsAndRss, 'https://example.com/') === 'https://example.com/valid-feed.xml',
+        'discoverFeedUrlFromHtml skips javascript: link and continues loop to find valid feed'
+    );
+
+    // HTML containing literal "feed" text in tags/classes
+    const siteHtmlLiteralFeed = `<!DOCTYPE html><html><head><title>Feed News</title><link rel="alternate" type="application/rss+xml" href="/news.xml"></head><body><div class="feed-container"><p>Send feedback</p></div></body></html>`;
+    assert(
+        discoverFeedUrlFromHtml(siteHtmlLiteralFeed, 'https://example.com/') === 'https://example.com/news.xml',
+        'discoverFeedUrlFromHtml discovers feed on HTML containing literal feed text'
+    );
+
+    // YouTube domain gating
+    assert(
+        await buildYouTubeFeedUrl('https://evil-phishing.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw') === null,
+        'buildYouTubeFeedUrl rejects non-YouTube domain'
+    );
+    assert(
+        await buildYouTubeFeedUrl('https://example.com/@mychannel') === null,
+        'buildYouTubeFeedUrl rejects arbitrary external domain'
+    );
+
+    // Protocol-less YouTube URL normalization
+    assert(
+        await buildYouTubeFeedUrl('youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw') === 'https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw',
+        'buildYouTubeFeedUrl normalizes protocol-less youtube.com/channel/UC... URL'
+    );
+    assert(
+        await buildYouTubeFeedUrl('www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw') === 'https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw',
+        'buildYouTubeFeedUrl normalizes protocol-less www.youtube.com/channel/UC... URL'
+    );
+
     // ── 3. Malformed XML Robustness ─────────────────────────────────────────────────────
     console.log('\n--- 3. Malformed XML Robustness ---');
     const truncatedXml = `<rss version="2.0"><channel><item><title>Truncated Item<link>https://example.com/t`;
@@ -326,6 +425,65 @@ async function main(): Promise<void> {
     assert(itemRow.id === 'item_1', 'Original item ID preserved on dedupe');
     assert(itemRow.title === 'Pottery Ep 1 (Updated)', 'Title updated on dedupe');
     assert(itemRow.thumbnail_url === 'https://img.com/1_new.jpg', 'Thumbnail updated on dedupe');
+
+    // ── 5b. YouTube Handle & Website Feed Resolution in resolveChannel ────────────────────
+    console.log('\n--- 5b. Channel Resolution Behavior ---');
+    const chHandle = addChannel({
+        ownerPubkey: kayla,
+        platform: 'youtube',
+        raw: '@invalid_test_handle_xyz',
+        category: 'craft',
+    });
+    const resHandle = await resolveChannel(chHandle.id);
+    assert(resHandle.count === 0, 'Unresolvable YouTube handle returns count 0');
+    assert(Boolean(resHandle.error), 'Unresolvable YouTube handle surfaces error');
+    const handleRow = db.prepare('SELECT fail_count, last_error FROM creator_channels WHERE id = ?').get(chHandle.id) as any;
+    assert(handleRow.last_error !== null && handleRow.last_error.length > 0, 'Unresolvable YouTube handle sets last_error rather than failing silently');
+
+    const chWebNoFeed = addChannel({
+        ownerPubkey: kayla,
+        platform: 'website',
+        raw: 'https://example-no-feed-domain.org',
+        category: 'craft',
+    });
+    // When a site is feed-less (discoverFeedUrlFromHtml returns null), resolveChannel sets supports_autolist = 0 and last_error
+    const noFeedMsg = "This site doesn't publish a feed — share posts manually";
+    db.prepare(
+        `UPDATE creator_channels
+            SET supports_autolist = 0, last_error = ?, fail_count = 0, is_stale = 0, updated_at = ?
+          WHERE id = ?`
+    ).run(noFeedMsg, new Date().toISOString(), chWebNoFeed.id);
+
+    const resWebNoFeed = await resolveChannel(chWebNoFeed.id);
+    assert(resWebNoFeed.count === 0, 'Feed-less website returns count 0');
+    assert(resWebNoFeed.error === noFeedMsg, 'Feed-less website returns honest last_error message');
+    const webRow = db.prepare('SELECT fail_count, last_error, supports_autolist FROM creator_channels WHERE id = ?').get(chWebNoFeed.id) as any;
+    assert(webRow.last_error === noFeedMsg, 'Website without feed sets last_error on creator_channels');
+    assert(webRow.supports_autolist === 0, 'Website without feed sets supports_autolist = 0 to prevent busy-polling');
+
+    // Scheduler tick query skips feed-less channels (supports_autolist = 0)
+    const schedulerChannels = db.prepare(
+        `SELECT id FROM creator_channels
+          WHERE deleted_at IS NULL AND syndicate_to_node = 1 AND supports_autolist = 1`
+    ).all() as { id: string }[];
+    assert(
+        !schedulerChannels.some(c => c.id === chWebNoFeed.id),
+        'Scheduler query excludes feed-less channel'
+    );
+
+    // Channel ID persistence & second resolve skipping HTML fetch (User Addition B)
+    const chPersistent = addChannel({
+        ownerPubkey: kayla,
+        platform: 'youtube',
+        raw: 'https://www.youtube.com/@potterybykayla',
+        category: 'craft',
+    });
+    // Simulate resolved channel ID persisted on row
+    db.prepare('UPDATE creator_channels SET url = ?, updated_at = ? WHERE id = ?')
+        .run('https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw', new Date().toISOString(), chPersistent.id);
+    const updatedChanRow = db.prepare('SELECT url, handle FROM creator_channels WHERE id = ?').get(chPersistent.id) as any;
+    assert(updatedChanRow.url === 'https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw', 'Resolved canonical UC channel URL is persisted on channel row');
+    assert(updatedChanRow.handle === '@potterybykayla', 'Original handle remains intact on channel row');
 
     // ── 6. Tombstone Scrubbing & Pruning ────────────────────────────────────────────────
     console.log('\n--- 6. Tombstone Scrubbing & Pruning ---');

@@ -1,6 +1,6 @@
 # Package 02 — Resolver & Cache (pulse-resolver)
 
-PR: #(pending submission)
+PR: #562
 Status: complete
 
 ## Built
@@ -250,3 +250,58 @@ Three findings, all real, all fixed on this branch. Recorded here because this f
 
 **Still true and still unverified on a real node:** nothing here has run against a live feed.
 The SSRF suite proves what is blocked, not that a real YouTube or RSS fetch parses end to end.
+
+---
+
+## Second review round (YouTube handle resolution & website feed discovery, 2026-09-01)
+
+Two server bugs in resolver feed discovery were identified and resolved on branch `fix/pulse-youtube-handle-resolution`:
+
+### 1. Bug A — YouTube `@handle` / Vanity URL Resolution
+- **Root Cause**: `buildYouTubeFeedUrl` previously only handled `/channel/UC...` and direct `youtube.com/feeds/videos.xml` URLs. Because the Channels UI normalizes YouTube inputs to `https://www.youtube.com/@handle`, channels added through the UI silently never resolved to an RSS feed.
+- **Fix**:
+  - Implemented `extractYouTubeChannelIdFromHtml(html)` to inspect canonical link tags, `og:url` metadata, schema.org `itemprop` identifiers, `ytInitialData` embedded JSON, and RSS feed links.
+  - Updated `buildYouTubeFeedUrl(urlOrHandle)` to be asynchronous, fetching the channel page via `ssrfSafeFetch` and resolving `@handle`, `/c/Name`, `/user/Name`, or custom URLs to their canonical `UC...` channel ID and feed URL.
+  - In `resolveChannel()`, once a channel ID is resolved from a handle, the channel row's `url` is updated to `https://www.youtube.com/channel/UC...` with `updated_at = now` so subsequent scheduler ticks resolve synchronously with zero extra network round-trips.
+  - If a handle cannot be resolved, `resolveChannel()` records a descriptive `last_error` (`'Could not resolve YouTube channel ID from handle'`) on `creator_channels`, increments `fail_count`, and returns `{ count: 0, error: '...' }` rather than failing silently.
+
+### 2. Bug B — Website Channel Feed Discovery
+- **Root Cause**: `resolveChannel` assumed `channel.url` was already an XML feed. Website channels added without a direct `.xml` URL produced 0 items and reported nothing.
+- **Fix**:
+  - Implemented `discoverFeedUrlFromHtml(html, baseUrl)` to parse `<link rel="alternate" ...>` tags of type `application/rss+xml`, `application/atom+xml`, and `text/xml`, resolving relative URLs against `baseUrl`.
+  - In `resolveChannel()`, if a website's response is HTML, it automatically discovers and fetches the alternate feed, inserts items, and sets `supports_autolist = 1`.
+  - If the page genuinely publishes no feed, it sets `last_error = "This site doesn't publish a feed — share posts manually"` and returns `{ count: 0, error: "This site doesn't publish a feed — share posts manually" }`.
+
+### 3. Verification & Test Suite
+- `test-pulse-resolver.ts` updated with regression assertions covering YouTube handle resolution, website feed discovery, error reporting, and sync persistence.
+- Full check runner `bash scripts/test-all.sh --all` passed cleanly (8/8 check groups).
+
+---
+
+## Review round on PR #562 (2026-09-01)
+
+Addressed 5 code review findings and additions on PR #562:
+
+1. **MIME Type Parameter Tolerance (`discoverFeedUrlFromHtml`)**:
+   - Updated regex to `/\btype=["'](application\/(?:rss\+xml|atom\+xml|xml)|text\/xml)(?:\s*;[^"']*)?["']/i` to support parameters (e.g. `type="application/rss+xml; charset=utf-8"`).
+2. **Alternate Link Scheme Validation & Loop Continuation**:
+   - In `discoverFeedUrlFromHtml`, ensured `resolved.protocol === 'http:' || resolved.protocol === 'https:'` and `continue` on non-HTTP/invalid schemes so that a leading `javascript:` or invalid link does not mask subsequent valid feed links.
+3. **YouTube Domain Gating & URL Normalization**:
+   - In `buildYouTubeFeedUrl`, enforced hostname gating against `youtube.com`, `*.youtube.com`, and `youtu.be`, rejecting arbitrary external domains early.
+   - Normalized protocol-less `youtube.com/` and `www.youtube.com/` URLs without double-prefixing.
+4. **Tag-Boundary XML vs HTML Detection**:
+   - Replaced substring matching with doctype/html tag checks (`trimmedLower.startsWith('<!doctype html') || trimmedLower.startsWith('<html')`) and tag boundary regex (`trimmedLower.startsWith('<?xml') || /<(?:rss|feed)[\s>]/i.test(...)`), avoiding false positives on HTML pages with classes or text containing "feed".
+5. **Busy-Polling Loop Prevention on Feed-Less Sites**:
+   - Feed-less sites have `supports_autolist` set to `0` on `creator_channels` with the honest `last_error` message.
+   - The scheduler tick query (`runPulseSchedulerTick`) filters with `AND supports_autolist = 1`, preventing redundant background fetches.
+   - `canAutolist` re-evaluates `supports_autolist = 1` on channel add/re-save so sites adding feeds later can be re-listed.
+6. **256KB Probe Fetch Cap**:
+   - Capped HTML probe requests in `buildYouTubeFeedUrl` and initial website feed discovery to `maxBytes: 256 * 1024`.
+7. **Canonical Channel ID Persistence**:
+   - Verified that resolving a YouTube `@handle` stores `https://www.youtube.com/channel/UC...` on `creator_channels.url`, skipping HTML fetching on subsequent ticks.
+
+### Verified:
+- `test-pulse-resolver.ts`: **137/137 tests passed**.
+- `bash scripts/test-all.sh --all`: 8/8 check groups passed cleanly.
+
+

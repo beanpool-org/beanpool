@@ -47,7 +47,7 @@ export const CHANNEL_CATEGORIES: readonly ChannelCategory[] =
  * or a phone. Those arrive one item at a time until a member connects OAuth, which flips
  * `supports_autolist` on the row rather than changing this map.
  */
-const AUTOLIST_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set<ChannelPlatform>(['youtube', 'rss']);
+const AUTOLIST_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set<ChannelPlatform>(['youtube', 'rss', 'website']);
 
 /**
  * Whether this specific URL can be listed, not just its platform.
@@ -61,6 +61,11 @@ function canAutolist(platform: ChannelPlatform, url: string): boolean {
     if (platform === 'youtube') {
         // Only the channel-shaped forms have an RSS feed behind them.
         return /\/(channel|c|user)\/|\/@|\/feeds\/videos\.xml/.test(url);
+    }
+    if (platform === 'website') {
+        // Websites start autolist-enabled so the resolver can perform initial feed discovery.
+        // If discovery finds no feed, resolveChannel sets supports_autolist = 0 to halt scheduler polling.
+        return true;
     }
     // A site root pasted under "Blog / RSS" is a website, not a feed. Phase 2's resolver can run
     // feed autodiscovery and flip this on once it has actually found one; until then, promising

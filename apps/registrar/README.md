@@ -14,13 +14,15 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 ## Signed request scheme (node → registrar)
 
 Headers `x-bp-pubkey` (64 hex), `x-bp-timestamp` (unix s), `x-bp-signature` (128 hex);
-signed message `` `${METHOD}\n${pathname}\n${timestamp}\n${bodyText}` `` with the node's Ed25519 key.
+signed message `` `beanpool-registrar-request/v1\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}` `` with the node's Ed25519 key.
+
+The leading domain tag is load-bearing, not cosmetic: the node signs both this and a PUBLIC attestation with the same identity key, so without distinct tags `/api/attest` is a forgery oracle for this scheme. Change it here and in `registrar-client.ts` together, never one alone.
 
 ## Attestation response (node serves at `/api/attest?nonce=`)
 
 ```json
 { "pubkey": "<hex>", "nonce": "<echoed>", "timestamp": <unix s>,
-  "signature": "<Ed25519 over `${nonce}\n${timestamp}`, hex>" }
+  "signature": "<Ed25519 over `beanpool-node-attest/v1\n${nonce}\n${timestamp}`, hex>" }
 ```
 
 ## Deploy

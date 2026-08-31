@@ -24,8 +24,8 @@ Git: on branch `feat/settings-public-address` (PR #88). `main` has all of #87.
 - **C** **Bring-your-own-domain** (independent; invites still work via the switchboard). Design only.
 
 ## Two contracts anyone continuing MUST preserve
-1. **Signed request (node → registrar):** headers `x-bp-pubkey` (raw Ed25519 hex) / `x-bp-timestamp` / `x-bp-signature`; message = `` `${METHOD}\n${pathname}\n${ts}\n${bodyText}` ``. Node side: `registrar-client.ts` (`.publicKey.raw` + `.sign()`). Worker side: `apps/registrar/src/sign.js`.
-2. **Attestation:** node serves `GET /api/attest?nonce=` → `{pubkey, nonce, timestamp, signature}` signed over `` `${nonce}\n${timestamp}` ``. Worker cron verifies; **offline-safe**: `mismatch` (wrong identity) → revoke fast; `unverified` (unreachable) → **never revoke** (solar nodes sleep). See `attestOne`/`attestSweep` in `apps/registrar/src/index.js`.
+1. **Signed request (node → registrar):** headers `x-bp-pubkey` (raw Ed25519 hex) / `x-bp-timestamp` / `x-bp-signature`; message = `` `beanpool-registrar-request/v1\n${METHOD}\n${pathname}\n${ts}\n${bodyText}` ``. Node side: `registrar-client.ts` (`.publicKey.raw` + `.sign()`). Worker side: `apps/registrar/src/sign.js`.
+2. **Attestation:** node serves `GET /api/attest?nonce=` → `{pubkey, nonce, timestamp, signature}` signed over `` `beanpool-node-attest/v1\n${nonce}\n${timestamp}` ``. The nonce is restricted to `[A-Za-z0-9._-]{1,128}`: a newline in it used to let a caller shape the signed message like a signed request, making this public endpoint an oracle for the private scheme. Worker cron verifies; **offline-safe**: `mismatch` (wrong identity) → revoke fast; `unverified` (unreachable) → **never revoke** (solar nodes sleep). See `attestOne`/`attestSweep` in `apps/registrar/src/index.js`.
 
 ## Validated facts / constants
 - **CF creds** live in repo `.env` (`CF_API_TOKEN` = DNS-only; `CLOUDFLARE_API_KEY`+`_EMAIL` = global). Never print them.

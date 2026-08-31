@@ -118,3 +118,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-10 - Single-pass N-gram Search Keyword Expansion in Engine
 **Learning:** In `packages/beanpool-engine/src/posts.ts`, `generateSearchKeywords` previously re-parsed input strings via `text.split(/\s+/)` and performed nested array loops for 2-gram and 3-gram synonym matching.
 **Action:** Refactored keyword generation to run in a single pass over pre-tokenized words, building n-gram strings inline to eliminate redundant allocations and loop overhead.
+
+## 2026-09-15 - O(1) Parent Message Lookups in Chat Thread Renders
+**Learning:** In `apps/native/app/chat/[id].tsx` and `apps/pwa/src/pages/MessagesPage.tsx`, resolving replied-to parent messages ran `messages.find(m => m.id === ...)` inside the render loop for every message row. In large chat threads with $M$ messages, this created an $O(M^2)$ nested search on every render cycle.
+**Action:** Pre-computed a `messagesById` Map indexed by message `id` prior to rendering message rows, reducing parent message resolution to $O(1)$ constant-time lookups ($O(M)$ overall).

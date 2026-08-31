@@ -572,6 +572,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="public-profile" options={{ presentation: 'modal' }} />
                 <Stack.Screen name="new-message" options={{ headerShown: false, animation: 'slide_from_right' }} />
                 <Stack.Screen name="chat/[id]" />
+                <Stack.Screen name="pulse-intake" options={{ presentation: 'modal' }} />
                 <Stack.Screen name="apple-probe" />
                 <Stack.Screen name="google-probe" />
                 <Stack.Screen name="channels" />

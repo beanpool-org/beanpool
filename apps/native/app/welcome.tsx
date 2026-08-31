@@ -56,6 +56,19 @@ function inviteProblemMessage(reason?: string): string {
     }
 }
 
+/**
+ * "March 2026" from whatever the node stored, or '' if it is unusable.
+ *
+ * Month and year only: the day adds nothing to telling two namesakes apart, and a precise join
+ * date is more than a public lookup needs to hand out about somebody.
+ */
+function joinedLabel(joinedAt: string | null | undefined): string {
+    if (!joinedAt) return '';
+    const d = new Date(joinedAt);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
 export default function WelcomeScreen() {
     const params = useGlobalSearchParams();
     const incomingUrl = Linking.useURL();
@@ -1820,7 +1833,9 @@ export default function WelcomeScreen() {
                                             }}
                                             accessible
                                             accessibilityRole="button"
-                                            accessibilityLabel={`Select the account ${c.callsign}`}
+                                            accessibilityLabel={joinedLabel(c.joinedAt)
+                                                ? `Select the account ${c.callsign}, joined ${joinedLabel(c.joinedAt)}`
+                                                : `Select the account ${c.callsign}`}
                                             accessibilityHint="Uses this account for recovery"
                                             style={{
                                                 flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -1829,7 +1844,16 @@ export default function WelcomeScreen() {
                                             }}
                                         >
                                             <MemberAvatar avatarUrl={c.avatarUrl} pubkey={c.publicKey} callsign={c.callsign || '?'} size={32} />
-                                            <Text style={{ color: colors.text.heading, fontWeight: '600' }}>{c.callsign}</Text>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: colors.text.heading, fontWeight: '600' }}>{c.callsign}</Text>
+                                                {/* Breaks the tie the avatar cannot: two namesakes who both
+                                                    kept the default identicon are otherwise identical rows. */}
+                                                {!!joinedLabel(c.joinedAt) && (
+                                                    <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
+                                                        joined {joinedLabel(c.joinedAt)}
+                                                    </Text>
+                                                )}
+                                            </View>
                                         </Pressable>
                                     ))}
                                 </View>

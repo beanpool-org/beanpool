@@ -2,7 +2,7 @@
   "expo": {
     "name": "Bean Pool",
     "slug": "beanpool-pillar",
-    "version": "1.2.21",
+    "version": "1.2.22",
     "orientation": "default",
     "icon": "./assets/images/app-icon.png",
     "scheme": "beanpool",
@@ -44,7 +44,7 @@
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 243,
+      "versionCode": 244,
       "package": "org.beanpool.pillar",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {

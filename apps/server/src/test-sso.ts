@@ -414,6 +414,12 @@ async function main(): Promise<void> {
         && !isSsoProvider('constructor'),
         'and twitter, empty and Object.prototype keys are not');
 
+    // GitHub unverified pseudo-JWT verification attempt must fail
+    nonce = issueNonce(SUBJECT);
+    const unverifiedGithubJwt = GITHUB.mint({ nonce });
+    await rejects(() => verifyIdToken('github', unverifiedGithubJwt, [GITHUB.aud], nonce, SUBJECT),
+        'an unverified pseudo-JWT for GitHub is refused');
+
     // The exported list must BE the table, not a copy of it that drifts (CR). Checked against
     // isSsoProvider in both directions so neither can gain an entry the other lacks.
     assert(SSO_PROVIDERS.length === 4 && SSO_PROVIDERS.every(isSsoProvider),

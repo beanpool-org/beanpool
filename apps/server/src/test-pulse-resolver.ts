@@ -39,6 +39,7 @@ import {
     extractYouTubeChannelIdFromHtml,
     discoverFeedUrlFromHtml,
     buildYouTubeFeedUrl,
+    YOUTUBE_HANDLE_PROBE_MAX_BYTES,
     resolveChannel,
     ssrfSafeFetch,
     createCustomLookup,
@@ -244,6 +245,40 @@ async function main(): Promise<void> {
     assert(
         extractYouTubeChannelIdFromHtml('<link rel="alternate" type="application/rss+xml" href="https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123456789012345678">') === 'UCabc123456789012345678',
         'Extract channel ID from feed link tag'
+    );
+
+    // 900KB synthetic YouTube channel page regression test (PR #566 regression pin)
+    // A real YouTube channel page is ~860KB with markers deep in the body (>700KB).
+    // An earlier 256KB probe cap caused ssrfSafeFetch to throw PayloadTooLargeError
+    // before reaching any channel identifier.
+    const targetChannelId = 'UCuAXFkgsw1L7xaCfnd5JJOw';
+    const paddingBefore700k = '<!-- ' + 'A'.repeat(740000) + ' -->\n';
+    const canonicalTag = `<link rel="canonical" href="https://www.youtube.com/channel/${targetChannelId}">\n`;
+    const paddingAfter = '<!-- ' + 'B'.repeat(150000) + ' -->\n';
+    const synthetic900kPage = `<!DOCTYPE html><html><head><title>Synthetic YouTube Channel</title></head><body>${paddingBefore700k}${canonicalTag}${paddingAfter}</body></html>`;
+
+    assert(
+        synthetic900kPage.length >= 890000 && synthetic900kPage.length <= 950000,
+        'Synthetic YouTube channel page is roughly 900KB in size'
+    );
+    assert(
+        synthetic900kPage.indexOf(canonicalTag) > 700000,
+        'Channel ID marker is positioned beyond byte 700,000 in synthetic page'
+    );
+    assert(
+        extractYouTubeChannelIdFromHtml(synthetic900kPage) === targetChannelId,
+        'extractYouTubeChannelIdFromHtml extracts channel ID from full ~900KB page'
+    );
+
+    const truncated256kPage = synthetic900kPage.slice(0, 256 * 1024);
+    assert(
+        extractYouTubeChannelIdFromHtml(truncated256kPage) === null,
+        'extractYouTubeChannelIdFromHtml returns null on 256KB truncated page (pins the 256KB probe cap failure mode)'
+    );
+
+    assert(
+        YOUTUBE_HANDLE_PROBE_MAX_BYTES >= 1024 * 1024,
+        `YouTube handle probe maxBytes (${YOUTUBE_HANDLE_PROBE_MAX_BYTES} bytes) is at least 1MB`
     );
 
     // buildYouTubeFeedUrl synchronous resolution

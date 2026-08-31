@@ -76,19 +76,23 @@ export function InstallPrompt() {
     const android = isAndroid();
 
     return (
-        <div style={{
-            position: 'fixed',
-            bottom: '4.5rem',
-            left: '0.75rem',
-            right: '0.75rem',
-            background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-            border: '1px solid #2563eb',
-            borderRadius: '16px',
-            padding: '1rem 1.25rem',
-            zIndex: 1000,
-            boxShadow: '0 8px 32px rgba(37, 99, 235, 0.3)',
-            animation: 'slideUp 0.4s ease-out',
-        }}>
+        <div
+            role="region"
+            aria-label="App installation prompt"
+            style={{
+                position: 'fixed',
+                bottom: '4.5rem',
+                left: '0.75rem',
+                right: '0.75rem',
+                background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+                border: '1px solid #2563eb',
+                borderRadius: '16px',
+                padding: '1rem 1.25rem',
+                zIndex: 1000,
+                boxShadow: '0 8px 32px rgba(37, 99, 235, 0.3)',
+                animation: 'slideUp 0.4s ease-out',
+            }}
+        >
             <style>{`
                 @keyframes slideUp {
                     from { transform: translateY(100%); opacity: 0; }
@@ -98,6 +102,7 @@ export function InstallPrompt() {
 
             {/* Close button */}
             <button
+                type="button"
                 onClick={handleDismiss}
                 style={{
                     position: 'absolute', top: '0.4rem', right: '0.5rem',
@@ -105,11 +110,12 @@ export function InstallPrompt() {
                     fontSize: '1rem', cursor: 'pointer', padding: '0.4rem 0.6rem',
                     borderRadius: '8px', lineHeight: 1,
                 }}
-                aria-label="Dismiss"
+                className="focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                aria-label="Dismiss install prompt"
             >✕</button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: showSteps ? '0.75rem' : 0 }}>
-                <span style={{ fontSize: '2rem' }}>📲</span>
+                <span style={{ fontSize: '2rem' }} aria-hidden="true">📲</span>
                 <div style={{ flex: 1 }}>
                     <p style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
                         Install BeanPool
@@ -120,6 +126,7 @@ export function InstallPrompt() {
                 </div>
                 {deferredPrompt ? (
                     <button
+                        type="button"
                         onClick={handleNativeInstall}
                         style={{
                             padding: '0.5rem 1rem', borderRadius: '10px',
@@ -127,18 +134,22 @@ export function InstallPrompt() {
                             fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
                             fontFamily: 'inherit', whiteSpace: 'nowrap',
                         }}
+                        className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         Install
                     </button>
                 ) : (
                     <button
+                        type="button"
                         onClick={() => setShowSteps(!showSteps)}
+                        aria-expanded={showSteps}
                         style={{
                             padding: '0.5rem 1rem', borderRadius: '10px',
                             background: showSteps ? '#333' : '#2563eb', color: 'var(--text-primary)',
                             border: 'none', fontSize: '0.85rem', fontWeight: 600,
                             cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
                         }}
+                        className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
                         {showSteps ? 'Hide' : 'How?'}
                     </button>

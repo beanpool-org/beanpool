@@ -83,3 +83,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-08-28 - ProfileGateModal Accessibility & Keyboard Navigation
 **Learning:** `ProfileGateModal.tsx` lacked Escape key dismissal, dynamic focus ring indicators for keyboard focus, explicit `type="button"` attributes on buttons, and title linking (`aria-labelledby` / `id`).
 **Action:** Added `useEffect` Escape key listener, `aria-labelledby="profile-gate-title"`, `id="profile-gate-title"`, explicit `type="button"`, and `focus-visible:ring-2 focus-visible:ring-nature-500` to modal buttons.
+
+## 2026-08-29 - InstallPrompt Banner Accessibility & Focus Ring Styling
+**Learning:** `InstallPrompt.tsx` floating banner lacked region ARIA semantics (`role="region"`, `aria-label="App installation prompt"`), decorative emoji hiding (`aria-hidden="true"`), explicit `type="button"` attributes on close and action buttons, disclosure state (`aria-expanded`), and focus-visible ring styling for keyboard users.
+**Action:** Added `role="region"`, `aria-label="App installation prompt"`, `aria-hidden="true"` on emoji, explicit `type="button"`, `aria-label="Dismiss install prompt"`, `aria-expanded={showSteps}`, and `focus-visible:ring-2` focus rings to all buttons.

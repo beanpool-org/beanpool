@@ -45,6 +45,7 @@ import {
     categoryMeta,
     isWebUrl,
 } from '@beanpool/core';
+import { lightColors } from '../constants/colors';
 import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
@@ -62,7 +63,7 @@ interface Channel {
     syndicateToNode: boolean;
 }
 
-function safeDecodeURIComponent(value: string | undefined): string {
+export function safeDecodeURIComponent(value: string | undefined): string {
     if (!value) return '';
     try {
         return decodeURIComponent(value);
@@ -585,11 +586,11 @@ export default function PulseIntakeScreen() {
     );
 }
 
-const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
+export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; theme: string }) =>
     StyleSheet.create({
         safeArea: {
             flex: 1,
-            backgroundColor: colors.background.default,
+            backgroundColor: colors.surface.app,
         },
         keyboardAvoid: {
             flex: 1,
@@ -623,7 +624,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         headerTitle: {
             fontSize: 17,
             fontWeight: '700',
-            color: colors.text.primary,
+            color: colors.text.heading,
         },
         headerSpacer: {
             width: 50,
@@ -651,7 +652,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         label: {
             fontSize: 14,
             fontWeight: '600',
-            color: colors.text.primary,
+            color: colors.text.heading,
             marginBottom: 6,
         },
         pasteButton: {
@@ -675,11 +676,11 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             paddingHorizontal: 14,
             paddingVertical: 12,
             fontSize: 15,
-            color: colors.text.primary,
+            color: colors.text.heading,
             minHeight: 48,
         },
         inputError: {
-            borderColor: colors.status.error,
+            borderColor: colors.feedback.danger.solid,
         },
         inlineErrorRow: {
             flexDirection: 'row',
@@ -693,7 +694,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         },
         inlineErrorText: {
             fontSize: 13,
-            color: colors.status.error,
+            color: colors.feedback.danger.fg,
             flex: 1,
             lineHeight: 18,
         },
@@ -739,7 +740,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         },
         chipTextSelected: {
             fontWeight: '700',
-            color: theme === 'dark' ? colors.text.primary : colors.brand.primary,
+            color: theme === 'dark' ? colors.text.heading : colors.brand.primary,
         },
         noChannelsCard: {
             backgroundColor: colors.surface.card,
@@ -757,7 +758,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         noChannelsTitle: {
             fontSize: 16,
             fontWeight: '700',
-            color: colors.text.primary,
+            color: colors.text.heading,
             marginBottom: 6,
         },
         noChannelsBody: {
@@ -779,13 +780,13 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             fontWeight: '600',
         },
         errorBanner: {
-            backgroundColor: theme === 'dark' ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2',
+            backgroundColor: theme === 'dark' ? 'rgba(239, 68, 68, 0.2)' : colors.feedback.danger.bg,
             padding: 12,
             borderRadius: 10,
             marginBottom: 14,
         },
         errorBannerText: {
-            color: colors.status.error,
+            color: colors.feedback.danger.fg,
             fontSize: 13,
         },
         successBanner: {

@@ -27,6 +27,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { platformMeta, isWebUrl, type ChannelPlatform } from '@beanpool/core';
+import { lightColors } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
@@ -350,7 +351,7 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
     );
 }
 
-const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
+export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; theme: string }) =>
     StyleSheet.create({
         container: {
             width: '100%',
@@ -358,15 +359,15 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             gap: 10,
         },
         nudgeCard: {
-            backgroundColor: theme === 'dark' ? '#1c1d1a' : '#f4fbf7',
-            borderRadius: 16,
+            backgroundColor: colors.surface.card,
+            borderRadius: 14,
             borderWidth: 1,
-            borderColor: theme === 'dark' ? 'rgba(74, 222, 128, 0.25)' : '#bbf7d0',
+            borderColor: colors.border.default,
             padding: 14,
-            width: '100%',
+            marginBottom: 16,
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.06,
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: theme === 'dark' ? 0.2 : 0.05,
             shadowRadius: 4,
             elevation: 2,
         },
@@ -388,7 +389,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         nudgeTitle: {
             fontSize: 14,
             fontWeight: '700',
-            color: colors.text.primary,
+            color: colors.text.heading,
             flexShrink: 1,
         },
         closeButton: {

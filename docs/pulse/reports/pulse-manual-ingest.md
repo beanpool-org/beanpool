@@ -273,3 +273,38 @@ A technical code review on PR #550 yielded 17 inline comments across server rout
 - SQLite prepared statements with `better-sqlite3` must be prepared at router initialization time outside transaction closures and loops; explicit channel ID selection must strictly validate platform compatibility before trusting the selection.
 - Native interactive chips functioning as mutually exclusive selectors should always carry `accessibilityRole="radio"` and `accessibilityState={{ selected: isSelected }}` for complete accessibility compliance.
 
+---
+
+## Crash fix
+
+PR: #563
+
+### Root Cause
+Opening the manual ingestion screen (route `/pulse-intake`) crashed immediately on mount with the error boundary displaying:
+`"Something went wrong — Error: Cannot read property 'default' of undefined"`
+
+The error boundary swallowed the stack trace on standalone production builds, presenting only the exception message. The underlying cause was:
+1. `apps/native/app/pulse-intake.tsx` referenced `colors.background.default` in `makeStyles`, but `ThemeContext` / `colors.ts` defines `colors.surface.app` and `colors.surface.card` (no `background` namespace exists in the semantic color system). Evaluating `colors.background.default` at style creation time resulted in reading `.default` off `undefined`.
+2. Several other style declarations in `pulse-intake.tsx`, `PulsePreviewCard.tsx`, and `PulseNudges.tsx` referenced undefined tokens (`colors.text.primary` instead of `colors.text.heading` and `colors.status.error` instead of `colors.feedback.danger.solid` / `colors.feedback.danger.fg`) because `makeStyles` used untyped `{ colors: any }` arguments.
+
+### Changes
+1. **`apps/native/app/pulse-intake.tsx`**:
+   - Replaced `colors.background.default` with `colors.surface.app`.
+   - Replaced `colors.text.primary` with `colors.text.heading`.
+   - Replaced `colors.status.error` with `colors.feedback.danger.solid` (borders) and `colors.feedback.danger.fg` (text).
+   - Typed `makeStyles` strictly with `{ colors: typeof lightColors; theme: string }` and exported it.
+2. **`apps/native/components/PulsePreviewCard.tsx`**:
+   - Replaced `colors.text.primary` with `colors.text.heading`.
+   - Typed `makeStyles` strictly with `{ colors: typeof lightColors; theme: string }` and exported it.
+3. **`apps/native/components/PulseNudges.tsx`**:
+   - Replaced `colors.text.primary` with `colors.text.heading`.
+   - Typed `makeStyles` strictly with `{ colors: typeof lightColors; theme: string }` and exported it.
+4. **`apps/native/utils/__tests__/pulse-intake.test.ts`**:
+   - Added unit test suite verifying `safeDecodeURIComponent` and evaluating `makeStyles` across all palettes (`classic`, `earth`, `slate`, and `dark`), ensuring no undefined tokens or style creation exceptions occur.
+
+### Verification
+- `pnpm --filter beanpool-pillar exec tsc --noEmit` exited with 0 errors.
+- `apps/native` vitest suite passed (13 test files, 141 tests).
+- `bash scripts/test-all.sh --all` passed (all 8 checks: build, lint, test, typecheck, suite_registration, deploy_preserve, secrets_guard, federation).
+
+

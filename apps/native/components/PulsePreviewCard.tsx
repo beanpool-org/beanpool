@@ -25,6 +25,7 @@ import {
     type ChannelPlatform,
     type ChannelCategory,
 } from '@beanpool/core';
+import { lightColors } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 export interface PulsePreviewData {
@@ -176,7 +177,7 @@ export function PulsePreviewCard({
     );
 }
 
-const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
+export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; theme: string }) =>
     StyleSheet.create({
         cardContainer: {
             backgroundColor: colors.surface.card,
@@ -297,7 +298,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         title: {
             fontSize: 15,
             fontWeight: '600',
-            color: colors.text.primary,
+            color: colors.text.heading,
             lineHeight: 20,
             marginBottom: 6,
         },
@@ -347,7 +348,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         reviewTitle: {
             fontSize: 14,
             fontWeight: '600',
-            color: colors.text.primary,
+            color: colors.text.heading,
         },
         reviewSub: {
             fontSize: 12,

@@ -89,9 +89,15 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      */
     router.post('/api/pair/cancel', async (ctx) => {
         const { sessionId } = (ctx.request as any).body || {};
-        if (sessionId) {
-            cancelPairingSession(sessionId);
+        if (!sessionId || typeof sessionId !== 'string') {
+            // Reliability fix: return 400 Bad Request when sessionId parameter is missing
+            ctx.status = 400;
+            ctx.body = { error: 'Missing sessionId parameter' };
+            return;
         }
+
+        cancelPairingSession(sessionId);
+        ctx.status = 200;
         ctx.body = { success: true };
     });
 

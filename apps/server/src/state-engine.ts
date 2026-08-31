@@ -16,6 +16,7 @@ import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
+import { scrubPulseItems } from './engine/pulse-resolver.js';
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
@@ -2974,6 +2975,7 @@ export function adminPruneUser(publicKey: string) {
         // permanently, with nobody able to remove it.
         const prunedAt = new Date().toISOString();
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
+        scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -3076,6 +3078,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // erased their profile should not leave their Instagram handle behind on a mirror.
         try {
             scrubChannelRows({ ownerPubkey: publicKey }, now);
+            scrubPulseItems({ ownerPubkey: publicKey }, now);
         } catch { }
         try {
             db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)").run(publicKey, publicKey);
@@ -3655,7 +3658,8 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'recovery_requests', 'recovery_approvals', 'recovery_shares', 'recovery_pin', 'settlements', 'tombstones',
+        'pulse_items', 'recovery_requests', 'recovery_approvals', 'recovery_shares',
+        'recovery_pin', 'settlements', 'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {

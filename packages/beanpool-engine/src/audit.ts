@@ -19,6 +19,7 @@ export interface AuditSyncPayload {
     marketplaceTransactions?: any[];
     messages?: any[];
     creatorChannels?: any[];
+    pulseItems?: any[];
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -173,6 +174,7 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // Replicated since the Pulse's first phase, but absent here — so a channel-replication
         // failure showed a matching hash and ok:true, and only surfaced at failover.
         ['creator_channels', payload.creatorChannels?.length ?? 0],
+        ['pulse_items', payload.pulseItems?.length ?? 0],
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

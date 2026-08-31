@@ -106,6 +106,25 @@ export interface SyncCreatorChannel {
     deletedAt: string | null;
 }
 
+export interface SyncPulseItem {
+    id: string;
+    channelId: string;
+    ownerPubkey: string;
+    platform: string;
+    externalId: string | null;
+    /** NULL once deleted — the tombstone carries the fact, never the content. */
+    url: string | null;
+    title: string | null;
+    thumbnailUrl: string | null;
+    publishedAt: string | null;
+    category: string;
+    source: string;
+    muted: boolean;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt: string | null;
+}
+
 export interface SyncRecoveryRequest {
     id: string;
     oldPubkey: string;
@@ -235,6 +254,7 @@ export interface SyncPayload {
     commonsBalance?: number;
     abuseReports?: SyncAbuseReport[];
     creatorChannels?: SyncCreatorChannel[];
+    pulseItems?: SyncPulseItem[];
     recoveryRequests?: SyncRecoveryRequest[];
     recoveryApprovals?: SyncRecoveryApproval[];
     recoveryShares?: SyncRecoveryShare[];
@@ -265,7 +285,14 @@ export function getStateHash(db: Db): string {
     } catch {
         // Table absent — hashes as empty, which differs from a primary that has any, as it should.
     }
-    const data = JSON.stringify({ m: pKeys.map(k => k.public_key), p: pIds.map(i => i.id), c: cIds });
+    let piIds: string[] = [];
+    try {
+        piIds = (db.prepare("SELECT id FROM pulse_items WHERE deleted_at IS NULL ORDER BY id")
+            .all() as any[]).map(r => r.id);
+    } catch {
+        // Table absent on older schema.
+    }
+    const data = JSON.stringify({ m: pKeys.map(k => k.public_key), p: pIds.map(i => i.id), c: cIds, pi: piIds });
 
     let hash = 0;
     for (let i = 0; i < data.length; i++) {
@@ -456,6 +483,30 @@ export function exportSyncState(
         deletedAt: row.deleted_at ?? null,
     }));
 
+    let pulseItems: SyncPulseItem[] = [];
+    try {
+        const pulseItemRows = sel('pulse_items', 'updated_at');
+        pulseItems = pulseItemRows.map(row => ({
+            id: row.id,
+            channelId: row.channel_id,
+            ownerPubkey: row.owner_pubkey,
+            platform: row.platform,
+            externalId: row.external_id ?? null,
+            url: row.url ?? null,
+            title: row.title ?? null,
+            thumbnailUrl: row.thumbnail_url ?? null,
+            publishedAt: row.published_at ?? null,
+            category: row.category,
+            source: row.source,
+            muted: row.muted === 1,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            deletedAt: row.deleted_at ?? null,
+        }));
+    } catch {
+        // pulse_items table may not exist on older test fixtures
+    }
+
     const recoveryReqRows = sel('recovery_requests', 'updated_at');
     const recoveryRequests: SyncRecoveryRequest[] = recoveryReqRows.map(row => ({
         id: row.id,
@@ -561,6 +612,7 @@ export function exportSyncState(
         commonsBalance,
         abuseReports,
         creatorChannels,
+        pulseItems,
         recoveryRequests,
         recoveryApprovals,
         recoveryShares,

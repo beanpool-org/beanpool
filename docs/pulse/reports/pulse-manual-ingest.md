@@ -277,6 +277,8 @@ A technical code review on PR #550 yielded 17 inline comments across server rout
 
 ## Crash fix
 
+PR: #563
+
 ### Root Cause
 Opening the manual ingestion screen (route `/pulse-intake`) crashed immediately on mount with the error boundary displaying:
 `"Something went wrong — Error: Cannot read property 'default' of undefined"`

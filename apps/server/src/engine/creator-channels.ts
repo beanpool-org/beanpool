@@ -24,6 +24,7 @@
 
 import { db } from '../db/db.js';
 import crypto from 'node:crypto';
+import { scrubPulseItems } from './pulse-resolver.js';
 
 export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'website' | 'rss';
 export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
@@ -845,6 +846,9 @@ export function deleteChannel(ownerPubkey: string, id: string): boolean {
         // The placeholders are NOT NULL columns; every read filters on `deleted_at IS NULL`, so
         // they are never shown or matched.
         changed = scrubChannelRows({ ownerPubkey, id }, now);
+        try {
+            scrubPulseItems({ channelId: id }, now);
+        } catch { }
 
         // Deleting the primary would otherwise leave the member with video channels and no
         // cross-post winner, which is the state the primary exists to prevent. The oldest

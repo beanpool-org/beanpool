@@ -284,7 +284,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -726,6 +726,50 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         cc.createdAt,
                         cc.updatedAt,
                         cc.deletedAt ?? null
+                    );
+                }
+            }
+
+            if (remote.pulseItems) {
+                // Prepared ONCE above the loop per Contract A rule 4 (better-sqlite3 compiles on prepare).
+                // Last-write-wins on updated_at.
+                const importPulseItem = db.prepare(`INSERT INTO pulse_items
+                                    (id, channel_id, owner_pubkey, platform, external_id,
+                                     url, title, thumbnail_url, published_at, category,
+                                     source, muted, created_at, updated_at, deleted_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ON CONFLICT(id) DO UPDATE SET
+                                    channel_id    = excluded.channel_id,
+                                    owner_pubkey  = excluded.owner_pubkey,
+                                    platform      = excluded.platform,
+                                    external_id   = excluded.external_id,
+                                    url           = excluded.url,
+                                    title         = excluded.title,
+                                    thumbnail_url = excluded.thumbnail_url,
+                                    published_at  = excluded.published_at,
+                                    category      = excluded.category,
+                                    source        = excluded.source,
+                                    muted         = excluded.muted,
+                                    deleted_at    = excluded.deleted_at,
+                                    updated_at    = excluded.updated_at
+                                WHERE excluded.updated_at > pulse_items.updated_at`);
+                for (const item of remote.pulseItems) {
+                    importPulseItem.run(
+                        item.id,
+                        item.channelId,
+                        item.ownerPubkey,
+                        item.platform,
+                        item.externalId ?? null,
+                        item.url ?? null,
+                        item.title ?? null,
+                        item.thumbnailUrl ?? null,
+                        item.publishedAt ?? null,
+                        item.category,
+                        item.source,
+                        item.muted ? 1 : 0,
+                        item.createdAt,
+                        item.updatedAt,
+                        item.deletedAt ?? null
                     );
                 }
             }

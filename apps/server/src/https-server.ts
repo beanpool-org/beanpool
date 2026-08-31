@@ -113,6 +113,8 @@ import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
+import { createPulseRoutes } from './routes/pulse.js';
+import { startPulseScheduler } from './engine/pulse-resolver.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 
@@ -243,6 +245,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/activity/feed',            // living activity waterfall community pulse feed (#208)
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
     '/api/channels/options',         // the platform/category vocabulary the channel form renders
+    '/api/pulse/feed',               // public syndicated creator activity feed (The Pulse, Phase 2)
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -916,6 +919,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),
         createActivityRouter(deps),
+        createPulseRoutes(deps),
         // Temporary Apple `sub` parity probe. Registers nothing unless APPLE_PROBE=1
         // (the domain-association file aside) — see routes/apple-probe.ts.
         createAppleProbeRoutes(),
@@ -923,6 +927,16 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // Start auto-pricing background aggregator
     startPricingAggregatorWorker();
+
+    // The Pulse: poll syndicated creator feeds and prune items past 30 days.
+    // On by default — an unstarted scheduler means channels resolve never and the
+    // feed stays permanently empty, which is exactly the built-but-unreachable
+    // trap. PULSE_SCHEDULER=0 disables it per node for a quiet rollout.
+    if (process.env.PULSE_SCHEDULER !== '0') {
+        startPulseScheduler();
+    } else {
+        logger.info('SYS', '[Pulse] Scheduler disabled by PULSE_SCHEDULER=0 — feeds will not refresh');
+    }
     for (const mod of routeModules) {
         router.use(mod.routes());
         router.use(mod.allowedMethods());

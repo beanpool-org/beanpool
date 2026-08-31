@@ -998,3 +998,47 @@ CREATE TABLE IF NOT EXISTS creator_channels (
 CREATE INDEX IF NOT EXISTS idx_creator_channels_owner ON creator_channels(owner_pubkey) WHERE deleted_at IS NULL;
 -- Sync watermark: exportSyncState pulls rows by `updated_at >= since`.
 CREATE INDEX IF NOT EXISTS idx_creator_channels_updated ON creator_channels(updated_at);
+
+-- ===================== PULSE ITEMS (The Pulse, Phase 2) =====================
+-- Items fetched from creator channels (YouTube RSS, generic RSS/Atom) or submitted manually.
+--
+-- Non-negotiable rules (CONTRACTS.md §2):
+-- 1. Deleting an item does not preserve the item: Set deleted_at and NULL url, title, and
+--    thumbnail_url in the same statement. The row survives so deletion replicates; content does not.
+-- 2. Index coverage for feed queries, keyed on the same (published_at, id) sort the
+--    deduplication (channel_id, external_id WHERE external_id IS NOT NULL AND deleted_at IS NULL),
+--    owner queries, and sync watermark (updated_at).
+CREATE TABLE IF NOT EXISTS pulse_items (
+    id             TEXT PRIMARY KEY,          -- 'item_' + 12 random bytes, hex
+    channel_id     TEXT NOT NULL REFERENCES creator_channels(id),
+    owner_pubkey   TEXT NOT NULL REFERENCES members(public_key),
+    platform       TEXT NOT NULL,   -- copied at insert: survives the channel's tombstone
+    external_id    TEXT,            -- platform's own id (YouTube video id, RSS guid); NULL if none
+    url            TEXT,            -- canonical permalink. NULLed on delete
+    title          TEXT,            -- NULLed on delete
+    thumbnail_url  TEXT,            -- NULLed on delete
+    published_at   DATETIME,        -- from the source. The feed orders by this, NOT created_at
+    category       TEXT NOT NULL,   -- copied at insert, so recategorising a channel does not
+                                    -- retro-relabel items already on the feed
+    source         TEXT NOT NULL,   -- 'autolist' | 'manual'
+    muted          INTEGER NOT NULL DEFAULT 0,
+    created_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at     DATETIME
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pulse_items_dedupe
+    ON pulse_items(channel_id, external_id) WHERE external_id IS NOT NULL AND deleted_at IS NULL;
+-- The feed sorts on COALESCE(published_at,'') so a NULL-dated item still has a
+-- position, and breaks ties on id so keyset pagination cannot skip rows. Both
+-- indexes must match that expression exactly or the feed falls back to a scan.
+CREATE INDEX IF NOT EXISTS idx_pulse_items_feed
+    ON pulse_items(COALESCE(published_at, '') DESC, id DESC)
+    WHERE deleted_at IS NULL AND muted = 0;
+-- Category browsing needs category leading, or ?category=craft scans every
+-- unmuted item on the node.
+CREATE INDEX IF NOT EXISTS idx_pulse_items_category_feed
+    ON pulse_items(category, COALESCE(published_at, '') DESC, id DESC)
+    WHERE deleted_at IS NULL AND muted = 0;
+CREATE INDEX IF NOT EXISTS idx_pulse_items_owner
+    ON pulse_items(owner_pubkey) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_pulse_items_updated ON pulse_items(updated_at);

@@ -221,3 +221,32 @@ Results: 103/103 tests passed.
 
 ## Found but out of scope
 - Pre-existing local test runner error in `apps/manager/src/lib/ai-client.test.ts` (vitest environment missing jsdom for localStorage; known issue tracked for Package 04).
+
+---
+
+## Director's review round (appended after review, 2026-08-31)
+
+Three findings, all real, all fixed on this branch. Recorded here because this file lands on
+`main` as the durable record and two claims above are now wrong.
+
+**Corrections to the report above:**
+- The "Built" section states `idx_pulse_items_feed` covers `(category, published_at DESC, muted,
+  deleted_at)`. It never did — the DDL indexed `published_at DESC` only, so `?category=` scanned
+  every unmuted item on the node. A description of intended coverage was written as though it
+  described the code. Now two indexes exist, both matching the query's sort expression exactly.
+- "103/103 tests passed" is now 109/109.
+
+**Fixed:**
+1. `startPulseScheduler()` was exported and never called — feeds would never refresh, pruning
+   would never run, and the feed would sit empty with nothing in the logs. Now started from
+   `startHttpsServer()`; `PULSE_SCHEDULER=0` disables it per node.
+2. Feed indexes as above.
+3. Pagination used `published_at < cursor` alone, which drops every item of a same-timestamp
+   batch that did not fit on the page — routine for RSS. Now a keyset cursor over
+   `(published_at, id)`. The same clause also made NULL-dated items unreachable past page 1
+   (`NULL < cursor` is NULL); the sort key is now `COALESCE(published_at, '')`. The column stays
+   nullable on purpose — `importPulseItem` accepts peer rows, and NOT NULL would convert a
+   cosmetic gap into a sync failure.
+
+**Still true and still unverified on a real node:** nothing here has run against a live feed.
+The SSRF suite proves what is blocked, not that a real YouTube or RSS fetch parses end to end.

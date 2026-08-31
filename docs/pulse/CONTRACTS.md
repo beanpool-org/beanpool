@@ -4,6 +4,8 @@
 Pulse build. If a prompt you were given disagrees with this file, this file wins — say so in your
 report rather than guessing.
 
+Your package brief is in [`PACKAGES.md`](./PACKAGES.md) alongside this file.
+
 Spec (the product intent, not the interfaces):
 <https://gist.github.com/martyinspace/f982a03a3d38875828d940d5b6657d47>
 

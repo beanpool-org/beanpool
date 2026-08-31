@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import {
     getMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
-    submitRating, vouchMemberApi, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo
+    submitRating, vouchMemberApi, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
+    type PublicCreatorChannel
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { ChannelChips } from '../components/ChannelChips';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -34,11 +36,17 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [reviewStars, setReviewStars] = useState(5);
     const [reviewComment, setReviewComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
+    const [channels, setChannels] = useState<PublicCreatorChannel[]>([]);
 
     const isSelf = pubkey === identity.publicKey;
 
     useEffect(() => {
         setLoading(true);
+        // Fetch syndicated creator channels (The Pulse, Phase 1)
+        getPublicChannels(pubkey)
+            .then(res => setChannels(res.channels || []))
+            .catch(() => setChannels([]));
+
         Promise.all([
             getMemberProfile(pubkey, identity.publicKey).catch(() => null),
             getMemberRatings(pubkey).catch(() => null),
@@ -156,6 +164,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             "{profile.bio}"
                         </div>
                     )}
+
+                    {/* Syndicated Creator Channels (The Pulse, Phase 1) */}
+                    <ChannelChips channels={channels} />
 
                     {!isSelf && (
                         <button 

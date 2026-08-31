@@ -209,3 +209,38 @@ describe('harvester helpers send the manager credential', () => {
         expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('node-secret');
     });
 });
+
+describe('registrar claim helpers send admin password header', () => {
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    const lastCall = () => fetchMock.mock.calls[0];
+    const headersOf = (init: any) => (init?.headers ?? {}) as Record<string, string>;
+
+    beforeEach(() => {
+        fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({ status: 'approved', name: 'mycommunity' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+    });
+
+    it('approveRegistrarClaim sends X-Admin-Password and body password when nodeUrl, name, and adminPassword are provided', async () => {
+        const { approveRegistrarClaim } = await import('./node-client');
+        await approveRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123');
+        const [url, init] = lastCall();
+        expect(url).toContain('/api/local/admin/registrar/mycommunity/approve');
+        expect(headersOf(init)['X-Admin-Password']).toBe('secret123');
+        expect(JSON.parse((init as any).body)).toEqual({ password: 'secret123' });
+    });
+
+    it('revokeRegistrarClaim sends X-Admin-Password and body password when nodeUrl, name, and adminPassword are provided', async () => {
+        const { revokeRegistrarClaim } = await import('./node-client');
+        await revokeRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123');
+        const [url, init] = lastCall();
+        expect(url).toContain('/api/local/admin/registrar/mycommunity/revoke');
+        expect(headersOf(init)['X-Admin-Password']).toBe('secret123');
+        expect(JSON.parse((init as any).body)).toEqual({ password: 'secret123' });
+    });
+});

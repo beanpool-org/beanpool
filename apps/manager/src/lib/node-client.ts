@@ -816,7 +816,7 @@ export async function approveRegistrarClaim(
     let name = nameOrPassword;
     let pwd = adminPassword;
 
-    if (!name) {
+    if (!nameOrPassword) {
         name = nodeUrlOrName;
         nodeUrl = '';
         pwd = undefined;
@@ -828,8 +828,8 @@ export async function approveRegistrarClaim(
         headers['x-admin-secret'] = pwd;
     }
     const endpoint = nodeUrl
-        ? resolveNodeApiUrl(nodeUrl, `/api/local/admin/registrar/${encodeURIComponent(name)}/approve`)
-        : `/api/local/admin/registrar/${encodeURIComponent(name)}/approve`;
+        ? resolveNodeApiUrl(nodeUrl, `/api/local/admin/registrar/${encodeURIComponent(name || '')}/approve`)
+        : `/api/local/admin/registrar/${encodeURIComponent(name || '')}/approve`;
 
     const res = await fetch(endpoint, {
         method: 'POST',
@@ -851,7 +851,7 @@ export async function revokeRegistrarClaim(
     let name = nameOrPassword;
     let pwd = adminPassword;
 
-    if (!name) {
+    if (!nameOrPassword) {
         name = nodeUrlOrName;
         nodeUrl = '';
         pwd = undefined;
@@ -863,8 +863,8 @@ export async function revokeRegistrarClaim(
         headers['x-admin-secret'] = pwd;
     }
     const endpoint = nodeUrl
-        ? resolveNodeApiUrl(nodeUrl, `/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`)
-        : `/api/local/admin/registrar/${encodeURIComponent(name)}/revoke`;
+        ? resolveNodeApiUrl(nodeUrl, `/api/local/admin/registrar/${encodeURIComponent(name || '')}/revoke`)
+        : `/api/local/admin/registrar/${encodeURIComponent(name || '')}/revoke`;
 
     const res = await fetch(endpoint, {
         method: 'POST',

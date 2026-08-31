@@ -13,6 +13,9 @@ import { defineConfig } from 'vitest/config';
  * stubbed — never a claim that the code ran on a phone.
  */
 export default defineConfig({
+    define: {
+        __DEV__: 'false',
+    },
     test: {
         environment: 'node',
         include: ['utils/__tests__/**/*.test.ts'],

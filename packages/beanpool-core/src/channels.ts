@@ -106,3 +106,18 @@ export function categoryMeta(id: string | null | undefined): CategoryInfo {
         label: 'Other',
     };
 }
+
+/**
+ * Is this a URL we are willing to hand to a browser or to Linking.openURL?
+ *
+ * Only http(s) qualifies. A channel row can carry no URL at all (a tombstoned
+ * row NULLs it), and a scheme like `javascript:` or `data:` must never reach an
+ * href — so callers render inert text rather than a link when this is false.
+ * `#` is not a safe fallback href either: in the PWA it scrolls the router and,
+ * with target="_blank", opens an empty tab.
+ */
+export function isWebUrl(url: string | null | undefined): boolean {
+    const trimmed = url?.trim();
+    if (!trimmed) return false;
+    return /^https?:\/\//i.test(trimmed);
+}

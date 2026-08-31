@@ -453,6 +453,7 @@ export default function PublicProfileScreen() {
     };
 
     useEffect(() => {
+        let cancelled = false;
         if (!pubKeyStr) {
             setLoading(false);
             setRatingsLoading(false);
@@ -462,10 +463,13 @@ export default function PublicProfileScreen() {
             return;
         }
 
-        // Fetch syndicated creator channels (The Pulse, Phase 1)
+        // Fetch syndicated creator channels (The Pulse, Phase 1). Clear first, so tapping
+        // from one member to another never shows the previous member's chips, and drop a
+        // reply that lands after we have navigated on.
+        setChannels([]);
         fetchPublicChannels(pubKeyStr)
-            .then(setChannels)
-            .catch(() => setChannels([]));
+            .then(list => { if (!cancelled) setChannels(list); })
+            .catch(() => { if (!cancelled) setChannels([]); });
 
         // 1. Load local first-class database items instantly
         setLoading(true);
@@ -532,6 +536,7 @@ export default function PublicProfileScreen() {
             setGivenLoading(false);
             setGiven([]);
         }
+        return () => { cancelled = true; };
     }, [pubKeyStr, isSelf, identity?.publicKey]);
 
     const renderStars = (avg: number) => {

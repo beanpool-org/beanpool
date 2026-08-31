@@ -41,11 +41,15 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const isSelf = pubkey === identity.publicKey;
 
     useEffect(() => {
+        let cancelled = false;
         setLoading(true);
-        // Fetch syndicated creator channels (The Pulse, Phase 1)
+        // Fetch syndicated creator channels (The Pulse, Phase 1). Clear first, so a slow
+        // reply never leaves the previous member's chips under this member's name, and
+        // drop a reply that lands after we have navigated on.
+        setChannels([]);
         getPublicChannels(pubkey)
-            .then(res => setChannels(res.channels || []))
-            .catch(() => setChannels([]));
+            .then(res => { if (!cancelled) setChannels(res.channels || []); })
+            .catch(() => { if (!cancelled) setChannels([]); });
 
         Promise.all([
             getMemberProfile(pubkey, identity.publicKey).catch(() => null),
@@ -74,6 +78,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             }
             setLoading(false);
         });
+
+        return () => { cancelled = true; };
     }, [pubkey, identity.publicKey, isSelf]);
 
     const renderStars = (avg: number) => {

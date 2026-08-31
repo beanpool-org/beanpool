@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
-import { platformMeta, type PublicCreatorChannel } from '@beanpool/core';
+import { isWebUrl, platformMeta, type PublicCreatorChannel } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 interface Props {
@@ -31,7 +31,7 @@ export function ChannelChips({ channels }: Props) {
         if (!channel.url) return;
         try {
             const url = channel.url.trim();
-            if (!/^https?:\/\//i.test(url)) return;
+            if (!isWebUrl(url)) return;
             const can = await Linking.canOpenURL(url).catch(() => false);
             if (can) {
                 await Linking.openURL(url);

@@ -60,7 +60,17 @@ function canAutolist(platform: ChannelPlatform, url: string): boolean {
     // A site root pasted under "Blog / RSS" is a website, not a feed. Phase 2's resolver can run
     // feed autodiscovery and flip this on once it has actually found one; until then, promising
     // "Updates itself" is a promise nothing here can keep.
-    return /(\/feed\b|\/rss\b|\/atom\b|\.xml(\?|$)|\.rss(\?|$)|\/feeds?\/)/i.test(url);
+    //
+    // Matched against the path and query ONLY. Against the whole URL, a blog homepage on
+    // `rss.mycoop.org` or `feed.example.com` matches its own hostname and gets the promise anyway.
+    let pathAndQuery: string;
+    try {
+        const u = new URL(url);
+        pathAndQuery = u.pathname + u.search;
+    } catch {
+        return false;
+    }
+    return /(\/feed\b|\/rss\b|\/atom\b|\.xml(\?|$)|\.rss(\?|$)|\/feeds?\/)/i.test(pathAndQuery);
 }
 
 /** Platforms that carry video, and so can collide when a creator cross-posts. */
@@ -359,11 +369,15 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     // verbatim — there is nothing to canonicalise and guessing would break them.
     const isShortLink = SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase().replace(/^www\./, ''));
     const segments = parsed.pathname.split('/').filter(Boolean);
+    // Every reserved-segment and prefix comparison below runs against this, not the raw segment.
+    // `instagram.com/P/Cxyz/` used to slip past the reserved list and store handle `@p`, and
+    // `facebook.com/Groups/123` past FB_PREFIX_DEPTH into the very dead link its comment describes.
+    const seg0 = (segments[0] || '').toLowerCase();
     let handle: string | null = null;
     if (isShortLink) {
         handle = null;
     } else if (platform === 'instagram' && segments.length >= 1
-               && !['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct'].includes(segments[0])) {
+               && !['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct'].includes(seg0)) {
         const h = segments[0].toLowerCase();
         handle = `@${h}`;
         parsed.pathname = `/${h}/`;
@@ -373,7 +387,7 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     } else if (platform === 'youtube' && segments[0]?.startsWith('@')) {
         handle = segments[0].toLowerCase();
         parsed.pathname = `/${handle}`;
-    } else if (platform === 'youtube' && ['channel', 'c', 'user'].includes(segments[0]) && segments[1]) {
+    } else if (platform === 'youtube' && ['channel', 'c', 'user'].includes(seg0) && segments[1]) {
         // `/channel/UC…` is the form that maps to the channel RSS feed the autolist path needs, so
         // it must be accepted, and `/c/` and `/user/` are still all over people's bios.
         //
@@ -384,45 +398,45 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         // What this still cannot collapse is the same channel added as both `/c/Foo` and `@foo`:
         // deciding they are the same requires resolving them, which Phase 2's resolver can do and
         // this cannot. The cross-post warning covers the visible symptom in the meantime.
-        const isChannelId = segments[0] === 'channel';
+        const isChannelId = seg0 === 'channel';
         const ident = isChannelId ? segments[1] : segments[1].toLowerCase();
         // Displayed verbatim, NOT as `@ident`: the legacy custom-URL namespace (`/c/`, `/user/`)
         // is distinct from the @handle namespace, so `youtube.com/c/foo` and `youtube.com/@foo`
         // can be different channels. Fabricating the @ form would put another channel's handle on
         // this member's chip.
         handle = ident;
-        parsed.pathname = `/${segments[0]}/${ident}`;
+        parsed.pathname = `/${seg0}/${ident}`;
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
         parsed.pathname = '/profile.php';
-    } else if (platform === 'facebook' && FB_PREFIX_DEPTH.has(segments[0] || '') && !segments[1]) {
+    } else if (platform === 'facebook' && FB_PREFIX_DEPTH.has(seg0) && !segments[1]) {
         // `/groups/`, `/share/`, `/pages/` with nothing after them fell through to the generic
         // branch and stored `facebook.com/groups` with handle `groups` — a dead link that every
         // such paste then collided with.
         throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
-    } else if (platform === 'facebook' && /^profile\.php$/i.test(segments[0] || '')) {
+    } else if (platform === 'facebook' && /^profile\.php$/i.test(seg0)) {
         // Reached only when there was no `id` to keep — `/profile.php` alone identifies nobody, and
         // storing it would put a dead link on the profile with "profile.php" as the handle.
         throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
-    } else if (platform === 'facebook' && FB_PREFIX_DEPTH.has(segments[0]) && segments[1]) {
+    } else if (platform === 'facebook' && FB_PREFIX_DEPTH.has(seg0) && segments[1]) {
         // These prefixes carry the identity BELOW the first segment, and how far below differs:
         // `/groups/<id>` is one deep, while `/people/<name>/<id>` and `/share/p/<id>` are two.
         // Keeping only the first segment collapsed every group to `facebook.com/groups`, so
         // distinct channels collided as duplicates and the chip linked to a generic page.
         // A Map, not an object literal: `/constructor/…` and `/__proto__/…` are real paths, and an
         // unguarded index would give them an inherited value, a NaN slice, and a dead stored URL.
-        const depth = FB_PREFIX_DEPTH.get(segments[0])!;
+        const depth = FB_PREFIX_DEPTH.get(seg0)!;
         // Folded like every other identity form, or `/people/Some-Name/61553` and
         // `/people/some-name/61553` are two rows for one page.
         //
         // NOT for `/share/`, whose ids are opaque and case-SENSITIVE — folding `1A2b3C4d` to
         // `1a2b3c4d` produces a dead link that cannot be recovered from what was stored. Slugs and
         // numeric ids fold safely; opaque ids never do.
-        const foldable = segments[0] !== 'share';
+        const foldable = seg0 !== 'share';
         const tail = segments.slice(1, 1 + depth).filter(Boolean)
             .map(x => (foldable ? x.toLowerCase() : x));
-        handle = `${segments[0]}/${tail.join('/')}`;
-        parsed.pathname = `/${segments[0]}/${tail.join('/')}`;
+        handle = `${seg0}/${tail.join('/')}`;
+        parsed.pathname = `/${seg0}/${tail.join('/')}`;
     } else if (platform === 'facebook' && segments.length >= 1) {
         // Canonicalised like the others, or `@mypage`, `/mypage/` and `/mypage/posts/123` become
         // three separate rows for one page and the duplicate check never fires.

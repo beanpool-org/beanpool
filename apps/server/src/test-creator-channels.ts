@@ -215,6 +215,18 @@ async function main(): Promise<void> {
     assert(normaliseChannelInput('rss', 'https://example.com/feed?si=keepme').url.includes('si=keepme'),
         "a feed's own si parameter survives — platform share params are dropped wholesale anyway");
 
+    // Round-twelve regressions: reserved segments were matched before case-folding.
+    assertThrows(() => normaliseChannelInput('instagram', 'https://www.instagram.com/P/Cxyz123/'),
+        'NO_HANDLE', 'an uppercase /P/ post link is still recognised as a post, not an account');
+    assertThrows(() => normaliseChannelInput('facebook', 'https://www.facebook.com/Groups/'),
+        'NO_HANDLE', 'an uppercase /Groups/ prefix with no id is still refused');
+    assert(normaliseChannelInput('facebook', 'https://www.facebook.com/Groups/1234567').url
+            === normaliseChannelInput('facebook', 'https://www.facebook.com/groups/1234567').url,
+        'facebook prefixes match case-insensitively');
+    assert(normaliseChannelInput('youtube', 'https://www.youtube.com/Channel/UCabc123def456ghi789jk').url
+            .includes('/channel/UCabc123def456ghi789jk'),
+        'an uppercase /Channel/ still routes to the channel form, id case intact');
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');
@@ -278,6 +290,12 @@ async function main(): Promise<void> {
         }
     }
     assert(churnBlocked, 'add/delete cycling is bounded by the churn window, not just the live cap');
+
+    // The feed check must read the path, not the hostname: a blog homepage on rss.example.org
+    // matched its own subdomain and inherited the "Updates itself" promise.
+    const rssSubdomain = addChannel({ ownerPubkey: marty, platform: 'rss', raw: 'https://rss.mycoop.org/', category: 'food' });
+    assert(rssSubdomain.supportsAutolist === false,
+        'a homepage on an rss.* subdomain is not treated as a feed');
 
     // ── 3. Primary switching ────────────────────────────────────────────────────────────────
     updateChannel(kayla, yt.id, { isPrimaryVideo: true });

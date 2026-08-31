@@ -22,8 +22,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, Pressable, TextInput, ScrollView,
-    ActivityIndicator, SafeAreaView, Switch, Alert,
+    ActivityIndicator, Switch, Alert,
 } from 'react-native';
+// react-native's own SafeAreaView is iOS-only — on Android it is a plain View, so under SDK 55's
+// edge-to-edge the header and Back control would sit under the status bar. Every other pushed
+// screen uses this one, and _layout.tsx already provides the SafeAreaProvider.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useIdentity } from './IdentityContext';
@@ -246,7 +250,7 @@ export default function ChannelsScreen() {
     const primary = videoChannels.find(c => c.isPrimaryVideo);
 
     return (
-        <SafeAreaView style={styles.screen}>
+        <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
             <View style={styles.header}>
                 <Pressable
                     onPress={() => router.back()}

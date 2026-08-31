@@ -2,7 +2,10 @@
 node_modules/
 .expo/
 *.log
-apps/native/android/
-apps/native/ios/
+android/
+ios/
 dist/
 out/
+build/
+.turbo/
+

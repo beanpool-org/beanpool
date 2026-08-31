@@ -26,12 +26,16 @@ import { db } from '../db/db.js';
 import crypto from 'node:crypto';
 
 export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'website' | 'rss';
-export type ChannelCategory = 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
+export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
 
 export const CHANNEL_PLATFORMS: readonly ChannelPlatform[] =
     ['youtube', 'tiktok', 'instagram', 'facebook', 'website', 'rss'] as const;
+// A channel is CONTENT, not produce. These started as the marketplace taxonomy — what a member
+// sells — which left a community org, a project account or a news feed with nowhere to go but
+// 'other'. `community` is additive: every other id keeps its meaning and its stored rows, only the
+// labels the client renders were rewritten.
 export const CHANNEL_CATEGORIES: readonly ChannelCategory[] =
-    ['food', 'craft', 'business', 'repair', 'art', 'other'] as const;
+    ['community', 'food', 'craft', 'business', 'repair', 'art', 'other'] as const;
 
 /**
  * Platforms whose items the node can list unaided.
@@ -242,6 +246,20 @@ const FB_PREFIX_DEPTH: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
+ * How a platform is named to a member, and the article that precedes it.
+ *
+ * The enum values are lowercase ids; interpolating them raw produced "That is not a instagram
+ * link." — wrong article and a brand name in lowercase, in a string members actually read.
+ */
+const PLATFORM_DISPLAY: Record<ChannelPlatform, string> = {
+    youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram',
+    facebook: 'Facebook', website: 'website', rss: 'feed',
+};
+const PLATFORM_ARTICLE: Record<ChannelPlatform, string> = {
+    youtube: 'a', tiktok: 'a', instagram: 'an', facebook: 'a', website: 'a', rss: 'a',
+};
+
+/**
  * Instagram paths that are site furniture, not accounts.
  *
  * Shared by the URL branch and the bare-handle fast path below, which used to disagree — and the
@@ -265,7 +283,7 @@ function assertHandleNotReserved(platform: ChannelPlatform, handle: string): voi
             : false;
     if (reserved) {
         throw new ChannelError('NO_HANDLE',
-            `"${handle}" is a reserved ${platform} address, not an account name.`);
+            `"${handle}" is a reserved ${PLATFORM_DISPLAY[platform]} address, not an account name.`);
     }
 }
 
@@ -284,7 +302,11 @@ function hostMatches(host: string, allowed: string[]): boolean {
  * Throws ChannelError rather than returning null so the caller cannot forget to check.
  */
 export function normaliseChannelInput(platform: ChannelPlatform, raw: string): { url: string; handle: string | null } {
-    const input = (raw || '').trim();
+    // ALL whitespace goes, not just the ends. Android's gesture typing and suggestion strip insert
+    // spaces mid-string even with autoCorrect off — a member typing their own domain got
+    // "bean pool.org", which fails to parse and reports BAD_URL for a link they typed correctly.
+    // Whitespace is never valid inside a URL or a handle, so there is nothing to preserve.
+    const input = (raw || '').replace(/\s+/g, '');
     if (!input) throw new ChannelError('EMPTY', 'Paste a link or handle.');
     if (input.length > MAX_URL_LENGTH) throw new ChannelError('TOO_LONG', 'That link is too long.');
 
@@ -360,8 +382,8 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
             // here. Say what actually fixes it rather than "that is not an instagram link".
             const looksLikeHandle = /^[A-Za-z0-9._-]+$/.test(input) && !/^https?:/i.test(input);
             throw new ChannelError('WRONG_HOST', looksLikeHandle
-                ? `If that is your ${platform} handle, put an @ in front of it.`
-                : `That is not a ${platform} link.`);
+                ? `If that is your ${PLATFORM_DISPLAY[platform]} handle, put an @ in front of it.`
+                : `That is not ${PLATFORM_ARTICLE[platform]} ${PLATFORM_DISPLAY[platform]} link.`);
         }
         if (!SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase().replace(/^www\./, ''))) {
             parsed.hostname = CANONICAL_HOST[platform];

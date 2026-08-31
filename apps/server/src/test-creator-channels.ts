@@ -253,6 +253,35 @@ async function main(): Promise<void> {
     assertThrows(() => normaliseChannelInput('instagram', '@' + 'a'.repeat(100)),
         'TOO_LONG', 'an over-long handle is rejected, never silently truncated');
 
+    // Round-fourteen: on-device findings from the first real test on the test node.
+    //
+    // Android's gesture typing inserts spaces mid-string even with autoCorrect off, so a member
+    // typing their own domain submitted "bean pool.org" and got BAD_URL for a link they had typed
+    // correctly. Whitespace is never valid inside a URL or a handle.
+    assert(normaliseChannelInput('website', 'bean pool.org').url === 'https://beanpool.org/',
+        'internal whitespace is stripped, not rejected');
+    assert(normaliseChannelInput('instagram', '@ mullum ceramics ').handle === '@mullumceramics',
+        'whitespace inside a handle is stripped too');
+
+    // "That is not a instagram link." reached members: the enum ids are lowercase and were
+    // interpolated raw, so both the article and the brand name were wrong.
+    try {
+        normaliseChannelInput('instagram', 'https://www.youtube.com/@someone');
+        assert(false, 'a youtube URL under instagram is rejected');
+    } catch (e: any) {
+        assert(e.message === 'That is not an Instagram link.',
+            `the wrong-host message names the platform properly (got: ${e.message})`);
+    }
+    try {
+        normaliseChannelInput('tiktok', 'https://www.youtube.com/@someone');
+        assert(false, 'a youtube URL under tiktok is rejected');
+    } catch (e: any) {
+        assert(e.message === 'That is not a TikTok link.',
+            `TikTok takes "a", not "an" (got: ${e.message})`);
+    }
+    assertThrows(() => normaliseChannelInput('instagram', '@p'),
+        'NO_HANDLE', 'the reserved-handle message also uses the display name');
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');
@@ -293,6 +322,11 @@ async function main(): Promise<void> {
         'BAD_PLATFORM', 'an unknown platform is rejected');
     assertThrows(() => addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@y', category: 'nope' as any }),
         'BAD_CATEGORY', 'an unknown category is rejected');
+    // A channel is content, not produce: a community media account had nowhere to go but 'other'.
+    const commsChan = addChannel({ ownerPubkey: marty, platform: 'website', raw: 'beanpool.org', category: 'community' });
+    assert(commsChan.category === 'community', 'community is a valid channel category');
+    assert(updateChannel(marty, commsChan.id, { category: 'art' }).category === 'art',
+        'the category can be changed after the fact — the one field the edit affordance exposes');
 
     // Auto-listing is a property of the URL, not the platform: a youtu.be link is one video with
     // no feed behind it, and claiming "Updates itself" is a promise nothing can keep.

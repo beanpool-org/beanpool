@@ -82,18 +82,22 @@ export function startRenewalScheduler(): void {
     const TWO_HOURS = 2 * 60 * 60 * 1000;
 
     setInterval(async () => {
-        console.log('🔄 Checking certificate renewal...');
-        const success = await tryLetsEncrypt();
-        if (success && !usingLetsEncrypt) {
-            console.log('🔒 Upgraded from self-signed to Let\'s Encrypt');
-            usingLetsEncrypt = true;
-        } else if (!success && usingLetsEncrypt) {
-            // LE cert expired and can't renew — fall back
-            if (isCertExpired(LE_CERT_PATH)) {
-                console.log('⚠️  LE cert expired, can\'t renew — falling back to self-signed');
-                generateSelfSigned();
-                usingLetsEncrypt = false;
+        try {
+            console.log('🔄 Checking certificate renewal...');
+            const success = await tryLetsEncrypt();
+            if (success && !usingLetsEncrypt) {
+                console.log('🔒 Upgraded from self-signed to Let\'s Encrypt');
+                usingLetsEncrypt = true;
+            } else if (!success && usingLetsEncrypt) {
+                // LE cert expired and can't renew — fall back
+                if (isCertExpired(LE_CERT_PATH)) {
+                    console.log('⚠️  LE cert expired, can\'t renew — falling back to self-signed');
+                    generateSelfSigned();
+                    usingLetsEncrypt = false;
+                }
             }
+        } catch (err) {
+            console.error('❌ Error during TLS certificate renewal check:', (err as Error).message);
         }
     }, TWO_HOURS);
 

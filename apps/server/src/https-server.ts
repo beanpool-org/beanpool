@@ -114,6 +114,7 @@ import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
 import { createPulseRoutes } from './routes/pulse.js';
+import { createPulseSubmitRoutes } from './routes/pulse-submit.js';
 import { startPulseScheduler } from './engine/pulse-resolver.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
@@ -920,6 +921,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createPricingGuideRoutes(deps),
         createActivityRouter(deps),
         createPulseRoutes(deps),
+        createPulseSubmitRoutes(deps),
         // Temporary Apple `sub` parity probe. Registers nothing unless APPLE_PROBE=1
         // (the domain-association file aside) — see routes/apple-probe.ts.
         createAppleProbeRoutes(),

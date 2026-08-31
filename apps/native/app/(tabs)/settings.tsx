@@ -1683,6 +1683,15 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/pulse-intake')} accessibilityRole="button" accessibilityLabel="Share post to Pulse">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>✨</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Share to Pulse</Text>
+                            <Text style={styles.menuSub}>Manually share a post from your channels</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/pair-device')} accessibilityRole="button" accessibilityLabel="Link another device or computer">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📲</Text></View>
                         <View style={{ flex: 1 }}>

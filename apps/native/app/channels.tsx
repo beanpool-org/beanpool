@@ -36,6 +36,7 @@ import * as Haptics from 'expo-haptics';
 import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
+import { PulseNudges } from '../components/PulseNudges';
 
 /**
  * Parse a response body without letting a non-JSON one mask the real failure.
@@ -70,6 +71,7 @@ interface Channel {
     supportsAutolist: boolean;
     oauthVerifiedAt: string | null;
     syndicateToNode: boolean;
+    postCountSeen?: number | null;
 }
 
 
@@ -310,6 +312,8 @@ export default function ChannelsScreen() {
                                 </View>
                             )}
 
+                            <PulseNudges channels={channels} onNudgeDismissed={load} />
+
                             {channels.length === 0 && !adding && (
                                 <View style={styles.empty}>
                                     <Text style={styles.emptyTitle}>Already posting your work somewhere?</Text>
@@ -416,6 +420,16 @@ export default function ChannelsScreen() {
                                         )}
 
                                         <View style={styles.cardActions}>
+                                            {!channel.supportsAutolist && (
+                                                <Pressable
+                                                    onPress={() => router.push({ pathname: '/pulse-intake', params: { channelId: channel.id } })}
+                                                    style={styles.shareBtn}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`Share a post from ${meta.label} to Pulse`}
+                                                >
+                                                    <Text style={styles.shareBtnText}>+ Share post</Text>
+                                                </Pressable>
+                                            )}
                                             {VIDEO_PLATFORMS.includes(channel.platform) && !channel.isPrimaryVideo && videoChannels.length > 1 && (
                                                 <Pressable
                                                     onPress={() => setPrimary(channel.id)}
@@ -537,14 +551,27 @@ export default function ChannelsScreen() {
                                     </View>
                                 </View>
                             ) : (
-                                <Pressable
-                                    onPress={() => { setAdding(true); setFormError(null); }}
-                                    style={styles.addBtn}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Add a channel"
-                                >
-                                    <Text style={styles.addBtnText}>+ Add a channel</Text>
-                                </Pressable>
+                                <View style={styles.bottomActions}>
+                                    <Pressable
+                                        onPress={() => { setAdding(true); setFormError(null); }}
+                                        style={styles.addBtn}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Add a channel"
+                                    >
+                                        <Text style={styles.addBtnText}>+ Add a channel</Text>
+                                    </Pressable>
+
+                                    {channels.length > 0 && (
+                                        <Pressable
+                                            onPress={() => router.push('/pulse-intake')}
+                                            style={styles.manualIntakeBtn}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Share a post manually to Pulse"
+                                        >
+                                            <Text style={styles.manualIntakeBtnText}>Share a post to Pulse →</Text>
+                                        </Pressable>
+                                    )}
+                                </View>
                             )}
                         </>
                     )}
@@ -598,6 +625,11 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     rowLabel: { fontSize: 15, color: colors.text.body, flexShrink: 1, paddingRight: 12 },
 
     cardActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+    shareBtn: {
+        paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8,
+        backgroundColor: colors.brand.primary,
+    },
+    shareBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '600' },
     secondaryBtn: {
         paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8,
         borderWidth: 1, borderColor: colors.border.strong,
@@ -612,11 +644,21 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     primaryBtnDisabled: { opacity: 0.5 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '600' },
 
+    bottomActions: {
+        gap: 12,
+        marginTop: 4,
+    },
     addBtn: {
         paddingVertical: 14, borderRadius: 10, alignItems: 'center',
         borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border.strong,
     },
     addBtnText: { color: colors.text.body, fontSize: 16, fontWeight: '600' },
+    manualIntakeBtn: {
+        paddingVertical: 12, borderRadius: 10, alignItems: 'center',
+        backgroundColor: colors.surface.card,
+        borderWidth: 1, borderColor: colors.border.default,
+    },
+    manualIntakeBtnText: { color: colors.brand.primary, fontSize: 15, fontWeight: '600' },
 
     sectionLabel: { fontSize: 14, fontWeight: '600', color: colors.text.secondary, marginTop: 8, marginBottom: 8 },
     tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

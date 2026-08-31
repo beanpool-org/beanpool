@@ -12,12 +12,15 @@ for the interfaces and [`PACKAGES.md`](./PACKAGES.md) for the package briefs.
 |---|---|
 | **Phase 1** — channels on the profile, chips visible to others | **Merged** (#530, #540, #541, #546) |
 | **Phase 2** — resolver, cache, feed API | **Merged** (#547) |
-| **Phase 3** — the feed UI | PR **#549**, green, **review not yet resolved** |
-| **Phase 4** — manual ingestion | PR **#550**, green, **review not yet resolved** |
+| **Phase 3** — the feed UI | **Merged** (#549) |
+| **Phase 4** — manual ingestion | **Merged** (#550) |
 | **Phase 5** | Spec only, in the gist. **Not written up as a package yet.** |
 | Platform OAuth verification | Referenced as "package 06" in #547's report. **No brief exists.** |
 
-Also merged along the way: #545 (manager vitest env), #548 (agent finishing rules).
+Also merged along the way: #545 (manager vitest env), #548 (agent finishing rules), #551 (this
+doc).
+
+**Phases 1–4 are complete in code.** The remaining work is the deploy, then Phase 5 and OAuth.
 
 **Nothing is deployed.** `main` is ahead of every node. Deployment is a human step and is
 deliberately not documented here — see the private runbook. No agent deploys, ever.
@@ -122,12 +125,14 @@ gh run list --branch main --limit 4 \
 
 ## 4. What to dispatch next, in order
 
-1. **Resolve review on #549** (feed UI) — section 2 above. 14 comments.
-2. **Resolve review on #550** (manual ingestion) — section 2 above. 17 comments.
-3. **Merge both**, one at a time — section 3.
-4. **Deploy to the test node** — Marty or the director only, never an agent. Then the feed
-   is real for the first time.
-5. **Marty:** standalone app build, and check the chips and the feed on device.
+1. **Deploy to the test node** — Marty or the director only, never an agent. Nothing above has
+   ever run on a node. This is the next step and it is not an agent's to take.
+2. **Marty:** standalone app build, then check on device — the chips on a profile, the feed
+   itself, and sharing a post through the intake screen.
+3. **Write a brief for Phase 5**, and one for OAuth verification, before dispatching either.
+
+Expect the feed to look sparse on first run: only YouTube and RSS channels produce items
+automatically, so most of what appears will be whatever gets shared manually.
 
 After that the Pulse is Phases 1–4 complete and running. Phase 5 and OAuth verification both need
 a brief written before they can be dispatched — neither exists yet, and neither should be handed to

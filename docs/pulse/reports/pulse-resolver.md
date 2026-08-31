@@ -250,3 +250,34 @@ Three findings, all real, all fixed on this branch. Recorded here because this f
 
 **Still true and still unverified on a real node:** nothing here has run against a live feed.
 The SSRF suite proves what is blocked, not that a real YouTube or RSS fetch parses end to end.
+
+---
+
+## Second review round (YouTube handle resolution & website feed discovery, 2026-09-01)
+
+Two server bugs in resolver feed discovery were identified and resolved on branch `fix/pulse-youtube-handle-resolution`:
+
+### 1. Bug A — YouTube `@handle` / Vanity URL Resolution
+- **Root Cause**: `buildYouTubeFeedUrl` previously only handled `/channel/UC...` and direct `youtube.com/feeds/videos.xml` URLs. Because the Channels UI normalizes YouTube inputs to `https://www.youtube.com/@handle`, channels added through the UI silently never resolved to an RSS feed.
+- **Fix**:
+  - Implemented `extractYouTubeChannelIdFromHtml(html)` to inspect canonical link tags, `og:url` metadata, schema.org `itemprop` identifiers, `ytInitialData` embedded JSON, and RSS feed links.
+  - Updated `buildYouTubeFeedUrl(urlOrHandle)` to be asynchronous, fetching the channel page via `ssrfSafeFetch` and resolving `@handle`, `/c/Name`, `/user/Name`, or custom URLs to their canonical `UC...` channel ID and feed URL.
+  - In `resolveChannel()`, once a channel ID is resolved from a handle, the channel row's `url` is updated to `https://www.youtube.com/channel/UC...` with `updated_at = now` so subsequent scheduler ticks resolve synchronously with zero extra network round-trips.
+  - If a handle cannot be resolved, `resolveChannel()` records a descriptive `last_error` (`'Could not resolve YouTube channel ID from handle'`) on `creator_channels`, increments `fail_count`, and returns `{ count: 0, error: '...' }` rather than failing silently.
+
+### 2. Bug B — Website Channel Feed Discovery
+- **Root Cause**: `resolveChannel` assumed `channel.url` was already an XML feed. Website channels added without a direct `.xml` URL produced 0 items and reported nothing.
+- **Fix**:
+  - Implemented `discoverFeedUrlFromHtml(html, baseUrl)` to parse `<link rel="alternate" ...>` tags of type `application/rss+xml`, `application/atom+xml`, and `text/xml`, resolving relative URLs against `baseUrl`.
+  - In `resolveChannel()`, if a website's response is HTML, it automatically discovers and fetches the alternate feed, inserts items, and sets `supports_autolist = 1`.
+  - If the page genuinely publishes no feed, it sets `last_error = "This site doesn't publish a feed — share posts manually"` and returns `{ count: 0, error: "This site doesn't publish a feed — share posts manually" }`.
+
+### 3. Verification & Test Suite
+- `test-pulse-resolver.ts` updated with 17 new assertions (now **126/126 tests passing**), verifying:
+  - `extractYouTubeChannelIdFromHtml` against canonical tags, `og:url`, `itemprop`, `ytInitialData`, and feed links.
+  - `buildYouTubeFeedUrl` resolution of feed URLs, `/channel/UC...` URLs, and raw `UC...` IDs.
+  - `discoverFeedUrlFromHtml` relative and absolute RSS/Atom feed links and no-feed rejection.
+  - `resolveChannel` error tracking when a handle cannot be resolved.
+  - `resolveChannel` reporting `"This site doesn't publish a feed — share posts manually"` on feed-less websites.
+- Full check runner `bash scripts/test-all.sh --all` passed cleanly (8/8 check groups).
+

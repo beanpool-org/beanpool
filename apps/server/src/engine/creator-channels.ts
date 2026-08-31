@@ -246,6 +246,20 @@ const FB_PREFIX_DEPTH: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
+ * How a platform is named to a member, and the article that precedes it.
+ *
+ * The enum values are lowercase ids; interpolating them raw produced "That is not a instagram
+ * link." — wrong article and a brand name in lowercase, in a string members actually read.
+ */
+const PLATFORM_DISPLAY: Record<ChannelPlatform, string> = {
+    youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram',
+    facebook: 'Facebook', website: 'website', rss: 'feed',
+};
+const PLATFORM_ARTICLE: Record<ChannelPlatform, string> = {
+    youtube: 'a', tiktok: 'a', instagram: 'an', facebook: 'a', website: 'a', rss: 'a',
+};
+
+/**
  * Instagram paths that are site furniture, not accounts.
  *
  * Shared by the URL branch and the bare-handle fast path below, which used to disagree — and the
@@ -272,20 +286,6 @@ function assertHandleNotReserved(platform: ChannelPlatform, handle: string): voi
             `"${handle}" is a reserved ${PLATFORM_DISPLAY[platform]} address, not an account name.`);
     }
 }
-
-/**
- * How a platform is named to a member, and the article that precedes it.
- *
- * The enum values are lowercase ids; interpolating them raw produced "That is not a instagram
- * link." — wrong article and a brand name in lowercase, in a string members actually read.
- */
-const PLATFORM_DISPLAY: Record<ChannelPlatform, string> = {
-    youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram',
-    facebook: 'Facebook', website: 'website', rss: 'feed',
-};
-const PLATFORM_ARTICLE: Record<ChannelPlatform, string> = {
-    youtube: 'a', tiktok: 'a', instagram: 'an', facebook: 'a', website: 'a', rss: 'a',
-};
 
 function hostMatches(host: string, allowed: string[]): boolean {
     const h = host.toLowerCase().replace(/^www\./, '');

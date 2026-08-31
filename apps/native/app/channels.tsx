@@ -137,7 +137,12 @@ export default function ChannelsScreen() {
     useEffect(() => { channelsRef.current = channels; }, [channels]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    // Two errors, not one. A card mutation failing while the add form is open used to render its
+    // message INSIDE that form — where it read as an add failure — and the scroll-to-top then moved
+    // the member away from the only copy of it on screen. A list error and a form error are
+    // different things and belong in different places.
+    const [listError, setListError] = useState<string | null>(null);
+    const [formError, setFormError] = useState<string | null>(null);
 
     const [platform, setPlatform] = useState<Platform>('youtube');
     // No preselection. Defaulting to 'food' quietly filed a community media account under produce,
@@ -153,17 +158,17 @@ export default function ChannelsScreen() {
     const load = useCallback(async () => {
         // Clear the spinner rather than returning into it — an identity that never arrives would
         // otherwise leave the screen loading forever with nothing to explain why.
-        if (!identity) { setError('No identity on this device yet.'); setLoading(false); return; }
+        if (!identity) { setListError('No identity on this device yet.'); setLoading(false); return; }
         try {
             const url = await anchorUrl();
-            if (!url) { setError('No community node yet.'); setLoading(false); return; }
+            if (!url) { setListError('No community node yet.'); setLoading(false); return; }
             const res = await signedPost(url, '/api/channels/mine', {}, identity);
             const data = await readJson(res);
             if (!res.ok) throw new Error(data?.message || data?.error || 'Could not load your channels.');
             setChannels(data.channels || []);
-            setError(null);
+            setListError(null);
         } catch (e: any) {
-            setError(e?.message || 'Could not load your channels.');
+            setListError(e?.message || 'Could not load your channels.');
         } finally {
             setLoading(false);
         }
@@ -185,7 +190,7 @@ export default function ChannelsScreen() {
             setValue('');
             setCategory(null);
             setAdding(false);
-            setError(null);
+            setFormError(null);
             // Fire-and-forget, as every other Haptics call site in the app is. Awaited inside the
             // try, a haptics rejection would surface as "Could not add that channel" after a
             // successful add, and skip the cross-post prompt below.
@@ -229,7 +234,7 @@ export default function ChannelsScreen() {
                 );
             }
         } catch (e: any) {
-            setError(e?.message || 'Could not add that channel.');
+            setFormError(e?.message || 'Could not add that channel.');
         } finally {
             setSaving(false);
         }
@@ -240,7 +245,7 @@ export default function ChannelsScreen() {
      *   back while a signed POST and a full re-fetch complete. Reverted if the write fails.
      */
     const patch = async (id: string, body: Record<string, unknown>, optimistic?: Partial<Channel>) => {
-        if (!identity) { setError('No identity on this device yet.'); return; }
+        if (!identity) { setListError('No identity on this device yet.'); return; }
         // Read through the ref, not the render closure. Two switches flipped in quick succession
         // captured the same `channels` array, so the first one's failure restored a snapshot taken
         // before the second was touched — silently reverting a change that had already succeeded.
@@ -272,7 +277,7 @@ export default function ChannelsScreen() {
                     return restored;
                 }));
             }
-            setError(e?.message || 'Could not save that change.');
+            setListError(e?.message || 'Could not save that change.');
             // The banner lives above the cards; a switch toggled near the bottom would otherwise
             // fail with no visible explanation.
             scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -282,6 +287,9 @@ export default function ChannelsScreen() {
     const setPrimary = (id: string) => patch(id, { isPrimaryVideo: true });
     const changeCategory = (id: string, next: Category) => {
         setEditingId(null);
+        // Tapping the chip that is already selected is a way of closing the picker, not a change.
+        // Read through the ref for the same reason patch() does — the render closure can be stale.
+        if (channelsRef.current.find(c => c.id === id)?.category === next) return;
         patch(id, { category: next }, { category: next });
     };
 
@@ -294,7 +302,7 @@ export default function ChannelsScreen() {
                 {
                     text: 'Remove', style: 'destructive',
                     onPress: async () => {
-                        if (!identity) { setError('No identity on this device yet.'); return; }
+                        if (!identity) { setListError('No identity on this device yet.'); return; }
                         try {
                             const url = await anchorUrl();
                             if (!url) throw new Error('No community node yet.');
@@ -312,7 +320,7 @@ export default function ChannelsScreen() {
                             }
                             await load();
                         } catch (e: any) {
-                            setError(e?.message || 'Could not remove that channel.');
+                            setListError(e?.message || 'Could not remove that channel.');
                             scrollRef.current?.scrollTo({ y: 0, animated: true });
                         }
                     },
@@ -345,9 +353,9 @@ export default function ChannelsScreen() {
                         <ActivityIndicator style={{ marginTop: 32 }} color={colors.brand.primary} />
                     ) : (
                         <>
-                            {error && !adding && (
+                            {listError && (
                                 <View style={styles.errorBox} accessibilityRole="alert">
-                                    <Text style={styles.errorText}>{error}</Text>
+                                    <Text style={styles.errorText}>{listError}</Text>
                                 </View>
                             )}
 
@@ -418,7 +426,11 @@ export default function ChannelsScreen() {
                                             </Text>
                                             <Pressable
                                                 onPress={() => setEditingId(editingId === channel.id ? null : channel.id)}
-                                                hitSlop={8}
+                                                // 14pt text plus hitSlop 8 came to ~34dp of height —
+                                                // under the 44dp floor, on a control sitting beside a
+                                                // Switch that has a comfortable one.
+                                                style={styles.changeBtn}
+                                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                                 accessibilityRole="button"
                                                 accessibilityLabel={editingId === channel.id
                                                     ? `Stop changing the category for ${meta.label}`
@@ -543,15 +555,15 @@ export default function ChannelsScreen() {
                                     {/* Beside the button that caused it. The page-top banner is
                                         off-screen by the time a member has scrolled down to this form,
                                         so an add failure read as nothing happening at all. */}
-                                    {error && (
+                                    {formError && (
                                         <View style={styles.errorBox} accessibilityRole="alert">
-                                            <Text style={styles.errorText}>{error}</Text>
+                                            <Text style={styles.errorText}>{formError}</Text>
                                         </View>
                                     )}
 
                                     <View style={styles.cardActions}>
                                         <Pressable
-                                            onPress={() => { setAdding(false); setValue(''); setCategory(null); setError(null); }}
+                                            onPress={() => { setAdding(false); setValue(''); setCategory(null); setFormError(null); }}
                                             style={styles.secondaryBtn}
                                             accessibilityRole="button"
                                         >
@@ -563,6 +575,11 @@ export default function ChannelsScreen() {
                                             style={[styles.primaryBtn, (saving || !value.trim() || !category) && styles.primaryBtnDisabled]}
                                             accessibilityRole="button"
                                             accessibilityLabel="Add channel"
+                                            // Disabled and busy were conveyed by colour alone.
+                                            accessibilityState={{
+                                                disabled: Boolean(saving || !value.trim() || !category),
+                                                busy: saving,
+                                            }}
                                         >
                                             <Text style={styles.primaryBtnText}>{saving ? 'Adding…' : 'Add channel'}</Text>
                                         </Pressable>
@@ -570,7 +587,7 @@ export default function ChannelsScreen() {
                                 </View>
                             ) : (
                                 <Pressable
-                                    onPress={() => { setAdding(true); setError(null); }}
+                                    onPress={() => { setAdding(true); setFormError(null); }}
                                     style={styles.addBtn}
                                     accessibilityRole="button"
                                     accessibilityLabel="Add a channel"
@@ -601,6 +618,9 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     emptyTitle: { fontSize: 17, fontWeight: '600', color: colors.text.heading, marginBottom: 6 },
     emptyBody: { fontSize: 15, lineHeight: 21, color: colors.text.secondary },
 
+    // paddingVertical carries the touch target rather than hitSlop alone, so the tappable area is
+    // also the visible area at 1.3x font scale.
+    changeBtn: { paddingVertical: 10, paddingHorizontal: 4, justifyContent: 'center' },
     editLink: { color: colors.text.link, fontSize: 14, fontWeight: '600' },
 
     banner: {

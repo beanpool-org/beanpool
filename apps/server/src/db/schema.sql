@@ -996,6 +996,5 @@ CREATE TABLE IF NOT EXISTS creator_channels (
 );
 
 CREATE INDEX IF NOT EXISTS idx_creator_channels_owner ON creator_channels(owner_pubkey) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_creator_channels_syndicate ON creator_channels(syndicate_to_node, category) WHERE deleted_at IS NULL;
 -- Sync watermark: exportSyncState pulls rows by `updated_at >= since`.
 CREATE INDEX IF NOT EXISTS idx_creator_channels_updated ON creator_channels(updated_at);

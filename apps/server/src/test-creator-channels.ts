@@ -227,6 +227,32 @@ async function main(): Promise<void> {
             .includes('/channel/UCabc123def456ghi789jk'),
         'an uppercase /Channel/ still routes to the channel form, id case intact');
 
+    // Round-thirteen regressions: the review round that never ran before this reached main.
+    //
+    // The bare-handle fast path returns a built URL without ever reaching the reserved-segment
+    // checks, so every guard the URL branch enforces has to be repeated there. It was not: `@p`
+    // was stored as instagram.com/p/, a dead link that every member typing `@p` then collided
+    // with as a duplicate.
+    for (const h of ['@p', '@reel', '@stories', '@explore']) {
+        assertThrows(() => normaliseChannelInput('instagram', h),
+            'NO_HANDLE', `a bare ${h} is a reserved instagram path, not an account`);
+    }
+    for (const h of ['@groups', '@profile.php', '@share']) {
+        assertThrows(() => normaliseChannelInput('facebook', h),
+            'NO_HANDLE', `a bare ${h} is a reserved facebook path, not an account`);
+    }
+    // TikTok and YouTube handles are stored under `/@...`, a namespace no reserved segment
+    // reaches — so the same guard must NOT fire for them.
+    assert(normaliseChannelInput('tiktok', '@p').url === 'https://www.tiktok.com/@p',
+        'a reserved-looking handle is still valid on tiktok, whose handles are namespaced');
+    assert(normaliseChannelInput('youtube', '@explore').url === 'https://www.youtube.com/@explore',
+        'a reserved-looking handle is still valid on youtube');
+
+    // Truncating to MAX_HANDLE_LENGTH left the handle naming one account while the URL pointed at
+    // another, so an over-long one is refused rather than mangled.
+    assertThrows(() => normaliseChannelInput('instagram', '@' + 'a'.repeat(100)),
+        'TOO_LONG', 'an over-long handle is rejected, never silently truncated');
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');
@@ -237,6 +263,27 @@ async function main(): Promise<void> {
     assertThrows(
         () => addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: 'instagram.com/mullum_ceramics/?igsh=zzz', category: 'craft' }),
         'DUPLICATE', 'the same channel pasted differently is caught as a duplicate');
+
+    // A member's own site is stored exactly as they typed it — rewriting someone's address is how
+    // a working link becomes a 404 — so `/feed` and `/feed/` are two strings for one feed, and the
+    // duplicate check used to compare them directly. It compares on a folded key now.
+    const dee = makeMember('Dee');
+    addChannel({ ownerPubkey: dee, platform: 'rss', raw: 'https://blog.example.com/feed', category: 'craft' });
+    assertThrows(
+        () => addChannel({ ownerPubkey: dee, platform: 'rss', raw: 'https://blog.example.com/feed/', category: 'craft' }),
+        'DUPLICATE', 'a trailing slash does not make a second copy of one feed');
+    // Still keyed on (platform, url): one blog as a card AND as a feed remains two channels.
+    const deeSite = addChannel({ ownerPubkey: dee, platform: 'website', raw: 'https://blog.example.com/feed', category: 'craft' });
+    assert(deeSite.platform === 'website', 'the same URL under a different platform is still allowed');
+
+    // One scrub helper now backs all three delete paths, and it clears the fetch-failure history
+    // that the three copied statements all left sitting on the tombstone.
+    const deeTomb = addChannel({ ownerPubkey: dee, platform: 'instagram', raw: '@deepottery', category: 'craft' });
+    db.prepare(`UPDATE creator_channels SET fail_count = 4, is_stale = 1, last_error = 'timeout' WHERE id = ?`).run(deeTomb.id);
+    deleteChannel(dee, deeTomb.id);
+    const scrubbed = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(deeTomb.id) as any;
+    assert(scrubbed.fail_count === 0 && scrubbed.is_stale === 0 && scrubbed.last_error === null,
+        'a tombstone carries no fetch-failure history into the backups');
 
     const yt = addChannel({ ownerPubkey: kayla, platform: 'youtube', raw: '@mullumceramics', category: 'craft' });
     assert(yt.supportsAutolist === true, 'youtube can be auto-listed');

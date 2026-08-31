@@ -324,6 +324,14 @@ export function initSchema() {
     // Perf: Add index to marketplace_transactions for status and completed_at (PR 26 review fix)
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at)`).run(); } catch { }
 
+    // Dropped, not replaced. `idx_creator_channels_syndicate(syndicate_to_node, category)` led on a
+    // two-valued column and matched no query that ships: the only read of syndicate_to_node is
+    // listPublicChannels, whose selective term is owner_pubkey and which uses
+    // idx_creator_channels_owner. Every insert, update and tombstone-scrub paid to maintain it —
+    // and a delete writes three times. Phase 2's feed query can add one led by the column it
+    // actually filters on, once that query exists to be measured.
+    try { db.prepare(`DROP INDEX IF EXISTS idx_creator_channels_syndicate`).run(); } catch { }
+
     // Phase 2 delta sync: add updated_at columns + indexes to mutable tables that
     // didn't previously track row-level mutation timestamps. Backfill from the
     // most recent existing timestamp so cursor scans don't miss pre-migration rows.

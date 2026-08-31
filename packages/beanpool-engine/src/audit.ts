@@ -18,6 +18,7 @@ export interface AuditSyncPayload {
     posts?: any[];
     marketplaceTransactions?: any[];
     messages?: any[];
+    creatorChannels?: any[];
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -154,7 +155,12 @@ export function computeWashSybilMetrics(db: Db): { totalNegative: number; accoun
  * Compares the primary's sync payload statistics against local DB rows.
  */
 export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCommonsBalance: number): ReplicaConsistency {
-    const count = (t: string) => Number((db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get() as any).c) || 0;
+    // Guarded: a replica whose schema predates a table must report a mismatch on that one row,
+    // not throw and abandon the whole consistency report.
+    const count = (t: string) => {
+        try { return Number((db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get() as any).c) || 0; }
+        catch { return 0; }
+    };
     const round2 = (n: number) => Math.round(n * 100) / 100;
 
     const tableDefs: [string, number][] = [
@@ -164,6 +170,9 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         ['posts', payload.posts?.length ?? 0],
         ['marketplace_transactions', payload.marketplaceTransactions?.length ?? 0],
         ['messages', payload.messages?.length ?? 0],
+        // Replicated since the Pulse's first phase, but absent here — so a channel-replication
+        // failure showed a matching hash and ok:true, and only surfaced at failover.
+        ['creator_channels', payload.creatorChannels?.length ?? 0],
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

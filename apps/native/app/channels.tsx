@@ -19,7 +19,7 @@
  * one, so the choice can be offered immediately instead of reported as a problem later.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View, Text, StyleSheet, Pressable, TextInput, ScrollView,
     ActivityIndicator, Switch, Alert,
@@ -96,8 +96,14 @@ const CATEGORIES: { id: Category; icon: string; label: string }[] = [
 
 const VIDEO_PLATFORMS: Platform[] = ['youtube', 'tiktok', 'instagram', 'facebook'];
 
-function platformMeta(id: Platform) {
-    return PLATFORMS.find(p => p.id === id) ?? PLATFORMS[0];
+/**
+ * Falling back to PLATFORMS[0] meant an unrecognised platform rendered as "🎥 YouTube · updates
+ * itself" — the wrong name attached to an autolist promise nothing would keep. A platform this
+ * build does not know about is labelled as exactly that, and `card` is the only honest listing for
+ * something whose capabilities are unknown.
+ */
+function platformMeta(id: Platform): { id: Platform; icon: string; label: string; listing: Listing; hint: string } {
+    return PLATFORMS.find(p => p.id === id) ?? { id, icon: '🔗', label: 'Link', listing: 'card', hint: '' };
 }
 
 export default function ChannelsScreen() {
@@ -106,6 +112,10 @@ export default function ChannelsScreen() {
     const styles = useStyles(makeStyles);
 
     const [channels, setChannels] = useState<Channel[]>([]);
+    // Mirrors `channels` for callbacks that would otherwise read a stale render closure — the
+    // same draftRef pattern used for the offer composer, and for the same class of bug.
+    const channelsRef = useRef<Channel[]>([]);
+    useEffect(() => { channelsRef.current = channels; }, [channels]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -160,14 +170,22 @@ export default function ChannelsScreen() {
             // asked now, while they are still thinking about it.
             const others: Channel[] = data.otherVideoChannels || [];
             if (VIDEO_PLATFORMS.includes(platform) && others.length > 0 && data.channel?.id) {
+                // The channel that actually HOLDS the primary, not merely the oldest. With three
+                // video channels, others[0] named one the member had not chosen, and its button
+                // then demoted the primary they had set somewhere else entirely — a question about
+                // YouTube vs TikTok silently moving the flag off Instagram.
+                const rival = others.find(c => c.isPrimaryVideo) ?? others[0];
                 // Each button describes ITS OWN channel. Deriving the "(updates itself)" note from
                 // any autolisting channel in the list put it on the wrong button as soon as a
                 // member had three — the exact opposite of what this screen exists to tell them.
-                const rival = others[0];
                 const label = (p: Platform, autoLists: boolean) =>
                     platformMeta(p).label + (autoLists ? ' (updates itself)' : '');
+                // "two places" and "Both" are wrong once a member has three video channels: the
+                // dialog still names only this one and the primary, so it is picking a winner
+                // among more than the two it mentions.
+                const several = others.length > 1;
                 Alert.alert(
-                    'You post video in two places',
+                    several ? 'You post video in more than one place' : 'You post video in two places',
                     `If you put the same videos on ${platformMeta(platform).label} and ` +
                     `${platformMeta(rival.platform).label}, they'd show up twice on the feed.\n\n` +
                     'Which should the feed use?',
@@ -180,7 +198,7 @@ export default function ChannelsScreen() {
                             text: label(rival.platform, rival.supportsAutolist === true),
                             onPress: () => setPrimary(rival.id),
                         },
-                        { text: 'Both — I post different things', style: 'cancel' },
+                        { text: several ? 'Keep all — I post different things' : 'Both — I post different things', style: 'cancel' },
                     ],
                 );
             }
@@ -197,7 +215,10 @@ export default function ChannelsScreen() {
      */
     const patch = async (id: string, body: Record<string, unknown>, optimistic?: Partial<Channel>) => {
         if (!identity) { setError('No identity on this device yet.'); return; }
-        const before = channels;
+        // Read through the ref, not the render closure. Two switches flipped in quick succession
+        // captured the same `channels` array, so the first one's failure restored a snapshot taken
+        // before the second was touched — silently reverting a change that had already succeeded.
+        const prev = channelsRef.current.find(c => c.id === id);
         if (optimistic) {
             setChannels(cs => cs.map(c => (c.id === id ? { ...c, ...optimistic } : c)));
         }
@@ -213,7 +234,18 @@ export default function ChannelsScreen() {
             }
             await load();
         } catch (e: any) {
-            if (optimistic) setChannels(before);
+            // Revert only the fields this call changed, on only this channel, against whatever the
+            // array holds NOW — never by restoring a whole captured array.
+            if (optimistic && prev) {
+                setChannels(cs => cs.map(c => {
+                    if (c.id !== id) return c;
+                    const restored: Channel = { ...c };
+                    for (const key of Object.keys(optimistic) as (keyof Channel)[]) {
+                        (restored as any)[key] = (prev as any)[key];
+                    }
+                    return restored;
+                }));
+            }
             setError(e?.message || 'Could not save that change.');
         }
     };
@@ -234,7 +266,17 @@ export default function ChannelsScreen() {
                             const url = await anchorUrl();
                             if (!url) throw new Error('No community node yet.');
                             const res = await signedPost(url, `/api/member/channels/${channel.id}/delete`, {}, identity);
-                            if (!res.ok) throw new Error('Could not remove that channel.');
+                            if (!res.ok) {
+                                // The server distinguishes "not yours" (403) from "already gone"
+                                // (404); a fixed string threw all of that away, so a member
+                                // deleting from a second device just saw a generic failure.
+                                const data = await readJson(res);
+                                // `error` as well as `message`: the auth middleware answers a
+                                // 401 with `{ error: 'Signed request required' }` and no message,
+                                // which would otherwise read as a generic delete failure. Same
+                                // fallback chain load() uses.
+                                throw new Error(data?.message || data?.error || 'Could not remove that channel.');
+                            }
                             await load();
                         } catch (e: any) {
                             setError(e?.message || 'Could not remove that channel.');

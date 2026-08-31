@@ -574,6 +574,8 @@ function RootLayoutNav() {
                 <Stack.Screen name="chat/[id]" />
                 <Stack.Screen name="apple-probe" />
                 <Stack.Screen name="google-probe" />
+                <Stack.Screen name="channels" />
+                <Stack.Screen name="pulse" />
             </Stack>
 
             {isLocked && identity && (

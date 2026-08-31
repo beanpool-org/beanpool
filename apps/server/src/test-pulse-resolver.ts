@@ -41,6 +41,7 @@ import {
     buildYouTubeFeedUrl,
     resolveChannel,
     ssrfSafeFetch,
+    createCustomLookup,
     isIpPrivateOrReserved,
     validateIpString,
     validateHostnameSyntax,
@@ -382,6 +383,83 @@ async function main(): Promise<void> {
         if (e instanceof SsrfSecurityError) credsBlocked = true;
     }
     assert(credsBlocked, 'ssrfSafeFetch blocks embedded user:pass credentials');
+
+    // Positive check 1: ssrfSafeFetch must successfully establish real HTTPS socket connection to public URL
+    let publicHttpsOk = false;
+    let publicHttpsError: any = null;
+    try {
+        const res = await ssrfSafeFetch('https://example.com');
+        const body = await res.text();
+        if (res.status === 200 && body.includes('Example Domain')) {
+            publicHttpsOk = true;
+        } else {
+            publicHttpsError = new Error(`Unexpected status ${res.status} or missing body text`);
+        }
+    } catch (e: any) {
+        publicHttpsError = e;
+    }
+    assert(publicHttpsOk, `ssrfSafeFetch succeeds on public HTTPS domain with real socket connection${publicHttpsError ? ` (failed: ${publicHttpsError.message || publicHttpsError})` : ''}`);
+
+    // Positive check 2: ssrfSafeFetch must successfully establish real HTTP socket connection to public URL
+    let publicHttpOk = false;
+    let publicHttpError: any = null;
+    try {
+        const res = await ssrfSafeFetch('http://example.com');
+        const body = await res.text();
+        if (res.status === 200 && body.includes('Example Domain')) {
+            publicHttpOk = true;
+        } else {
+            publicHttpError = new Error(`Unexpected status ${res.status} or missing body text`);
+        }
+    } catch (e: any) {
+        publicHttpError = e;
+    }
+    assert(publicHttpOk, `ssrfSafeFetch succeeds on public HTTP domain with real socket connection${publicHttpError ? ` (failed: ${publicHttpError.message || publicHttpError})` : ''}`);
+
+    // CustomLookup callback interface tests (Node 22 all:true vs legacy single-result form)
+    const lookup = createCustomLookup('93.184.216.34', 4);
+
+    let allTrueResult: any = null;
+    lookup('example.com', { all: true }, (_err: any, addresses: any) => {
+        allTrueResult = addresses;
+    });
+    assert(
+        Array.isArray(allTrueResult) && allTrueResult.length === 1 && allTrueResult[0].address === '93.184.216.34' && allTrueResult[0].family === 4,
+        'createCustomLookup returns array [{ address, family }] when options.all is true (Node 22 autoSelectFamily)'
+    );
+
+    let allFalseAddr: any = null;
+    let allFalseFamily: any = null;
+    lookup('example.com', { all: false }, (_err: any, address: any, family: any) => {
+        allFalseAddr = address;
+        allFalseFamily = family;
+    });
+    assert(
+        allFalseAddr === '93.184.216.34' && allFalseFamily === 4,
+        'createCustomLookup returns (address, family) when options.all is false'
+    );
+
+    let numericFamilyAddr: any = null;
+    let numericFamilyVal: any = null;
+    lookup('example.com', 4, (_err: any, address: any, family: any) => {
+        numericFamilyAddr = address;
+        numericFamilyVal = family;
+    });
+    assert(
+        numericFamilyAddr === '93.184.216.34' && numericFamilyVal === 4,
+        'createCustomLookup returns (address, family) when options is a numeric family'
+    );
+
+    let legacyAddr: any = null;
+    let legacyFamily: any = null;
+    lookup('example.com', (_err: any, address: any, family: any) => {
+        legacyAddr = address;
+        legacyFamily = family;
+    });
+    assert(
+        legacyAddr === '93.184.216.34' && legacyFamily === 4,
+        'createCustomLookup returns (address, family) when called without options'
+    );
 
     // ── 5. Database Channel & Items Insertion & Deduplication ────────────────────────────
     console.log('\n--- 5. Database Items & Deduplication ---');

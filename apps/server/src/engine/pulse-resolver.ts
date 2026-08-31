@@ -433,6 +433,27 @@ async function resolveAndPinHost(hostname: string): Promise<PinnedResolution> {
     return { pinnedIp: selected.address, family: selected.family };
 }
 
+/**
+ * Create a DNS lookup function pinned to an already-validated IP address and family.
+ *
+ * Node 22 defaults net.connect to autoSelectFamily: true, which passes { all: true }
+ * and expects cb(null, [{ address, family }]). When all is falsy or omitted, the legacy
+ * cb(null, address, family) form is expected.
+ */
+export function createCustomLookup(pinnedIp: string, family: number) {
+    return (_host: string, lookupOpts: any, callback?: any) => {
+        const cb = typeof lookupOpts === 'function' ? lookupOpts : callback;
+        if (typeof cb !== 'function') return;
+
+        const isAll = typeof lookupOpts === 'object' && lookupOpts !== null && Boolean(lookupOpts.all);
+        if (isAll) {
+            cb(null, [{ address: pinnedIp, family }]);
+        } else {
+            cb(null, pinnedIp, family);
+        }
+    };
+}
+
 function createByteLimitTransform(maxBytes: number, onLimitExceeded: () => void): Transform {
     let bytesRead = 0;
     return new Transform({
@@ -504,12 +525,7 @@ export async function ssrfSafeFetch(
 
         const { pinnedIp, family } = await resolveAndPinHost(hostname);
 
-        const customLookup = (_host: string, _lookupOpts: any, callback?: any) => {
-            const cb = typeof _lookupOpts === 'function' ? _lookupOpts : callback;
-            if (typeof cb === 'function') {
-                cb(null, pinnedIp, family);
-            }
-        };
+        const customLookup = createCustomLookup(pinnedIp, family);
 
         const agentOptions = {
             lookup: customLookup,

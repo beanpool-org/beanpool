@@ -320,6 +320,11 @@ function matchOwnedChannel(
         if (!found) {
             throw new PulseError('NOT_YOURS', 'Channel does not belong to you or does not exist.');
         }
+        const platformMatch = found.platform === platform ||
+            ((platform === 'website' || platform === 'rss') && (found.platform === 'website' || found.platform === 'rss'));
+        if (!platformMatch) {
+            throw new PulseError('NO_CHANNEL_MATCH', `Selected channel is a ${found.platform} channel, but the URL is for ${platform}.`);
+        }
         return found;
     }
 
@@ -370,6 +375,7 @@ function matchOwnedChannel(
         } catch {
             // ignore
         }
+        throw new PulseError('NOT_YOURS', 'The website domain does not match any of your registered website/RSS channels.');
     }
 
     // Fall back to primary video channel or the first compatible channel
@@ -383,8 +389,8 @@ function rowToPulseFeedCard(itemId: string): PulseFeedCard {
                 i.published_at, i.category, i.source, c.oauth_verified_at,
                 m.callsign, m.avatar_url
            FROM pulse_items i
-           JOIN creator_channels c ON c.id = i.channel_id
-           JOIN members m ON m.public_key = i.owner_pubkey
+           LEFT JOIN creator_channels c ON c.id = i.channel_id
+           LEFT JOIN members m ON m.public_key = i.owner_pubkey
           WHERE i.id = ?`
     ).get(itemId) as any;
 
@@ -410,6 +416,78 @@ function rowToPulseFeedCard(itemId: string): PulseFeedCard {
 
 export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
     const router = new Router();
+
+    // Prepare statements outside request and transaction loops (Contract A Rule 4)
+    const stmtFindActiveByExternalId = db.prepare(
+        `SELECT id, deleted_at FROM pulse_items
+          WHERE channel_id = ? AND external_id = ? AND deleted_at IS NULL
+          LIMIT 1`
+    );
+    const stmtFindActiveByUrl = db.prepare(
+        `SELECT id, deleted_at FROM pulse_items
+          WHERE channel_id = ? AND url = ? AND deleted_at IS NULL
+          LIMIT 1`
+    );
+    const stmtFindExistingByExternalId = db.prepare(
+        `SELECT id, deleted_at, title, thumbnail_url, category, published_at
+           FROM pulse_items
+          WHERE channel_id = ? AND external_id = ?
+          ORDER BY (deleted_at IS NULL) DESC, created_at DESC
+          LIMIT 1`
+    );
+    const stmtFindExistingByUrl = db.prepare(
+        `SELECT id, deleted_at, title, thumbnail_url, category, published_at
+           FROM pulse_items
+          WHERE channel_id = ? AND url = ?
+          ORDER BY (deleted_at IS NULL) DESC, created_at DESC
+          LIMIT 1`
+    );
+    const stmtRestoreItem = db.prepare(
+        `UPDATE pulse_items
+            SET deleted_at = NULL,
+                url = ?,
+                title = ?,
+                thumbnail_url = ?,
+                published_at = COALESCE(?, published_at, ?),
+                category = ?,
+                source = 'manual',
+                muted = 0,
+                updated_at = ?
+          WHERE id = ?`
+    );
+    const stmtUpdateActiveItem = db.prepare(
+        `UPDATE pulse_items
+            SET title = COALESCE(?, title),
+                thumbnail_url = COALESCE(?, thumbnail_url),
+                category = ?,
+                updated_at = ?
+          WHERE id = ?`
+    );
+    const stmtInsertItem = db.prepare(
+        `INSERT INTO pulse_items
+            (id, channel_id, owner_pubkey, platform, external_id,
+             url, title, thumbnail_url, published_at, category,
+             source, muted, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 0, ?, ?)`
+    );
+    const stmtUpdateChannelWatermark = db.prepare(
+        `UPDATE creator_channels
+            SET post_count_seen = ?, updated_at = ?
+          WHERE id = ? AND owner_pubkey = ?`
+    );
+    const stmtGetChannelById = db.prepare(
+        `SELECT id, owner_pubkey, platform, url, handle, post_count_seen
+           FROM creator_channels
+          WHERE id = ? AND deleted_at IS NULL`
+    );
+    const stmtGetItemById = db.prepare(
+        `SELECT id, owner_pubkey, deleted_at FROM pulse_items WHERE id = ?`
+    );
+    const stmtGetMemberChannels = db.prepare(
+        `SELECT id, owner_pubkey, platform, url, handle, post_count_seen
+           FROM creator_channels
+          WHERE owner_pubkey = ? AND deleted_at IS NULL`
+    );
 
     /**
      * 1. POST /api/member/pulse/preview
@@ -439,17 +517,10 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             const channel = matchOwnedChannel(actor, platform, canonicalUrl, accountHandle, requestedChannelId);
             const meta = await resolveMetadata(canonicalUrl, platform, externalId);
 
-            // Check if already imported
-            const existing = db.prepare(
-                `SELECT id, deleted_at FROM pulse_items
-                  WHERE channel_id = ?
-                    AND (
-                        (external_id IS NOT NULL AND external_id = ?)
-                        OR (url IS NOT NULL AND url = ?)
-                    )
-                  ORDER BY (deleted_at IS NULL) DESC, created_at DESC
-                  LIMIT 1`
-            ).get(channel.id, meta.externalId, canonicalUrl) as any;
+            // Check if already imported using the partial index directly
+            const existing = (meta.externalId
+                ? stmtFindActiveByExternalId.get(channel.id, meta.externalId)
+                : stmtFindActiveByUrl.get(channel.id, canonicalUrl)) as any;
 
             const alreadyImported = Boolean(existing && existing.deleted_at === null);
 
@@ -502,8 +573,22 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         const body = (ctx as any).requestBody || {};
         const rawUrl = typeof body.url === 'string' ? body.url.trim() : '';
         const requestedChannelId = typeof body.channelId === 'string' ? body.channelId.trim() : undefined;
-        const customTitle = typeof body.title === 'string' && body.title.trim() ? cleanXmlText(body.title) : undefined;
-        const customThumbnailUrl = typeof body.thumbnailUrl === 'string' && body.thumbnailUrl.trim() ? body.thumbnailUrl.trim() : undefined;
+        const customTitle = typeof body.title === 'string' && body.title.trim()
+            ? cleanXmlText(body.title.trim()).slice(0, 500)
+            : undefined;
+
+        let customThumbnailUrl: string | undefined;
+        if (typeof body.thumbnailUrl === 'string' && body.thumbnailUrl.trim()) {
+            const trimmedThumb = body.thumbnailUrl.trim();
+            if (trimmedThumb.length <= 2048 && /^https?:\/\//i.test(trimmedThumb)) {
+                customThumbnailUrl = trimmedThumb;
+            } else {
+                ctx.status = 400;
+                ctx.body = { error: 'invalid_thumbnail_url', message: 'Thumbnail URL must be a valid HTTP or HTTPS URL under 2048 characters.' };
+                return;
+            }
+        }
+
         const customCategory = typeof body.category === 'string' && body.category.trim() ? body.category.trim() : undefined;
 
         if (!rawUrl) {
@@ -535,35 +620,15 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
 
             db.transaction(() => {
                 // Check if existing row exists (active or tombstoned)
-                const existing = db.prepare(
-                    `SELECT id, deleted_at, title, thumbnail_url, category, published_at
-                       FROM pulse_items
-                      WHERE channel_id = ?
-                        AND (
-                            (external_id IS NOT NULL AND external_id = ?)
-                            OR (url IS NOT NULL AND url = ?)
-                        )
-                      ORDER BY (deleted_at IS NULL) DESC, created_at DESC
-                      LIMIT 1`
-                ).get(channel.id, finalExternalId, canonicalUrl) as any;
+                const existing = (finalExternalId
+                    ? stmtFindExistingByExternalId.get(channel.id, finalExternalId)
+                    : stmtFindExistingByUrl.get(channel.id, canonicalUrl)) as any;
 
                 if (existing) {
                     finalItemId = existing.id;
                     if (existing.deleted_at !== null) {
                         // Restore tombstoned row
-                        db.prepare(
-                            `UPDATE pulse_items
-                                SET deleted_at = NULL,
-                                    url = ?,
-                                    title = ?,
-                                    thumbnail_url = ?,
-                                    published_at = COALESCE(?, published_at, ?),
-                                    category = ?,
-                                    source = 'manual',
-                                    muted = 0,
-                                    updated_at = ?
-                              WHERE id = ?`
-                        ).run(
+                        stmtRestoreItem.run(
                             canonicalUrl,
                             finalTitle,
                             finalThumbnailUrl,
@@ -576,26 +641,19 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                         isDeduplicated = false;
                     } else {
                         // Already active: update metadata if provided and mark as deduplicated
-                        db.prepare(
-                            `UPDATE pulse_items
-                                SET title = COALESCE(?, title),
-                                    thumbnail_url = COALESCE(?, thumbnail_url),
-                                    category = ?,
-                                    updated_at = ?
-                              WHERE id = ?`
-                        ).run(customTitle ?? null, customThumbnailUrl ?? null, finalCategory, now, existing.id);
+                        stmtUpdateActiveItem.run(
+                            customTitle ?? null,
+                            customThumbnailUrl ?? null,
+                            finalCategory,
+                            now,
+                            existing.id
+                        );
                         isDeduplicated = true;
                     }
                 } else {
                     // Fresh insert
                     finalItemId = `item_${crypto.randomBytes(12).toString('hex')}`;
-                    db.prepare(
-                        `INSERT INTO pulse_items
-                            (id, channel_id, owner_pubkey, platform, external_id,
-                             url, title, thumbnail_url, published_at, category,
-                             source, muted, created_at, updated_at)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 0, ?, ?)`
-                    ).run(
+                    stmtInsertItem.run(
                         finalItemId,
                         channel.id,
                         actor,
@@ -644,11 +702,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         }
 
         const channelId = ctx.params.id;
-        const channel = db.prepare(
-            `SELECT id, owner_pubkey, platform, url, handle, post_count_seen
-               FROM creator_channels
-              WHERE id = ? AND deleted_at IS NULL`
-        ).get(channelId) as any;
+        const channel = stmtGetChannelById.get(channelId) as any;
 
         if (!channel) {
             ctx.status = 404;
@@ -663,26 +717,28 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         }
 
         const body = (ctx as any).requestBody || {};
-        let seenCount = typeof body.seenCount === 'number' && body.seenCount >= 0 ? body.seenCount : null;
+        let seenCount: number | null = null;
+        if (typeof body.seenCount === 'number' && Number.isSafeInteger(body.seenCount) && body.seenCount >= 0) {
+            seenCount = Math.max(channel.post_count_seen ?? 0, body.seenCount);
+        }
 
         if (seenCount === null && channel.platform === 'instagram') {
             try {
-                seenCount = await probeInstagramPostCount(channel.url || channel.handle);
+                const probed = await probeInstagramPostCount(channel.url || channel.handle);
+                if (probed !== null && Number.isSafeInteger(probed) && probed >= 0) {
+                    seenCount = Math.max(channel.post_count_seen ?? 0, probed);
+                }
             } catch {
                 seenCount = channel.post_count_seen ?? 0;
             }
         }
 
         if (seenCount === null) {
-            seenCount = (channel.post_count_seen ?? 0);
+            seenCount = channel.post_count_seen ?? 0;
         }
 
         const now = new Date().toISOString();
-        db.prepare(
-            `UPDATE creator_channels
-                SET post_count_seen = ?, updated_at = ?
-              WHERE id = ? AND owner_pubkey = ?`
-        ).run(seenCount, now, channel.id, actor);
+        stmtUpdateChannelWatermark.run(seenCount, now, channel.id, actor);
 
         ctx.body = { success: true, channelId: channel.id, postCountSeen: seenCount };
     });
@@ -700,9 +756,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         }
 
         const itemId = ctx.params.id;
-        const item = db.prepare(
-            `SELECT id, owner_pubkey, deleted_at FROM pulse_items WHERE id = ?`
-        ).get(itemId) as any;
+        const item = stmtGetItemById.get(itemId) as any;
 
         if (!item || item.deleted_at !== null) {
             ctx.status = 404;
@@ -734,11 +788,22 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             return;
         }
 
-        const channels = db.prepare(
-            `SELECT id, owner_pubkey, platform, url, handle, post_count_seen
-               FROM creator_channels
-              WHERE owner_pubkey = ? AND deleted_at IS NULL`
-        ).all(actor) as any[];
+        const channels = stmtGetMemberChannels.all(actor) as any[];
+
+        // Probe channels concurrently rather than sequentially
+        const probePromises = channels.map(async (ch) => {
+            let currentCount: number | null = null;
+            if (ch.platform === 'instagram') {
+                try {
+                    currentCount = await probeInstagramPostCount(ch.url || ch.handle);
+                } catch {
+                    currentCount = null;
+                }
+            }
+            return { ch, currentCount };
+        });
+
+        const probedChannels = await Promise.all(probePromises);
 
         const nudges: Array<{
             channelId: string;
@@ -750,16 +815,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             newPostsCount: number;
         }> = [];
 
-        for (const ch of channels) {
-            let currentCount: number | null = null;
-            if (ch.platform === 'instagram') {
-                try {
-                    currentCount = await probeInstagramPostCount(ch.url || ch.handle);
-                } catch {
-                    currentCount = null;
-                }
-            }
-
+        for (const { ch, currentCount } of probedChannels) {
             if (currentCount !== null && currentCount >= 0) {
                 if (ch.post_count_seen !== null && currentCount > ch.post_count_seen) {
                     nudges.push({
@@ -774,9 +830,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                 } else if (ch.post_count_seen === null) {
                     // Initialize watermark to current count so future increments trigger nudges
                     const now = new Date().toISOString();
-                    db.prepare(
-                        `UPDATE creator_channels SET post_count_seen = ?, updated_at = ? WHERE id = ?`
-                    ).run(currentCount, now, ch.id);
+                    stmtUpdateChannelWatermark.run(currentCount, now, ch.id, actor);
                 }
             }
         }

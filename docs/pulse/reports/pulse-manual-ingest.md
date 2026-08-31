@@ -221,3 +221,55 @@ $ ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm --filter @bean
 
 ## Found but out of scope
 - `apps/manager/src/lib/ai-client.test.ts` fails in local node environment without jsdom localstorage bridging (addressed by Package 04).
+
+---
+
+## Review round (2026-08-31)
+
+### What was found
+A technical code review on PR #550 yielded 17 inline comments across server route handlers and native client components:
+1. **Server Platform Mismatch on Explicit Channel ID**: `matchOwnedChannel` did not verify platform compatibility when `requestedChannelId` was explicitly provided.
+2. **Website/RSS Domain Gating**: Fallback for `website`/`rss` channels allowed unowned hostnames if no hostname match occurred.
+3. **Left Join Resilience**: `rowToPulseFeedCard` used `INNER JOIN` instead of `LEFT JOIN`, risking item lookup failures if channel/member records were transiently altered.
+4. **Index-Optimized Deduplication Query**: Deduplication query in `preview` used an `OR` construct instead of branching on `external_id` / `url` against partial index `idx_pulse_items_dedupe`.
+5. **Custom Overrides Validation**: `customTitle` and `customThumbnailUrl` in submit route lacked XML sanitization, length bounds, and URL scheme validation.
+6. **SQLite Statement Compilation**: Prepared statements in `better-sqlite3` were compiled inside transaction closures and request loops rather than at router scope.
+7. **Sequential Probing in Nudges**: `POST /api/member/pulse/nudges` probed member channels sequentially with `await` in a `for` loop.
+8. **Watermark Regression & Safe Integer**: `dismiss-nudge` did not enforce `Number.isSafeInteger` and could regress watermarks if a lower count was passed.
+9. **Watermark Update Statement**: Prepared statement for watermark initialization in `/nudges` was inside the channel iteration loop.
+10. **Native URI Decoding Safety**: `decodeURIComponent(params.url)` could crash on malformed percent encoding without `try/catch`.
+11. **Native URL Ref Tracking & Debounce Cleanup**: Chip selection re-triggered preview fetching due to dependency on `urlInput`, and debounce timers were not cleaned up on unmount.
+12. **Native Thumbnail Error Reset**: `PulsePreviewCard` did not reset `imageError` state when `preview.thumbnailUrl` changed.
+13. **YouTube Shorts Clipboard Support**: Clipboard platform matcher in `PulseNudges` lacked `youtube.com/shorts/`.
+14. **Native HitSlop & Accessibility**: `Paste` button lacked `hitSlop` and accessible attributes.
+15. **Native Chip Semantics**: Channel and category chips lacked `accessibilityRole="radio"` and `accessibilityState={{ selected: isSelected }}`.
+16. **Nudge Dismiss Accessibility**: Close buttons (`✕`) in `PulseNudges` lacked `accessibilityRole="button"` and `hitSlop`.
+17. **Review Toggle Touch Target**: Review toggle row was not wrapped in an accessible `Pressable`, making only the switch itself tappable.
+
+### What was changed
+- **`apps/server/src/routes/pulse-submit.ts`**:
+  - Added platform compatibility verification when `requestedChannelId` is provided, throwing `PulseError('NO_CHANNEL_MATCH')` if incompatible.
+  - Enforced hostname verification for `website`/`rss` channels in `matchOwnedChannel`, throwing `PulseError('NOT_YOURS')` on domain mismatch.
+  - Converted `rowToPulseFeedCard` joins to `LEFT JOIN` on `creator_channels` and `members`.
+  - Prepared statements at router scope (`stmtFindActiveByExternalId`, `stmtFindExistingByExternalId`, `stmtRestoreItem`, `stmtUpdateActiveItem`, `stmtInsertItem`, `stmtUpdateChannelWatermark`, etc.).
+  - Added `cleanXmlText` sanitization and 500-char truncation on `customTitle`; validated `customThumbnailUrl` (`https?://`, max 2048 chars).
+  - Refactored `/nudges` to probe channels concurrently via `Promise.all`.
+  - Validated `Number.isSafeInteger(seenCount) && seenCount >= 0` and guarded against watermark regression with `Math.max(channel.post_count_seen ?? 0, seenCount)`.
+- **`apps/native/app/pulse-intake.tsx`**:
+  - Implemented `safeDecodeURIComponent` with `try/catch`.
+  - Added `lastResolvedUrlRef` to decouple chip changes from URL preview re-resolution.
+  - Added unmount cleanup for `debounceTimerRef`.
+  - Added `hitSlop` and accessible labels to `Paste` button; updated chips to `accessibilityRole="radio"` with `accessibilityState={{ selected: isSelected }}`.
+- **`apps/native/components/PulsePreviewCard.tsx`**:
+  - Added `useEffect` hook resetting `imageError` whenever `preview.thumbnailUrl` changes.
+  - Wrapped review toggle row in accessible `Pressable` with `accessibilityRole="switch"` and `accessibilityState={{ checked: isOptedIn }}`.
+- **`apps/native/components/PulseNudges.tsx`**:
+  - Added `youtube.com/shorts/` platform matching.
+  - Added `accessibilityRole="button"` and `hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}` to dismiss buttons.
+- **`apps/server/src/test-pulse-submit.ts`**:
+  - Added regression test suite for explicit `channelId` platform mismatch, foreign website domain rejection, custom thumbnail URL scheme validation, and watermark non-regression (87/87 tests passed).
+
+### What was learned
+- SQLite prepared statements with `better-sqlite3` must be prepared at router initialization time outside transaction closures and loops; explicit channel ID selection must strictly validate platform compatibility before trusting the selection.
+- Native interactive chips functioning as mutually exclusive selectors should always carry `accessibilityRole="radio"` and `accessibilityState={{ selected: isSelected }}` for complete accessibility compliance.
+

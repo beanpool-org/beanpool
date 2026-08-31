@@ -62,6 +62,15 @@ interface Channel {
     syndicateToNode: boolean;
 }
 
+function safeDecodeURIComponent(value: string | undefined): string {
+    if (!value) return '';
+    try {
+        return decodeURIComponent(value);
+    } catch {
+        return value;
+    }
+}
+
 export default function PulseIntakeScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
@@ -73,7 +82,7 @@ export default function PulseIntakeScreen() {
     const [channelError, setChannelError] = useState<string | null>(null);
 
     // Form inputs
-    const [urlInput, setUrlInput] = useState<string>(params.url ? decodeURIComponent(params.url) : '');
+    const [urlInput, setUrlInput] = useState<string>(safeDecodeURIComponent(params.url));
     const [selectedChannelId, setSelectedChannelId] = useState<string | null>(params.channelId || null);
     const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
 
@@ -89,6 +98,7 @@ export default function PulseIntakeScreen() {
     const [submitSuccess, setSubmitSuccess] = useState(false);
 
     const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastResolvedUrlRef = useRef<string | null>(null);
 
     /**
      * Load member's connected channels
@@ -224,11 +234,22 @@ export default function PulseIntakeScreen() {
     // Trigger preview if prefilled URL exists
     useEffect(() => {
         if (params.url) {
-            const decoded = decodeURIComponent(params.url).replace(/\s+/g, '');
-            setUrlInput(decoded);
-            resolvePreview(decoded);
+            const decoded = safeDecodeURIComponent(params.url).replace(/\s+/g, '');
+            if (decoded && decoded !== lastResolvedUrlRef.current) {
+                lastResolvedUrlRef.current = decoded;
+                setUrlInput(decoded);
+                resolvePreview(decoded);
+            }
         }
-    }, [params.url, resolvePreview]);
+    }, [params.url]);
+
+    useEffect(() => {
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+        };
+    }, []);
 
     /**
      * Paste URL from clipboard
@@ -379,6 +400,7 @@ export default function PulseIntakeScreen() {
                             <Pressable
                                 onPress={pasteFromClipboard}
                                 style={styles.pasteButton}
+                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                 accessibilityRole="button"
                                 accessibilityLabel="Paste link from clipboard"
                             >
@@ -438,7 +460,8 @@ export default function PulseIntakeScreen() {
                                                 styles.chip,
                                                 isSelected && styles.chipSelected,
                                             ]}
-                                            accessibilityRole="button"
+                                            accessibilityRole="radio"
+                                            accessibilityState={{ selected: isSelected }}
                                             accessibilityLabel={`${meta.label}${handleText}`}
                                         >
                                             <Text style={styles.chipIcon} allowFontScaling={false}>
@@ -476,7 +499,8 @@ export default function PulseIntakeScreen() {
                                                 styles.chip,
                                                 isSelected && styles.chipSelected,
                                             ]}
-                                            accessibilityRole="button"
+                                            accessibilityRole="radio"
+                                            accessibilityState={{ selected: isSelected }}
                                             accessibilityLabel={cat.label}
                                         >
                                             <Text style={styles.chipIcon} allowFontScaling={false}>

@@ -101,7 +101,7 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                     matchedPlatform = 'tiktok';
                     break;
                 }
-                if (ch.platform === 'youtube' && (lowerUrl.includes('youtube.com/watch') || lowerUrl.includes('youtu.be/'))) {
+                if (ch.platform === 'youtube' && (lowerUrl.includes('youtube.com/watch') || lowerUrl.includes('youtube.com/shorts/') || lowerUrl.includes('youtu.be/'))) {
                     matchedPlatform = 'youtube';
                     break;
                 }
@@ -254,7 +254,8 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                         <Pressable
                             onPress={dismissClipboard}
                             style={styles.closeButton}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                            accessibilityRole="button"
                             accessibilityLabel="Dismiss clipboard suggestion"
                         >
                             <Text style={styles.closeIcon} allowFontScaling={false}>✕</Text>
@@ -311,7 +312,8 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                             <Pressable
                                 onPress={() => dismissPostCountNudge(nudge)}
                                 style={styles.closeButton}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                accessibilityRole="button"
                                 accessibilityLabel="Dismiss update notice"
                             >
                                 <Text style={styles.closeIcon} allowFontScaling={false}>✕</Text>

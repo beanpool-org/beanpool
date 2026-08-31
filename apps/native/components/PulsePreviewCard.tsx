@@ -59,6 +59,10 @@ export function PulsePreviewCard({
     const styles = useStyles(makeStyles);
     const [imageError, setImageError] = useState(false);
 
+    React.useEffect(() => {
+        setImageError(false);
+    }, [preview.thumbnailUrl]);
+
     const platform = platformMeta(preview.platform);
     const category = categoryMeta(preview.category);
     const displayCallsign = preview.authorCallsign || callsign || 'You';
@@ -146,7 +150,13 @@ export function PulsePreviewCard({
 
             {/* Review Opt-out Toggle */}
             {showReviewToggle && onToggleOptIn ? (
-                <View style={styles.reviewRow}>
+                <Pressable
+                    style={styles.reviewRow}
+                    onPress={() => onToggleOptIn(!isOptedIn)}
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: isOptedIn }}
+                    accessibilityLabel="Publish to Pulse"
+                >
                     <View style={styles.reviewLabelGroup}>
                         <Text style={styles.reviewTitle}>Publish to Pulse</Text>
                         <Text style={styles.reviewSub}>
@@ -160,7 +170,7 @@ export function PulsePreviewCard({
                         thumbColor={Platform.OS === 'android' ? (isOptedIn ? colors.brand.primary : colors.surface.card) : undefined}
                         accessibilityLabel="Include this post in Pulse"
                     />
-                </View>
+                </Pressable>
             ) : null}
         </View>
     );

@@ -44,7 +44,7 @@ const deps: RouteDeps = {
     enforceReadAuth: false,
 };
 
-const router = createPulseSubmitRoutes(deps);
+let router: any;
 
 async function call(
     method: string,
@@ -93,6 +93,7 @@ async function main(): Promise<void> {
     console.log('=== Manual Ingestion (Pulse Submit) Test Suite ===\n');
 
     initStateEngine();
+    router = createPulseSubmitRoutes(deps);
 
     const kayla = makeMember('Kayla');
     const marty = makeMember('Marty');
@@ -279,10 +280,7 @@ async function main(): Promise<void> {
     // ── 5. Watermark Dismissal (dismiss-nudge) ─────────────────────────────────
     console.log('\n--- 5. Watermark Dismissal (dismiss-nudge) ---');
 
-    // Initialize post_count_seen to 10
-    db.prepare('UPDATE creator_channels SET post_count_seen = 10 WHERE id = ?').run(chKaylaIg.id);
-
-    // Dismiss nudge setting post_count_seen to 15
+    // Dismiss with valid count
     const dismissRes = await call('POST', `/api/member/pulse/channels/${chKaylaIg.id}/dismiss-nudge`, {
         actor: kayla,
         body: { seenCount: 15 },
@@ -292,11 +290,19 @@ async function main(): Promise<void> {
     assert(dismissRes.body.success === true, 'dismiss-nudge returns success: true');
     assert(dismissRes.body.postCountSeen === 15, 'dismiss-nudge returned postCountSeen: 15');
 
-    // Verify DB
-    const chAfterDismiss = db.prepare('SELECT post_count_seen FROM creator_channels WHERE id = ?').get(chKaylaIg.id) as any;
-    assert(chAfterDismiss.post_count_seen === 15, 'creator_channels.post_count_seen updated in DB to 15');
+    const dbChannel = db.prepare('SELECT post_count_seen FROM creator_channels WHERE id = ?').get(chKaylaIg.id) as any;
+    assert(dbChannel.post_count_seen === 15, 'creator_channels.post_count_seen updated in DB to 15');
 
-    // Marty tries to dismiss Kayla channel -> 403
+    // Watermark cannot regress to a lower number
+    const regressRes = await call('POST', `/api/member/pulse/channels/${chKaylaIg.id}/dismiss-nudge`, {
+        actor: kayla,
+        body: { seenCount: 10 },
+        params: { id: chKaylaIg.id },
+    });
+    assert(regressRes.status === 200, 'dismiss-nudge with lower number returns 200');
+    assert(regressRes.body.postCountSeen === 15, 'watermark does not regress to lower count (stays 15)');
+
+    // Non-owner cannot dismiss nudge
     const martyDismissKayla = await call('POST', `/api/member/pulse/channels/${chKaylaIg.id}/dismiss-nudge`, {
         actor: marty,
         body: { seenCount: 20 },
@@ -310,6 +316,56 @@ async function main(): Promise<void> {
         params: { id: 'chan_nonexistent' },
     });
     assert(dismissNonExistent.status === 404, 'dismiss-nudge on non-existent channel returns 404');
+
+    // ── 5b. Platform & Domain Mismatch Gating & Custom Validation ──────────────
+    console.log('\n--- 5b. Platform & Domain Mismatch & Validation ---');
+
+    // Mismatched channelId platform (Instagram channel for YouTube URL) -> 403 NO_CHANNEL_MATCH
+    const mismatchedChannelPreview = await call('POST', '/api/member/pulse/preview', {
+        actor: kayla,
+        body: {
+            url: ytUrl,
+            channelId: chKaylaIg.id,
+        },
+    });
+    assert(mismatchedChannelPreview.status === 403, 'Mismatched channelId platform in preview rejected with 403');
+    assert(mismatchedChannelPreview.body.error === 'no_channel_match', 'Error code is no_channel_match');
+
+    const mismatchedChannelSubmit = await call('POST', '/api/member/pulse/submit', {
+        actor: kayla,
+        body: {
+            url: ytUrl,
+            channelId: chKaylaIg.id,
+        },
+    });
+    assert(mismatchedChannelSubmit.status === 403, 'Mismatched channelId platform in submit rejected with 403');
+
+    // Website channel domain validation
+    const chKaylaWeb = addChannel({
+        ownerPubkey: kayla,
+        platform: 'website',
+        raw: 'https://kaylapottery.org/blog',
+        category: 'craft',
+    });
+
+    const foreignDomainSubmit = await call('POST', '/api/member/pulse/submit', {
+        actor: kayla,
+        body: {
+            url: 'https://strangers-pottery.com/posts/1',
+        },
+    });
+    assert(foreignDomainSubmit.status === 403, 'Foreign website domain not matching owned channel is refused (403 NOT_YOURS)');
+
+    // Invalid thumbnail URL validation (non-http scheme)
+    const invalidThumbSubmit = await call('POST', '/api/member/pulse/submit', {
+        actor: kayla,
+        body: {
+            url: ytUrl,
+            thumbnailUrl: 'javascript:alert(1)',
+        },
+    });
+    assert(invalidThumbSubmit.status === 400, 'Invalid thumbnail scheme rejected with 400');
+    assert(invalidThumbSubmit.body.error === 'invalid_thumbnail_url', 'Error code is invalid_thumbnail_url');
 
     // ── 6. SSRF Protection ─────────────────────────────────────────────────────
     console.log('\n--- 6. SSRF Protection ---');

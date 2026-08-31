@@ -1496,11 +1496,19 @@ export async function buildYouTubeFeedUrl(urlOrHandle: string): Promise<string |
         targetUrl = `https://www.youtube.com/@${trimmed}`;
     }
 
-    // 5. Fetch page using ssrfSafeFetch to resolve handle to channel id (capped at 256KB)
+    // 5. Fetch page using ssrfSafeFetch to resolve handle to channel id.
+    //
+    // The cap must clear the whole document, NOT just the <head>. A real YouTube
+    // channel page is ~860KB and puts every usable identifier deep in the body:
+    // measured on youtube.com/@beanpool, rel=canonical sits at byte ~746k,
+    // browseId at ~760k and externalId at ~838k. An earlier 256KB cap therefore
+    // tripped the byte limiter before a single identifier appeared — and the
+    // limiter throws rather than truncating, so the probe failed outright and
+    // every handle reported "Could not resolve YouTube channel ID from handle".
     try {
         const response = await ssrfSafeFetch(targetUrl, {
             timeoutMs: 8000,
-            maxBytes: 256 * 1024,
+            maxBytes: 2 * 1024 * 1024,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',

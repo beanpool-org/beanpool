@@ -671,12 +671,17 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             }
 
             if (remote.creatorChannels) {
-                for (const cc of remote.creatorChannels) {
-                    // Last-write-wins on `updated_at`, same as members and abuse_reports. A delete
-                    // is just a row whose deleted_at is set and whose url/handle are already NULL,
-                    // so it converges through the identical path — no separate tombstone needed,
-                    // and a replica can never resurrect a link the member removed.
-                    db.prepare(`INSERT INTO creator_channels
+                // Prepared ONCE, above the loop. better-sqlite3 compiles on every db.prepare() —
+                // there is no internal statement cache — so leaving this inside recompiled ~1.5KB
+                // of SQL per row, up to MAX_IMPORT_ROWS_PER_CATEGORY (250k) of them, all inside the
+                // single import transaction. On the 1cpu/1GB test VM that is event-loop block time
+                // for nothing.
+                //
+                // Last-write-wins on `updated_at`, same as members and abuse_reports. A delete
+                // is just a row whose deleted_at is set and whose url/handle are already NULL,
+                // so it converges through the identical path — no separate tombstone needed,
+                // and a replica can never resurrect a link the member removed.
+                const importChannel = db.prepare(`INSERT INTO creator_channels
                                     (id, owner_pubkey, platform, url, handle, category, is_primary_video,
                                      supports_autolist, oauth_verified_at, post_count_seen, autopublish,
                                      syndicate_to_node, created_at, updated_at, deleted_at)
@@ -703,7 +708,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                                     syndicate_to_node = excluded.syndicate_to_node,
                                     deleted_at        = excluded.deleted_at,
                                     updated_at        = excluded.updated_at
-                                WHERE excluded.updated_at > creator_channels.updated_at`).run(
+                                WHERE excluded.updated_at > creator_channels.updated_at`);
+                for (const cc of remote.creatorChannels) {
+                    importChannel.run(
                         cc.id,
                         cc.ownerPubkey,
                         cc.platform,

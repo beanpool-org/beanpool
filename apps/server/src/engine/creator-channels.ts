@@ -241,6 +241,34 @@ const FB_PREFIX_DEPTH: ReadonlyMap<string, number> = new Map([
     ['groups', 1], ['g', 1], ['pages', 2], ['people', 2], ['share', 2], ['profile', 1],
 ]);
 
+/**
+ * Instagram paths that are site furniture, not accounts.
+ *
+ * Shared by the URL branch and the bare-handle fast path below, which used to disagree — and the
+ * fast path was the one skipping the check, so `@p` was stored as `instagram.com/p/`: a permanently
+ * dead link that every member typing `@p` then collided with as a duplicate.
+ */
+const IG_RESERVED_SEGMENTS: ReadonlySet<string> =
+    new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct']);
+
+/**
+ * Reject a bare handle that names a reserved path rather than an account.
+ *
+ * Only Instagram and Facebook can collide: TikTok and YouTube handles are stored under `/@...`, a
+ * namespace of their own that no reserved segment reaches.
+ */
+function assertHandleNotReserved(platform: ChannelPlatform, handle: string): void {
+    const reserved = platform === 'instagram'
+        ? IG_RESERVED_SEGMENTS.has(handle)
+        : platform === 'facebook'
+            ? (FB_PREFIX_DEPTH.has(handle) || handle === 'profile.php')
+            : false;
+    if (reserved) {
+        throw new ChannelError('NO_HANDLE',
+            `"${handle}" is a reserved ${platform} address, not an account name.`);
+    }
+}
+
 function hostMatches(host: string, allowed: string[]): boolean {
     const h = host.toLowerCase().replace(/^www\./, '');
     return allowed.some(a => h === a || h.endsWith('.' + a));
@@ -279,11 +307,26 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
             return { url: `https://www.youtube.com/channel/${bareHandle[1]}`, handle: bareHandle[1] };
         }
         const h = bareHandle[1].toLowerCase();
-        switch (platform) {
-            case 'instagram': return { url: `https://www.instagram.com/${h}/`, handle: `@${h}` };
-            case 'tiktok': return { url: `https://www.tiktok.com/@${h}`, handle: `@${h}` };
-            case 'youtube': return { url: `https://www.youtube.com/@${h}`, handle: `@${h}` };
-            case 'facebook': return { url: `https://www.facebook.com/${h}`, handle: h };
+        // The URL branch rejects these below; the fast path returns a built string without ever
+        // round-tripping through it, so the same check has to run here or it does not run at all.
+        assertHandleNotReserved(platform, h);
+        // Built, then checked, then returned — rather than returned straight out of the switch.
+        // Every guard at the end of this function is one the fast path skips, and the handle-length
+        // bound was one of them: `@` + 100 characters is 101, and it was reaching the column
+        // unchecked because the `return` came first.
+        const built = (() => {
+            switch (platform) {
+                case 'instagram': return { url: `https://www.instagram.com/${h}/`, handle: `@${h}` };
+                case 'tiktok': return { url: `https://www.tiktok.com/@${h}`, handle: `@${h}` };
+                case 'youtube': return { url: `https://www.youtube.com/@${h}`, handle: `@${h}` };
+                case 'facebook': return { url: `https://www.facebook.com/${h}`, handle: h };
+            }
+        })();
+        if (built) {
+            if (built.handle.length > MAX_HANDLE_LENGTH) {
+                throw new ChannelError('TOO_LONG', 'That account name is too long.');
+            }
+            return built;
         }
     }
 
@@ -376,8 +419,7 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     let handle: string | null = null;
     if (isShortLink) {
         handle = null;
-    } else if (platform === 'instagram' && segments.length >= 1
-               && !['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct'].includes(seg0)) {
+    } else if (platform === 'instagram' && segments.length >= 1 && !IG_RESERVED_SEGMENTS.has(seg0)) {
         const h = segments[0].toLowerCase();
         handle = `@${h}`;
         parsed.pathname = `/${h}/`;
@@ -455,8 +497,63 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
 
     const url = parsed.toString();
     if (url.length > MAX_URL_LENGTH) throw new ChannelError('TOO_LONG', 'That link is too long.');
-    if (handle && handle.length > MAX_HANDLE_LENGTH) handle = handle.slice(0, MAX_HANDLE_LENGTH);
+    // Rejected, NOT truncated. Slicing decoupled the handle from the URL it was derived from, so
+    // the chip named one account while the link pointed at another — and for a `/people/<slug>/<id>`
+    // handle the truncation could cut off the very id that distinguishes the page.
+    if (handle && handle.length > MAX_HANDLE_LENGTH) {
+        throw new ChannelError('TOO_LONG', 'That account name is too long.');
+    }
     return { url, handle };
+}
+
+/**
+ * The key two channels are the same by.
+ *
+ * `normaliseChannelInput` canonicalises the path for the four platforms, but a member's own
+ * website or feed is deliberately left as they typed it — rewriting someone's address is how a
+ * working link becomes a 404. That left `example.com/feed` and `example.com/feed/` as two strings
+ * for one feed, which the duplicate check compared directly and let through.
+ *
+ * So the fold happens on the comparison key instead of on the stored URL. Case is NOT folded here:
+ * Facebook `/share/` ids are case-sensitive, and lowercasing would make two genuinely different
+ * share links collide as duplicates — the normaliser has already folded case everywhere it is safe.
+ */
+export function channelDedupeKey(platform: ChannelPlatform, url: string | null): string {
+    if (!url) return `${platform}\u0000`;
+    let key = url;
+    try {
+        const u = new URL(url);
+        if (u.pathname.length > 1 && u.pathname.endsWith('/')) {
+            u.pathname = u.pathname.replace(/\/+$/, '');
+        }
+        key = u.toString();
+    } catch {
+        // Stored URLs always parse; a malformed one compares verbatim rather than throwing here.
+    }
+    return `${platform}\u0000${key}`;
+}
+
+/**
+ * The one definition of what a channel tombstone keeps.
+ *
+ * Three call sites scrub channels — the member's own delete, `adminPruneUser` and
+ * `purgeMemberSelf` — and as three copied statements they had already drifted: all three cleared
+ * `last_error`, none cleared `fail_count` or `is_stale`, so a channel that had accumulated fetch
+ * failures carried that history into every backup. One definition means the next column added to
+ * the table is one edit, not three.
+ *
+ * `where` is interpolated, so it takes internal literals only — never anything from a request.
+ */
+export function scrubChannelRows(where: string, params: unknown[], at: string): number {
+    return db.prepare(
+        `UPDATE creator_channels
+            SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0,
+                platform = 'deleted', category = 'other', supports_autolist = 0,
+                autopublish = 0, syndicate_to_node = 0, post_count_seen = NULL,
+                oauth_verified_at = NULL, last_error = NULL, fail_count = 0, is_stale = 0,
+                updated_at = ?
+          WHERE ${where} AND deleted_at IS NULL`
+    ).run(at, at, ...(params as any[])).changes;
 }
 
 export function listChannels(ownerPubkey: string): CreatorChannel[] {
@@ -583,7 +680,8 @@ export function addChannel(input: {
     // their own feed.
     // Keyed on (platform, url), not url alone: a blog normalises the same as `website` and as
     // `rss`, and a member is entitled to both — one as a card, one as the autolisting feed.
-    if (existing.some(c => c.url === url && c.platform === platform)) {
+    const dedupeKey = channelDedupeKey(platform, url);
+    if (existing.some(c => channelDedupeKey(c.platform, c.url) === dedupeKey)) {
         throw new ChannelError('DUPLICATE', 'You have already added that channel.');
     }
 
@@ -715,14 +813,7 @@ export function deleteChannel(ownerPubkey: string, id: string): boolean {
         //
         // The placeholders are NOT NULL columns; every read filters on `deleted_at IS NULL`, so
         // they are never shown or matched.
-        changed = db.prepare(
-            `UPDATE creator_channels
-                SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0,
-                    platform = 'deleted', category = 'other', supports_autolist = 0,
-                    autopublish = 0, syndicate_to_node = 0, post_count_seen = NULL,
-                    oauth_verified_at = NULL, last_error = NULL, updated_at = ?
-              WHERE id = ? AND owner_pubkey = ? AND deleted_at IS NULL`
-        ).run(now, now, id, ownerPubkey).changes;
+        changed = scrubChannelRows('id = ? AND owner_pubkey = ?', [id, ownerPubkey], now);
 
         // Deleting the primary would otherwise leave the member with video channels and no
         // cross-post winner, which is the state the primary exists to prevent. The oldest

@@ -250,7 +250,22 @@ export interface SyncPayload {
 export function getStateHash(db: Db): string {
     const pKeys = db.prepare("SELECT public_key FROM members ORDER BY public_key").all() as any[];
     const pIds = db.prepare("SELECT id FROM posts WHERE active=1 ORDER BY id").all() as any[];
-    const data = JSON.stringify({ m: pKeys.map(k => k.public_key), p: pIds.map(i => i.id) });
+    // Creator channels replicate, so they have to be hashed, or nothing alerts when they stop.
+    // LIVE ids only (`deleted_at IS NULL`) — that is what catches both halves of the failure: a
+    // channel that never imported is missing here, and a tombstone that never applied leaves the
+    // row still live on the replica, i.e. a link the member deleted still published. Counting all
+    // rows instead would see those two as identical.
+    //
+    // Guarded: a backup binary whose schema predates the table is one of the exact scenarios this
+    // is meant to catch, and it must report divergence rather than throw and take sync with it.
+    let cIds: string[] = [];
+    try {
+        cIds = (db.prepare("SELECT id FROM creator_channels WHERE deleted_at IS NULL ORDER BY id")
+            .all() as any[]).map(r => r.id);
+    } catch {
+        // Table absent — hashes as empty, which differs from a primary that has any, as it should.
+    }
+    const data = JSON.stringify({ m: pKeys.map(k => k.public_key), p: pIds.map(i => i.id), c: cIds });
 
     let hash = 0;
     for (let i = 0; i < data.length; i++) {

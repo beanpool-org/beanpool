@@ -98,26 +98,34 @@ export function SyncStatus() {
     const config = STATUS_CONFIG[statusMode];
 
     return (
-        <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.3rem 0.75rem',
-            borderRadius: '9999px',
-            background: config.bg,
-            border: `1px solid ${config.borderColor}`,
-            fontSize: '0.75rem',
-            fontWeight: 500,
-            transition: 'all 0.3s ease',
-        }}>
-            <span style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                background: config.color,
-                animation: sync.connected ? 'pulse 2s infinite' : 'none',
-                flexShrink: 0,
-            }} />
+        <div
+            role="status"
+            aria-live="polite"
+            aria-label={`Network status: ${config.label}${sync.lastSyncTime && statusMode !== 'guest' ? `, last synced ${formatTimeAgo(sync.lastSyncTime)}` : ''}`}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.3rem 0.75rem',
+                borderRadius: '9999px',
+                background: config.bg,
+                border: `1px solid ${config.borderColor}`,
+                fontSize: '0.75rem',
+                fontWeight: 500,
+                transition: 'all 0.3s ease',
+            }}
+        >
+            <span
+                aria-hidden="true"
+                style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: config.color,
+                    animation: sync.connected ? 'pulse 2s infinite' : 'none',
+                    flexShrink: 0,
+                }}
+            />
             <span style={{ color: config.color, whiteSpace: 'nowrap' }}>
                 {config.label}
             </span>

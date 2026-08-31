@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Text, View, Image, StyleSheet } from 'react-native';
+import { Text, View, Image, StyleSheet, StyleProp, TextStyle } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSavedNodes } from '../utils/nodes';
 
@@ -32,7 +32,7 @@ export function useCurrencyString() {
 
 interface Props {
     amount?: number | string;
-    style?: any;
+    style?: StyleProp<TextStyle>;
     hideAmount?: boolean;
     asView?: boolean;
 }

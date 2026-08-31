@@ -48,6 +48,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
     const catMeta = categoryMeta(item.category);
     const isVideo = VIDEO_PLATFORMS.includes(item.platform as any);
     const timeAgo = formatRelativeTime(item.publishedAt);
+    const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : 'Neighbour');
 
     const handleOpenPost = async () => {
         if (!item.url) return;
@@ -58,14 +59,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
         }
 
         try {
-            const canOpen = await Linking.canOpenURL(targetUrl).catch(() => false);
-            if (canOpen) {
-                await Linking.openURL(targetUrl);
-            } else {
-                Alert.alert('Cannot Open Link', 'The link could not be opened on this device.');
-            }
+            await Linking.openURL(targetUrl);
         } catch (e) {
             console.warn('[PulseFeedCard] Error opening URL:', e);
+            Alert.alert('Cannot Open Link', 'The link could not be opened on this device.');
         }
     };
 
@@ -93,7 +90,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
         );
     };
 
-    const cardAccessibilityLabel = `${item.title || 'Community post'} by ${item.callsign} on ${platMeta.label}${item.isVerified ? ', verified creator' : ''}`;
+    const cardAccessibilityLabel = `${item.title || 'Community post'} by ${authorName} on ${platMeta.label}${item.isVerified ? ', verified creator' : ''}`;
 
     return (
         <View style={styles.cardContainer}>
@@ -103,19 +100,19 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                     onPress={handleAuthorPress}
                     style={styles.authorButton}
                     accessibilityRole="button"
-                    accessibilityLabel={`View ${item.callsign}'s public profile`}
+                    accessibilityLabel={`View ${authorName}'s public profile`}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                     <MemberAvatar
                         avatarUrl={item.avatarUrl}
                         pubkey={item.ownerPubkey}
-                        callsign={item.callsign}
+                        callsign={authorName}
                         size={38}
                     />
                     <View style={styles.authorInfo}>
                         <View style={styles.callsignRow}>
                             <Text style={styles.callsign} numberOfLines={1}>
-                                {item.callsign}
+                                {authorName}
                             </Text>
                             {item.isVerified ? (
                                 <View style={styles.verifiedBadge} accessibilityLabel="Verified account">
@@ -149,7 +146,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                             accessibilityRole="button"
                             accessibilityLabel="Hide this item from feed"
                         >
-                            <Text style={styles.muteBtnText}>Mute</Text>
+                            <Text style={styles.muteBtnText}>Hide</Text>
                         </Pressable>
                     )}
                 </View>
@@ -174,7 +171,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                             contentFit="cover"
                             transition={200}
                             onError={() => setImageFailed(true)}
-                            accessibilityLabel={`${item.title || 'Thumbnail image'}`}
+                            accessible={false}
                         />
                         {isVideo && (
                             <View style={styles.playOverlay} aria-hidden={true}>

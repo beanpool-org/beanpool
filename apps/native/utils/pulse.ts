@@ -7,7 +7,7 @@
  * 3. Local fixture fallback for development, testing, and offline preview.
  */
 
-import { type ChannelPlatform, type ChannelCategory, isWebUrl } from '@beanpool/core';
+import { type ChannelPlatform, type ChannelCategory } from '@beanpool/core';
 import { anchorUrl, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 
@@ -165,6 +165,9 @@ export function getFixturePulseFeed(options: FetchPulseFeedOptions = {}): PulseF
         const cursorIndex = filtered.findIndex(item => item.id === cursor || item.publishedAt === cursor);
         if (cursorIndex !== -1) {
             filtered = filtered.slice(cursorIndex + 1);
+        } else {
+            // Unmatched cursor: return empty slice instead of looping back to page 1
+            return { items: [], nextCursor: null };
         }
     }
 
@@ -205,13 +208,18 @@ export async function fetchPulseFeed(options: FetchPulseFeedOptions = {}): Promi
         });
 
         if (!res.ok) {
-            // Node exists but returned non-200 (e.g. 404 if package 02 not on node yet).
-            // Fall back to fixture so UI stays usable for review.
+            // Do not inject fixture items into live pagination streams on server errors
+            if (options.cursor) {
+                throw new Error(`Failed to load feed page (${res.status})`);
+            }
             return getFixturePulseFeed(options);
         }
 
         const data = await res.json().catch(() => null);
         if (!data || !Array.isArray(data.items)) {
+            if (options.cursor) {
+                throw new Error('Invalid feed response from server');
+            }
             return getFixturePulseFeed(options);
         }
 
@@ -219,8 +227,11 @@ export async function fetchPulseFeed(options: FetchPulseFeedOptions = {}): Promi
             items: data.items,
             nextCursor: data.nextCursor ?? null,
         };
-    } catch {
-        // Network failure / offline: fall back to fixture
+    } catch (e: any) {
+        // Network failure / offline during pagination should propagate error, not inject fixture
+        if (options.cursor) {
+            throw e;
+        }
         return getFixturePulseFeed(options);
     }
 }
@@ -243,7 +254,7 @@ export async function mutePulseItem(
     }
 
     const url = await anchorUrl();
-    if (!url) {
+    if (!url || itemId.startsWith('item_fix_')) {
         // In fixture / mock mode: mock success
         return { success: true };
     }

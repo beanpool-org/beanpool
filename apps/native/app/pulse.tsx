@@ -128,16 +128,27 @@ export default function PulseScreen() {
     const handleMute = async (itemId: string) => {
         if (!identity) return;
 
+        const itemToMute = items.find(i => i.id === itemId);
+        if (!itemToMute) return;
+
         // Optimistic removal from feed
-        const previousItems = [...items];
         setItems(prev => prev.filter(i => i.id !== itemId));
 
         try {
             await mutePulseItem(itemId, true, identity);
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         } catch (e: any) {
-            // Revert on failure
-            setItems(previousItems);
+            // Revert only the specific item without overwriting other feed updates
+            setItems(prev => {
+                if (prev.some(i => i.id === itemId)) return prev;
+                const updated = [...prev, itemToMute];
+                updated.sort((a, b) => {
+                    const da = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+                    const db = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+                    return db - da;
+                });
+                return updated;
+            });
             setError(e?.message || 'Could not hide that item.');
         }
     };
@@ -243,6 +254,7 @@ export default function PulseScreen() {
                         accessibilityRole="radio"
                         accessibilityState={{ selected: selectedCategory === 'all' }}
                         accessibilityLabel="All categories"
+                        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                     >
                         <Text
                             style={[
@@ -267,6 +279,7 @@ export default function PulseScreen() {
                                 accessibilityRole="radio"
                                 accessibilityState={{ selected: active }}
                                 accessibilityLabel={c.label}
+                                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                             >
                                 <Text
                                     style={[
@@ -463,6 +476,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         listContent: {
             padding: 16,
             paddingBottom: 36,
+            flexGrow: 1,
         },
         footerLoader: {
             flexDirection: 'row',

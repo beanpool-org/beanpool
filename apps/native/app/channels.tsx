@@ -301,6 +301,7 @@ export default function ChannelsScreen() {
                         style={styles.feedLinkBtn}
                         accessibilityRole="button"
                         accessibilityLabel="View The Pulse community feed"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                         <Text style={styles.feedLinkText}>View Feed ↗</Text>
                     </Pressable>

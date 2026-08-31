@@ -137,3 +137,64 @@ Results: 109/109 tests passed.
 
 ## Found but out of scope
 - `apps/manager/src/lib/ai-client.test.ts` fails locally due to vitest JSDOM environment config (owned by Package 04 per `CONTRACTS.md`).
+
+---
+
+## Review round 1 (2026-08-31)
+
+Resolved code review on PR #549 (14 comments).
+
+### Verdicts per finding:
+1. `apps/native/app/pulse.tsx:29` (comment 3894228886): **Invalid / Rejected**. `@beanpool/core` exports `CATEGORIES` and `ChannelCategory` (merged in Phase 1 / PR #546). Reusing shared core vocabulary is strictly required by `CONTRACTS.md` line 79.
+2. `apps/native/components/PulseFeedCard.tsx:30` (comment 3894229061): **Invalid / Rejected**. `@beanpool/core` exports `isWebUrl`, `platformMeta`, `categoryMeta`, and `VIDEO_PLATFORMS`. Retained canonical `@beanpool/core` imports.
+3. `apps/native/utils/pulse.ts:10` (comment 3894229208): **Fixed**. Removed unused `isWebUrl` import from `pulse.ts`.
+4. `apps/native/components/PulseFeedCard.tsx:61` (comment 3894229331): **Fixed**. Removed `Linking.canOpenURL` pre-check (avoids Android 11+ API 30+ false negatives); directly invokes `Linking.openURL` in `try/catch`.
+5. `apps/native/utils/pulse.ts:168` (comment 3894229463): **Fixed**. `getFixturePulseFeed` returns `{ items: [], nextCursor: null }` on unmatched cursor instead of looping index `-1`. Added regression test.
+6. `apps/native/utils/pulse.ts:210` (comment 3894229608): **Fixed**. `fetchPulseFeed` throws on non-200/network drops during cursor pagination instead of injecting fixture mock data into live feed streams. Added regression tests.
+7. `apps/native/utils/pulse.ts:247` (comment 3894229734): **Fixed**. `mutePulseItem` treats `item_fix_*` items as local mock operations without making doomed network requests. Added regression test.
+8. `apps/native/app/pulse.tsx:133` (comment 3894229865): **Fixed**. `handleMute` error rollback restores only `itemToMute` (sorted by date) rather than restoring a stale whole-array snapshot.
+9. `apps/native/components/PulseFeedCard.tsx:178` (comment 3894230017): **Fixed**. Added `accessible={false}` and removed redundant `accessibilityLabel` on `<Image>` to eliminate duplicate screen reader announcements.
+10. `apps/native/components/PulseFeedCard.tsx:152` (comment 3894230163): **Fixed**. Changed button visible text to `"Hide"` to match action copy and dialog prompt.
+11. `apps/native/components/PulseFeedCard.tsx:74` (comment 3894230327): **Fixed**. Added resilient `authorName` fallback for undefined/blank callsigns.
+12. `apps/native/app/pulse.tsx:238` (comment 3894230484): **Fixed**. Added `hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}` to category filter chips for WCAG 2.5.8 touch target compliance.
+13. `apps/native/app/pulse.tsx:464` (comment 3894230634): **Fixed**. Added `flexGrow: 1` to `listContent` for proper empty state centering and iOS pull-to-refresh bounce.
+14. `apps/native/app/channels.tsx:299` (comment 3894230777): **Fixed**. Added `hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}` to header shortcut button.
+
+### Test-All Suite Verification
+```
+🚀 Running BeanPool checks (max 4 parallel jobs)...
+
+╔══════════════════════════════════════════╗
+║          BEANPOOL TEST-ALL REPORT        ║
+╠══════════════════════════════════════════╣
+║  build            ✅ PASS
+║  lint             ✅ PASS
+║  test             ✅ PASS
+║  typecheck        ✅ PASS
+║  suite_registration ✅ PASS
+║  deploy_preserve  ✅ PASS
+║  secrets_guard    ✅ PASS
+║  federation       ✅ PASS
+╠══════════════════════════════════════════╣
+║  Total: 8 passed, 0 failed, 0 skipped
+╚══════════════════════════════════════════╝
+```
+
+### Native Test Suite Verification
+```
+✓ utils/__tests__/pulse.test.ts (22 tests) 18ms
+✓ utils/__tests__/channels.test.ts (8 tests) 3ms
+✓ utils/__tests__/node-url.test.ts (13 tests) 3ms
+✓ utils/__tests__/local-auth.test.ts (6 tests) 4ms
+✓ utils/__tests__/pin.test.ts (17 tests) 5ms
+✓ utils/__tests__/protection-state.test.ts (15 tests) 9ms
+✓ utils/__tests__/apply-delta.test.ts (4 tests) 11ms
+✓ utils/__tests__/pillar-sync.test.ts (5 tests) 11ms
+✓ utils/__tests__/friend-recovery.test.ts (2 tests) 38ms
+✓ utils/__tests__/sso-recovery.test.ts (4 tests) 131ms
+✓ utils/__tests__/keeper-enrolment.test.ts (16 tests) 157ms
+✓ utils/__tests__/sso-signin.test.ts (23 tests) 367ms
+
+Test Files  12 passed (12)
+     Tests  126 passed (126)
+```

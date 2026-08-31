@@ -89,6 +89,12 @@ describe('pulse utility (native)', () => {
             expect(page2.items.length).toBe(2);
             expect(page2.items[0].id).not.toBe(page1.items[0].id);
         });
+
+        it('returns empty items and null nextCursor if cursor is not found in dataset', () => {
+            const res = getFixturePulseFeed({ cursor: 'non-existent-cursor' });
+            expect(res.items).toEqual([]);
+            expect(res.nextCursor).toBeNull();
+        });
     });
 
     describe('fetchPulseFeed', () => {
@@ -125,13 +131,13 @@ describe('pulse utility (native)', () => {
             );
         });
 
-        it('falls back to fixture when anchorUrl is null', async () => {
+        it('falls back to fixture when anchorUrl is null on initial fetch', async () => {
             vi.mocked(anchorUrl).mockResolvedValueOnce(null);
             const res = await fetchPulseFeed();
             expect(res.items.length).toBe(PULSE_FIXTURE_ITEMS.length);
         });
 
-        it('falls back to fixture when node returns 404/500', async () => {
+        it('falls back to fixture when node returns 404/500 on initial fetch', async () => {
             global.fetch = vi.fn().mockResolvedValueOnce({
                 ok: false,
                 status: 404,
@@ -142,10 +148,26 @@ describe('pulse utility (native)', () => {
             expect(res.items.length).toBe(PULSE_FIXTURE_ITEMS.length);
         });
 
-        it('falls back to fixture when network error throws', async () => {
+        it('falls back to fixture when network error throws on initial fetch', async () => {
             global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
             const res = await fetchPulseFeed();
             expect(res.items.length).toBe(PULSE_FIXTURE_ITEMS.length);
+        });
+
+        it('throws when pagination request fails on non-200 rather than injecting fixture', async () => {
+            global.fetch = vi.fn().mockResolvedValueOnce({
+                ok: false,
+                status: 500,
+                json: async () => ({ error: 'internal_error' }),
+            });
+
+            await expect(fetchPulseFeed({ cursor: 'c_123' })).rejects.toThrow('Failed to load feed page (500)');
+        });
+
+        it('throws when pagination network request fails rather than injecting fixture', async () => {
+            global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network drop'));
+
+            await expect(fetchPulseFeed({ cursor: 'c_123' })).rejects.toThrow('Network drop');
         });
 
         it('respects forceFixture option directly without hitting network', async () => {
@@ -173,7 +195,13 @@ describe('pulse utility (native)', () => {
             await expect(mutePulseItem('', true, mockIdentity)).rejects.toThrow('Item ID is required');
         });
 
-        it('calls signedPost with correct path and body', async () => {
+        it('succeeds without calling signedPost for fixture items (item_fix_*)', async () => {
+            const result = await mutePulseItem('item_fix_01', true, mockIdentity);
+            expect(result.success).toBe(true);
+            expect(signedPost).not.toHaveBeenCalled();
+        });
+
+        it('calls signedPost with correct path and body for real items', async () => {
             const result = await mutePulseItem('item_1', true, mockIdentity);
             expect(result.success).toBe(true);
             expect(signedPost).toHaveBeenCalledWith(

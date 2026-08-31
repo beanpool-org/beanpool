@@ -50,6 +50,26 @@ Status: complete | partial | blocked
 <name it, do not fix it>
 ```
 
+### Finishing — you are not done until your work is on the remote
+
+The first batch of agents all built good work and left **all of it uncommitted** in their worktrees,
+with a placeholder or an invented number on the `PR:` line. Uncommitted work in a shared checkout is
+one stray command from gone — we have already lost a session's work that way once. So finish
+properly, in this order, and treat it as part of the package rather than admin afterwards:
+
+1. `git add` your files — including your report — and commit on your branch.
+2. `git push -u origin HEAD`.
+3. Open the PR yourself: `gh pr create --head <your-branch> --base main`. Pass `--head` explicitly;
+   `gh` infers the wrong branch in this repo and will silently target someone else's work.
+4. Put the **real** PR number the command returned on the `PR:` line, then amend or add a commit so
+   the report in the PR carries it.
+5. Paste the `gh pr create` URL as the last line of your final message.
+
+If any step fails, say so plainly in your final message and leave the work committed at minimum.
+A committed branch with no PR is recoverable in seconds; an uncommitted worktree is not.
+
+Do **not** merge your own PR, and do **not** deploy to any node. Both belong to the director.
+
 ### File ownership — do not edit outside your package
 
 | Package | Worktree | Owns |

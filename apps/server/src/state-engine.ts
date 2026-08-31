@@ -2973,7 +2973,7 @@ export function adminPruneUser(publicKey: string) {
         // there is no admin route for it — so anything left behind stays on every mirror and backup
         // permanently, with nobody able to remove it.
         const prunedAt = new Date().toISOString();
-        scrubChannelRows('owner_pubkey = ?', [publicKey], prunedAt);
+        scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -3075,7 +3075,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // row has to survive so the removal replicates to the backup, but a member who has just
         // erased their profile should not leave their Instagram handle behind on a mirror.
         try {
-            scrubChannelRows('owner_pubkey = ?', [publicKey], now);
+            scrubChannelRows({ ownerPubkey: publicKey }, now);
         } catch { }
         try {
             db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)").run(publicKey, publicKey);

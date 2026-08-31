@@ -180,8 +180,12 @@ export default function ChannelsScreen() {
                 // member had three — the exact opposite of what this screen exists to tell them.
                 const label = (p: Platform, autoLists: boolean) =>
                     platformMeta(p).label + (autoLists ? ' (updates itself)' : '');
+                // "two places" and "Both" are wrong once a member has three video channels: the
+                // dialog still names only this one and the primary, so it is picking a winner
+                // among more than the two it mentions.
+                const several = others.length > 1;
                 Alert.alert(
-                    'You post video in two places',
+                    several ? 'You post video in more than one place' : 'You post video in two places',
                     `If you put the same videos on ${platformMeta(platform).label} and ` +
                     `${platformMeta(rival.platform).label}, they'd show up twice on the feed.\n\n` +
                     'Which should the feed use?',
@@ -194,7 +198,7 @@ export default function ChannelsScreen() {
                             text: label(rival.platform, rival.supportsAutolist === true),
                             onPress: () => setPrimary(rival.id),
                         },
-                        { text: 'Both — I post different things', style: 'cancel' },
+                        { text: several ? 'Keep all — I post different things' : 'Both — I post different things', style: 'cancel' },
                     ],
                 );
             }
@@ -267,7 +271,11 @@ export default function ChannelsScreen() {
                                 // (404); a fixed string threw all of that away, so a member
                                 // deleting from a second device just saw a generic failure.
                                 const data = await readJson(res);
-                                throw new Error(data?.message || 'Could not remove that channel.');
+                                // `error` as well as `message`: the auth middleware answers a
+                                // 401 with `{ error: 'Signed request required' }` and no message,
+                                // which would otherwise read as a generic delete failure. Same
+                                // fallback chain load() uses.
+                                throw new Error(data?.message || data?.error || 'Could not remove that channel.');
                             }
                             await load();
                         } catch (e: any) {

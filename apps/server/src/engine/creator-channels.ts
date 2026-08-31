@@ -542,9 +542,18 @@ export function channelDedupeKey(platform: ChannelPlatform, url: string | null):
  * failures carried that history into every backup. One definition means the next column added to
  * the table is one edit, not three.
  *
- * `where` is interpolated, so it takes internal literals only — never anything from a request.
+ * Takes structured criteria rather than a SQL fragment. An exported helper whose caller supplies
+ * raw `WHERE` text is a footgun for the next caller even when today's two pass literals — the
+ * owner scope is the entire security property here, so it is not something a caller can phrase.
  */
-export function scrubChannelRows(where: string, params: unknown[], at: string): number {
+export function scrubChannelRows(criteria: { ownerPubkey: string; id?: string }, at: string): number {
+    // owner_pubkey is always required; `id` narrows one channel out of that member's set.
+    const conditions = ['owner_pubkey = ?'];
+    const params: unknown[] = [criteria.ownerPubkey];
+    if (criteria.id !== undefined) {
+        conditions.push('id = ?');
+        params.push(criteria.id);
+    }
     return db.prepare(
         `UPDATE creator_channels
             SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0,
@@ -552,8 +561,8 @@ export function scrubChannelRows(where: string, params: unknown[], at: string): 
                 autopublish = 0, syndicate_to_node = 0, post_count_seen = NULL,
                 oauth_verified_at = NULL, last_error = NULL, fail_count = 0, is_stale = 0,
                 updated_at = ?
-          WHERE ${where} AND deleted_at IS NULL`
-    ).run(at, at, ...(params as any[])).changes;
+          WHERE ${conditions.join(' AND ')} AND deleted_at IS NULL`
+    ).run(at, at, ...params).changes;
 }
 
 export function listChannels(ownerPubkey: string): CreatorChannel[] {
@@ -813,7 +822,7 @@ export function deleteChannel(ownerPubkey: string, id: string): boolean {
         //
         // The placeholders are NOT NULL columns; every read filters on `deleted_at IS NULL`, so
         // they are never shown or matched.
-        changed = scrubChannelRows('id = ? AND owner_pubkey = ?', [id, ownerPubkey], now);
+        changed = scrubChannelRows({ ownerPubkey, id }, now);
 
         // Deleting the primary would otherwise leave the member with video channels and no
         // cross-post winner, which is the state the primary exists to prevent. The oldest

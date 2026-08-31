@@ -1,6 +1,6 @@
 # Package 02 — Resolver & Cache (pulse-resolver)
 
-PR: #(pending submission)
+PR: #562
 Status: complete
 
 ## Built

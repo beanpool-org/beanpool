@@ -1452,6 +1452,8 @@ export function discoverFeedUrlFromHtml(html: string, baseUrl: string): string |
  * If given an @handle, /c/Name, /user/Name or vanity URL, fetches the channel page
  * via ssrfSafeFetch to resolve the canonical channel ID.
  */
+export const YOUTUBE_HANDLE_PROBE_MAX_BYTES = 2 * 1024 * 1024;
+
 export async function buildYouTubeFeedUrl(urlOrHandle: string): Promise<string | null> {
     if (!urlOrHandle) return null;
     const trimmed = urlOrHandle.trim();
@@ -1508,7 +1510,7 @@ export async function buildYouTubeFeedUrl(urlOrHandle: string): Promise<string |
     try {
         const response = await ssrfSafeFetch(targetUrl, {
             timeoutMs: 8000,
-            maxBytes: 2 * 1024 * 1024,
+            maxBytes: YOUTUBE_HANDLE_PROBE_MAX_BYTES,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',

@@ -456,5 +456,92 @@ Added to `apps/server/src/test-pulse-resolver.ts`:
 ```
 - `pnpm exec tsc --noEmit` clean across both `apps/server` and `apps/native`.
 
+---
+
+## YouTube Handle Probe Cap Regression Test & SSRF Test Suite Audit (2026-09-01)
+
+PR: #567
+Status: complete
+
+### 1. Task 1 — YouTube Handle Probe Cap Regression Test (#566 Regression Pin)
+- **Background**:
+  - Issue #566 raised the probe cap from 256KB to 2MB. On a real YouTube channel page (~860KB, measured on `youtube.com/@beanpool`), all identifier markers (`rel=canonical` at ~746KB, `browseId` at ~760KB, `externalId` at ~838KB) reside deep in the document body. Because `ssrfSafeFetch`'s byte limiter throws `PayloadTooLargeError` rather than truncating, the earlier 256KB cap failed the probe before reaching any identifier.
+- **Implementation**:
+  - Exported `YOUTUBE_HANDLE_PROBE_MAX_BYTES = 2 * 1024 * 1024` in `apps/server/src/engine/pulse-resolver.ts` and referenced it in `buildYouTubeFeedUrl`.
+  - Added deterministic, offline regression tests to `apps/server/src/test-pulse-resolver.ts`:
+    - Constructed a synthetic ~900KB HTML page where the only channel ID marker (`<link rel="canonical" href="https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw">`) is positioned past byte 700,000 (after 740,000 bytes of padding).
+    - Asserted `extractYouTubeChannelIdFromHtml` successfully finds and extracts the channel ID from the full 900KB page.
+    - Asserted `extractYouTubeChannelIdFromHtml` returns `null` when given the page truncated to 256KB, pinning the exact failure mode under the former cap.
+    - Asserted `YOUTUBE_HANDLE_PROBE_MAX_BYTES >= 1024 * 1024`, ensuring lowering the constant fails the test suite.
+
+### 2. Task 2 — SSRF Test Suite Audit & Blind Spot Analysis
+An exhaustive audit of `apps/server/src/test-pulse-resolver.ts` reveals every test that would STILL PASS if `ssrfSafeFetch` were completely broken (as occurred under Node 22's `ERR_INVALID_IP_ADDRESS` bug):
+
+#### Tests That Passed While `ssrfSafeFetch` Was 100% Broken:
+1. **Section 1: RSS 2.0 Feed Parser (18 assertions)**
+   - `parseFeedDate` (RFC 822/2822, offsets, named timezones, 2-digit years, invalid fallback)
+   - `decodeHtmlEntities` & `cleanXmlText` (CDATA and XML entity handling)
+   - `parseRss2Feed` (channel title, item link, GUID, dates, thumbnails, authors, fallback link/SHA-256)
+   - *Reason*: Pure in-memory string parsing; zero network calls.
+
+2. **Section 2: Atom 1.0 Feed Parser (13 assertions)**
+   - `extractYouTubeVideoId` (direct ID, `yt:video:`, watch URLs, youtu.be)
+   - `parseAtomFeed` (Atom titles, entries, video IDs, watch links, thumbnails, ISO dates, hqdefault fallback)
+   - `parseFeedXml` format detection
+   - *Reason*: Pure in-memory string parsing.
+
+3. **Section 2b: YouTube Extraction & Website Feed Discovery (16 assertions)**
+   - `extractYouTubeChannelIdFromHtml` (canonical links, `og:url`, `itemprop`, embedded `ytInitialData`, feed tags)
+   - `buildYouTubeFeedUrl` fast paths (`youtube.com/feeds/videos.xml`, `/channel/UC...`, raw `UC...` IDs)
+   - `buildYouTubeFeedUrl` domain gating rejections (`evil-phishing.com`, `example.com/@mychannel`)
+   - `buildYouTubeFeedUrl` protocol-less normalizations (`youtube.com/channel/UC...`, `www.youtube.com/channel/UC...`)
+   - `discoverFeedUrlFromHtml` (relative links, absolute links, MIME parameters, javascript: scheme skipping, feed class tolerance)
+   - *Reason*: Evaluated against pure HTML strings, regexes, or URL string prefixes without calling `ssrfSafeFetch`.
+
+4. **Section 3: Malformed XML Robustness (4 assertions)**
+   - Truncated XML, empty string, null, HTML 404 responses
+   - *Reason*: Pure string parser error-resilience tests.
+
+5. **Section 4: SSRF Security Hardening (28 pre-existing assertions)**
+   - IPv4 private/reserved checks: 10 tests (`isIpPrivateOrReserved`)
+   - IPv6 private/reserved checks: 9 tests (`isIpPrivateOrReserved`)
+   - Hostname syntax checks: 5 tests (`validateHostnameSyntax`)
+   - IP syntax check: 1 test (`validateIpString`)
+   - `ssrfSafeFetch` negative tests:
+     - `http://127.0.0.1:8080/secret` (blocked in `resolveAndPinHost` pre-flight)
+     - `file:///etc/passwd` (blocked in scheme check before DNS)
+     - `http://user:pass@example.com/feed` (blocked in credential check before DNS)
+   - `createCustomLookup` unit tests: 4 tests
+   - *Reason*: All tests verify pre-flight rejections or pure validator algorithms before socket instantiation.
+
+6. **Section 5: Database Items & Deduplication (6 assertions)**
+   - `addChannel`, SQLite upserts, row deduplication, ID preservation, title/thumbnail updates
+   - *Reason*: Direct SQLite database operations.
+
+7. **Section 5b: Channel Resolution Behavior (8 assertions)**
+   - `resolveChannel` with invalid YouTube handle `@invalid_test_handle_xyz`:
+     - *Critical Blind Spot*: When `ssrfSafeFetch` was broken and threw `ERR_INVALID_IP_ADDRESS`, `buildYouTubeFeedUrl` caught the error in `try/catch` and returned `null`. `resolveChannel` saw `feedUrl === null`, set `last_error`, incremented `fail_count`, and returned `{ count: 0 }`. The test asserted `count === 0` and `error` was set, which passed despite network failure!
+   - `resolveChannel` with feed-less website: Pre-seeded in SQLite; returned `{ count: 0 }` immediately.
+   - Scheduler tick query and channel row persistence assertions: Pure SQLite queries.
+
+8. **Sections 6–9: Database, Muting, Sync & Topology (48 assertions)**
+   - Section 6 (Tombstone scrubbing & 30-day pruner): 7 assertions
+   - Section 7 (Feed queries, keyset pagination, visibility): 14 assertions
+   - Section 8 (Item muting, 403/404, channel deletion cascade): 8 assertions
+   - Section 9 (Sync state export, signed payloads, state hash, import, consistency audit): 11 assertions
+   - *Reason*: Local SQLite database logic, crypto signing, and in-memory P2P engine sync.
+
+#### Summary of the Blind Spot:
+Prior to PR #565 adding the two positive `ssrfSafeFetch('http(s)://example.com')` tests, **100% (137 of 137)** of tests in `test-pulse-resolver.ts` passed while real outbound socket connections were completely inoperable.
+
+#### Recommended Future Fixes (Out of Scope for this PR):
+1. **In-Process HTTP/HTTPS Test Server / Socket Mocking**:
+   - Spin up an ephemeral local `http.Server` (or provide a test hook to allow test port loopback bypass) to assert end-to-end socket data transfer, gzip decompression, brotli decompression, redirect following, and byte-limit enforcement.
+2. **Differentiate Network Failures vs Resolution Misses**:
+   - In `buildYouTubeFeedUrl` and `resolveChannel`, distinguish between "HTML page fetched (200 OK) but contained no channel ID" and "Network / DNS / Socket connection failed". Recording distinct errors (e.g. `'Failed to fetch channel page: Network error'` vs `'Channel ID not found on page'`) prevents network crashes from masquerading as resolution misses.
+3. **Contract Tests for Socket Pipelines**:
+   - Add contract tests exercising `ssrfSafeFetch` response streams (`buffer()`, `text()`, `json()`, chunked transfers).
+
+
 
 

@@ -86,6 +86,22 @@ async function main() {
         { type: 'group', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex], name: 'legit' });
     assert(a15ok.status === 200, `A2-15: creator-included is allowed (got ${a15ok.status} ${a15ok.error ?? ''})`);
 
+    // Reactions — sending a message from A, then testing reaction permissions.
+    const msgRes = await signedFetch('POST', '/api/messages/send', A,
+        { conversationId: conv.id, authorPubkey: A.pubKeyHex, ciphertext: 'hello', nonce: '123' });
+    assert(msgRes.status === 200, `send message: A sends message in A-B DM (got ${msgRes.status})`);
+
+    const msgId = (db.prepare("SELECT id FROM messages WHERE conversation_id=? LIMIT 1").get(conv.id) as any)?.id;
+    if (!msgId) throw new Error('setup: failed to find message id');
+
+    const reactA = await signedFetch('POST', '/api/messages/react', A,
+        { messageId: msgId, authorPubkey: A.pubKeyHex, emoji: '👍' });
+    assert(reactA.status === 200, `reactions: participant A can react (got ${reactA.status})`);
+
+    const reactC = await signedFetch('POST', '/api/messages/react', C,
+        { messageId: msgId, authorPubkey: C.pubKeyHex, emoji: '👎' });
+    assert(reactC.status === 404, `reactions: outsider C is DENIED reacting to message (got ${reactC.status} ${reactC.error ?? ''})`);
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Messaging IDOR checks PASSED (A2-2/A2-3/A2-15).');

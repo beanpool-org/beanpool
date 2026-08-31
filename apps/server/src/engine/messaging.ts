@@ -202,6 +202,11 @@ export function toggleMessageReaction(
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
     if (!row) return null;
 
+    const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
+    if (!participants.some((p: any) => p.public_key === authorPubkey)) {
+        return null;
+    }
+
     let metadata: any = {};
     if (row.metadata) {
         try {
@@ -230,7 +235,6 @@ export function toggleMessageReaction(
     const metadataStr = JSON.stringify(metadata);
     db.prepare("UPDATE messages SET metadata=? WHERE id=?").run(metadataStr, messageId);
 
-    const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
     cb.broadcast({
         type: 'message_reaction',
         conversationId: row.conversation_id,

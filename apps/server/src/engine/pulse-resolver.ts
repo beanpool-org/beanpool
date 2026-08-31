@@ -1408,7 +1408,7 @@ export function discoverFeedUrlFromHtml(html: string, baseUrl: string): string |
         const relMatch = /\brel=["'](?:alternate|feed)["']/i.test(tag) || /\brel=["'][^"']*\balternate\b[^"']*["']/i.test(tag);
         if (!relMatch) continue;
 
-        const typeMatch = /\btype=["'](application\/(?:rss\+xml|atom\+xml|xml)|text\/xml)["']/i.exec(tag);
+        const typeMatch = /\btype=["'](application\/(?:rss\+xml|atom\+xml|xml)|text\/xml)(?:\s*;[^"']*)?["']/i.exec(tag);
         if (!typeMatch) continue;
 
         const hrefMatch = /\bhref=["']([^"']+)["']/i.exec(tag);
@@ -1418,7 +1418,10 @@ export function discoverFeedUrlFromHtml(html: string, baseUrl: string): string |
         if (!rawHref) continue;
 
         try {
-            return new URL(rawHref, baseUrl).toString();
+            const resolved = new URL(rawHref, baseUrl);
+            if (resolved.protocol === 'http:' || resolved.protocol === 'https:') {
+                return resolved.toString();
+            }
         } catch {
             continue;
         }
@@ -1443,20 +1446,32 @@ export async function buildYouTubeFeedUrl(urlOrHandle: string): Promise<string |
     }
 
     // 2. Direct channel ID URL (/channel/UC...)
-    const channelMatch = /(?:youtube\.com\/channel\/)(UC[a-zA-Z0-9_-]{22})/i.exec(trimmed);
+    const channelMatch = /(?:youtube\.com\/channel\/)(UC[a-zA-Z0-9_-]{20,24})/i.exec(trimmed);
     if (channelMatch) {
         return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch[1]}`;
     }
 
     // 3. Direct UC ID string
-    if (/^UC[a-zA-Z0-9_-]{22}$/.test(trimmed)) {
+    if (/^UC[a-zA-Z0-9_-]{20,24}$/.test(trimmed)) {
         return `https://www.youtube.com/feeds/videos.xml?channel_id=${trimmed}`;
     }
 
-    // 4. Normalise to full youtube.com URL for @handle, /c/Name, /user/Name
+    // 4. Normalise to full youtube.com URL for @handle, /c/Name, /user/Name with domain gating
     let targetUrl: string;
     if (/^https?:\/\//i.test(trimmed)) {
-        targetUrl = trimmed;
+        try {
+            const parsed = new URL(trimmed);
+            const host = parsed.hostname.toLowerCase();
+            if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') {
+                targetUrl = trimmed;
+            } else {
+                return null;
+            }
+        } catch {
+            return null;
+        }
+    } else if (/^(?:www\.)?(?:m\.)?youtube\.com\//i.test(trimmed) || /^youtu\.be\//i.test(trimmed)) {
+        targetUrl = `https://${trimmed}`;
     } else if (trimmed.startsWith('@')) {
         targetUrl = `https://www.youtube.com/${trimmed}`;
     } else if (trimmed.startsWith('/')) {
@@ -1465,11 +1480,11 @@ export async function buildYouTubeFeedUrl(urlOrHandle: string): Promise<string |
         targetUrl = `https://www.youtube.com/@${trimmed}`;
     }
 
-    // 5. Fetch page using ssrfSafeFetch to resolve handle to channel id
+    // 5. Fetch page using ssrfSafeFetch to resolve handle to channel id (capped at 256KB)
     try {
         const response = await ssrfSafeFetch(targetUrl, {
             timeoutMs: 8000,
-            maxBytes: 2 * 1024 * 1024,
+            maxBytes: 256 * 1024,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
@@ -1523,8 +1538,8 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
         }
     }
 
-    if (channel.supports_autolist !== 1 && channel.platform !== 'youtube' && channel.platform !== 'rss' && channel.platform !== 'website') {
-        return { count: 0 };
+    if (channel.supports_autolist !== 1) {
+        return { count: 0, error: channel.last_error || undefined };
     }
 
     try {
@@ -1532,8 +1547,8 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
         let feedXmlContent: string | null = null;
 
         if (channel.platform === 'youtube') {
-            const directChannelMatch = /(?:youtube\.com\/channel\/)(UC[a-zA-Z0-9_-]{22})/i.exec(channel.url || '')
-                || /(?:youtube\.com\/feeds\/videos\.xml\?channel_id=)(UC[a-zA-Z0-9_-]{22})/i.exec(channel.url || '');
+            const directChannelMatch = /(?:youtube\.com\/channel\/)(UC[a-zA-Z0-9_-]{20,24})/i.exec(channel.url || '')
+                || /(?:youtube\.com\/feeds\/videos\.xml\?channel_id=)(UC[a-zA-Z0-9_-]{20,24})/i.exec(channel.url || '');
 
             if (directChannelMatch) {
                 feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${directChannelMatch[1]}`;
@@ -1541,7 +1556,7 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                 feedUrl = await buildYouTubeFeedUrl(channel.url || channel.handle || '');
                 if (feedUrl) {
                     // Extract UC id and persist it on the channel row so subsequent lookups are instant
-                    const ucMatch = /channel_id=(UC[a-zA-Z0-9_-]{22})/i.exec(feedUrl);
+                    const ucMatch = /channel_id=(UC[a-zA-Z0-9_-]{20,24})/i.exec(feedUrl);
                     if (ucMatch) {
                         const canonicalChannelUrl = `https://www.youtube.com/channel/${ucMatch[1]}`;
                         db.prepare(
@@ -1570,12 +1585,17 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
 
             const initialResp = await ssrfSafeFetch(initialUrl, {
                 timeoutMs: 8000,
-                maxBytes: 2 * 1024 * 1024,
+                maxBytes: 256 * 1024,
             });
 
             const initialText = await initialResp.text();
-            const lowerSnippet = initialText.slice(0, 2000).toLowerCase();
-            const isDirectXml = lowerSnippet.includes('<feed') || lowerSnippet.includes('<rss') || lowerSnippet.includes('xmlns="http://www.w3.org/2005/atom"');
+            const trimmedLower = initialText.slice(0, 2000).trimStart().toLowerCase();
+            const isHtml = trimmedLower.startsWith('<!doctype html') || trimmedLower.startsWith('<html') || /<html[\s>]/i.test(trimmedLower);
+            const isDirectXml = !isHtml && (
+                trimmedLower.startsWith('<?xml') ||
+                /<(?:rss|feed)[\s>]/i.test(initialText) ||
+                initialText.includes('xmlns="http://www.w3.org/2005/atom"')
+            );
 
             if (isDirectXml) {
                 feedUrl = initialUrl;
@@ -1589,7 +1609,7 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                     const noFeedMsg = "This site doesn't publish a feed — share posts manually";
                     db.prepare(
                         `UPDATE creator_channels
-                            SET last_error = ?, fail_count = 0, is_stale = 0, updated_at = ?
+                            SET supports_autolist = 0, last_error = ?, fail_count = 0, is_stale = 0, updated_at = ?
                           WHERE id = ?`
                     ).run(noFeedMsg, now, channel.id);
                     return { count: 0, error: noFeedMsg };
@@ -1688,52 +1708,55 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
  * in the SAME statement so the deletion replicates without carrying the content.
  */
 export function scrubPulseItems(
-    criteria: { id?: string; channelId?: string; ownerPubkey?: string; olderThan?: string },
-    at: string
+    target: { channelId?: string; ownerPubkey?: string; id?: string },
+    timestamp?: string
 ): number {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
+    const now = timestamp || new Date().toISOString();
+    let query = `UPDATE pulse_items
+                    SET deleted_at = ?, url = NULL, title = NULL, thumbnail_url = NULL, updated_at = ?
+                  WHERE deleted_at IS NULL`;
+    const params: any[] = [now, now];
 
-    if (criteria.id !== undefined) {
-        conditions.push('id = ?');
-        params.push(criteria.id);
+    if (target.id) {
+        query += ' AND id = ?';
+        params.push(target.id);
     }
-    if (criteria.channelId !== undefined) {
-        conditions.push('channel_id = ?');
-        params.push(criteria.channelId);
+    if (target.channelId) {
+        query += ' AND channel_id = ?';
+        params.push(target.channelId);
     }
-    if (criteria.ownerPubkey !== undefined) {
-        conditions.push('owner_pubkey = ?');
-        params.push(criteria.ownerPubkey);
-    }
-    if (criteria.olderThan !== undefined) {
-        conditions.push('published_at < ?');
-        params.push(criteria.olderThan);
-    }
-
-    if (conditions.length === 0) {
-        throw new PulseError('BAD_CRITERIA', 'scrubPulseItems requires at least one criterion.');
+    if (target.ownerPubkey) {
+        query += ' AND owner_pubkey = ?';
+        params.push(target.ownerPubkey);
     }
 
-    return db.prepare(
+    const info = db.prepare(query).run(...params);
+    return info.changes;
+}
+
+/**
+ * Prunes pulse items older than 30 days by tombstoning them.
+ */
+export function prunePulseItems(maxAgeDays = 30): number {
+    const now = new Date().toISOString();
+    const cutoffMs = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
+    const cutoff = new Date(cutoffMs).toISOString();
+
+    const info = db.prepare(
         `UPDATE pulse_items
             SET deleted_at = ?, url = NULL, title = NULL, thumbnail_url = NULL, updated_at = ?
-          WHERE ${conditions.join(' AND ')} AND deleted_at IS NULL`
-    ).run(at, at, ...params).changes;
-}
+          WHERE deleted_at IS NULL AND published_at < ?`
+    ).run(now, now, cutoff);
 
-export function prunePulseItems(olderThanDays = 30): number {
-    const cutoffDate = new Date(Date.now() - (olderThanDays * 24 * 60 * 60 * 1000)).toISOString();
-    const now = new Date().toISOString();
-    return scrubPulseItems({ olderThan: cutoffDate }, now);
+    return info.changes;
 }
 
 // ============================================================================
-// 8. Fetch Scheduler
+// 8. Scheduler Tick
 // ============================================================================
 
-let schedulerTimer: NodeJS.Timeout | null = null;
 let isSchedulerRunning = false;
+let schedulerTimer: NodeJS.Timeout | null = null;
 
 export async function runPulseSchedulerTick(): Promise<void> {
     if (isSchedulerRunning) return;
@@ -1744,7 +1767,7 @@ export async function runPulseSchedulerTick(): Promise<void> {
 
         const channels = db.prepare(
             `SELECT id FROM creator_channels
-              WHERE deleted_at IS NULL AND syndicate_to_node = 1
+              WHERE deleted_at IS NULL AND syndicate_to_node = 1 AND supports_autolist = 1
               ORDER BY fail_count ASC, updated_at ASC
               LIMIT 10`
         ).all() as { id: string }[];

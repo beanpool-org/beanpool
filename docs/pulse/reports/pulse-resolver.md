@@ -460,7 +460,7 @@ Added to `apps/server/src/test-pulse-resolver.ts`:
 
 ## YouTube Handle Probe Cap Regression Test & SSRF Test Suite Audit (2026-09-01)
 
-PR: #568
+PR: #567
 Status: complete
 
 ### 1. Task 1 — YouTube Handle Probe Cap Regression Test (#566 Regression Pin)

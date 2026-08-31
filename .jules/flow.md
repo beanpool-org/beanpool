@@ -63,3 +63,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-08-25 - Add loading state and spinner for AiServicesModule
 **Learning:** Async operations like asking AI Copilot lacked visual loading feedback, leaving the user unsure if the query was processing.
 **Action:** Add explicit loading state banners and animated spinners to async submit buttons and result panels.
+
+## 2026-08-25 - Replace any types in MemberDetailModal
+**Learning:** `MemberDetailModal.tsx` relied on `any` types for `member`, `profiles`, and `flags` props, weakening type checking across member inspection dialogs.
+**Action:** Define strict interfaces (`MemberModalItem`, `MemberFlag`) for component props and internal filters.

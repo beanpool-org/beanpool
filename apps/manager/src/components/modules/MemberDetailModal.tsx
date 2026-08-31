@@ -1,10 +1,30 @@
 import React, { useState } from 'react';
 import { getMemberDisplayName, getMemberAvatar, fmtDate, fmtLastActive } from './MembersModule';
 
+export interface MemberModalItem {
+    publicKey?: string;
+    pubkey?: string;
+    platform?: string;
+    canVouch?: boolean;
+    standing?: string;
+    vouched_by_pubkey?: string;
+    joinedAt?: string;
+    joined_at?: string;
+    lastActiveAt?: string;
+    last_active_at?: string;
+    last_seen?: string;
+}
+
+export interface MemberFlag {
+    type?: string;
+    description?: string;
+    severity?: string;
+}
+
 interface MemberDetailModalProps {
-    member: any;
-    profiles?: any[];
-    flags?: any[];
+    member: MemberModalItem | null;
+    profiles?: Record<string, unknown>[];
+    flags?: MemberFlag[];
     isFrozen: boolean;
     isVoucher?: boolean;
     isOperator?: boolean;
@@ -37,7 +57,7 @@ export function MemberDetailModal({
     const initial = displayName.charAt(0).toUpperCase();
 
     // Check if this member is mentioned in any active flags
-    const activeMemberFlags = flags.filter((f: any) => {
+    const activeMemberFlags = flags.filter((f: MemberFlag) => {
         const desc = f.description || '';
         return desc.includes(pubkey) || (pubkey && pubkey.length > 5 && desc.includes(pubkey.split('-')[0]));
     });
@@ -197,7 +217,7 @@ export function MemberDetailModal({
                     </span>
                     {activeMemberFlags.length > 0 ? (
                         <div className="space-y-2 max-h-28 overflow-y-auto">
-                            {activeMemberFlags.map((flag: any, idx: number) => (
+                            {activeMemberFlags.map((flag: MemberFlag, idx: number) => (
                                 <div key={idx} className="p-2.5 bg-red-950/60 border border-red-900/60 rounded-xl text-xs space-y-1">
                                     <div className="flex items-center justify-between">
                                         <span className="font-mono font-bold text-red-300 uppercase text-[10px]">{flag.type}</span>

@@ -289,14 +289,25 @@ export default function ChannelsScreen() {
     return (
         <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
             <View style={styles.header}>
-                <Pressable
-                    onPress={() => router.back()}
-                    style={styles.backBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="Go back"
-                >
-                    <Text style={styles.backText}>‹ Back</Text>
-                </Pressable>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Pressable
+                        onPress={() => router.back()}
+                        style={styles.backBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Go back"
+                    >
+                        <Text style={styles.backText}>‹ Back</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={() => router.push('/pulse')}
+                        style={styles.feedLinkBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="View The Pulse community feed"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                        <Text style={styles.feedLinkText}>View Feed ↗</Text>
+                    </Pressable>
+                </View>
                 <Text style={styles.title}>Channels & Showcase</Text>
             </View>
 
@@ -589,6 +600,11 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     },
     backBtn: { paddingVertical: 4, alignSelf: 'flex-start' },
     backText: { color: colors.text.link, fontSize: 16 },
+    feedLinkBtn: {
+        paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8,
+        backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default,
+    },
+    feedLinkText: { color: colors.text.body, fontSize: 13, fontWeight: '600' },
     title: { fontSize: 22, fontWeight: '700', color: colors.text.heading, marginTop: 4 },
     body: { padding: 16, paddingBottom: 48 },
 

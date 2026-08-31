@@ -1008,6 +1008,9 @@ export default function ChatScreen() {
         if (peerPubkey) setPromptReviewForTx({ txId: deal.txId, targetPubkey: peerPubkey, targetCallsign: peerName });
     };
 
+    // ⚡ Bolt: O(1) Map lookup for parent messages in reply threads instead of repeated O(M) .find() scans
+    const messagesById = React.useMemo(() => new Map(messages.map(m => [m.id, m])), [messages]);
+
     // Interleave day-separator pills between messages from different calendar days
     const listItems = React.useMemo(() => {
         const items: any[] = [];
@@ -1299,7 +1302,7 @@ export default function ChatScreen() {
                         ]}
                     >
                         {item.metadata?.replyToId && (() => {
-                            const parentMsg = messages.find(m => m.id === item.metadata.replyToId);
+                            const parentMsg = messagesById.get(item.metadata.replyToId);
                             const parentText = parentMsg ? (parentMsg.type === 'image' ? '🔒 Photo' : parentMsg.text) : 'Message not found';
                             const parentAuthor = parentMsg ? (parentMsg.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')) : 'Someone';
                             return (

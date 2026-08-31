@@ -537,8 +537,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         );
     }
 
-    // Pre-compute O(1) member lookup map for message rendering performance in large chat threads.
+    // Pre-compute O(1) member & message lookup maps for message rendering performance in large chat threads.
     const membersByPublicKey = new Map(members.map(m => [m.publicKey, m]));
+    const messagesById = new Map(messages.map(m => [m.id, m]));
 
     // Chat view
     if (activeConv) {
@@ -786,7 +787,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         } catch {}
                                         
                                         if (metaObj && metaObj.replyToId) {
-                                            const parentMsg = messages.find(m => m.id === metaObj.replyToId);
+                                            const parentMsg = messagesById.get(metaObj.replyToId);
                                             const parentText = parentMsg ? (parentMsg.type === 'image' ? '🔒 Photo' : decryptMessage(parentMsg)) : 'Message not found';
                                             const parentAuthor = parentMsg 
                                                 ? (membersByPublicKey.get(parentMsg.authorPubkey)?.callsign

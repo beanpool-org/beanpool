@@ -113,7 +113,9 @@ async function makeSignedRequest(url, method, keyPair, pubHex, bodyObj = null, t
     const ts = timestampOverride !== null ? String(timestampOverride) : String(Math.floor(Date.now() / 1000));
     const bodyText = bodyObj ? JSON.stringify(bodyObj) : '';
     const parsedUrl = new URL(url);
-    const message = `${method}\n${parsedUrl.pathname}\n${ts}\n${bodyText}`;
+    // Domain-separated: mirrors the node and the verifier. Without the leading tag every signed
+    // request here would fail against the hardened verifier.
+    const message = `beanpool-registrar-request/v1\n${method}\n${parsedUrl.pathname}\n${ts}\n${bodyText}`;
     const sigArray = new Uint8Array(await crypto.subtle.sign('Ed25519', keyPair.privateKey, new TextEncoder().encode(message)));
     const sigHex = Array.from(sigArray).map(b => b.toString(16).padStart(2, '0')).join('');
 
@@ -373,12 +375,12 @@ test('Attestation Sweep - Mismatch classification (abuse detection)', async () =
         };
         assert.equal(await attestOne(env, alloc), 'mismatch');
 
-        // Scenario 7: Valid Ed25519 signature!
+        // Scenario 7: Valid Ed25519 signature! (domain-separated, as the node now signs it)
         globalThis.fetch = async (url) => {
             const parsed = new URL(url);
             const nonce = parsed.searchParams.get('nonce');
             const ts = String(Math.floor(Date.now() / 1000));
-            const msg = `${nonce}\n${ts}`;
+            const msg = `beanpool-node-attest/v1\n${nonce}\n${ts}`;
             const sigBuf = new Uint8Array(await crypto.subtle.sign('Ed25519', keyPair.privateKey, new TextEncoder().encode(msg)));
             const sigHex = Array.from(sigBuf).map(b => b.toString(16).padStart(2, '0')).join('');
             return new Response(JSON.stringify({
@@ -523,4 +525,83 @@ test('Ed25519 - Mismatched pubkey in header vs signing key', async () => {
     // Signed by KeyPair1, but header pubkey is PubHex2
     const req = await makeSignedRequest('https://beanpool.org/api/registrar/status', 'GET', keyPair1, pubHex2);
     assert.equal((await worker.fetch(req, env)).status, 401);
+});
+
+// ── The attest signing oracle (2026-08-26 finding) ────────────────────────────────────────────
+//
+// `/api/attest` is public and signs a registrar-supplied nonce with the node's identity key — the
+// same key that authorises registrar requests. Before domain separation the two messages shared a
+// grammar, so an attacker could ask the oracle to sign a string that IS a valid signed request and
+// replay it to revoke any node's public domain, unauthenticated and remotely.
+//
+// The exploit, precisely: a signed request to POST /api/registrar/offline is verified against
+// `${METHOD}\n${path}\n${ts}\n${body}`. The oracle signed `${nonce}\n${oracleTs}`. Setting
+// nonce = `POST\n/api/registrar/offline\n${T}` yields a signature over
+// `POST\n/api/registrar/offline\n${T}\n${oracleTs}` — which the registrar reconstructs exactly if
+// the attacker sends timestamp T and a body of the bare oracle timestamp.
+test('A-ORACLE: an attestation signature cannot be replayed as a signed request', async () => {
+    const env = mockEnv();
+    const { keyPair, pubHex } = await generateKeypair();
+    const requested_at = Math.floor(Date.now() / 1000);
+    await db.insertAllocation(env, {
+        name: 'victim', node_pubkey: pubHex, hostname: 'victim.beanpool.org',
+        mode: 'tunnel', status: 'live', origin: null, public_ip: null, contact: null, requested_at,
+    });
+
+    const hex = a => Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+    const signRaw = async (msg) => hex(new Uint8Array(
+        await crypto.subtle.sign('Ed25519', keyPair.privateKey, new TextEncoder().encode(msg))));
+
+    const T = String(Math.floor(Date.now() / 1000));
+    const oracleTs = String(Math.floor(Date.now() / 1000));
+
+    // What the node's /api/attest would hand back for a smuggled nonce, under the CURRENT format.
+    const smuggledNonce = `POST\n/api/registrar/offline\n${T}`;
+    const forged = await signRaw(`beanpool-node-attest/v1\n${smuggledNonce}\n${oracleTs}`);
+
+    const res = await worker.fetch(new Request('https://beanpool.org/api/registrar/offline', {
+        method: 'POST',
+        headers: { 'x-bp-pubkey': pubHex, 'x-bp-timestamp': T, 'x-bp-signature': forged },
+        body: oracleTs,
+    }), env);
+    assert.equal(res.status, 401, 'a domain-separated attestation must not authorise a request');
+
+    // And the pre-fix shape — no domain tag at all — must also be refused.
+    const legacy = await signRaw(`${smuggledNonce}\n${oracleTs}`);
+    const res2 = await worker.fetch(new Request('https://beanpool.org/api/registrar/offline', {
+        method: 'POST',
+        headers: { 'x-bp-pubkey': pubHex, 'x-bp-timestamp': T, 'x-bp-signature': legacy },
+        body: oracleTs,
+    }), env);
+    assert.equal(res2.status, 401, 'the original exploit shape must be refused');
+
+    // The victim keeps its domain.
+    const still = await db.getAllocation(env, 'victim');
+    assert.equal(still.status, 'live', 'the allocation must not have been revoked');
+});
+
+// A real attestation must still verify — domain separation has to be applied consistently, not just
+// added to the verifier (which would silently mark every healthy node as 'mismatch' and revoke it).
+test('A-ORACLE2: a correctly domain-separated attestation still verifies', async () => {
+    const env = mockEnv();
+    const { keyPair, pubHex } = await generateKeypair();
+    const requested_at = Math.floor(Date.now() / 1000);
+    await db.insertAllocation(env, {
+        name: 'healthy', node_pubkey: pubHex, hostname: 'healthy.beanpool.org',
+        mode: 'tunnel', status: 'live', origin: null, public_ip: null, contact: null, requested_at,
+    });
+    const hex = a => Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (u) => {
+        const nonce = new URL(u).searchParams.get('nonce');
+        const timestamp = Math.floor(Date.now() / 1000);
+        const sig = hex(new Uint8Array(await crypto.subtle.sign(
+            'Ed25519', keyPair.privateKey,
+            new TextEncoder().encode(`beanpool-node-attest/v1\n${nonce}\n${timestamp}`))));
+        return new Response(JSON.stringify({ pubkey: pubHex, nonce, timestamp, signature: sig }), { status: 200 });
+    };
+    try {
+        const alloc = await db.getAllocation(env, 'healthy');
+        assert.equal(await attestOne(env, alloc), 'ok');
+    } finally { globalThis.fetch = realFetch; }
 });

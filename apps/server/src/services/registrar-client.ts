@@ -4,7 +4,23 @@
 // registrar can bind a <name>.beanpool.org lease to THIS node and re-verify it via /api/attest.
 // The signed-request scheme mirrors the Worker's verifier (apps/registrar/src/sign.js):
 //   headers x-bp-pubkey (raw Ed25519 pubkey hex) / x-bp-timestamp / x-bp-signature
-//   message = `${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`
+//   message = `${REQUEST_DOMAIN}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`
+//
+// ## Domain separation — why the first line is a constant
+//
+// The node signs two different things with the SAME identity key: a signed request (above) and a
+// public attestation over a registrar-supplied nonce (`buildAttestation`). `/api/attest` is public
+// and its nonce was attacker-controlled, so without separation an attacker could ask the oracle to
+// sign `POST\n/api/registrar/offline\n<ts>` — a string that IS a valid signed-request message — and
+// replay the result to take any node's public domain offline. Each message now begins with a
+// distinct domain tag, so a signature produced for one context can never reconstruct as the other:
+// the verifier rebuilds its own message with its own leading tag, and the first bytes never match.
+// Kept in lockstep with apps/registrar/src/sign.js — change both or neither.
+
+/** Leading line of a signed node→registrar request. Must match apps/registrar/src/sign.js. */
+export const REQUEST_DOMAIN = 'beanpool-registrar-request/v1';
+/** Leading line of a node attestation. Must match apps/registrar/src/index.js (attestOne). */
+export const ATTEST_DOMAIN = 'beanpool-node-attest/v1';
 
 import { getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
@@ -33,7 +49,7 @@ async function signHex(message: string): Promise<string> {
 // Attestation payload the registrar's cron expects at GET /api/attest?nonce=.
 export async function buildAttestation(nonce: string): Promise<{ pubkey: string; nonce: string; timestamp: number; signature: string }> {
     const timestamp = Math.floor(Date.now() / 1000);
-    const signature = await signHex(`${nonce}\n${timestamp}`);
+    const signature = await signHex(`${ATTEST_DOMAIN}\n${nonce}\n${timestamp}`);
     return { pubkey: nodePubkeyHex(), nonce, timestamp, signature };
 }
 
@@ -43,7 +59,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
     const headers: Record<string, string> = {
         'x-bp-pubkey': nodePubkeyHex(),
         'x-bp-timestamp': String(ts),
-        'x-bp-signature': await signHex(`${method}\n${path}\n${ts}\n${bodyText}`),
+        'x-bp-signature': await signHex(`${REQUEST_DOMAIN}\n${method}\n${path}\n${ts}\n${bodyText}`),
     };
     if (body) headers['content-type'] = 'application/json';
     const controller = new AbortController();

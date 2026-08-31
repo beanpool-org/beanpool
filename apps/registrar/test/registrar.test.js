@@ -112,7 +112,9 @@ async function makeSignedRequest(url, method, keyPair, pubHex, bodyObj = null) {
     const ts = String(Math.floor(Date.now() / 1000));
     const bodyText = bodyObj ? JSON.stringify(bodyObj) : '';
     const parsedUrl = new URL(url);
-    const message = `${method}\n${parsedUrl.pathname}\n${ts}\n${bodyText}`;
+    // Domain-separated: mirrors the node and the verifier. Without the leading tag every signed
+    // request here would fail against the hardened verifier.
+    const message = `beanpool-registrar-request/v1\n${method}\n${parsedUrl.pathname}\n${ts}\n${bodyText}`;
     const sigArray = new Uint8Array(await crypto.subtle.sign('Ed25519', keyPair.privateKey, new TextEncoder().encode(message)));
     const sigHex = Array.from(sigArray).map(b => b.toString(16).padStart(2, '0')).join('');
 

@@ -5,7 +5,7 @@
 
 import * as cf from './cf.js';
 import * as db from './db.js';
-import { verifySignedRequest, verifyEd25519 } from './sign.js';
+import { verifySignedRequest, verifyEd25519, ATTEST_DOMAIN } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
@@ -262,7 +262,7 @@ export async function attestOne(env, a) {
         const ts = parseInt(j.timestamp, 10);
         if ((j.pubkey || '').toLowerCase() === a.node_pubkey && j.nonce === nonce &&
             ts && Math.abs(nowS() - ts) <= 120 &&
-            await verifyEd25519(a.node_pubkey, `${nonce}\n${j.timestamp}`, j.signature || '')) {
+            await verifyEd25519(a.node_pubkey, `${ATTEST_DOMAIN}\n${nonce}\n${j.timestamp}`, j.signature || '')) {
             return 'ok';
         }
     } catch { /* not JSON → serving something else */ }

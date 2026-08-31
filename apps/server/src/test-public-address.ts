@@ -21,7 +21,7 @@ import Koa from 'koa';
 import { startP2P } from './p2p.js';
 import { initStateEngine, getNodeConfig } from './state-engine.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
-import { buildAttestation, nodePubkeyHex } from './services/registrar-client.js';
+import { buildAttestation, ATTEST_DOMAIN, REQUEST_DOMAIN, nodePubkeyHex } from './services/registrar-client.js';
 import type { RouteDeps } from './routes/types.js';
 
 let testsRun = 0;
@@ -57,6 +57,22 @@ async function run() {
     assert(attestation.nonce === testNonce, 'Attestation carries requested nonce');
     assert(typeof attestation.timestamp === 'number' && attestation.timestamp > 0, 'Attestation includes integer unix timestamp');
     assert(typeof attestation.signature === 'string' && attestation.signature.length === 128, 'Attestation produces valid 64-byte Ed25519 hex signature');
+    // Domain separation (2026-08-26 oracle finding). /api/attest signs a caller-supplied nonce with
+    // the same identity key that authorises registrar requests, so the two messages must live in
+    // different namespaces or the public endpoint is a forgery oracle for the private one.
+    {
+        const { publicKeyFromRaw } = await import('@libp2p/crypto/keys');
+        const pub = publicKeyFromRaw(Buffer.from(pubkey, 'hex'));
+        const sig = Buffer.from(attestation.signature, 'hex');
+        const tagged = new TextEncoder().encode(`${ATTEST_DOMAIN}\n${testNonce}\n${attestation.timestamp}`);
+        const untagged = new TextEncoder().encode(`${testNonce}\n${attestation.timestamp}`);
+        assert(await pub.verify(tagged, sig), 'Attestation signs the DOMAIN-TAGGED message');
+        assert(!(await pub.verify(untagged, sig)), 'Attestation does NOT sign the bare nonce+timestamp (pre-fix shape)');
+        // The shape the exploit needed: a nonce that reads as a signed request.
+        const smuggled = `POST\n/api/registrar/offline\n${attestation.timestamp}`;
+        const asRequest = new TextEncoder().encode(`${REQUEST_DOMAIN}\n${smuggled}\n${attestation.timestamp}`);
+        assert(!(await pub.verify(asRequest, sig)), 'An attestation can never verify under the request domain');
+    }
 
     // 2. Setup Mock Registrar Server
     let registrarStatus = 'none';
@@ -186,6 +202,17 @@ async function run() {
         // Test missing nonce returns 400
         const attestFail = await fetch(`${baseUrl}/api/attest`);
         assert(attestFail.status === 400, 'GET /api/attest without nonce returns 400 Bad Request');
+
+        // A nonce carrying structure is refused outright — defence in depth behind the domain tag.
+        // A newline was the whole exploit: it turned `${nonce}\n${ts}` into a multi-line message
+        // that could be shaped like a signed registrar request.
+        for (const bad of ['a\nb', 'POST\n/api/registrar/offline\n123', 'a b', 'a\tb', 'a\r\nb']) {
+            const res = await fetch(`${baseUrl}/api/attest?nonce=${encodeURIComponent(bad)}`);
+            assert(res.status === 400, `GET /api/attest refuses a nonce containing control characters (${JSON.stringify(bad)})`);
+        }
+        // A real registrar nonce is a randomUUID and must still be accepted.
+        const uuidRes = await fetch(`${baseUrl}/api/attest?nonce=${crypto.randomUUID()}`);
+        assert(uuidRes.status === 200, 'GET /api/attest still accepts a crypto.randomUUID nonce');
 
         // --- Test 2: Apple Domain Association ---
         const appleResNone = await fetch(`${baseUrl}/.well-known/apple-developer-domain-association.txt`);

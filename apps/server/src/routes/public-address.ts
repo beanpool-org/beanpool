@@ -103,7 +103,13 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
 
     router.get('/api/attest', async (ctx) => {
         const nonce = String(ctx.query.nonce || '');
-        if (!nonce || nonce.length > 256) { ctx.status = 400; ctx.body = { error: 'nonce required' }; return; }
+        // The registrar's nonce is a crypto.randomUUID() — hex and hyphens. Anything outside that
+        // charset is an attempt to smuggle structure (a newline turns the signed `${nonce}\n${ts}`
+        // into a multi-line message that can mimic another signing context). Domain separation in
+        // buildAttestation is the structural backstop; this rejects the payload outright as well.
+        if (!nonce || !/^[A-Za-z0-9._-]{1,128}$/.test(nonce)) {
+            ctx.status = 400; ctx.body = { error: 'nonce required' }; return;
+        }
         try { ctx.body = await buildAttestation(nonce); }
         catch (e: any) { ctx.status = 503; ctx.body = { error: e.message || 'identity not ready' }; }
     });

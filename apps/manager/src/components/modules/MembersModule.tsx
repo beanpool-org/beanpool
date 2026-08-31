@@ -792,8 +792,21 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                 </div>
                             </div>
                         ) : (
-                            <div className="p-8 text-center text-nature-500 text-xs">
-                                No member records match the filter query.
+                            <div className="p-8 text-center text-nature-400 text-xs space-y-2 bg-nature-950/40 rounded-xl border border-nature-800/60">
+                                <div className="text-2xl">🔍</div>
+                                <div className="font-semibold text-nature-300">
+                                    {searchTerm.trim()
+                                        ? `No members found matching "${searchTerm}"`
+                                        : 'No registered members on this node yet'}
+                                </div>
+                                {searchTerm.trim() && (
+                                    <button
+                                        onClick={() => setSearchTerm('')}
+                                        className="mt-2 px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-terra-400 font-bold transition-all text-[11px] border border-nature-700"
+                                    >
+                                        Clear Search Filter
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>

@@ -107,3 +107,28 @@ $ BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-creator-chan
 
 ## Found but out of scope
 - `apps/manager/src/lib/ai-client.test.ts` has a known pre-existing failure in the local Vitest runner (missing jsdom environment configuration); owned by Package 04 per `CONTRACTS.md`.
+
+---
+
+## Director's review round (appended after review, 2026-08-31)
+
+Three findings, all real, all fixed on this branch.
+
+1. The PWA chip interpolated `channel.url` straight into `href` with `|| '#'` as the fallback — a
+   `javascript:` or `data:` scheme reaching that column would have executed on click, and `'#'`
+   scrolls the router and opens a blank tab under `target="_blank"`. Only `http(s)` becomes an
+   `<a>` now; anything else renders as an inert `<span>`.
+2. & 3. Neither profile screen cleared `channels` before fetching, so tapping from one member to
+   another showed the previous member's chips until the request landed. Both now clear on entry
+   **and** drop a reply that arrives after navigation — the reset alone still lets a slow first
+   request overwrite a fast second one.
+
+The URL guard became `isWebUrl()` in `@beanpool/core` rather than a regex per client: native
+already had its own copy, so the rule existed in two places before either was right. Same
+principle as the platform vocabulary this package extracted.
+
+**Assumptions above, now resolved:** both were accepted as-is — the shared module stays in
+`@beanpool/core`, and the chips stay in the profile banner under the bio.
+
+**Still not done:** no on-device verification. This changes what strangers see on a profile, and
+it needs a standalone build to check — a dev client will not exercise it.

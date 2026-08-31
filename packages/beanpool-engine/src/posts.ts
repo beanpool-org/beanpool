@@ -101,7 +101,6 @@ export function validatePostPhotos(photos: string[] | undefined): void {
 
 export function generateSearchKeywords(title: string, description: string, category: string, synonymMap?: Record<string, string[]>): string {
     const text = `${title} ${description}`.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-    const words = text.split(/\s+/).filter(w => w.length > 2);
     const expanded = new Set<string>();
     expanded.add(category);
 
@@ -118,9 +117,10 @@ export function generateSearchKeywords(title: string, description: string, categ
     };
 
     // ⚡ Bolt: Single-pass n-gram scanning over pre-split words array to avoid re-parsing and string allocations
-    const len = words.length;
+    const allWords = text.split(/\s+/).filter(Boolean);
+    const len = allWords.length;
     for (let i = 0; i < len; i++) {
-        const word = words[i];
+        const word = allWords[i];
         if (word.length > 2) {
             const syns = lookup(word);
             if (syns) {
@@ -128,12 +128,12 @@ export function generateSearchKeywords(title: string, description: string, categ
             }
         }
         if (i < len - 1) {
-            const two = `${word} ${words[i+1]}`;
+            const two = `${word} ${allWords[i+1]}`;
             if (synonymMap[two]) {
                 for (const syn of synonymMap[two]) expanded.add(syn);
             }
             if (i < len - 2) {
-                const three = `${two} ${words[i+2]}`;
+                const three = `${two} ${allWords[i+2]}`;
                 if (synonymMap[three]) {
                     for (const syn of synonymMap[three]) expanded.add(syn);
                 }

@@ -2204,6 +2204,7 @@ export function executeRecovery(requestId: string): boolean {
         db.prepare(`UPDATE ratings SET rater_pubkey=? WHERE rater_pubkey=?`).run(newP, oldP);
         db.prepare(`UPDATE abuse_reports SET reporter_pubkey=? WHERE reporter_pubkey=?`).run(newP, oldP);
         db.prepare(`UPDATE abuse_reports SET target_pubkey=? WHERE target_pubkey=?`).run(newP, oldP);
+        db.prepare(`UPDATE creator_channels SET owner_pubkey=?, updated_at=? WHERE owner_pubkey=?`).run(newP, new Date().toISOString(), oldP);
         
         // 7. Projects
         db.prepare(`UPDATE projects SET creator_pubkey=? WHERE creator_pubkey=?`).run(newP, oldP);
@@ -2966,6 +2967,17 @@ export function adminPruneUser(publicKey: string) {
         // client the member was pruned while the database reverted.
         setUserStatusRow(publicKey, 'pruned');
         db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
+        // Same scrub as purgeMemberSelf, and it has to happen here rather than being left to the
+        // member: a pruned account can no longer sign a request, deleteChannel is owner-scoped, and
+        // there is no admin route for it — so anything left behind stays on every mirror and backup
+        // permanently, with nobody able to remove it.
+        const prunedAt = new Date().toISOString();
+        db.prepare(`UPDATE creator_channels
+                       SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0,
+                           platform = 'deleted', category = 'other', supports_autolist = 0,
+                           autopublish = 0, syndicate_to_node = 0, post_count_seen = NULL,
+                           oauth_verified_at = NULL, last_error = NULL, updated_at = ?
+                     WHERE owner_pubkey = ? AND deleted_at IS NULL`).run(prunedAt, prunedAt, publicKey);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -3063,6 +3075,17 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // 6. Purge private device tokens, communication links, and recovery metadata
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
+        // Channels are tombstoned rather than deleted, and their links are cleared with them: the
+        // row has to survive so the removal replicates to the backup, but a member who has just
+        // erased their profile should not leave their Instagram handle behind on a mirror.
+        try {
+            db.prepare(`UPDATE creator_channels
+                           SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0,
+                               platform = 'deleted', category = 'other', supports_autolist = 0,
+                               autopublish = 0, syndicate_to_node = 0, post_count_seen = NULL,
+                               oauth_verified_at = NULL, last_error = NULL, updated_at = ?
+                         WHERE owner_pubkey = ? AND deleted_at IS NULL`).run(now, now, publicKey);
+        } catch { }
         try {
             db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)").run(publicKey, publicKey);
         } catch { }
@@ -3640,7 +3663,7 @@ export function clearReplicatedTables(): void {
     const tables = [
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
-        'conversation_participants', 'messages', 'abuse_reports',
+        'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
         'recovery_requests', 'recovery_approvals', 'recovery_shares', 'recovery_pin', 'settlements', 'tombstones',
     ];
     db.transaction(() => {

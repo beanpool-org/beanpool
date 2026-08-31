@@ -1674,6 +1674,15 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
+                    <Pressable style={styles.menuBtn} onPress={() => router.push('/channels')} accessibilityRole="button" accessibilityLabel="Channels and showcase">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📡</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Channels & Showcase</Text>
+                            <Text style={styles.menuSub}>Link the places you already post your work</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/pair-device')} accessibilityRole="button" accessibilityLabel="Link another device or computer">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📲</Text></View>
                         <View style={{ flex: 1 }}>

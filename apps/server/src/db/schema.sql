@@ -952,3 +952,50 @@ CREATE TABLE IF NOT EXISTS activity_feed (
 CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_feed_event ON activity_feed(event_type, created_at DESC);
 
+
+-- ===================== CREATOR CHANNELS (The Pulse, Phase 1) =====================
+-- A member's own external channels — the YouTube channel, Instagram handle, website or RSS feed
+-- they already publish to. Phase 1 stores and displays them; the Pulse feed reads them later.
+--
+-- A dedicated table rather than a JSON column on `members`, for three reasons that all bite:
+-- the feed queries by (platform, category) and a blob cannot be indexed; deleting one link has to
+-- be tombstoneable on its own; and every edit would otherwise rewrite the whole member row through
+-- the sync engine.
+--
+-- DELETION IS NOT A SOFT DELETE OF THE URL. `deleted_at` marks the row, and `url`/`handle` are
+-- NULLed at the same time. Someone removing their Instagram link is usually doing it *for*
+-- privacy, and a row that keeps the link forever — in the table, in every backup, on the mirror —
+-- defeats the point. The tombstone carries the fact of the deletion, never the thing deleted.
+CREATE TABLE IF NOT EXISTS creator_channels (
+    id                TEXT PRIMARY KEY,
+    owner_pubkey      TEXT NOT NULL REFERENCES members(public_key),
+    platform          TEXT NOT NULL,   -- youtube | tiktok | instagram | facebook | website | rss
+    url               TEXT,            -- NULLed on delete
+    handle            TEXT,            -- NULLed on delete
+    category          TEXT NOT NULL,   -- food | craft | business | repair | art | other
+    -- The cross-post winner. A creator posting the same reel to YouTube and Instagram would
+    -- otherwise appear twice on the feed; the primary is the one the feed prefers.
+    is_primary_video  INTEGER NOT NULL DEFAULT 0,
+    -- Whether the node can list this channel's items unaided (YouTube/RSS = 1). Instagram and
+    -- TikTok cannot be enumerated without OAuth, so they arrive one item at a time and stay 0.
+    supports_autolist INTEGER NOT NULL DEFAULT 0,
+    -- Set only by a completed OAuth connection. It is the ONLY proof that a handle belongs to the
+    -- member claiming it — a typed handle is a claim, not a fact.
+    oauth_verified_at DATETIME,
+    -- Last post count seen on the channel, for the "you've posted 2 new things" nudge. A
+    -- watermark, never a backlog: it advances on dismissal as well as on action.
+    post_count_seen   INTEGER,
+    autopublish       INTEGER NOT NULL DEFAULT 0,
+    syndicate_to_node INTEGER NOT NULL DEFAULT 1,
+    fail_count        INTEGER NOT NULL DEFAULT 0,
+    last_error        TEXT,
+    is_stale          INTEGER NOT NULL DEFAULT 0,
+    created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    deleted_at        DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_creator_channels_owner ON creator_channels(owner_pubkey) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_creator_channels_syndicate ON creator_channels(syndicate_to_node, category) WHERE deleted_at IS NULL;
+-- Sync watermark: exportSyncState pulls rows by `updated_at >= since`.
+CREATE INDEX IF NOT EXISTS idx_creator_channels_updated ON creator_channels(updated_at);

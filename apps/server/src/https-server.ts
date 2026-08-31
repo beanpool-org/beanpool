@@ -107,6 +107,7 @@ import { createPublicAddressRoutes } from './routes/public-address.js';
 import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createKeeperRoutes } from './routes/keepers.js';
+import { createChannelRoutes } from './routes/channels.js';
 import { createPinRoutes } from './routes/pin.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
@@ -241,6 +242,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/activity/feed',            // living activity waterfall community pulse feed (#208)
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
+    '/api/channels/options',         // the platform/category vocabulary the channel form renders
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -908,6 +910,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createPublicAddressRoutes(deps),
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
+        createChannelRoutes(deps),
         createPinRoutes(deps),
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),

@@ -39,6 +39,8 @@ import {
     extractYouTubeChannelIdFromHtml,
     discoverFeedUrlFromHtml,
     buildYouTubeFeedUrl,
+    extractSoundCloudUserIdFromHtml,
+    buildSoundCloudFeedUrl,
     YOUTUBE_HANDLE_PROBE_MAX_BYTES,
     resolveChannel,
     ssrfSafeFetch,
@@ -351,6 +353,28 @@ async function main(): Promise<void> {
     assert(
         await buildYouTubeFeedUrl('www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw') === 'https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw',
         'buildYouTubeFeedUrl normalizes protocol-less www.youtube.com/channel/UC... URL'
+    );
+
+    // SoundCloud User ID Extraction & Feed Resolution
+    const scProfileHtml1 = `<!DOCTYPE html><html><head><meta property="al:ios:url" content="soundcloud://users:987654321"><title>DJ Cool</title></head><body><h1>DJ Cool</h1></body></html>`;
+    assert(
+        extractSoundCloudUserIdFromHtml(scProfileHtml1) === '987654321',
+        'extractSoundCloudUserIdFromHtml extracts user ID from al:ios:url meta tag'
+    );
+
+    const scProfileHtml2 = `<!DOCTYPE html><html><head><meta property="twitter:app:url:googleplay" content="soundcloud://users:12345678"><title>Artist</title></head><body></body></html>`;
+    assert(
+        extractSoundCloudUserIdFromHtml(scProfileHtml2) === '12345678',
+        'extractSoundCloudUserIdFromHtml extracts user ID from twitter googleplay meta tag'
+    );
+
+    assert(
+        await buildSoundCloudFeedUrl('https://feeds.soundcloud.com/users/soundcloud:users:12345678/sounds.rss') === 'https://feeds.soundcloud.com/users/soundcloud:users:12345678/sounds.rss',
+        'buildSoundCloudFeedUrl passes through direct feed URL'
+    );
+    assert(
+        await buildSoundCloudFeedUrl('https://evil-phishing.com/artist') === null,
+        'buildSoundCloudFeedUrl rejects non-SoundCloud domain'
     );
 
     // ── 3. Malformed XML Robustness ─────────────────────────────────────────────────────

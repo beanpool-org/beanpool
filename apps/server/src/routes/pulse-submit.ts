@@ -54,6 +54,7 @@ import {
     type ChannelCategory,
     type ChannelPlatform,
     normaliseChannelInput,
+    SOUNDCLOUD_RESERVED_SEGMENTS,
 } from '../engine/creator-channels.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
@@ -188,6 +189,13 @@ export function identifyPlatformAndExternalId(rawUrl: string): {
         if (fbMatch) {
             externalId = fbMatch[1];
         }
+    } else if (host === 'soundcloud.com' || host === 'snd.sc' || host === 'm.soundcloud.com') {
+        platform = 'soundcloud';
+        const segments = parsed.pathname.split('/').filter(Boolean);
+        if (host !== 'snd.sc' && segments.length >= 1 && !SOUNDCLOUD_RESERVED_SEGMENTS.has(segments[0].toLowerCase())) {
+            accountHandle = `@${segments[0].toLowerCase()}`;
+        }
+        externalId = canonicalUrl;
     } else {
         platform = 'website';
         externalId = canonicalUrl;
@@ -247,6 +255,50 @@ export async function resolveMetadata(
             }
         } catch (err: any) {
             if (err instanceof SsrfSecurityError) throw err;
+        }
+    } else if (platform === 'soundcloud') {
+        title = 'SoundCloud Track';
+        try {
+            const oembedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+            const res = await ssrfSafeFetch(oembedUrl, { timeoutMs: 5000, maxBytes: 512 * 1024 });
+            if (res.status === 200) {
+                const data = await res.json();
+                if (data.title) title = cleanXmlText(data.title);
+                if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
+                if (data.author_url) {
+                    try {
+                        const parsedSlug = new URL(data.author_url).pathname.split('/').filter(Boolean)[0];
+                        if (parsedSlug && !SOUNDCLOUD_RESERVED_SEGMENTS.has(parsedSlug.toLowerCase())) {
+                            authorHandle = `@${parsedSlug.toLowerCase()}`;
+                        }
+                    } catch {}
+                }
+            }
+        } catch (err: any) {
+            if (err instanceof SsrfSecurityError) throw err;
+        }
+
+        if (!thumbnailUrl || title === 'SoundCloud Track') {
+            try {
+                const res = await ssrfSafeFetch(url, {
+                    timeoutMs: 5000,
+                    maxBytes: 1024 * 1024,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    },
+                });
+                if (res.status === 200) {
+                    const html = await res.text();
+                    const ogTitle = extractMetaProperty(html, 'og:title') || extractMetaProperty(html, 'twitter:title') || extractTagText(html, 'title');
+                    const ogImage = extractMetaProperty(html, 'og:image') || extractMetaProperty(html, 'twitter:image');
+                    const ogPubDate = extractMetaProperty(html, 'article:published_time') || extractMetaProperty(html, 'og:article:published_time') || extractMetaProperty(html, 'date');
+                    if (ogTitle && title === 'SoundCloud Track') title = cleanXmlText(ogTitle);
+                    if (ogImage && !thumbnailUrl) thumbnailUrl = ogImage;
+                    if (ogPubDate) publishedAt = parseFeedDate(ogPubDate);
+                }
+            } catch (err: any) {
+                if (err instanceof SsrfSecurityError) throw err;
+            }
         }
     } else if (platform === 'instagram') {
         title = 'Instagram Post';
@@ -354,7 +406,7 @@ function matchOwnedChannel(
         }
 
         // If the URL has an explicit handle that conflicts with all member channels on that platform, reject it
-        if (platform === 'tiktok' || platform === 'instagram' || platform === 'youtube') {
+        if (platform === 'tiktok' || platform === 'instagram' || platform === 'youtube' || platform === 'soundcloud') {
             throw new PulseError('NOT_YOURS', `The account "${accountHandle}" in the URL does not match your owned channels.`);
         }
     }

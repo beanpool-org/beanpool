@@ -26,11 +26,11 @@ import { db } from '../db/db.js';
 import crypto from 'node:crypto';
 import { scrubPulseItems } from './pulse-resolver.js';
 
-export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'website' | 'rss';
+export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'soundcloud' | 'website' | 'rss';
 export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
 
 export const CHANNEL_PLATFORMS: readonly ChannelPlatform[] =
-    ['youtube', 'tiktok', 'instagram', 'facebook', 'website', 'rss'] as const;
+    ['youtube', 'tiktok', 'instagram', 'facebook', 'soundcloud', 'website', 'rss'] as const;
 // A channel is CONTENT, not produce. These started as the marketplace taxonomy — what a member
 // sells — which left a community org, a project account or a news feed with nowhere to go but
 // 'other'. `community` is additive: every other id keeps its meaning and its stored rows, only the
@@ -47,7 +47,7 @@ export const CHANNEL_CATEGORIES: readonly ChannelCategory[] =
  * or a phone. Those arrive one item at a time until a member connects OAuth, which flips
  * `supports_autolist` on the row rather than changing this map.
  */
-const AUTOLIST_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set<ChannelPlatform>(['youtube', 'rss', 'website']);
+const AUTOLIST_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set<ChannelPlatform>(['youtube', 'soundcloud', 'rss', 'website']);
 
 /**
  * Whether this specific URL can be listed, not just its platform.
@@ -61,6 +61,10 @@ function canAutolist(platform: ChannelPlatform, url: string): boolean {
     if (platform === 'youtube') {
         // Only the channel-shaped forms have an RSS feed behind them.
         return /\/(channel|c|user)\/|\/@|\/feeds\/videos\.xml/.test(url);
+    }
+    if (platform === 'soundcloud') {
+        // SoundCloud profiles attempt feed discovery against feeds.soundcloud.com.
+        return true;
     }
     if (platform === 'website') {
         // Websites start autolist-enabled so the resolver can perform initial feed discovery.
@@ -166,6 +170,7 @@ const PLATFORM_HOSTS: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
     tiktok: ['tiktok.com', 'vm.tiktok.com'],
     instagram: ['instagram.com', 'instagr.am'],
     facebook: ['facebook.com', 'fb.com', 'fb.me', 'm.facebook.com'],
+    soundcloud: ['soundcloud.com', 'snd.sc', 'm.soundcloud.com'],
 };
 
 /**
@@ -180,6 +185,7 @@ const CANONICAL_HOST: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
     tiktok: 'www.tiktok.com',
     instagram: 'www.instagram.com',
     facebook: 'www.facebook.com',
+    soundcloud: 'soundcloud.com',
 };
 
 /**
@@ -189,7 +195,7 @@ const CANONICAL_HOST: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
  * on the short domain — rewriting `youtu.be/abc` to `www.youtube.com/abc` produces a 404, and the
  * member has no way to tell why the link they pasted stopped working.
  */
-const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set(['youtu.be', 'vm.tiktok.com', 'fb.me']);
+const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set(['youtu.be', 'vm.tiktok.com', 'fb.me', 'snd.sc']);
 
 /** Tracking parameters that differ per share and would defeat de-duplication. */
 // Deliberately excludes `si`: it is a YouTube share parameter, and platform query strings are
@@ -259,10 +265,10 @@ const FB_PREFIX_DEPTH: ReadonlyMap<string, number> = new Map([
  */
 const PLATFORM_DISPLAY: Record<ChannelPlatform, string> = {
     youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram',
-    facebook: 'Facebook', website: 'website', rss: 'feed',
+    facebook: 'Facebook', soundcloud: 'SoundCloud', website: 'website', rss: 'feed',
 };
 const PLATFORM_ARTICLE: Record<ChannelPlatform, string> = {
-    youtube: 'a', tiktok: 'a', instagram: 'an', facebook: 'a', website: 'a', rss: 'a',
+    youtube: 'a', tiktok: 'a', instagram: 'an', facebook: 'a', soundcloud: 'a', website: 'a', rss: 'a',
 };
 
 /**
@@ -275,18 +281,24 @@ const PLATFORM_ARTICLE: Record<ChannelPlatform, string> = {
 const IG_RESERVED_SEGMENTS: ReadonlySet<string> =
     new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct']);
 
+/** SoundCloud site furniture paths that are not user channels. */
+export const SOUNDCLOUD_RESERVED_SEGMENTS: ReadonlySet<string> =
+    new Set(['discover', 'stream', 'upload', 'search', 'you', 'charts', 'messages', 'settings', 'stations', 'popular', 'tags', 'imprint', 'terms-of-use', 'pages', 'jobs', 'press', 'feed']);
+
 /**
  * Reject a bare handle that names a reserved path rather than an account.
  *
- * Only Instagram and Facebook can collide: TikTok and YouTube handles are stored under `/@...`, a
+ * Only Instagram, SoundCloud, and Facebook can collide: TikTok and YouTube handles are stored under `/@...`, a
  * namespace of their own that no reserved segment reaches.
  */
 function assertHandleNotReserved(platform: ChannelPlatform, handle: string): void {
     const reserved = platform === 'instagram'
         ? IG_RESERVED_SEGMENTS.has(handle)
-        : platform === 'facebook'
-            ? (FB_PREFIX_DEPTH.has(handle) || handle === 'profile.php')
-            : false;
+        : platform === 'soundcloud'
+            ? SOUNDCLOUD_RESERVED_SEGMENTS.has(handle)
+            : platform === 'facebook'
+                ? (FB_PREFIX_DEPTH.has(handle) || handle === 'profile.php')
+                : false;
     if (reserved) {
         throw new ChannelError('NO_HANDLE',
             `"${handle}" is a reserved ${PLATFORM_DISPLAY[platform]} address, not an account name.`);
@@ -347,6 +359,7 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
                 case 'instagram': return { url: `https://www.instagram.com/${h}/`, handle: `@${h}` };
                 case 'tiktok': return { url: `https://www.tiktok.com/@${h}`, handle: `@${h}` };
                 case 'youtube': return { url: `https://www.youtube.com/@${h}`, handle: `@${h}` };
+                case 'soundcloud': return { url: `https://soundcloud.com/${h}`, handle: `@${h}` };
                 case 'facebook': return { url: `https://www.facebook.com/${h}`, handle: h };
             }
         })();
@@ -476,6 +489,10 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         // this member's chip.
         handle = ident;
         parsed.pathname = `/${seg0}/${ident}`;
+    } else if (platform === 'soundcloud' && segments.length >= 1 && !SOUNDCLOUD_RESERVED_SEGMENTS.has(seg0)) {
+        const h = segments[0].toLowerCase();
+        handle = `@${h}`;
+        parsed.pathname = `/${h}`;
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
         parsed.pathname = '/profile.php';

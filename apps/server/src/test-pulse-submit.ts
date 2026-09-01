@@ -121,6 +121,14 @@ async function main(): Promise<void> {
     const blogPost = identifyPlatformAndExternalId('https://alice-pottery.org/blog/new-glazes');
     assert(blogPost.platform === 'website', 'Generic website platform detected');
 
+    const scTrack = identifyPlatformAndExternalId('https://soundcloud.com/djcool/summer-mix-2026');
+    assert(scTrack.platform === 'soundcloud', 'SoundCloud track platform detected');
+    assert(scTrack.accountHandle === '@djcool', 'SoundCloud account handle extracted');
+
+    const scShort = identifyPlatformAndExternalId('https://snd.sc/abc1234');
+    assert(scShort.platform === 'soundcloud', 'snd.sc detected as soundcloud');
+    assert(scShort.accountHandle === null, 'snd.sc does not extract random slug as accountHandle');
+
     // Setup channels
     const chKaylaYt = addChannel({
         ownerPubkey: kayla,
@@ -133,6 +141,13 @@ async function main(): Promise<void> {
         ownerPubkey: kayla,
         platform: 'instagram',
         raw: '@kayla_pottery',
+        category: 'art',
+    });
+
+    const chKaylaSc = addChannel({
+        ownerPubkey: kayla,
+        platform: 'soundcloud',
+        raw: '@djcool',
         category: 'art',
     });
 
@@ -276,6 +291,22 @@ async function main(): Promise<void> {
     // Check DB row count: exactly 1 row
     const countRows = (db.prepare('SELECT COUNT(*) as c FROM pulse_items WHERE channel_id = ? AND external_id = ?').get(chKaylaYt.id, 'dQw4w9WgXcQ') as any).c;
     assert(countRows === 1, 'Database contains exactly 1 row for the deduplicated post');
+
+    // Submit SoundCloud track
+    const scUrl = 'https://soundcloud.com/djcool/summer-mix-2026';
+    const scSubmit = await call('POST', '/api/member/pulse/submit', {
+        actor: kayla,
+        body: {
+            url: scUrl,
+            title: 'Summer Mix 2026',
+            category: 'art',
+        },
+    });
+    assert(scSubmit.status === 200, 'SoundCloud submit returns 200');
+    assert(scSubmit.body.item.platform === 'soundcloud', 'Item platform is soundcloud');
+    assert(scSubmit.body.item.title === 'Summer Mix 2026', 'SoundCloud item title preserved');
+    const scDbRow = db.prepare('SELECT channel_id FROM pulse_items WHERE id = ?').get(scSubmit.body.item.id) as any;
+    assert(scDbRow.channel_id === chKaylaSc.id, 'SoundCloud item assigned to Kayla soundcloud channel');
 
     // ── 5. Watermark Dismissal (dismiss-nudge) ─────────────────────────────────
     console.log('\n--- 5. Watermark Dismissal (dismiss-nudge) ---');

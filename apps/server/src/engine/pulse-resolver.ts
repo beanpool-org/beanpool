@@ -1529,6 +1529,80 @@ export async function buildYouTubeFeedUrl(urlOrHandle: string): Promise<string |
     return null;
 }
 
+/**
+ * Extract numeric SoundCloud user ID from profile HTML.
+ * Inspects iOS app meta tags, Google Play meta tags, api links, and schema metadata.
+ */
+export function extractSoundCloudUserIdFromHtml(html: string): string | null {
+    if (!html || typeof html !== 'string') return null;
+    const match = /soundcloud:\/\/(?:users|user):(\d+)/i.exec(html)
+        || /soundcloud:(?:users|user):(\d+)/i.exec(html)
+        || /["']soundcloud:(?:users|user):(\d+)["']/i.exec(html)
+        || /api\.soundcloud\.com\/users\/(\d+)/i.exec(html);
+    return match ? match[1] : null;
+}
+
+/**
+ * Build or resolve a SoundCloud creator's public RSS feed URL.
+ */
+export async function buildSoundCloudFeedUrl(urlOrHandle: string): Promise<string | null> {
+    if (!urlOrHandle) return null;
+    const trimmed = urlOrHandle.trim();
+
+    // 1. Direct feeds.soundcloud.com URL
+    if (trimmed.includes('feeds.soundcloud.com/users/soundcloud:users:')) {
+        return trimmed;
+    }
+
+    // 2. Normalise to full soundcloud.com URL
+    let targetUrl: string;
+    if (/^https?:\/\//i.test(trimmed)) {
+        try {
+            const parsed = new URL(trimmed);
+            const host = parsed.hostname.toLowerCase();
+            if (host === 'soundcloud.com' || host.endsWith('.soundcloud.com') || host === 'snd.sc') {
+                targetUrl = trimmed;
+            } else {
+                return null;
+            }
+        } catch {
+            return null;
+        }
+    } else if (trimmed.startsWith('@')) {
+        targetUrl = `https://soundcloud.com/${trimmed.slice(1)}`;
+    } else {
+        targetUrl = `https://soundcloud.com/${trimmed}`;
+    }
+
+    try {
+        const response = await ssrfSafeFetch(targetUrl, {
+            timeoutMs: 8000,
+            maxBytes: 1024 * 1024,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+        });
+
+        if (response.status === 200) {
+            const html = await response.text();
+            const directFeed = discoverFeedUrlFromHtml(html, targetUrl);
+            if (directFeed && directFeed.includes('feeds.soundcloud.com')) {
+                return directFeed;
+            }
+            const userId = extractSoundCloudUserIdFromHtml(html);
+            if (userId) {
+                return `https://feeds.soundcloud.com/users/soundcloud:users:${userId}/sounds.rss`;
+            }
+            return directFeed || null;
+        }
+    } catch {
+        // Fetch failed or blocked by SSRF
+    }
+
+    return null;
+}
+
 export async function resolveChannel(channelId: string): Promise<{ count: number; error?: string }> {
     const channel = db.prepare(
         `SELECT id, owner_pubkey, platform, url, handle, category, supports_autolist,
@@ -1640,6 +1714,29 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                     ).run(noFeedMsg, now, channel.id);
                     return { count: 0, error: noFeedMsg };
                 }
+            }
+        } else if (channel.platform === 'soundcloud') {
+            const initialUrl = channel.url;
+            if (!initialUrl) {
+                return { count: 0, error: 'No URL available' };
+            }
+            feedUrl = await buildSoundCloudFeedUrl(initialUrl);
+            if (feedUrl) {
+                if (feedUrl !== initialUrl && feedUrl.includes('feeds.soundcloud.com')) {
+                    db.prepare(
+                        `UPDATE creator_channels SET url = ?, updated_at = ? WHERE id = ?`
+                    ).run(feedUrl, now, channel.id);
+                }
+            } else {
+                const nextFails = (channel.fail_count || 0) + 1;
+                const isStale = nextFails >= 3 ? 1 : (channel.is_stale || 0);
+                const errMsg = "SoundCloud profile has no public RSS feed — share tracks manually";
+                db.prepare(
+                    `UPDATE creator_channels
+                        SET fail_count = ?, last_error = ?, is_stale = ?, updated_at = ?
+                      WHERE id = ?`
+                ).run(nextFails, errMsg, isStale, now, channel.id);
+                return { count: 0, error: errMsg };
             }
         } else {
             feedUrl = channel.url;

@@ -304,29 +304,42 @@ export async function connectTikTokChannel(
         throw new PulseOAuthError('no-token', 'TikTok authorization completed without a code.');
     }
 
-    // Token exchange
-    console.log('[PulseOAuth] Exchanging TikTok authorization code for access token');
+    // Token exchange via node relay
+    console.log('[PulseOAuth] Exchanging TikTok authorization code for access token via node relay');
     let tokenData: any;
     try {
-        const tokenRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                client_key: clientKey,
-                code_verifier: verifier,
+        const exchangeRes = await signedPost(
+            nodeUrl,
+            '/api/member/pulse/oauth-exchange',
+            {
+                platform: 'tiktok',
+                grantType: 'authorization_code',
                 code,
-                grant_type: 'authorization_code',
-                redirect_uri: redirectUri,
-            }).toString(),
-        });
-        tokenData = await tokenRes.json();
+                codeVerifier: verifier,
+                redirectUri,
+            },
+            identity
+        );
+        const text = await exchangeRes.text();
+        try {
+            tokenData = JSON.parse(text);
+        } catch {
+            tokenData = { error: text || `HTTP ${exchangeRes.status}` };
+        }
+        if (!exchangeRes.ok && !tokenData?.error) {
+            tokenData.error = `HTTP error ${exchangeRes.status}`;
+        }
     } catch (e: any) {
-        throw new PulseOAuthError('network', `Could not reach TikTok: ${e.message}`);
+        throw new PulseOAuthError('network', `Could not reach node for token exchange: ${e.message}`);
     }
 
     const data = tokenData?.data || {};
     if (!data.access_token) {
-        const msg = tokenData?.error?.message || tokenData?.message || 'Failed to obtain access token from TikTok.';
+        const msg = (typeof tokenData?.error === 'string' ? tokenData.error : tokenData?.error?.message)
+            || tokenData?.error_description
+            || tokenData?.data?.description
+            || tokenData?.message
+            || (typeof tokenData === 'string' ? tokenData : 'Failed to obtain access token from TikTok.');
         throw new PulseOAuthError('provider', msg);
     }
 
@@ -403,8 +416,7 @@ export async function connectTikTokChannel(
 }
 
 /**
- * Connect an Instagram Creator Channel via Meta Graph API.
- * Structured behind the same interface, ready for when Meta review is complete.
+ * Connect an Instagram Creator Channel via Meta Graph API & Instagram API with Instagram Login.
  */
 export async function connectInstagramChannel(
     channel: { id: string; handle: string | null; url: string | null },
@@ -429,11 +441,11 @@ export async function connectInstagramChannel(
     const redirectUri = 'https://beanpool.org/auth/instagram';
     const completionUri = 'beanpool://auth/instagram';
 
-    const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${encodeURIComponent(
+    const authUrl = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=${encodeURIComponent(
         appId
     )}&redirect_uri=${encodeURIComponent(
         redirectUri
-    )}&scope=user_profile,user_media&response_type=code&state=${encodeURIComponent(state)}`;
+    )}&response_type=code&scope=instagram_business_basic&state=${encodeURIComponent(state)}`;
 
     const callbackUrl = await openAuthSessionWithFallback(authUrl, completionUri, state, 'Instagram Creator');
 
@@ -445,7 +457,107 @@ export async function connectInstagramChannel(
         throw new PulseOAuthError('cancelled', 'Instagram Creator connection was cancelled or refused.');
     }
 
-    throw new PulseOAuthError('unsupported', 'Instagram Creator integration is pending app review approval.');
+    // Token exchange via node relay
+    console.log('[PulseOAuth] Exchanging Instagram authorization code for access token via node relay');
+    let tokenData: any;
+    try {
+        const exchangeRes = await signedPost(
+            nodeUrl,
+            '/api/member/pulse/oauth-exchange',
+            {
+                platform: 'instagram',
+                grantType: 'authorization_code',
+                code,
+                redirectUri,
+            },
+            identity
+        );
+        const text = await exchangeRes.text();
+        try {
+            tokenData = JSON.parse(text);
+        } catch {
+            tokenData = { error: text || `HTTP ${exchangeRes.status}` };
+        }
+        if (!exchangeRes.ok && !tokenData?.error) {
+            tokenData.error = `HTTP error ${exchangeRes.status}`;
+        }
+    } catch (e: any) {
+        throw new PulseOAuthError('network', `Could not reach node for Instagram token exchange: ${e.message}`);
+    }
+
+    const data = tokenData?.data || tokenData || {};
+    if (!data.access_token) {
+        const msg = (typeof tokenData?.error === 'string' ? tokenData.error : tokenData?.error?.message)
+            || tokenData?.error_description
+            || tokenData?.data?.description
+            || tokenData?.message
+            || (typeof tokenData === 'string' ? tokenData : 'Failed to obtain access token from Instagram.');
+        throw new PulseOAuthError('provider', msg);
+    }
+
+    const accessToken = data.access_token;
+    const expiresInSec = data.expires_in || 5184000; // 60 days for long-lived token
+
+    // Fetch user profile from Instagram Graph API
+    console.log('[PulseOAuth] Fetching Instagram user profile');
+    let profileData: any;
+    try {
+        const userRes = await fetch(
+            `https://graph.instagram.com/v21.0/me?fields=id,username,name&access_token=${encodeURIComponent(accessToken)}`
+        );
+        profileData = await userRes.json();
+    } catch (e: any) {
+        throw new PulseOAuthError('network', `Could not verify Instagram user profile: ${e.message}`);
+    }
+
+    const platformUsername = profileData?.username || profileData?.name || '';
+    if (!platformUsername) {
+        throw new PulseOAuthError('provider', 'Instagram did not return an account username.');
+    }
+
+    // Verify ownership on node
+    console.log(`[PulseOAuth] Verifying channel on node with Instagram username: ${platformUsername}`);
+    const verifyRes = await signedPost(
+        nodeUrl,
+        `/api/member/channels/${channel.id}/verify-oauth`,
+        {
+            platform: 'instagram',
+            platformUsername,
+        },
+        identity
+    );
+
+    const verifyJson = await verifyRes.json().catch(() => ({}));
+    if (!verifyRes.ok) {
+        const errorMsg = verifyJson?.message || verifyJson?.error || 'Verification refused by node.';
+        if (verifyJson?.error === 'account_mismatch' || errorMsg.includes('does not match')) {
+            throw new PulseOAuthError('account-mismatch', errorMsg);
+        }
+        throw new PulseOAuthError('provider', errorMsg);
+    }
+
+    // Persist token in device SecureStore
+    const now = Date.now();
+    const storedToken: PulseOAuthToken = {
+        platform: 'instagram',
+        channelId: channel.id,
+        accessToken,
+        expiresAt: now + expiresInSec * 1000,
+        platformUsername,
+        openId: profileData?.id,
+    };
+    await saveStoredOAuthToken(storedToken);
+
+    // Fetch and ingest initial video list
+    let newItemsCount = 0;
+    try {
+        const syncResult = await syncChannelVideos(channel.id, identity, nodeUrl, storedToken);
+        newItemsCount = syncResult.synced;
+    } catch (syncErr) {
+        console.warn('[PulseOAuth] Initial video sync error (non-fatal):', syncErr);
+    }
+
+    return { channel: verifyJson.channel, newItemsCount };
 }
 
 /**
@@ -454,7 +566,8 @@ export async function connectInstagramChannel(
 export async function refreshTokenIfNeeded(
     storedToken: PulseOAuthToken,
     clientKey?: string | null,
-    nodeUrl?: string
+    nodeUrl?: string,
+    identity?: BeanPoolIdentity
 ): Promise<PulseOAuthToken> {
     const now = Date.now();
     // If more than 10 minutes remaining, token is fresh
@@ -462,15 +575,19 @@ export async function refreshTokenIfNeeded(
         return storedToken;
     }
 
-    if (!storedToken.refreshToken) {
-        throw new PulseOAuthError('expired', 'Token expired and no refresh token is stored.');
-    }
-
-    if (storedToken.refreshExpiresAt && storedToken.refreshExpiresAt <= now) {
-        throw new PulseOAuthError('expired', 'Refresh token expired. Please reconnect.');
+    if (storedToken.platform === 'instagram') {
+        throw new PulseOAuthError('expired', 'Instagram access token has expired. Please reconnect.');
     }
 
     if (storedToken.platform === 'tiktok') {
+        if (!storedToken.refreshToken) {
+            throw new PulseOAuthError('expired', 'Token expired and no refresh token is stored.');
+        }
+
+        if (storedToken.refreshExpiresAt && storedToken.refreshExpiresAt <= now) {
+            throw new PulseOAuthError('expired', 'Refresh token expired. Please reconnect.');
+        }
+
         let key = clientKey;
         if (!key && nodeUrl) {
             const config = await fetchPulseOAuthConfig(nodeUrl);
@@ -484,18 +601,41 @@ export async function refreshTokenIfNeeded(
             throw new PulseOAuthError('provider', 'Cannot refresh TikTok token without a client key.');
         }
 
-        const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                client_key: key,
-                grant_type: 'refresh_token',
-                refresh_token: storedToken.refreshToken,
-            }).toString(),
-        });
+        let data: any;
+        if (nodeUrl && identity) {
+            try {
+                const res = await signedPost(
+                    nodeUrl,
+                    '/api/member/pulse/oauth-exchange',
+                    {
+                        platform: 'tiktok',
+                        grantType: 'refresh_token',
+                        refreshToken: storedToken.refreshToken,
+                    },
+                    identity
+                );
+                const json = await res.json();
+                data = json?.data;
+            } catch (e) {
+                console.warn('[PulseOAuth] Relay refresh failed, falling back to direct:', e);
+            }
+        }
 
-        const json = await res.json();
-        const data = json?.data;
+        if (!data?.access_token) {
+            const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    client_key: key,
+                    grant_type: 'refresh_token',
+                    refresh_token: storedToken.refreshToken || '',
+                }).toString(),
+            });
+
+            const json = await res.json();
+            data = json?.data;
+        }
+
         if (!data?.access_token) {
             throw new PulseOAuthError('expired', 'Failed to refresh TikTok token. Please reconnect.');
         }
@@ -531,7 +671,7 @@ export async function syncChannelVideos(
 
     try {
         const config = await fetchPulseOAuthConfig(nodeUrl);
-        token = await refreshTokenIfNeeded(token, config.tiktok.clientKey, nodeUrl);
+        token = await refreshTokenIfNeeded(token, config.tiktok.clientKey, nodeUrl, identity);
     } catch (e: any) {
         if (e instanceof PulseOAuthError && e.reason === 'expired') {
             console.log('[PulseOAuth] Token expired during sync');
@@ -578,6 +718,28 @@ export async function syncChannelVideos(
             }
         } catch (e) {
             console.warn('[PulseOAuth] Error fetching TikTok video list:', e);
+        }
+    } else if (token.platform === 'instagram') {
+        try {
+            const mediaRes = await fetch(
+                `https://graph.instagram.com/v21.0/me/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&access_token=${encodeURIComponent(token.accessToken)}`
+            );
+            if (mediaRes.ok) {
+                const mediaData = await mediaRes.json();
+                const mediaItems = mediaData?.data || [];
+                for (const m of mediaItems) {
+                    if (!m.permalink) continue;
+                    itemsToIngest.push({
+                        url: m.permalink,
+                        title: m.caption?.slice(0, 100) || 'Instagram Post',
+                        thumbnailUrl: m.thumbnail_url || m.media_url || undefined,
+                        publishedAt: m.timestamp || undefined,
+                        externalId: m.id ? String(m.id) : undefined,
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('[PulseOAuth] Error fetching Instagram media list:', e);
         }
     }
 

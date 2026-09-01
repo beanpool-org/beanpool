@@ -121,9 +121,23 @@ async function main(): Promise<void> {
 
     // Test with configured key
     process.env.TIKTOK_CLIENT_KEY = 'test_tiktok_client_key_123';
+    process.env.TIKTOK_CLIENT_SECRET = 'test_tiktok_secret_456';
     const configured = await callRouter(pulseSubmitRouter, 'GET', '/api/pulse/oauth/config');
     assert(configured.body.tiktok.enabled === true, 'TikTok is enabled when client key is provided');
     assert(configured.body.tiktok.clientKey === 'test_tiktok_client_key_123', 'TikTok clientKey is returned');
+
+    // 1b: Test redirect_uri whitelist rejection in oauth-exchange
+    const badRedirectExchange = await callRouter(channelRouter, 'POST', '/api/member/pulse/oauth-exchange', {
+        actor: alice,
+        body: {
+            platform: 'tiktok',
+            grantType: 'authorization_code',
+            code: 'test_code',
+            redirectUri: 'https://evil-attacker.com/oauth/callback',
+        },
+    });
+    assert(badRedirectExchange.status === 400, 'Unauthorized redirectUri rejected with 400');
+    assert(badRedirectExchange.body.error.includes('Unauthorized redirect URI'), 'Error names unauthorized redirect URI');
 
     console.log('\n--- 2. Channel Ownership & Verification Enforcement ---');
     const aliceTikTok = addChannel({

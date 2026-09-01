@@ -197,6 +197,11 @@ function RootLayoutNav() {
         // Immediately clear state to prevent double execution or infinite loops
         setDeepLinkUrl(null);
 
+        // Ignore OAuth authentication callback deep links (handled by openAuthSessionAsync in pulse-oauth.ts)
+        if (currentUrl.includes('/auth/instagram') || currentUrl.includes('/auth/tiktok') || currentUrl.startsWith('beanpool://auth/')) {
+            return;
+        }
+
         const inviteToken = extractInviteToken(currentUrl);
         // Valid invite tokens must be present, and not be full HTTP URLs or paths
         if (!inviteToken || inviteToken.startsWith('http') || inviteToken.includes('/') || inviteToken.length < 5) {

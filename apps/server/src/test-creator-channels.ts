@@ -282,6 +282,16 @@ async function main(): Promise<void> {
     assertThrows(() => normaliseChannelInput('instagram', '@p'),
         'NO_HANDLE', 'the reserved-handle message also uses the display name');
 
+    // SoundCloud normalisation & reserved paths
+    const scBare = normaliseChannelInput('soundcloud', '@djcool');
+    const scFull = normaliseChannelInput('soundcloud', 'https://soundcloud.com/djcool');
+    assert(scBare.url === scFull.url && scBare.url === 'https://soundcloud.com/djcool', 'soundcloud bare handle and URL normalise canonically');
+    assert(scBare.handle === '@djcool', 'soundcloud handle is extracted with leading @');
+    assertThrows(() => normaliseChannelInput('soundcloud', '@discover'),
+        'NO_HANDLE', 'soundcloud reserved paths like @discover are refused');
+    assertThrows(() => normaliseChannelInput('soundcloud', 'https://www.youtube.com/@someone'),
+        'WRONG_HOST', 'a youtube URL is rejected for soundcloud');
+
     // ── 2. Add, duplicate, cap ──────────────────────────────────────────────────────────────
     const ig = addChannel({ ownerPubkey: kayla, platform: 'instagram', raw: '@mullum_ceramics', category: 'craft' });
     assert(ig.url === 'https://www.instagram.com/mullum_ceramics/', 'channel stores the canonical URL');

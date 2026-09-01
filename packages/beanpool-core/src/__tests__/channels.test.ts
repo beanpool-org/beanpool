@@ -30,6 +30,14 @@ describe('channels platform vocabulary and metadata', () => {
             hint: '@yourhandle',
         });
 
+        expect(platformMeta('soundcloud')).toEqual({
+            id: 'soundcloud',
+            icon: '🎧',
+            label: 'SoundCloud',
+            listing: 'auto',
+            hint: 'soundcloud.com/you',
+        });
+
         expect(platformMeta('website')).toEqual({
             id: 'website',
             icon: '🌐',

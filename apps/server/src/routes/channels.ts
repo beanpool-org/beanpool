@@ -269,5 +269,171 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
         }
     });
 
+const ALLOWED_REDIRECT_URIS = new Set([
+    'https://beanpool.org/auth/tiktok',
+    'https://beanpool.org/auth/instagram',
+    'beanpool://auth/tiktok',
+    'beanpool://auth/instagram',
+]);
+
+function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'instagram'): string {
+    const defaultUri = `https://beanpool.org/auth/${platform}`;
+    if (!uri) return defaultUri;
+    if (!ALLOWED_REDIRECT_URIS.has(uri)) {
+        throw new Error(`Unauthorized redirect URI for ${platform}: ${uri}`);
+    }
+    return uri;
+}
+
+    /**
+     * Relay OAuth code exchange for TikTok and Instagram using server-side client secrets.
+     * The node NEVER persists the resulting tokens — it strictly acts as a confidential client proxy.
+     */
+    router.post('/api/member/pulse/oauth-exchange', async (ctx) => {
+        const actor = ctx.state.actor;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Signed request required' };
+            return;
+        }
+
+        const body = (ctx as any).requestBody || {};
+        const platform = body.platform;
+        const grantType = body.grantType || 'authorization_code';
+
+        if (platform === 'tiktok') {
+            const clientKey = process.env.TIKTOK_CLIENT_KEY || process.env.TIKTOK_CLIENT_ID;
+            const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+            if (!clientKey || !clientSecret) {
+                ctx.status = 503;
+                ctx.body = { error: 'TikTok client secret is not configured on this node.' };
+                return;
+            }
+
+            const params: Record<string, string> = {
+                client_key: clientKey,
+                client_secret: clientSecret,
+                grant_type: grantType,
+            };
+
+            if (grantType === 'authorization_code') {
+                if (!body.code) {
+                    ctx.status = 400;
+                    ctx.body = { error: 'Code is required' };
+                    return;
+                }
+                params.code = body.code;
+                if (body.codeVerifier) params.code_verifier = body.codeVerifier;
+                try {
+                    params.redirect_uri = validateRedirectUri(body.redirectUri, 'tiktok');
+                } catch (e: any) {
+                    ctx.status = 400;
+                    ctx.body = { error: e.message };
+                    return;
+                }
+            } else if (grantType === 'refresh_token') {
+                if (!body.refreshToken) {
+                    ctx.status = 400;
+                    ctx.body = { error: 'Refresh token is required' };
+                    return;
+                }
+                params.refresh_token = body.refreshToken;
+            }
+
+            try {
+                const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams(params).toString(),
+                });
+                const json = await res.json();
+                ctx.status = res.status;
+                ctx.body = json;
+            } catch (e: any) {
+                ctx.status = 502;
+                ctx.body = { error: 'Failed to contact TikTok token endpoint', message: e.message };
+            }
+            return;
+        }
+
+        if (platform === 'instagram') {
+            const appId = process.env.INSTAGRAM_APP_ID;
+            const appSecret = process.env.INSTAGRAM_APP_SECRET || process.env.INSTAGRAM_CLIENT_SECRET;
+            if (!appId || !appSecret) {
+                ctx.status = 503;
+                ctx.body = { error: 'Instagram app secret is not configured on this node.' };
+                return;
+            }
+
+            if (grantType === 'authorization_code') {
+                if (!body.code) {
+                    ctx.status = 400;
+                    ctx.body = { error: 'Code is required' };
+                    return;
+                }
+                let redirectUri: string;
+                try {
+                    redirectUri = validateRedirectUri(body.redirectUri, 'instagram');
+                } catch (e: any) {
+                    ctx.status = 400;
+                    ctx.body = { error: e.message };
+                    return;
+                }
+                try {
+                    const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            client_id: appId,
+                            client_secret: appSecret,
+                            grant_type: 'authorization_code',
+                            redirect_uri: redirectUri,
+                            code: body.code,
+                        }).toString(),
+                    });
+                    const tokenJson = await tokenRes.json();
+                    if (!tokenRes.ok) {
+                        ctx.status = tokenRes.status;
+                        ctx.body = tokenJson;
+                        return;
+                    }
+
+                    // Exchange short-lived token for long-lived token (60 days)
+                    let finalToken = tokenJson.access_token;
+                    let expiresIn = tokenJson.expires_in || 3600;
+                    try {
+                        const longRes = await fetch(
+                            `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(
+                                appSecret
+                            )}&access_token=${encodeURIComponent(tokenJson.access_token)}`
+                        );
+                        if (longRes.ok) {
+                            const longJson = await longRes.json();
+                            if (longJson.access_token) {
+                                finalToken = longJson.access_token;
+                                expiresIn = longJson.expires_in || 5184000; // 60 days
+                            }
+                        }
+                    } catch {}
+
+                    ctx.body = {
+                        data: {
+                            access_token: finalToken,
+                            user_id: tokenJson.user_id,
+                            expires_in: expiresIn,
+                        },
+                    };
+                } catch (e: any) {
+                    ctx.status = 502;
+                    ctx.body = { error: 'Failed to contact Instagram token endpoint', message: e.message };
+                }
+                return;
+            }
+        }
+
+        ctx.status = 400;
+        ctx.body = { error: 'Unsupported platform or grant type' };
+    });
+
     return router;
 }

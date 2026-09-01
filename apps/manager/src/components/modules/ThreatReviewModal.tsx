@@ -1,15 +1,35 @@
 import React, { useState, useMemo } from 'react';
 import { getMemberDisplayName } from './MembersModule';
+import type { NodeProfile } from '../../lib/profiles';
+
+export interface ThreatItem {
+    id?: string;
+    type?: string;
+    severity?: 'critical' | 'alert' | 'warning' | 'info' | string;
+    description?: string;
+    reason?: string;
+    isReport?: boolean;
+    targetPubkey?: string;
+}
+
+export interface MemberItem {
+    publicKey?: string;
+    pubkey?: string;
+    displayName?: string;
+    name?: string;
+    handle?: string;
+    [key: string]: unknown;
+}
 
 interface ThreatReviewModalProps {
-    threat: any;
-    profiles?: any[];
-    members?: any[];
+    threat: ThreatItem;
+    profiles?: NodeProfile[];
+    members?: MemberItem[];
     frozenPubkeys?: string[] | Set<string>;
     onClose: () => void;
-    onDismiss?: (threat: any) => void;
+    onDismiss?: (threat: ThreatItem) => void;
     onFreezePubkeys?: (pubkeys: string[]) => void;
-    onInspectMember?: (member: any) => void;
+    onInspectMember?: (member: MemberItem) => void;
 }
 
 export function ThreatReviewModal({
@@ -27,7 +47,7 @@ export function ThreatReviewModal({
 
     // ⚡ Bolt: Pre-compute Map for O(1) member lookups by exact key or prefix token
     const membersMap = useMemo(() => {
-        const map = new Map<string, any>();
+        const map = new Map<string, MemberItem>();
         for (const m of members) {
             const pk = m.publicKey || m.pubkey || '';
             if (pk) {
@@ -63,11 +83,11 @@ export function ThreatReviewModal({
 
         // Map short/prefix tokens (e.g. ring0-17) to full pubkeys in members roster (e.g. ring0-1784649014864...)
         return rawKeys.map((key) => {
-            const found = membersMap.get(key) || members.find((m: any) => {
+            const found = membersMap.get(key) || members.find((m: MemberItem) => {
                 const pk = m.publicKey || m.pubkey || '';
                 return pk === key || (pk && key && (pk.startsWith(key) || key.startsWith(pk)));
             });
-            return found ? (found.publicKey || found.pubkey) : key;
+            return found ? (found.publicKey || found.pubkey || key) : key;
         });
     };
 

@@ -67,3 +67,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-08-25 - Replace any types in MemberDetailModal
 **Learning:** `MemberDetailModal.tsx` relied on `any` types for `member`, `profiles`, and `flags` props, weakening type checking across member inspection dialogs.
 **Action:** Define strict interfaces (`MemberModalItem`, `MemberFlag`) for component props and internal filters.
+
+## 2026-08-25 - Replace any types in ThreatReviewModal
+**Learning:** `ThreatReviewModal.tsx` relied on `any` types for `threat`, `profiles`, `members`, and callback props, weakening type safety in security review dialogs.
+**Action:** Define strict interfaces (`ThreatItem`, `MemberItem`) for modal props and lookup maps to enhance DX and autocompletion.

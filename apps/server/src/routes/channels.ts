@@ -322,7 +322,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
                     ctx.body = { error: 'Code is required' };
                     return;
                 }
-                params.code = body.code;
+                params.code = String(body.code).replace(/#_$/, '').replace(/#$/, '').trim();
                 if (body.codeVerifier) params.code_verifier = body.codeVerifier;
                 try {
                     params.redirect_uri = validateRedirectUri(body.redirectUri, 'tiktok');
@@ -341,15 +341,20 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
             }
 
             try {
+                console.log(`[PulseOAuthRelay] Calling TikTok token endpoint for client_key=${clientKey}`);
                 const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams(params).toString(),
                 });
                 const json = await res.json();
+                if (!res.ok || json?.error || (json?.data && json?.data?.error_code && json?.data?.error_code !== 'ok')) {
+                    console.warn('[PulseOAuthRelay] TikTok token endpoint returned error:', res.status, JSON.stringify(json));
+                }
                 ctx.status = res.status;
                 ctx.body = json;
             } catch (e: any) {
+                console.error('[PulseOAuthRelay] TikTok fetch exception:', e);
                 ctx.status = 502;
                 ctx.body = { error: 'Failed to contact TikTok token endpoint', message: e.message };
             }
@@ -371,6 +376,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
                     ctx.body = { error: 'Code is required' };
                     return;
                 }
+                const cleanCode = String(body.code).replace(/#_$/, '').replace(/#$/, '').trim();
                 let redirectUri: string;
                 try {
                     redirectUri = validateRedirectUri(body.redirectUri, 'instagram');
@@ -380,6 +386,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
                     return;
                 }
                 try {
+                    console.log(`[PulseOAuthRelay] Calling Instagram token endpoint for appId=${appId}, redirectUri=${redirectUri}`);
                     const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -388,11 +395,12 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
                             client_secret: appSecret,
                             grant_type: 'authorization_code',
                             redirect_uri: redirectUri,
-                            code: body.code,
+                            code: cleanCode,
                         }).toString(),
                     });
                     const tokenJson = await tokenRes.json();
                     if (!tokenRes.ok) {
+                        console.warn('[PulseOAuthRelay] Instagram token endpoint returned error:', tokenRes.status, JSON.stringify(tokenJson));
                         ctx.status = tokenRes.status;
                         ctx.body = tokenJson;
                         return;
@@ -424,6 +432,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
                         },
                     };
                 } catch (e: any) {
+                    console.error('[PulseOAuthRelay] Instagram fetch exception:', e);
                     ctx.status = 502;
                     ctx.body = { error: 'Failed to contact Instagram token endpoint', message: e.message };
                 }

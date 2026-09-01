@@ -290,7 +290,7 @@ export async function connectTikTokChannel(
     const callbackUrl = await openAuthSessionWithFallback(authUrl, completionUri, state, 'TikTok');
 
     const params = new URLSearchParams(callbackParams(callbackUrl));
-    const code = params.get('code');
+    const code = params.get('code')?.replace(/#_$/, '').replace(/#$/, '').trim();
     const error = params.get('error') || params.get('error_description');
 
     if (error) {
@@ -335,8 +335,9 @@ export async function connectTikTokChannel(
 
     const data = tokenData?.data || {};
     if (!data.access_token) {
-        const msg = (typeof tokenData?.error === 'string' ? tokenData.error : tokenData?.error?.message)
-            || tokenData?.error_description
+        const msg = tokenData?.error_description
+            || tokenData?.error_message
+            || (typeof tokenData?.error === 'string' ? tokenData.error : tokenData?.error?.message)
             || tokenData?.data?.description
             || tokenData?.message
             || (typeof tokenData === 'string' ? tokenData : 'Failed to obtain access token from TikTok.');
@@ -450,7 +451,7 @@ export async function connectInstagramChannel(
     const callbackUrl = await openAuthSessionWithFallback(authUrl, completionUri, state, 'Instagram Creator');
 
     const params = new URLSearchParams(callbackParams(callbackUrl));
-    const code = params.get('code');
+    const code = params.get('code')?.replace(/#_$/, '').replace(/#$/, '').trim();
     const error = params.get('error') || params.get('error_description');
 
     if (error || !code) {
@@ -487,7 +488,9 @@ export async function connectInstagramChannel(
 
     const data = tokenData?.data || tokenData || {};
     if (!data.access_token) {
-        const msg = (typeof tokenData?.error === 'string' ? tokenData.error : tokenData?.error?.message)
+        const msg = tokenData?.error_message
+            || tokenData?.error?.message
+            || (typeof tokenData?.error === 'string' ? tokenData.error : undefined)
             || tokenData?.error_description
             || tokenData?.data?.description
             || tokenData?.message

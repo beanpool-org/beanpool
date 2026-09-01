@@ -76,3 +76,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `TopHeader` component in `apps/manager/src/components/layout/TopHeader.tsx` was untested.
 **Learning:** Testing `TopHeader` required verifying input events, button trigger callbacks, and UI loading states.
 **Action:** Continue adding component tests for layout components in `apps/manager/src/components/layout/`.
+
+## 2026-08-27 - [manager tests] EditNodeModal component unit tests
+**Gap:** `EditNodeModal` component in `apps/manager/src/components/nodes/EditNodeModal.tsx` was untested.
+**Learning:** Mocking `fetchDiagnostics` from `../../lib/node-client` allows testing connection state responses (success/failure feedback UI) in component tests.
+**Action:** Identify remaining untested modal and panel components in `apps/manager/src/components/`.

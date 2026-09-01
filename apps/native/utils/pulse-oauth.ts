@@ -453,7 +453,8 @@ export async function connectInstagramChannel(
  */
 export async function refreshTokenIfNeeded(
     storedToken: PulseOAuthToken,
-    clientKey?: string | null
+    clientKey?: string | null,
+    nodeUrl?: string
 ): Promise<PulseOAuthToken> {
     const now = Date.now();
     // If more than 10 minutes remaining, token is fresh
@@ -470,11 +471,24 @@ export async function refreshTokenIfNeeded(
     }
 
     if (storedToken.platform === 'tiktok') {
+        let key = clientKey;
+        if (!key && nodeUrl) {
+            const config = await fetchPulseOAuthConfig(nodeUrl);
+            key = config.tiktok.clientKey;
+        }
+        if (!key) {
+            const config = await fetchPulseOAuthConfig();
+            key = config.tiktok.clientKey;
+        }
+        if (!key) {
+            throw new PulseOAuthError('provider', 'Cannot refresh TikTok token without a client key.');
+        }
+
         const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
-                client_key: clientKey || '',
+                client_key: key,
                 grant_type: 'refresh_token',
                 refresh_token: storedToken.refreshToken,
             }).toString(),
@@ -516,7 +530,8 @@ export async function syncChannelVideos(
     }
 
     try {
-        token = await refreshTokenIfNeeded(token);
+        const config = await fetchPulseOAuthConfig(nodeUrl);
+        token = await refreshTokenIfNeeded(token, config.tiktok.clientKey, nodeUrl);
     } catch (e: any) {
         if (e instanceof PulseOAuthError && e.reason === 'expired') {
             console.log('[PulseOAuth] Token expired during sync');

@@ -913,7 +913,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                 for (const rawItem of rawItems) {
                     if (!rawItem || typeof rawItem !== 'object') continue;
                     const itemUrl = typeof rawItem.url === 'string' ? rawItem.url.trim() : '';
-                    if (!itemUrl) continue;
+                    if (!itemUrl || !/^https?:\/\//i.test(itemUrl)) continue;
 
                     let externalId: string | null = typeof rawItem.externalId === 'string' && rawItem.externalId.trim()
                         ? rawItem.externalId.trim()
@@ -935,8 +935,11 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                     let thumbnailUrl: string | null = null;
                     if (typeof rawItem.thumbnailUrl === 'string' && rawItem.thumbnailUrl.trim()) {
                         const trimmedThumb = rawItem.thumbnailUrl.trim();
-                        if (trimmedThumb.length <= 2048 && /^https?:\/\//i.test(trimmedThumb)) {
+                        if (trimmedThumb.length <= 4096 && /^https?:\/\//i.test(trimmedThumb)) {
                             thumbnailUrl = trimmedThumb;
+                        } else {
+                            // Refuse item if thumbnail URL is invalid/unsafe (e.g. non-http(s) scheme or too long)
+                            continue;
                         }
                     }
 

@@ -137,3 +137,35 @@ Status: complete
 4. Token refresh cycle (`refresh_token`) against live TikTok auth endpoints upon token expiry.
 5. End-to-end device authorization flow on physical Android and iOS hardware.
 
+---
+
+## Code Review Fixes (PR #569)
+
+### Applied Fixes Summary
+1. **Fix 1 — Token Refresh Client Key Propagation (`apps/native/utils/pulse-oauth.ts`):**
+   - In `refreshTokenIfNeeded`, ensured `clientKey` is resolved from node configuration if omitted, and explicitly throws `PulseOAuthError('provider', ...)` if missing rather than silently passing `client_key: ''`.
+   - In `syncChannelVideos`, updated call site to fetch node OAuth configuration (`fetchPulseOAuthConfig`) and pass `clientKey` and `nodeUrl` into `refreshTokenIfNeeded`.
+2. **Fix 2 — Channel URL Query String and Hash Stripping (`apps/server/src/engine/creator-channels.ts`):**
+   - Stripped query parameters and hash (`.split(/[?#]/)[0]`) from `row.url` before evaluating handle matching in `verifyChannelOauth`.
+   - Preserved all three existing URL checks (`/@${cleanUsername}`, `/${cleanUsername}/`, and `endsWith('/${cleanUsername}')`). Added defence-in-depth comment noting that `normaliseChannelInput` cleans URLs on write, but this protects against URLs predating normalization or arriving via other paths.
+3. **Fix 3 — URL Protocol & Length Validation on Ingestion (`apps/server/src/routes/pulse-submit.ts`):**
+   - Added `^https?://` protocol validation to `itemUrl` in `/api/member/pulse/oauth-ingest`, refusing non-http(s) schemes (`javascript:`, `data:`).
+   - Added `^https?://` protocol validation to `thumbnailUrl` and raised maximum thumbnail length cap from 2048 to 4096 characters. Invalid/unsafe thumbnails are refused rather than silently stored as `NULL`.
+   - *Note on thumbnail length:* The 4096-character limit is precautionary insurance; the assertion that TikTok signed CDN URLs frequently exceed 2048 characters is unmeasured and unverified.
+4. **Fix 4 — Button Accessibility States (`apps/native/app/channels.tsx`):**
+   - Added `accessibilityState={{ disabled: isSyncing, busy: isSyncing }}` to `oauthSyncBtn`.
+   - Added `accessibilityState={{ disabled: isConnecting, busy: isConnecting }}` to `oauthConnectBtn`.
+
+### Verification Status & Real Platform Endpoint Disclaimer
+- **Proven by automated tests:**
+  - `apps/server/src/test-pulse-oauth.ts` (46/46 passing):
+    - Channel URL carrying query strings (`?igshid=...`) verifies successfully for rightful owners (Fix 2).
+    - Ingested items with non-http(s) `itemUrl` (e.g. `javascript:`, `data:`) are refused (Fix 3).
+    - Ingested items with non-http(s) `thumbnailUrl` are refused (Fix 3).
+    - Ingested items with valid long thumbnail URLs up to 4096 characters are accepted (Fix 3).
+  - `apps/native/utils/__tests__/pulse-oauth.test.ts` (6/6 passing):
+    - `refreshTokenIfNeeded` refuses invocation without a client key and throws an explicit error when omitted/unconfigured (Fix 1).
+    - Resolves client key from node config when omitted and calls refresh endpoint with proper parameters (Fix 1).
+- **Remains unexercised against real platform endpoints:**
+  - Live token refresh against `https://open.tiktokapis.com/v2/oauth/token/` remains unexercised against real TikTok production auth servers until a registered TikTok developer app exists.
+

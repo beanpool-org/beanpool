@@ -563,6 +563,7 @@ export default function ChannelsScreen() {
                                                             style={[styles.oauthSyncBtn, isSyncing && styles.btnDisabled]}
                                                             accessibilityRole="button"
                                                             accessibilityLabel={`Sync latest videos from ${meta.label}`}
+                                                            accessibilityState={{ disabled: isSyncing, busy: isSyncing }}
                                                         >
                                                             <Text style={styles.oauthSyncBtnText}>
                                                                 {isSyncing ? 'Syncing…' : '↻ Sync videos'}
@@ -584,6 +585,7 @@ export default function ChannelsScreen() {
                                                         style={[styles.oauthConnectBtn, isConnecting && styles.btnDisabled]}
                                                         accessibilityRole="button"
                                                         accessibilityLabel={`Connect ${meta.label} account`}
+                                                        accessibilityState={{ disabled: isConnecting, busy: isConnecting }}
                                                     >
                                                         <Text style={styles.oauthConnectBtnText}>
                                                             {isConnecting ? 'Connecting…' : `Connect ${meta.label}`}

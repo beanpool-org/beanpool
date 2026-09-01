@@ -904,7 +904,9 @@ export function verifyChannelOauth(
     }
 
     const cleanHandle = (row.handle || '').replace(/^@/, '').toLowerCase().trim();
-    const cleanUrl = (row.url || '').toLowerCase();
+    // normaliseChannelInput already clears .hash and strips tracking params on the way in, so this is defence for URLs that predate normalisation or arrive by another path
+    const urlWithoutQueryOrHash = (row.url || '').split(/[?#]/)[0];
+    const cleanUrl = urlWithoutQueryOrHash.toLowerCase();
 
     // Check handle match or URL match
     const matchesHandle = cleanHandle === cleanUsername;

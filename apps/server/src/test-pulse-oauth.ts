@@ -178,6 +178,24 @@ async function main(): Promise<void> {
     const alicePubChan = publicChips.find(c => c.id === aliceTikTok.id);
     assert(alicePubChan?.isVerified === true, 'listPublicChannels returns isVerified: true for verified channel');
 
+    // 2f: Channel URL with query params / tracking still verifies for rightful owner (Fix 2)
+    const chanWithQuery = addChannel({
+        ownerPubkey: alice,
+        platform: 'instagram',
+        raw: 'https://www.instagram.com/alice_pottery?igshid=abc123tracking&utm_source=feed#bio',
+        category: 'craft',
+    });
+    // Explicitly null the handle to ensure URL pattern matching logic is exercising matchesUrl
+    db.prepare('UPDATE creator_channels SET handle = NULL, url = ? WHERE id = ?')
+        .run('https://www.instagram.com/alice_pottery?igshid=abc123tracking&utm_source=feed#bio', chanWithQuery.id);
+
+    const verifyChanWithQuery = await callRouter(channelRouter, 'POST', `/api/member/channels/${chanWithQuery.id}/verify-oauth`, {
+        actor: alice,
+        body: { platform: 'instagram', platformUsername: 'alice_pottery' },
+    });
+    assert(verifyChanWithQuery.status === 200, 'Channel URL carrying query string verifies for rightful owner (Fix 2)');
+    assert(typeof verifyChanWithQuery.body.channel.oauthVerifiedAt === 'string', 'Channel with query string is marked oauthVerifiedAt');
+
     console.log('\n--- 3. OAuth Ingestion & Deduplication Against Manual Submission ---');
     const testVideoUrl = 'https://www.tiktok.com/@alice_pottery/video/7100000000000000001';
 
@@ -235,6 +253,66 @@ async function main(): Promise<void> {
     // Verify card rendering has verified tick
     const feedCard = rowToPulseFeedCard(manualItem.id);
     assert(feedCard.isVerified === true, 'rowToPulseFeedCard returns isVerified: true for item on verified channel');
+
+    // 3d: Non-http(s) itemUrl (e.g. javascript: or data:) is refused rather than stored (Fix 3)
+    const jsItemIngest = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
+        actor: alice,
+        body: {
+            channelId: aliceTikTok.id,
+            items: [
+                {
+                    url: 'javascript:alert(1)',
+                    title: 'XSS attempt',
+                },
+                {
+                    url: 'data:text/html,<script>alert(1)</script>',
+                    title: 'Data URL attempt',
+                },
+            ],
+        },
+    });
+    assert(jsItemIngest.status === 200, 'OAuth ingest returned 200');
+    assert(jsItemIngest.body.count === 0, 'Non-http(s) itemUrls are refused (count = 0) (Fix 3)');
+
+    // 3e: Non-http(s) thumbnailUrl (e.g. javascript: or data:) is refused rather than stored (Fix 3)
+    const jsThumbIngest = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
+        actor: alice,
+        body: {
+            channelId: aliceTikTok.id,
+            items: [
+                {
+                    url: 'https://www.tiktok.com/@alice_pottery/video/7100000000000000002',
+                    title: 'Bad thumb item',
+                    thumbnailUrl: 'javascript:alert(1)',
+                },
+                {
+                    url: 'https://www.tiktok.com/@alice_pottery/video/7100000000000000003',
+                    title: 'Data thumb item',
+                    thumbnailUrl: 'data:image/png;base64,bad',
+                },
+            ],
+        },
+    });
+    assert(jsThumbIngest.status === 200, 'OAuth ingest returned 200');
+    assert(jsThumbIngest.body.count === 0, 'Items with non-http(s) thumbnailUrl are refused (count = 0) (Fix 3)');
+
+    // 3f: Valid thumbnail up to 4096 characters is accepted (Fix 3)
+    const longThumbUrl = 'https://p16-sign.tiktokcdn.com/' + 'a'.repeat(3000) + '.jpg';
+    const longThumbIngest = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
+        actor: alice,
+        body: {
+            channelId: aliceTikTok.id,
+            items: [
+                {
+                    url: 'https://www.tiktok.com/@alice_pottery/video/7100000000000000004',
+                    title: 'Long thumbnail video',
+                    thumbnailUrl: longThumbUrl,
+                },
+            ],
+        },
+    });
+    assert(longThumbIngest.status === 200, 'Long thumbnail ingest returned 200');
+    assert(longThumbIngest.body.count === 1, 'Long thumbnail URL up to 4096 chars is accepted (Fix 3)');
 
     console.log('\n--- 4. Resubmission & Tombstone Restoration via OAuth ---');
     const now = new Date().toISOString();

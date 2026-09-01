@@ -125,6 +125,10 @@ async function main(): Promise<void> {
     assert(scTrack.platform === 'soundcloud', 'SoundCloud track platform detected');
     assert(scTrack.accountHandle === '@djcool', 'SoundCloud account handle extracted');
 
+    const scShort = identifyPlatformAndExternalId('https://snd.sc/abc1234');
+    assert(scShort.platform === 'soundcloud', 'snd.sc detected as soundcloud');
+    assert(scShort.accountHandle === null, 'snd.sc does not extract random slug as accountHandle');
+
     // Setup channels
     const chKaylaYt = addChannel({
         ownerPubkey: kayla,

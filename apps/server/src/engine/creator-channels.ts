@@ -282,7 +282,7 @@ const IG_RESERVED_SEGMENTS: ReadonlySet<string> =
     new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct']);
 
 /** SoundCloud site furniture paths that are not user channels. */
-const SOUNDCLOUD_RESERVED_SEGMENTS: ReadonlySet<string> =
+export const SOUNDCLOUD_RESERVED_SEGMENTS: ReadonlySet<string> =
     new Set(['discover', 'stream', 'upload', 'search', 'you', 'charts', 'messages', 'settings', 'stations', 'popular', 'tags', 'imprint', 'terms-of-use', 'pages', 'jobs', 'press', 'feed']);
 
 /**

@@ -54,6 +54,7 @@ import {
     type ChannelCategory,
     type ChannelPlatform,
     normaliseChannelInput,
+    SOUNDCLOUD_RESERVED_SEGMENTS,
 } from '../engine/creator-channels.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
@@ -191,7 +192,7 @@ export function identifyPlatformAndExternalId(rawUrl: string): {
     } else if (host === 'soundcloud.com' || host === 'snd.sc' || host === 'm.soundcloud.com') {
         platform = 'soundcloud';
         const segments = parsed.pathname.split('/').filter(Boolean);
-        if (segments.length >= 1 && !['discover', 'stream', 'upload', 'search', 'you', 'charts', 'messages', 'settings'].includes(segments[0].toLowerCase())) {
+        if (host !== 'snd.sc' && segments.length >= 1 && !SOUNDCLOUD_RESERVED_SEGMENTS.has(segments[0].toLowerCase())) {
             accountHandle = `@${segments[0].toLowerCase()}`;
         }
         externalId = canonicalUrl;
@@ -264,7 +265,14 @@ export async function resolveMetadata(
                 const data = await res.json();
                 if (data.title) title = cleanXmlText(data.title);
                 if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
-                if (data.author_name) authorHandle = data.author_name;
+                if (data.author_url) {
+                    try {
+                        const parsedSlug = new URL(data.author_url).pathname.split('/').filter(Boolean)[0];
+                        if (parsedSlug && !SOUNDCLOUD_RESERVED_SEGMENTS.has(parsedSlug.toLowerCase())) {
+                            authorHandle = `@${parsedSlug.toLowerCase()}`;
+                        }
+                    } catch {}
+                }
             }
         } catch (err: any) {
             if (err instanceof SsrfSecurityError) throw err;

@@ -269,6 +269,22 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
         }
     });
 
+const ALLOWED_REDIRECT_URIS = new Set([
+    'https://beanpool.org/auth/tiktok',
+    'https://beanpool.org/auth/instagram',
+    'beanpool://auth/tiktok',
+    'beanpool://auth/instagram',
+]);
+
+function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'instagram'): string {
+    const defaultUri = `https://beanpool.org/auth/${platform}`;
+    if (!uri) return defaultUri;
+    if (!ALLOWED_REDIRECT_URIS.has(uri)) {
+        throw new Error(`Unauthorized redirect URI for ${platform}: ${uri}`);
+    }
+    return uri;
+}
+
     /**
      * Relay OAuth code exchange for TikTok and Instagram using server-side client secrets.
      * The node NEVER persists the resulting tokens — it strictly acts as a confidential client proxy.
@@ -308,7 +324,13 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
                 }
                 params.code = body.code;
                 if (body.codeVerifier) params.code_verifier = body.codeVerifier;
-                if (body.redirectUri) params.redirect_uri = body.redirectUri;
+                try {
+                    params.redirect_uri = validateRedirectUri(body.redirectUri, 'tiktok');
+                } catch (e: any) {
+                    ctx.status = 400;
+                    ctx.body = { error: e.message };
+                    return;
+                }
             } else if (grantType === 'refresh_token') {
                 if (!body.refreshToken) {
                     ctx.status = 400;
@@ -349,7 +371,14 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
                     ctx.body = { error: 'Code is required' };
                     return;
                 }
-                const redirectUri = body.redirectUri || 'https://beanpool.org/auth/instagram';
+                let redirectUri: string;
+                try {
+                    redirectUri = validateRedirectUri(body.redirectUri, 'instagram');
+                } catch (e: any) {
+                    ctx.status = 400;
+                    ctx.body = { error: e.message };
+                    return;
+                }
                 try {
                     const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
                         method: 'POST',

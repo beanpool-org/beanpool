@@ -575,15 +575,19 @@ export async function refreshTokenIfNeeded(
         return storedToken;
     }
 
-    if (!storedToken.refreshToken && storedToken.platform === 'tiktok') {
-        throw new PulseOAuthError('expired', 'Token expired and no refresh token is stored.');
-    }
-
-    if (storedToken.refreshExpiresAt && storedToken.refreshExpiresAt <= now) {
-        throw new PulseOAuthError('expired', 'Refresh token expired. Please reconnect.');
+    if (storedToken.platform === 'instagram') {
+        throw new PulseOAuthError('expired', 'Instagram access token has expired. Please reconnect.');
     }
 
     if (storedToken.platform === 'tiktok') {
+        if (!storedToken.refreshToken) {
+            throw new PulseOAuthError('expired', 'Token expired and no refresh token is stored.');
+        }
+
+        if (storedToken.refreshExpiresAt && storedToken.refreshExpiresAt <= now) {
+            throw new PulseOAuthError('expired', 'Refresh token expired. Please reconnect.');
+        }
+
         let key = clientKey;
         if (!key && nodeUrl) {
             const config = await fetchPulseOAuthConfig(nodeUrl);

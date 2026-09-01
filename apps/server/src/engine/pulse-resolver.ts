@@ -1538,8 +1538,7 @@ export function extractSoundCloudUserIdFromHtml(html: string): string | null {
     const match = /soundcloud:\/\/(?:users|user):(\d+)/i.exec(html)
         || /soundcloud:(?:users|user):(\d+)/i.exec(html)
         || /["']soundcloud:(?:users|user):(\d+)["']/i.exec(html)
-        || /api\.soundcloud\.com\/users\/(\d+)/i.exec(html)
-        || /users:(\d+)/i.exec(html);
+        || /api\.soundcloud\.com\/users\/(\d+)/i.exec(html);
     return match ? match[1] : null;
 }
 
@@ -1722,14 +1721,22 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                 return { count: 0, error: 'No URL available' };
             }
             feedUrl = await buildSoundCloudFeedUrl(initialUrl);
-            if (!feedUrl) {
-                const noFeedMsg = "SoundCloud profile has no public RSS feed — share tracks manually";
+            if (feedUrl) {
+                if (feedUrl !== initialUrl && feedUrl.includes('feeds.soundcloud.com')) {
+                    db.prepare(
+                        `UPDATE creator_channels SET url = ?, updated_at = ? WHERE id = ?`
+                    ).run(feedUrl, now, channel.id);
+                }
+            } else {
+                const nextFails = (channel.fail_count || 0) + 1;
+                const isStale = nextFails >= 3 ? 1 : (channel.is_stale || 0);
+                const errMsg = "SoundCloud profile has no public RSS feed — share tracks manually";
                 db.prepare(
                     `UPDATE creator_channels
-                        SET supports_autolist = 0, last_error = ?, fail_count = 0, is_stale = 0, updated_at = ?
+                        SET fail_count = ?, last_error = ?, is_stale = ?, updated_at = ?
                       WHERE id = ?`
-                ).run(noFeedMsg, now, channel.id);
-                return { count: 0, error: noFeedMsg };
+                ).run(nextFails, errMsg, isStale, now, channel.id);
+                return { count: 0, error: errMsg };
             }
         } else {
             feedUrl = channel.url;

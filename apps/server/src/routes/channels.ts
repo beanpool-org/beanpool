@@ -417,7 +417,13 @@ function getJsonWithIPv4(urlStr: string): Promise<{ status: number; json: any }>
             try {
                 console.log(`[PulseOAuthRelay] Calling TikTok token endpoint for client_key=${clientKey}, redirect_uri=${params.redirect_uri}`);
                 const { status, json } = await postFormWithIPv4('https://open.tiktokapis.com/v2/oauth/token/', params);
-                console.log('[PulseOAuthRelay] TikTok token endpoint response:', status, JSON.stringify(json));
+                console.log('[PulseOAuthRelay] TikTok token endpoint response:', {
+                    status,
+                    has_access_token: Boolean(json?.access_token || json?.data?.access_token),
+                    has_refresh_token: Boolean(json?.refresh_token || json?.data?.refresh_token),
+                    error: json?.error || json?.data?.error,
+                    error_description: json?.error_description || json?.data?.error_description || json?.message || json?.data?.description,
+                });
                 const normalizedData = {
                     ...(json.data || {}),
                     access_token: json.access_token || json.data?.access_token,
@@ -467,32 +473,19 @@ function getJsonWithIPv4(urlStr: string): Promise<{ status: number; json: any }>
                 }
                 try {
                     console.log(`[PulseOAuthRelay] Calling Instagram token endpoint for appId=${appId}, redirectUri=${redirectUri}`);
-                    let { status: tokenStatus, json: tokenJson } = await postFormWithIPv4('https://api.instagram.com/oauth/access_token', {
+                    const { status: tokenStatus, json: tokenJson } = await postFormWithIPv4('https://api.instagram.com/oauth/access_token', {
                         client_id: appId,
                         client_secret: appSecret,
                         grant_type: 'authorization_code',
                         redirect_uri: redirectUri,
                         code: cleanCode,
                     });
-                    console.log('[PulseOAuthRelay] Instagram token endpoint response:', tokenStatus, JSON.stringify(tokenJson));
-
-                    // If Meta rejects due to trailing slash mismatch, try the opposite slash variant
-                    if ((tokenStatus >= 400 || !tokenJson.access_token) && tokenJson?.error_message?.includes('redirect_uri')) {
-                        const altUri = redirectUri.endsWith('/') ? redirectUri.slice(0, -1) : redirectUri + '/';
-                        console.log(`[PulseOAuthRelay] Retrying Instagram token endpoint with alt redirectUri=${altUri}`);
-                        const altRes = await postFormWithIPv4('https://api.instagram.com/oauth/access_token', {
-                            client_id: appId,
-                            client_secret: appSecret,
-                            grant_type: 'authorization_code',
-                            redirect_uri: altUri,
-                            code: cleanCode,
-                        });
-                        console.log('[PulseOAuthRelay] Instagram alt token endpoint response:', altRes.status, JSON.stringify(altRes.json));
-                        if (altRes.status < 400 && altRes.json?.access_token) {
-                            tokenStatus = altRes.status;
-                            tokenJson = altRes.json;
-                        }
-                    }
+                    console.log('[PulseOAuthRelay] Instagram token endpoint response:', {
+                        status: tokenStatus,
+                        has_access_token: Boolean(tokenJson?.access_token),
+                        error_type: tokenJson?.error_type || tokenJson?.error?.type,
+                        error_message: tokenJson?.error_message || tokenJson?.error?.message || (typeof tokenJson?.error === 'string' ? tokenJson.error : undefined),
+                    });
 
                     if (tokenStatus >= 400 || !tokenJson.access_token) {
                         ctx.status = tokenStatus >= 400 ? tokenStatus : 400;

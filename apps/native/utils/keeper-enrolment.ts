@@ -244,9 +244,7 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         if (existingHub) {
             hubShare = existingHub;
             otherHalf = xorBytes(seed, existingHub);
-            // The node compares the re-encoded fragment byte-for-byte against what it stored, so
-            // log exactly what we are about to send. A difference here is the whole bug.
-            console.log(`[KEEPER] ${provider}: reusing stored hub fragment (${existingHub.length}B -> ${recordShareForHub(existingHub).encryptedShare.slice(0, 16)}...)`);
+            console.log(`[KEEPER] ${provider}: reusing stored hub fragment (${existingHub.length}B)`);
         } else {
             const result = await splitHubAndWhole(seed);
             hubShare = result.hubShare;

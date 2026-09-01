@@ -600,7 +600,7 @@ export async function refreshTokenIfNeeded(
                 body: new URLSearchParams({
                     client_key: key,
                     grant_type: 'refresh_token',
-                    refresh_token: storedToken.refreshToken,
+                    refresh_token: storedToken.refreshToken || '',
                 }).toString(),
             });
 

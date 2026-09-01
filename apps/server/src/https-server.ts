@@ -247,6 +247,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
     '/api/channels/options',         // the platform/category vocabulary the channel form renders
     '/api/pulse/feed',               // public syndicated creator activity feed (The Pulse, Phase 2)
+    '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't

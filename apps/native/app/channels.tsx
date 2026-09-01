@@ -60,6 +60,15 @@ import {
     platformMeta,
     categoryMeta,
 } from '@beanpool/core';
+import {
+    fetchPulseOAuthConfig,
+    connectTikTokChannel,
+    connectInstagramChannel,
+    syncChannelVideos,
+    disconnectOAuthChannel,
+    type PulseOAuthConfig,
+    PulseOAuthError,
+} from '../utils/pulse-oauth';
 
 interface Channel {
     id: string;
@@ -81,6 +90,14 @@ export default function ChannelsScreen() {
     const styles = useStyles(makeStyles);
 
     const [channels, setChannels] = useState<Channel[]>([]);
+    const [oauthConfig, setOAuthConfig] = useState<PulseOAuthConfig>({
+        tiktok: { enabled: false, clientKey: null },
+        instagram: { enabled: false, appId: null },
+    });
+    const [connectingId, setConnectingId] = useState<string | null>(null);
+    const [syncingId, setSyncingId] = useState<string | null>(null);
+    const [cardErrors, setCardErrors] = useState<Record<string, string | null>>({});
+
     // A list-level error renders above the cards, which is off-screen once the member has scrolled
     // to the form at the bottom — so the view is scrolled back to it rather than reporting silently.
     const scrollRef = useRef<ScrollView>(null);
@@ -120,6 +137,9 @@ export default function ChannelsScreen() {
             if (!res.ok) throw new Error(data?.message || data?.error || 'Could not load your channels.');
             setChannels(data.channels || []);
             setListError(null);
+
+            const conf = await fetchPulseOAuthConfig(url);
+            setOAuthConfig(conf);
         } catch (e: any) {
             setListError(e?.message || 'Could not load your channels.');
         } finally {
@@ -246,6 +266,96 @@ export default function ChannelsScreen() {
         patch(id, { category: next }, { category: next });
     };
 
+    const connectChannel = async (channel: Channel) => {
+        if (!identity) { setListError('No identity on this device yet.'); return; }
+        setConnectingId(channel.id);
+        setCardErrors(prev => ({ ...prev, [channel.id]: null }));
+
+        try {
+            const url = await anchorUrl();
+            if (!url) throw new Error('No community node yet.');
+
+            if (channel.platform === 'tiktok') {
+                const res = await connectTikTokChannel(channel, identity, url, oauthConfig.tiktok.clientKey);
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                await load();
+                if (res.newItemsCount > 0) {
+                    Alert.alert(
+                        'TikTok Connected',
+                        `Imported ${res.newItemsCount} recent video${res.newItemsCount === 1 ? '' : 's'} to the community feed.`
+                    );
+                }
+            } else if (channel.platform === 'instagram') {
+                await connectInstagramChannel(channel, identity, url, oauthConfig.instagram.appId);
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                await load();
+            }
+        } catch (e: any) {
+            if (e instanceof PulseOAuthError && e.reason === 'cancelled') {
+                return;
+            }
+            const msg = e?.message || 'Could not connect channel.';
+            setCardErrors(prev => ({ ...prev, [channel.id]: msg }));
+        } finally {
+            setConnectingId(null);
+        }
+    };
+
+    const syncChannel = async (channel: Channel) => {
+        if (!identity) { setListError('No identity on this device yet.'); return; }
+        setSyncingId(channel.id);
+        setCardErrors(prev => ({ ...prev, [channel.id]: null }));
+
+        try {
+            const url = await anchorUrl();
+            if (!url) throw new Error('No community node yet.');
+
+            const res = await syncChannelVideos(channel.id, identity, url);
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            await load();
+            if (res.synced > 0) {
+                Alert.alert(
+                    'Channel Synced',
+                    `Synced ${res.synced} video${res.synced === 1 ? '' : 's'} from ${platformMeta(channel.platform).label}.`
+                );
+            }
+        } catch (e: any) {
+            const msg = e?.message || 'Could not sync channel videos.';
+            setCardErrors(prev => ({ ...prev, [channel.id]: msg }));
+        } finally {
+            setSyncingId(null);
+        }
+    };
+
+    const disconnectChannel = (channel: Channel) => {
+        const meta = platformMeta(channel.platform);
+        Alert.alert(
+            `Disconnect ${meta.label}?`,
+            `Your ${meta.label} account will be disconnected from automatic updates and fall back to manual post sharing. Existing posts will remain on the community feed.`,
+            [
+                { text: 'Keep connected', style: 'cancel' },
+                {
+                    text: 'Disconnect',
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (!identity) { setListError('No identity on this device yet.'); return; }
+                        setCardErrors(prev => ({ ...prev, [channel.id]: null }));
+                        try {
+                            const url = await anchorUrl();
+                            if (!url) throw new Error('No community node yet.');
+                            await disconnectOAuthChannel(channel.id, identity, url);
+                            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                            await load();
+                        } catch (e: any) {
+                            const msg = e?.message || 'Could not disconnect channel.';
+                            setCardErrors(prev => ({ ...prev, [channel.id]: msg }));
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     const remove = (channel: Channel) => {
         Alert.alert(
             'Remove this channel?',
@@ -347,6 +457,13 @@ export default function ChannelsScreen() {
 
                             {channels.map(channel => {
                                 const meta = platformMeta(channel.platform);
+                                const isConnecting = connectingId === channel.id;
+                                const isSyncing = syncingId === channel.id;
+                                const cardError = cardErrors[channel.id];
+                                const isOauthPlatform = channel.platform === 'tiktok' || channel.platform === 'instagram';
+                                const isOauthEnabled = (channel.platform === 'tiktok' && oauthConfig.tiktok.enabled) ||
+                                    (channel.platform === 'instagram' && oauthConfig.instagram.enabled);
+
                                 return (
                                     <View key={channel.id} style={styles.card}>
                                         <View style={styles.cardTop}>
@@ -354,17 +471,16 @@ export default function ChannelsScreen() {
                                                 {meta.icon} {meta.label}
                                                 {channel.handle ? ` · ${channel.handle}` : ''}
                                             </Text>
-                                            {channel.oauthVerifiedAt ? <Text style={styles.verified}>✅</Text> : null}
+                                            {channel.oauthVerifiedAt ? (
+                                                <View style={styles.verifiedBadgeRow}>
+                                                    <Text style={styles.verifiedText}>✓ Verified</Text>
+                                                </View>
+                                            ) : null}
                                         </View>
 
                                         <Text style={styles.cardMeta}>
                                             {channel.supportsAutolist
-                                                ? 'Updates itself'
-                                                // Never fall back to the platform's own label here: a
-                                                // youtu.be link is stored on YouTube with
-                                                // supports_autolist = 0, and YouTube's static label is
-                                                // "updates itself" — the exact claim the server just
-                                                // declined to make.
+                                                ? (channel.oauthVerifiedAt ? 'Updates itself (connected)' : 'Updates itself')
                                                 : LISTING_LABEL[
                                                     platformMeta(channel.platform).listing === 'auto'
                                                         ? 'manual'
@@ -430,7 +546,52 @@ export default function ChannelsScreen() {
                                             </View>
                                         )}
 
+                                        {cardError && (
+                                            <View style={styles.cardErrorBox} accessibilityRole="alert">
+                                                <Text style={styles.cardErrorText}>{cardError}</Text>
+                                            </View>
+                                        )}
+
                                         <View style={styles.cardActions}>
+                                            {/* OAuth Actions */}
+                                            {isOauthPlatform && (
+                                                channel.oauthVerifiedAt ? (
+                                                    <>
+                                                        <Pressable
+                                                            onPress={() => syncChannel(channel)}
+                                                            disabled={isSyncing}
+                                                            style={[styles.oauthSyncBtn, isSyncing && styles.btnDisabled]}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`Sync latest videos from ${meta.label}`}
+                                                        >
+                                                            <Text style={styles.oauthSyncBtnText}>
+                                                                {isSyncing ? 'Syncing…' : '↻ Sync videos'}
+                                                            </Text>
+                                                        </Pressable>
+                                                        <Pressable
+                                                            onPress={() => disconnectChannel(channel)}
+                                                            style={styles.oauthDisconnectBtn}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`Disconnect ${meta.label} account`}
+                                                        >
+                                                            <Text style={styles.oauthDisconnectBtnText}>Disconnect</Text>
+                                                        </Pressable>
+                                                    </>
+                                                ) : isOauthEnabled ? (
+                                                    <Pressable
+                                                        onPress={() => connectChannel(channel)}
+                                                        disabled={isConnecting}
+                                                        style={[styles.oauthConnectBtn, isConnecting && styles.btnDisabled]}
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={`Connect ${meta.label} account`}
+                                                    >
+                                                        <Text style={styles.oauthConnectBtnText}>
+                                                            {isConnecting ? 'Connecting…' : `Connect ${meta.label}`}
+                                                        </Text>
+                                                    </Pressable>
+                                                ) : null
+                                            )}
+
                                             {!channel.supportsAutolist && (
                                                 <Pressable
                                                     onPress={() => router.push({ pathname: '/pulse-intake', params: { channelId: channel.id } })}
@@ -704,4 +865,66 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     chipActive: { borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
     chipText: { fontSize: 14, color: colors.text.body },
     chipTextActive: { color: colors.brand.dark, fontWeight: '600' },
+
+    verifiedBadgeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.brand.tint,
+        paddingVertical: 3,
+        paddingHorizontal: 8,
+        borderRadius: 12,
+    },
+    verifiedText: {
+        color: colors.brand.dark,
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    oauthConnectBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 8,
+        backgroundColor: colors.brand.primary,
+    },
+    oauthConnectBtnText: {
+        color: colors.text.inverse,
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    oauthSyncBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 8,
+        backgroundColor: colors.surface.subtle,
+        borderWidth: 1,
+        borderColor: colors.border.default,
+    },
+    oauthSyncBtnText: {
+        color: colors.text.body,
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    oauthDisconnectBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: colors.border.default,
+    },
+    oauthDisconnectBtnText: {
+        color: colors.text.secondary,
+        fontSize: 15,
+    },
+    btnDisabled: {
+        opacity: 0.5,
+    },
+    cardErrorBox: {
+        backgroundColor: colors.market.need.bg,
+        borderRadius: 8,
+        padding: 10,
+        marginTop: 10,
+    },
+    cardErrorText: {
+        color: colors.market.need.fg,
+        fontSize: 13,
+    },
 });

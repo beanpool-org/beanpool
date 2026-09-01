@@ -55,6 +55,7 @@ import {
     type ChannelPlatform,
     normaliseChannelInput,
 } from '../engine/creator-channels.js';
+import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
 
 export interface ResolvedPulsePreview {
@@ -383,7 +384,7 @@ function matchOwnedChannel(
     return primary || compatible[0];
 }
 
-function rowToPulseFeedCard(itemId: string): PulseFeedCard {
+export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
     const r = db.prepare(
         `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
                 i.published_at, i.category, i.source, c.oauth_verified_at,
@@ -469,6 +470,26 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
              url, title, thumbnail_url, published_at, category,
              source, muted, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 0, ?, ?)`
+    );
+    const stmtRestoreOauthItem = db.prepare(
+        `UPDATE pulse_items
+            SET deleted_at = NULL,
+                url = ?,
+                title = ?,
+                thumbnail_url = ?,
+                published_at = COALESCE(?, published_at, ?),
+                category = ?,
+                source = 'oauth',
+                muted = 0,
+                updated_at = ?
+          WHERE id = ?`
+    );
+    const stmtInsertOauthItem = db.prepare(
+        `INSERT INTO pulse_items
+            (id, channel_id, owner_pubkey, platform, external_id,
+             url, title, thumbnail_url, published_at, category,
+             source, muted, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'oauth', 0, ?, ?)`
     );
     const stmtUpdateChannelWatermark = db.prepare(
         `UPDATE creator_channels
@@ -836,6 +857,167 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         }
 
         ctx.body = { nudges };
+    });
+
+    /**
+     * 6. GET /api/pulse/oauth/config
+     * Public read. Returns platform OAuth availability and client identifiers.
+     */
+    router.get('/api/pulse/oauth/config', async (ctx) => {
+        ctx.body = getPulseOAuthConfig();
+    });
+
+    /**
+     * 7. POST /api/member/pulse/oauth-ingest
+     * Takes { channelId, items: Array<{ url, title, thumbnailUrl, publishedAt, externalId, category }> }.
+     * Verifies channel ownership (owner_pubkey = ctx.state.actor).
+     * Ingests items as OAuth-sourced, deduplicating against existing pulse_items rows.
+     */
+    router.post('/api/member/pulse/oauth-ingest', async (ctx) => {
+        const actor = ctx.state.actor;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Signed request required' };
+            return;
+        }
+
+        const body = (ctx as any).requestBody || {};
+        const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
+        const rawItems = Array.isArray(body.items) ? body.items : [];
+
+        if (!channelId) {
+            ctx.status = 400;
+            ctx.body = { error: 'missing_field', message: 'channelId is required.' };
+            return;
+        }
+
+        const channel = stmtGetChannelById.get(channelId) as any;
+        if (!channel) {
+            ctx.status = 404;
+            ctx.body = { error: 'not_found', message: 'Channel not found.' };
+            return;
+        }
+
+        if (channel.owner_pubkey !== actor) {
+            ctx.status = 403;
+            ctx.body = { error: 'not_yours', message: 'That is not your channel.' };
+            return;
+        }
+
+        const now = new Date().toISOString();
+        const results: PulseFeedCard[] = [];
+        let deduplicatedCount = 0;
+
+        try {
+            db.transaction(() => {
+                for (const rawItem of rawItems) {
+                    if (!rawItem || typeof rawItem !== 'object') continue;
+                    const itemUrl = typeof rawItem.url === 'string' ? rawItem.url.trim() : '';
+                    if (!itemUrl) continue;
+
+                    let externalId: string | null = typeof rawItem.externalId === 'string' && rawItem.externalId.trim()
+                        ? rawItem.externalId.trim()
+                        : null;
+                    let canonicalUrl = itemUrl;
+
+                    try {
+                        const identified = identifyPlatformAndExternalId(itemUrl);
+                        if (!externalId) externalId = identified.externalId;
+                        canonicalUrl = identified.canonicalUrl;
+                    } catch {
+                        // Fall back to provided url
+                    }
+
+                    const title = typeof rawItem.title === 'string' && rawItem.title.trim()
+                        ? cleanXmlText(rawItem.title.trim()).slice(0, 500)
+                        : (channel.platform === 'tiktok' ? 'TikTok Video' : 'Post');
+
+                    let thumbnailUrl: string | null = null;
+                    if (typeof rawItem.thumbnailUrl === 'string' && rawItem.thumbnailUrl.trim()) {
+                        const trimmedThumb = rawItem.thumbnailUrl.trim();
+                        if (trimmedThumb.length <= 2048 && /^https?:\/\//i.test(trimmedThumb)) {
+                            thumbnailUrl = trimmedThumb;
+                        }
+                    }
+
+                    const itemCategory = typeof rawItem.category === 'string' && CHANNEL_CATEGORIES.includes(rawItem.category as ChannelCategory)
+                        ? (rawItem.category as ChannelCategory)
+                        : (channel.category || 'other');
+
+                    const publishedAt = typeof rawItem.publishedAt === 'string' && rawItem.publishedAt.trim()
+                        ? parseFeedDate(rawItem.publishedAt.trim()) || now
+                        : now;
+
+                    let finalItemId: string;
+
+                    const existing = (externalId
+                        ? stmtFindExistingByExternalId.get(channel.id, externalId)
+                        : stmtFindExistingByUrl.get(channel.id, canonicalUrl)) as any;
+
+                    if (existing) {
+                        finalItemId = existing.id;
+                        if (existing.deleted_at !== null) {
+                            // Restore tombstoned row
+                            stmtRestoreOauthItem.run(
+                                canonicalUrl,
+                                title,
+                                thumbnailUrl,
+                                publishedAt,
+                                now,
+                                itemCategory,
+                                now,
+                                existing.id
+                            );
+                        } else {
+                            // Update active item
+                            stmtUpdateActiveItem.run(
+                                title,
+                                thumbnailUrl,
+                                itemCategory,
+                                now,
+                                existing.id
+                            );
+                            deduplicatedCount++;
+                        }
+                    } else {
+                        finalItemId = `item_${crypto.randomBytes(12).toString('hex')}`;
+                        stmtInsertOauthItem.run(
+                            finalItemId,
+                            channel.id,
+                            actor,
+                            channel.platform,
+                            externalId,
+                            canonicalUrl,
+                            title,
+                            thumbnailUrl,
+                            publishedAt,
+                            itemCategory,
+                            now,
+                            now
+                        );
+                    }
+
+                    try {
+                        results.push(rowToPulseFeedCard(finalItemId));
+                    } catch { }
+                }
+
+                // Advance watermark if channel has post_count_seen
+                if (channel.post_count_seen !== null && rawItems.length > channel.post_count_seen) {
+                    stmtUpdateChannelWatermark.run(rawItems.length, now, channel.id, actor);
+                }
+            })();
+
+            ctx.body = {
+                success: true,
+                count: results.length,
+                deduplicatedCount,
+                items: results,
+            };
+        } catch (err: any) {
+            ctx.status = 500;
+            ctx.body = { error: 'internal_error', message: err?.message || 'Failed to ingest OAuth items.' };
+        }
     });
 
     return router;

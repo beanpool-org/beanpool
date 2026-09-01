@@ -137,7 +137,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                     <button
                         type="button"
                         onClick={onClose}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors"
                         aria-label="Close pricing guide"
                     >
                         ✕
@@ -175,7 +175,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                         type="button"
                         aria-pressed={selectedCategory === 'all'}
                         onClick={() => setSelectedCategory('all')}
-                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors ${
                             selectedCategory === 'all'
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
@@ -191,7 +191,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                 type="button"
                                 aria-pressed={active}
                                 onClick={() => setSelectedCategory(cat.id)}
-                                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors ${
                                     active
                                         ? 'bg-emerald-600 text-white'
                                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
@@ -241,11 +241,12 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                     }}
                                     className={`flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 transition-all ${
                                         onSelectOfferItem
-                                            ? 'cursor-pointer hover:border-emerald-500/50 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 active:scale-[0.99]'
+                                            ? 'cursor-pointer hover:border-emerald-500/50 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500'
                                             : ''
                                     }`}
                                     role={onSelectOfferItem ? 'button' : undefined}
                                     tabIndex={onSelectOfferItem ? 0 : undefined}
+                                    aria-label={onSelectOfferItem ? `Select ${item.name} for offer at ${effectivePrice} Beans` : undefined}
                                     onKeyDown={(e) => {
                                         if (onSelectOfferItem && (e.key === 'Enter' || e.key === ' ')) {
                                             e.preventDefault();

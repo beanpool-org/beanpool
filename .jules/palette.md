@@ -91,3 +91,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-08-30 - SyncStatus ARIA Status & Live Region Accessibility
 **Learning:** `SyncStatus.tsx` displayed network status and last sync time visually, but lacked ARIA status semantics (`role="status"`, `aria-live="polite"`), descriptive screen-reader `aria-label`, and decorative element hiding (`aria-hidden="true"` on the dot indicator).
 **Action:** Added `role="status"`, `aria-live="polite"`, dynamic `aria-label` announcing status and sync time, and `aria-hidden="true"` to the indicator dot.
+
+## 2026-08-31 - PricingGuideModal Accessibility & Keyboard Focus Indicators
+**Learning:** `PricingGuideModal.tsx` close button, category selection pills, and interactive catalog item rows (`role="button"`) lacked visual focus ring indicators (`focus-visible:ring-2`) and explicit screen-reader `aria-label`s on item rows when interactive.
+**Action:** Added `focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to modal close button, category buttons, and item cards. Added dynamic `aria-label` context to item cards.

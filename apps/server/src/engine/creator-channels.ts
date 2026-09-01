@@ -869,3 +869,94 @@ export function deleteChannel(ownerPubkey: string, id: string): boolean {
 
     return changed > 0;
 }
+
+/**
+ * Attach OAuth verification to a channel (The Pulse, Phase 5).
+ *
+ * Setting `oauth_verified_at` is a claim of cryptographic/platform proof that the authenticated
+ * member actually owns the connected platform account.
+ *
+ * Rules:
+ * 1. Takes owner from `ctx.state.actor` (ownerPubkey). Never trusts a body claim.
+ * 2. Confirms the channel belongs to this owner and is not deleted.
+ * 3. Confirms the connected platform matches the channel platform.
+ * 4. Confirms the platform username matches the channel's handle or URL (prevent attaching own OAuth to someone else's channel).
+ * 5. Sets `oauth_verified_at = now`, `supports_autolist = 1`, and updates `updated_at = now`.
+ */
+export function verifyChannelOauth(
+    ownerPubkey: string,
+    id: string,
+    proof: { platform: string; platformUsername: string }
+): CreatorChannel {
+    const row = db.prepare(
+        `SELECT * FROM creator_channels WHERE id = ? AND deleted_at IS NULL`
+    ).get(id) as any;
+    if (!row) throw new ChannelError('NOT_FOUND', 'Channel not found.');
+    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
+
+    if (row.platform !== proof.platform) {
+        throw new ChannelError('BAD_PLATFORM', `Channel platform is ${row.platform}, but verification is for ${proof.platform}.`);
+    }
+
+    const cleanUsername = (proof.platformUsername || '').replace(/^@/, '').toLowerCase().trim();
+    if (!cleanUsername) {
+        throw new ChannelError('EMPTY', 'Platform account username is required.');
+    }
+
+    const cleanHandle = (row.handle || '').replace(/^@/, '').toLowerCase().trim();
+    // normaliseChannelInput already clears .hash and strips tracking params on the way in, so this is defence for URLs that predate normalisation or arrive by another path
+    const urlWithoutQueryOrHash = (row.url || '').split(/[?#]/)[0];
+    const cleanUrl = urlWithoutQueryOrHash.toLowerCase();
+
+    // Check handle match or URL match
+    const matchesHandle = cleanHandle === cleanUsername;
+    const matchesUrl = cleanUrl.includes(`/@${cleanUsername}`) ||
+        cleanUrl.includes(`/${cleanUsername}/`) ||
+        cleanUrl.endsWith(`/${cleanUsername}`);
+
+    if (!matchesHandle && !matchesUrl) {
+        throw new ChannelError(
+            'ACCOUNT_MISMATCH',
+            `The connected ${PLATFORM_DISPLAY[row.platform as ChannelPlatform] || proof.platform} account (@${cleanUsername}) does not match this channel.`
+        );
+    }
+
+    const now = new Date().toISOString();
+    db.prepare(
+        `UPDATE creator_channels
+            SET oauth_verified_at = ?,
+                supports_autolist = 1,
+                updated_at = ?
+          WHERE id = ? AND owner_pubkey = ?`
+    ).run(now, now, id, ownerPubkey);
+
+    return getChannel(id)!;
+}
+
+/**
+ * Disconnect OAuth verification from a channel (The Pulse, Phase 5).
+ *
+ * Drops `oauth_verified_at`, resets `supports_autolist` back to the platform's native capability,
+ * and leaves already ingested feed items intact.
+ */
+export function disconnectChannelOauth(ownerPubkey: string, id: string): CreatorChannel {
+    const row = db.prepare(
+        `SELECT * FROM creator_channels WHERE id = ? AND deleted_at IS NULL`
+    ).get(id) as any;
+    if (!row) throw new ChannelError('NOT_FOUND', 'Channel not found.');
+    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
+
+    const now = new Date().toISOString();
+    const nativeAutolist = canAutolist(row.platform as ChannelPlatform, row.url || '') ? 1 : 0;
+
+    db.prepare(
+        `UPDATE creator_channels
+            SET oauth_verified_at = NULL,
+                supports_autolist = ?,
+                updated_at = ?
+          WHERE id = ? AND owner_pubkey = ?`
+    ).run(nativeAutolist, now, id, ownerPubkey);
+
+    return getChannel(id)!;
+}
+

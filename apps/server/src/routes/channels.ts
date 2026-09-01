@@ -25,15 +25,38 @@
 import Router from '@koa/router';
 import {
     listChannels, listPublicChannels, addChannel, updateChannel, deleteChannel,
+    verifyChannelOauth, disconnectChannelOauth,
     otherVideoChannels, ChannelError, CHANNEL_PLATFORMS, CHANNEL_CATEGORIES,
 } from '../engine/creator-channels.js';
 import type { RouteDeps } from './types.js';
+
+export function getPulseOAuthConfig(): {
+    tiktok: { enabled: boolean; clientKey: string | null };
+    instagram: { enabled: boolean; appId: string | null };
+} {
+    const tiktokKey = process.env.TIKTOK_CLIENT_KEY || process.env.TIKTOK_CLIENT_ID || null;
+    const instagramAppId = process.env.INSTAGRAM_APP_ID || null;
+    return {
+        tiktok: {
+            enabled: Boolean(tiktokKey),
+            clientKey: tiktokKey,
+        },
+        instagram: {
+            enabled: Boolean(instagramAppId),
+            appId: instagramAppId,
+        },
+    };
+}
 
 /** Map a ChannelError onto a status code. Anything unrecognised is a 400, never a 500. */
 function channelErrorStatus(code: string): number {
     switch (code) {
         case 'NOT_FOUND': return 404;
         case 'NOT_YOURS': return 403;
+        case 'ACCOUNT_MISMATCH':
+        case 'BAD_PLATFORM':
+        case 'EMPTY':
+            return 400;
         case 'DUPLICATE': return 409;
         // A standing limit, not a rate: 429 would invite the client to retry, and retrying never
         // helps — the member has to remove a channel first.
@@ -48,7 +71,11 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
 
     /** The platform and category vocabularies, so the client never hardcodes a drifting list. */
     router.get('/api/channels/options', async (ctx) => {
-        ctx.body = { platforms: CHANNEL_PLATFORMS, categories: CHANNEL_CATEGORIES };
+        ctx.body = {
+            platforms: CHANNEL_PLATFORMS,
+            categories: CHANNEL_CATEGORIES,
+            oauth: getPulseOAuthConfig(),
+        };
     });
 
     /**
@@ -133,6 +160,72 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
             const channel = updateChannel(actor, ctx.params.id, {
                 category, syndicateToNode, isPrimaryVideo, autopublish,
             });
+            ctx.body = { success: true, channel };
+        } catch (e: any) {
+            if (e instanceof ChannelError) {
+                ctx.status = channelErrorStatus(e.code);
+                ctx.body = { error: e.code.toLowerCase(), message: e.message };
+                return;
+            }
+            throw e;
+        }
+    });
+
+    /**
+     * Attach OAuth verification to a creator channel (The Pulse, Phase 5).
+     *
+     * Takes owner strictly from ctx.state.actor and verifies the authenticated platform username
+     * matches the channel before setting oauth_verified_at.
+     */
+    router.post('/api/member/channels/:id/verify-oauth', async (ctx) => {
+        const actor = ctx.state.actor;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Signed request required' };
+            return;
+        }
+
+        const body = (ctx as any).requestBody || {};
+        const platform = typeof body.platform === 'string' ? body.platform.trim() : '';
+        const platformUsername = typeof body.platformUsername === 'string' ? body.platformUsername.trim() : '';
+
+        if (!platform || !platformUsername) {
+            ctx.status = 400;
+            ctx.body = { error: 'empty', message: 'Platform and platformUsername are required.' };
+            return;
+        }
+
+        try {
+            const channel = verifyChannelOauth(actor, ctx.params.id, {
+                platform,
+                platformUsername,
+            });
+            ctx.body = { success: true, channel };
+        } catch (e: any) {
+            if (e instanceof ChannelError) {
+                ctx.status = channelErrorStatus(e.code);
+                ctx.body = { error: e.code.toLowerCase(), message: e.message };
+                return;
+            }
+            throw e;
+        }
+    });
+
+    /**
+     * Disconnect OAuth verification from a creator channel (The Pulse, Phase 5).
+     *
+     * Drops oauth_verified_at and resets autolist support. Existing items stay in pulse_items.
+     */
+    router.post('/api/member/channels/:id/disconnect-oauth', async (ctx) => {
+        const actor = ctx.state.actor;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Signed request required' };
+            return;
+        }
+
+        try {
+            const channel = disconnectChannelOauth(actor, ctx.params.id);
             ctx.body = { success: true, channel };
         } catch (e: any) {
             if (e instanceof ChannelError) {

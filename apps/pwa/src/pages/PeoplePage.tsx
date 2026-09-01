@@ -132,8 +132,9 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         }
     }
 
-    const friendPubkeys = new Set(friends.map(f => f.publicKey));
-    const guardians = friends.filter(f => f.isGuardian);
+    // ⚡ Bolt: Memoize friendPubkeys Set to prevent rebuilding on every render cycle
+    const friendPubkeys = useMemo(() => new Set(friends.map(f => f.publicKey)), [friends]);
+    const guardians = useMemo(() => friends.filter(f => f.isGuardian), [friends]);
 
     // Build avatar lookup from members for friends view
     const memberAvatarMap = useMemo(() => {

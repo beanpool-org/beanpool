@@ -122,3 +122,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-15 - O(1) Parent Message Lookups in Chat Thread Renders
 **Learning:** In `apps/native/app/chat/[id].tsx` and `apps/pwa/src/pages/MessagesPage.tsx`, resolving replied-to parent messages ran `messages.find(m => m.id === ...)` inside the render loop for every message row. In large chat threads with $M$ messages, this created an $O(M^2)$ nested search on every render cycle.
 **Action:** Pre-computed a `messagesById` Map indexed by message `id` prior to rendering message rows, reducing parent message resolution to $O(1)$ constant-time lookups ($O(M)$ overall).
+
+## 2026-09-18 - Memoize friendPubkeys Set Allocation in PWA PeoplePage
+**Learning:** In `apps/pwa/src/pages/PeoplePage.tsx`, `const friendPubkeys = new Set(friends.map(f => f.publicKey))` was constructed unmemoized directly inside the component body, rebuilding the Set and iterating `friends` on every single state change or parent render cycle.
+**Action:** Wrapped `friendPubkeys` (and `guardians`) in `React.useMemo` keyed on `friends`, eliminating redundant array iterations and Set allocations across component re-renders.

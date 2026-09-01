@@ -5,7 +5,7 @@
  * and display metadata. Used across Native, PWA, and server surfaces to prevent drift.
  */
 
-export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'website' | 'rss';
+export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'soundcloud' | 'website' | 'rss';
 export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
 
 /**
@@ -40,6 +40,7 @@ export const PLATFORMS: readonly PlatformInfo[] = [
     { id: 'youtube', icon: '🎥', label: 'YouTube', listing: 'auto', hint: 'youtube.com/@you' },
     { id: 'instagram', icon: '📷', label: 'Instagram', listing: 'manual', hint: '@yourhandle' },
     { id: 'tiktok', icon: '🎵', label: 'TikTok', listing: 'manual', hint: '@yourhandle' },
+    { id: 'soundcloud', icon: '🎧', label: 'SoundCloud', listing: 'auto', hint: 'soundcloud.com/you' },
     { id: 'website', icon: '🌐', label: 'Website', listing: 'card', hint: 'yoursite.com' },
     { id: 'facebook', icon: '📘', label: 'Facebook', listing: 'manual', hint: 'facebook.com/yourpage' },
     { id: 'rss', icon: '✍️', label: 'Blog / RSS', listing: 'auto', hint: 'yourblog.com/feed' },

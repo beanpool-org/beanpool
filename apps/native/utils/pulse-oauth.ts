@@ -320,14 +320,26 @@ export async function connectTikTokChannel(
             },
             identity
         );
-        tokenData = await exchangeRes.json();
+        const text = await exchangeRes.text();
+        try {
+            tokenData = JSON.parse(text);
+        } catch {
+            tokenData = { error: text || `HTTP ${exchangeRes.status}` };
+        }
+        if (!exchangeRes.ok && !tokenData?.error) {
+            tokenData.error = `HTTP error ${exchangeRes.status}`;
+        }
     } catch (e: any) {
         throw new PulseOAuthError('network', `Could not reach node for token exchange: ${e.message}`);
     }
 
     const data = tokenData?.data || {};
     if (!data.access_token) {
-        const msg = tokenData?.error?.message || tokenData?.message || 'Failed to obtain access token from TikTok.';
+        const msg = (typeof tokenData?.error === 'string' ? tokenData.error : tokenData?.error?.message)
+            || tokenData?.error_description
+            || tokenData?.data?.description
+            || tokenData?.message
+            || (typeof tokenData === 'string' ? tokenData : 'Failed to obtain access token from TikTok.');
         throw new PulseOAuthError('provider', msg);
     }
 
@@ -460,14 +472,26 @@ export async function connectInstagramChannel(
             },
             identity
         );
-        tokenData = await exchangeRes.json();
+        const text = await exchangeRes.text();
+        try {
+            tokenData = JSON.parse(text);
+        } catch {
+            tokenData = { error: text || `HTTP ${exchangeRes.status}` };
+        }
+        if (!exchangeRes.ok && !tokenData?.error) {
+            tokenData.error = `HTTP error ${exchangeRes.status}`;
+        }
     } catch (e: any) {
         throw new PulseOAuthError('network', `Could not reach node for Instagram token exchange: ${e.message}`);
     }
 
     const data = tokenData?.data || tokenData || {};
     if (!data.access_token) {
-        const msg = tokenData?.error?.message || tokenData?.message || 'Failed to obtain access token from Instagram.';
+        const msg = (typeof tokenData?.error === 'string' ? tokenData.error : tokenData?.error?.message)
+            || tokenData?.error_description
+            || tokenData?.data?.description
+            || tokenData?.message
+            || (typeof tokenData === 'string' ? tokenData : 'Failed to obtain access token from Instagram.');
         throw new PulseOAuthError('provider', msg);
     }
 

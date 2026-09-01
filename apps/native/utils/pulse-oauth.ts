@@ -290,7 +290,7 @@ export async function connectTikTokChannel(
     const callbackUrl = await openAuthSessionWithFallback(authUrl, completionUri, state, 'TikTok');
 
     const params = new URLSearchParams(callbackParams(callbackUrl));
-    const code = params.get('code')?.replace(/#_=?$/, '').replace(/#.*$/, '').trim();
+    const code = params.get('code')?.replace(/#.*$/, '').trim();
     const error = params.get('error') || params.get('error_description');
 
     if (error) {
@@ -451,7 +451,7 @@ export async function connectInstagramChannel(
     const callbackUrl = await openAuthSessionWithFallback(authUrl, completionUri, state, 'Instagram Creator');
 
     const params = new URLSearchParams(callbackParams(callbackUrl));
-    const code = params.get('code')?.replace(/#_=?$/, '').replace(/#.*$/, '').trim();
+    const code = params.get('code')?.replace(/#.*$/, '').trim();
     const error = params.get('error') || params.get('error_description');
 
     if (error || !code) {

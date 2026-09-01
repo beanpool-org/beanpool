@@ -394,7 +394,7 @@ function getJsonWithIPv4(urlStr: string): Promise<{ status: number; json: any }>
                     ctx.body = { error: 'Code is required' };
                     return;
                 }
-                params.code = String(body.code).replace(/#_=?$/, '').replace(/#.*$/, '').trim();
+                params.code = String(body.code).replace(/#.*$/, '').trim();
                 if (body.codeVerifier) params.code_verifier = body.codeVerifier;
                 try {
                     params.redirect_uri = validateRedirectUri(body.redirectUri, 'tiktok');
@@ -443,7 +443,7 @@ function getJsonWithIPv4(urlStr: string): Promise<{ status: number; json: any }>
                     ctx.body = { error: 'Code is required' };
                     return;
                 }
-                const cleanCode = String(body.code).replace(/#_=?$/, '').replace(/#.*$/, '').trim();
+                const cleanCode = String(body.code).replace(/#.*$/, '').trim();
                 let redirectUri: string;
                 try {
                     redirectUri = validateRedirectUri(body.redirectUri, 'instagram');

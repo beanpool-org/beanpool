@@ -363,7 +363,7 @@ export async function connectTikTokChannel(
     }
 
     const user = profileData?.data?.user || {};
-    const platformUsername = user.display_name || user.username || '';
+    const platformUsername = user.username || user.display_name || '';
 
     if (!platformUsername) {
         const errMsg = profileData?.error?.message || 'TikTok did not return an account username.';

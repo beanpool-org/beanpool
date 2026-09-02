@@ -304,8 +304,10 @@ function postFormWithIPv4(urlStr: string, params: Record<string, string>): Promi
                 timeout: 10000,
             },
             (res) => {
+                res.setEncoding('utf8');
                 let resData = '';
                 res.on('data', (chunk) => { resData += chunk; });
+                res.on('error', reject);
                 res.on('end', () => {
                     let json: any;
                     try {
@@ -338,8 +340,10 @@ function getJsonWithIPv4(urlStr: string): Promise<{ status: number; json: any }>
                 timeout: 10000,
             },
             (res) => {
+                res.setEncoding('utf8');
                 let resData = '';
                 res.on('data', (chunk) => { resData += chunk; });
+                res.on('error', reject);
                 res.on('end', () => {
                     let json: any;
                     try {

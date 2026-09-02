@@ -210,6 +210,36 @@ async function main(): Promise<void> {
     assert(verifyChanWithQuery.status === 200, 'Channel URL carrying query string verifies for rightful owner (Fix 2)');
     assert(typeof verifyChanWithQuery.body.channel.oauthVerifiedAt === 'string', 'Channel with query string is marked oauthVerifiedAt');
 
+    // 2g: Missing or empty platform username cannot produce a false verification
+    const unverifiedChan = addChannel({
+        ownerPubkey: alice,
+        platform: 'tiktok',
+        raw: '@alice_unverified',
+        category: 'craft',
+    });
+    const emptyUsernameVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${unverifiedChan.id}/verify-oauth`, {
+        actor: alice,
+        body: { platform: 'tiktok', platformUsername: '' },
+    });
+    assert(emptyUsernameVerify.status === 400, 'Empty platform username is rejected with 400');
+    assert(emptyUsernameVerify.body.error === 'empty', 'Error code is empty');
+
+    // 2h: Arbitrary display name (e.g. "Alice Smith") differing from handle is refused (no false verification)
+    const displayNameVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${unverifiedChan.id}/verify-oauth`, {
+        actor: alice,
+        body: { platform: 'tiktok', platformUsername: 'Alice Smith' },
+    });
+    assert(displayNameVerify.status === 400, 'Display name mismatch is refused with 400 ACCOUNT_MISMATCH');
+    assert(displayNameVerify.body.error === 'account_mismatch', 'Error code is account_mismatch');
+
+    // 2i: Case-insensitive real handle verification succeeds
+    const handleCaseVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${unverifiedChan.id}/verify-oauth`, {
+        actor: alice,
+        body: { platform: 'tiktok', platformUsername: 'Alice_Unverified' },
+    });
+    assert(handleCaseVerify.status === 200, 'Case-insensitive real handle verification succeeds');
+    assert(typeof handleCaseVerify.body.channel.oauthVerifiedAt === 'string', 'Channel marked oauthVerifiedAt');
+
     console.log('\n--- 3. OAuth Ingestion & Deduplication Against Manual Submission ---');
     const testVideoUrl = 'https://www.tiktok.com/@alice_pottery/video/7100000000000000001';
 

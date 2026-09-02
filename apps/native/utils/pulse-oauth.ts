@@ -280,7 +280,7 @@ export async function connectTikTokChannel(
 
     const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
         clientKey
-    )}&scope=user.info.basic,video.list&response_type=code&redirect_uri=${encodeURIComponent(
+    )}&scope=user.info.basic,user.info.profile,video.list&response_type=code&redirect_uri=${encodeURIComponent(
         redirectUri
     )}&state=${encodeURIComponent(state)}&code_challenge=${encodeURIComponent(
         challenge
@@ -354,7 +354,7 @@ export async function connectTikTokChannel(
     console.log('[PulseOAuth] Fetching TikTok user profile');
     let profileData: any;
     try {
-        const userRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name', {
+        const userRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username', {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
         profileData = await userRes.json();
@@ -362,11 +362,29 @@ export async function connectTikTokChannel(
         throw new PulseOAuthError('network', `Could not verify TikTok user profile: ${e.message}`);
     }
 
+    // Defensive fallback if TikTok rejects username field (e.g. legacy token missing user.info.profile scope)
+    if (profileData?.error && profileData?.error?.code !== 'ok' && profileData?.error?.code !== 0 && profileData?.error?.code !== '') {
+        try {
+            const fallbackRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name', {
+                headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            const fallbackJson = await fallbackRes.json();
+            if (fallbackJson?.data?.user) {
+                profileData = fallbackJson;
+            }
+        } catch {
+            // Keep original profileData error
+        }
+    }
+
     const user = profileData?.data?.user || {};
-    const platformUsername = user.username || user.display_name || '';
+    const platformUsername = user.username || '';
 
     if (!platformUsername) {
-        const errMsg = profileData?.error?.message || 'TikTok did not return an account username.';
+        const errMsg = profileData?.error?.message
+            || (user.display_name && !user.username
+                ? 'TikTok did not return a username (user.info.profile scope required). Please reconnect.'
+                : 'TikTok did not return an account username.');
         throw new PulseOAuthError('provider', errMsg);
     }
 

@@ -34,8 +34,8 @@ Grounding extracted from `apps/native/utils/pulse-oauth.ts`, `apps/server/src/ro
 | **TikTok Deep Link (App)** | `beanpool://auth/tiktok` | [`apps/native/utils/pulse-oauth.ts:L275`](file:///Users/marty/projects/beanpool/apps/native/utils/pulse-oauth.ts#L275) |
 | **Instagram Redirect URI (Web)**| `https://beanpool.org/auth/instagram` | [`apps/native/utils/pulse-oauth.ts:L427`](file:///Users/marty/projects/beanpool/apps/native/utils/pulse-oauth.ts#L427) |
 | **Instagram Deep Link (App)** | `beanpool://auth/instagram` | [`apps/native/utils/pulse-oauth.ts:L428`](file:///Users/marty/projects/beanpool/apps/native/utils/pulse-oauth.ts#L428) |
-| **TikTok Scopes** | `user.info.basic,video.list` | [`apps/native/utils/pulse-oauth.ts:L278`](file:///Users/marty/projects/beanpool/apps/native/utils/pulse-oauth.ts#L278) |
-| **Instagram Scopes** | `user_profile,user_media` | [`apps/native/utils/pulse-oauth.ts:L434`](file:///Users/marty/projects/beanpool/apps/native/utils/pulse-oauth.ts#L434) |
+| **TikTok Scopes** | `user.info.basic,user.info.profile,video.list` | [`apps/native/utils/pulse-oauth.ts:L283`](file:///Users/marty/projects/beanpool/apps/native/utils/pulse-oauth.ts#L283) |
+| **Instagram Scopes** | `instagram_business_basic` | [`apps/native/utils/pulse-oauth.ts:L468`](file:///Users/marty/projects/beanpool/apps/native/utils/pulse-oauth.ts#L468) |
 | **PKCE Parameters** | SHA-256 (`code_challenge_method=S256`, 32-byte verifier) | [`apps/native/utils/pulse-oauth.ts:L145-L151`](file:///Users/marty/projects/beanpool/apps/native/utils/pulse-oauth.ts#L145-L151) |
 | **Deep Link Interception** | `apps/native/app/+native-intent.ts` | [`apps/native/app/+native-intent.ts:L23-L38`](file:///Users/marty/projects/beanpool/apps/native/app/+native-intent.ts#L23-L38) |
 
@@ -82,11 +82,12 @@ Grounding extracted from `apps/native/utils/pulse-oauth.ts`, `apps/server/src/ro
 *   **Portfolio Inheritance:** A new Meta app created within the existing verified Meta Business Portfolio automatically inherits portfolio-level business verification.
 
 ### 4. Reviewer Access to an Invite-Gated App
-*   **Risk:** BeanPool requires an invite code / community node pairing on first launch. If a reviewer launches the app and cannot proceed past the welcome gate, the submission will be immediately rejected with *"Could not test the integration"*.
+*   **Risk:** BeanPool requires an invite code and community node pairing on first launch. If a reviewer launches the app and cannot proceed past the onboarding gate, the submission will be rejected with *"Could not test the integration"*.
 *   **Resolution Protocol for App Review:**
-    1.  In the Review Notes, provide a dedicated, persistent **Reviewer Invite Code** (e.g., `DEMO-REVIEWER-2026`).
-    2.  Provide clear test account credentials and specify exact steps to reach the Channels screen (`Profile -> Channels -> Connect TikTok / Connect Instagram`).
-    3.  Submit a crystal-clear, unedited **Screencast Video (MP4)** demonstrating the full user journey from clicking "Connect" to granting permissions and displaying the verified badge on The Pulse.
+    1.  **Generate Real Invite Codes on the Review Node:** Do NOT provide placeholder or invented codes. Generate fresh, genuine invite codes on the review node beforehand (e.g. via the node admin CLI or database).
+    2.  **Provide Multiple Codes (Single-Use, No Expiry):** Invite codes **never expire, but are strictly single-use** (in [`apps/server/src/db/schema.sql`](file:///Users/marty/projects/beanpool/apps/server/src/db/schema.sql), `invite_codes` tracks `used_by` and `used_at` with no expiration column). Once consumed by an initial test, that code cannot be reused. Provide a list of several unconsumed invite codes in the reviewer instructions so multiple reviewers or repeated test runs do not get blocked.
+    3.  **Clear Testing Instructions:** Provide clear test account credentials and specify exact navigation steps to reach the Channels screen (`Profile -> Creator Channels -> Connect TikTok / Connect Instagram`).
+    4.  **Submit Screencast Video (MP4):** Submit an unedited MP4 video demonstrating the full user journey from clicking "Connect" to granting permissions and displaying the verified badge on The Pulse.
 
 ### 5. App Store Presence Requirements
 *   **TikTok:** If registering as a "Mobile App", TikTok requires published Apple App Store or Google Play Store URLs for production review approval. However, registering with the **Web Platform** mode requires only the verified official website (`https://beanpool.org`). Furthermore, **TikTok Sandbox Mode** allows authorized test accounts to log in and sync immediately without any App Store listing or production review!
@@ -137,7 +138,8 @@ TikTok has no account-type restriction and provides a functional Sandbox mode th
     *   Under **Redirect Domain / URI**, enter:  
         `https://beanpool.org/auth/tiktok`
     *   Under **Scopes**, select:
-        *   `user.info.basic` *(Read avatar and username — Auto-granted in Sandbox)*
+        *   `user.info.basic` *(Read avatar and display name — Auto-granted in Sandbox)*
+        *   `user.info.profile` *(Read account username — Auto-granted in Sandbox; required to verify channel ownership against registered handles)*
 3.  Add **Display API** (or Content Kit / Video Kit depending on current UI):
     *   Select Scope: `video.list` *(Read public video list — Auto-granted in Sandbox for test users; gated by review in Production)*.
 
@@ -167,10 +169,11 @@ When ready to open TikTok OAuth to all community members:
 2.  **Screencast Video:** Upload a short MP4 ($\le$ 50MB) showing:
     *   Opening BeanPool native app or web interface.
     *   Navigating to Profile $\to$ Creator Channels $\to$ Connect TikTok.
-    *   The TikTok OAuth dialog requesting `user.info.basic` and `video.list`.
+    *   The TikTok OAuth dialog requesting `user.info.basic`, `user.info.profile`, and `video.list`.
     *   Returning to BeanPool with the `✓ Verified` badge and seeing the synced videos in The Pulse feed.
 3.  **Scope Justifications:**
-    *   `user.info.basic`: *"Used to confirm channel ownership by verifying the authenticated TikTok username matches the creator's registered channel handle."*
+    *   `user.info.basic`: *"Used to read the creator's avatar and display name to render their creator profile card."*
+    *   `user.info.profile`: *"Used to read the authenticated member's account username to verify channel ownership against their registered channel handle, ensuring handles match even when the creator's display name differs from their username."*
     *   `video.list`: *"Allows verified community creators to automatically syndicate their latest public video links to their neighborhood community feed."*
 4.  **Review Timeline:** Typically 2 to 5 business days.
 5.  **Common Rejection Reasons:** Video doesn't show the permission consent screen; Privacy policy doesn't mention TikTok data; Redirect URI mismatch.
@@ -252,30 +255,38 @@ Click **Save Changes**.
     # Expected: {"tiktok":{"enabled":true,...},"instagram":{"enabled":true,"appId":"your_meta_app_id_here"}}
     ```
 
-### Step 2.6: Development Mode & Test Users
-*   While in **Development Mode**, only users listed in **App Roles** can authenticate.
-*   Navigate to **App roles** $\to$ **Roles** $\to$ **Instagram Testers** (or Roles $\to$ Test Users).
-*   Add your Instagram Creator handle.
-*   In your Instagram mobile app, navigate to **Settings** $\to$ **Creator Tools and Controls** $\to$ **Apps and Websites** $\to$ **Tester Invitations**, and accept the invitation.
-*   You can now test the connection in Development Mode.
+### Step 2.6: Development Mode, Standard Access & Instagram Tester Setup
+> [!IMPORTANT]
+> ### CRITICAL REQUIREMENT: Instagram Tester Role under Standard Access
+> Under **Standard Access**, `graph.instagram.com` refuses ALL data reads for any Instagram account that has not been explicitly assigned the Instagram Tester role on the app — even while `api.instagram.com` still issues a completely valid OAuth access token!  
+> **Symptom:** Without the Tester role, every endpoint and field combination on `graph.instagram.com` fails with:  
+> `{"error":{"message":"Unsupported request - method type: get","type":"IGApiException","code":100}}`  
+> This generic error message names nothing useful and masks the underlying permissions gate. **A valid OAuth access token proves nothing about data access under Standard Access.**
+
+**Required Setup Steps:**
+1. In the Meta Developer Portal, go to **Instagram API with Instagram Login** (left menu) $\to$ **API setup with Instagram login**.
+2. Scroll to section **2. Generate access tokens** and click **Add account** (or navigate to **App roles** $\to$ **Roles** $\to$ **Instagram Testers** $\to$ **Add Instagram Testers**).
+3. Enter your Instagram Creator account username and send the tester invitation.
+4. Open the Instagram mobile app on your phone, navigate to **Settings and privacy** $\to$ **For professionals** (or **Creator tools and controls**) $\to$ **Apps and websites** $\to$ **Tester invitations**, and tap **Accept**.
+5. Once accepted, your account can successfully read profile information and media items via BeanPool in Development Mode and Standard Access.
 
 ### Step 2.7: App Review for Advanced Access (Production)
-To allow any community creator to connect their Instagram Creator account:
+To allow any community creator to connect their Instagram Creator account without manual tester assignment:
 1.  Navigate to **App Review** $\to$ **Permissions and Features**.
 2.  Locate `instagram_business_basic` (and `instagram_basic` if applicable) and click **Request Advanced Access**.
 3.  **Submission Form Details:**
     *   **Screencast Video:** Record an unedited MP4 demonstrating:
-        *   App login with reviewer invite code (`DEMO-REVIEWER-2026`).
-        *   Navigating to Profile $\to$ Channels $\to$ Connect Instagram Creator.
+        *   App onboarding/login with a freshly generated real review invite code.
+        *   Navigating to Profile $\to$ Creator Channels $\to$ Connect Instagram.
         *   Meta OAuth consent screen.
-        *   Returning to BeanPool with channel verification tick.
+        *   Returning to BeanPool with channel verification tick and seeing synced items on The Pulse feed.
     *   **Step-by-Step Testing Instructions:**
-        *   *Step 1:* Open BeanPool web app / staging build.
-        *   *Step 2:* Enter test invite code `DEMO-REVIEWER-2026`.
+        *   *Step 1:* Open BeanPool web app or mobile staging build.
+        *   *Step 2:* Enter one of the pre-generated single-use invite codes provided in the review notes (e.g. `INVITE-XXXX-YYYY`).
         *   *Step 3:* Tap Profile $\to$ Creator Channels $\to$ Connect Instagram.
-        *   *Step 4:* Grant permission on Instagram login screen.
+        *   *Step 4:* Log in and grant permission on the Instagram login screen.
 4.  **Review Timeline:** Typically 5 to 20 days.
-5.  **Common Rejection Reasons:** Reviewer could not log in (blocked by invite code); Screencast missing; Requesting unnecessary Facebook permissions.
+5.  **Common Rejection Reasons:** Reviewer could not log in (dead, already-used, or fabricated invite code); Screencast missing; Requesting unnecessary Facebook permissions.
 6.  **Ongoing Obligations (Annual Data Use Checkup - DUC):**
     *   Meta requires an **annual Data Use Checkup (DUC)**. You will receive an alert in the App Dashboard 60 days prior. An admin must certify that data handling complies with Meta Platform Terms, or API access is automatically revoked.
 7.  **Cost:** Free ($0).
@@ -291,7 +302,7 @@ Print or check off this list during registration:
 - [ ] 2. Create app `BeanPool Pulse` with icon from `apps/website/bean.png`.
 - [ ] 3. Enter Terms URL (`https://beanpool.org/terms.html`) and Privacy Policy URL (`https://beanpool.org/privacy.html`).
 - [ ] 4. Add **Login Kit** product; enter Redirect URI `https://beanpool.org/auth/tiktok`.
-- [ ] 5. Add **Display API** product; select `user.info.basic` and `video.list`.
+- [ ] 5. Add **Login Kit** and **Display API** products; select scopes `user.info.basic`, `user.info.profile`, and `video.list`.
 - [ ] 6. Copy **Client Key** to `.env` as `TIKTOK_CLIENT_KEY=...`.
 - [ ] 7. In Sandbox $\to$ Test accounts, add your personal TikTok handle.
 - [ ] 8. Accept the invitation in TikTok inbox and test the connection in BeanPool!
@@ -303,8 +314,8 @@ Print or check off this list during registration:
 - [ ] 4. Enter App Domains (`beanpool.org`), Privacy Policy, Terms of Service, and Data Deletion URL (`https://beanpool.org/privacy.html`).
 - [ ] 5. Add **Instagram API with Instagram Login**; enter Redirect URI `https://beanpool.org/auth/instagram`.
 - [ ] 6. Copy **App ID** to `.env` as `INSTAGRAM_APP_ID=...`.
-- [ ] 7. Under App Roles $\to$ Instagram Testers, add your Instagram handle and accept in Instagram Settings.
-- [ ] 8. Test the connection in Development Mode!
+- [ ] 7. Under **API setup with Instagram login $\to$ 2. Generate access tokens**, click **Add account** to assign the Instagram Tester role (required for data access under Standard Access), and accept in Instagram app under **Settings $\to$ Creator tools and controls $\to$ Apps and websites $\to$ Tester invitations**.
+- [ ] 8. Test the connection in Development Mode / Standard Access!
 
 ---
 

@@ -201,7 +201,7 @@ export default function ProjectDetailScreen() {
                         {/* Report Action */}
                         {!isCreator && (
                             <View style={{ marginTop: 24, borderTopWidth: 1, borderTopColor: colors.surface.subtle, paddingTop: 20 }}>
-                                <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button">
+                                <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel="Report Project" accessibilityHint="Toggles report project form" accessibilityState={{ expanded: showReportForm }}>
                                     <MaterialCommunityIcons name="shield-off-outline" size={20} color={colors.feedback.danger.solid} />
                                     <Text style={{ color: colors.feedback.danger.solid, fontSize: 15, fontWeight: '600' }}>Report Project</Text>
                                 </Pressable>

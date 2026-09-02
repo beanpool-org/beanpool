@@ -954,7 +954,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             </span>
                         </div>
 
-                        {registrarAllocations.filter(a => a.status === 'pending').length === 0 ? (
+                        {registrarLoading && registrarAllocations.length === 0 ? (
+                            <div className="p-8 text-center text-xs text-sky-400 font-mono animate-pulse">
+                                🔄 Loading domain registrar claims...
+                            </div>
+                        ) : registrarAllocations.filter(a => a.status === 'pending').length === 0 ? (
                             <div className="p-8 text-center text-xs text-nature-400">
                                 No pending domain name claims requiring approval at this time.
                             </div>

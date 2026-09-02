@@ -57,6 +57,7 @@ export default function NodeMismatchScreen() {
     }
 
     async function switchToNode(url: string) {
+        setLoading(true);
         setError(null);
         try {
             // Each node has its own local DB — swap it the same way Settings does.
@@ -66,7 +67,9 @@ export default function NodeMismatchScreen() {
             await initDB();
 
             const result = await recheck();
-            if (result === 'member') {
+            const { isGuestNode } = await import('../utils/nodes');
+            const intentionalGuest = result === 'stranger' && await isGuestNode(url);
+            if (result === 'member' || intentionalGuest) {
                 requestSync().catch(() => {});
                 router.replace('/(tabs)');
             } else if (result === 'stranger') {

@@ -34,6 +34,7 @@ export function TopHeader({
                     <span className="text-nature-400 hidden sm:inline">Admin Password:</span>
                     <input
                         type="password"
+                        autoComplete="off"
                         value={adminPasswordInput}
                         onChange={(e) => onPasswordChange(e.target.value)}
                         placeholder="Enter Admin Password"

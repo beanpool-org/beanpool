@@ -669,6 +669,10 @@ export default function SettingsScreen() {
     const [holidayLoading, setHolidayLoading] = useState(false);
     const [editCallsign, setEditCallsign] = useState(identity?.callsign || '');
     const [avatar, setAvatar] = useState<string | null>(null);
+    // Callsign as held by the node we're currently anchored to. Callsigns are per-node
+    // (unique per node, chosen at join), so the device-global identity.callsign is only
+    // ever right by coincidence — display this instead and fall back while it loads.
+    const [nodeCallsign, setNodeCallsign] = useState<string | null>(null);
     const [bio, setBio] = useState('');
     const [contact, setContact] = useState('');
     const [contactVisibility, setContactVisibility] = useState<'hidden' | 'trade_partners' | 'friends' | 'community'>('community');
@@ -679,15 +683,25 @@ export default function SettingsScreen() {
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState<string>('Detecting...');
     
-    React.useEffect(() => {
-        // Load profile data on mount
-        if (identity?.publicKey) {
-            getMemberProfile(identity.publicKey).then(async profile => {
-                const canonical = await getCanonicalProfile().catch(() => null);
+    // Reads the profile from whichever node we are currently anchored to. `getDb()` is
+    // keyed on `beanpool_anchor_url`, so this always resolves against the active node's
+    // database without needing to be told which one that is.
+    const loadProfileForCurrentNode = React.useCallback(async () => {
+        if (!identity?.publicKey) return;
+        try {
+            const profile = await getMemberProfile(identity.publicKey);
+            const canonical = await getCanonicalProfile().catch(() => null);
+            // Assign unconditionally. Setting this only when the node knows us would
+            // leave the previous node's name on the card (and in the purge gate) after
+            // switching to a node that has no profile for this key.
+            setNodeCallsign(profile?.callsign || null);
+            {
                 if (profile) {
                     const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
                     setAvatar(cleaned || canonical?.avatar || null);
-                    if (profile.callsign) setEditCallsign(profile.callsign);
+                    if (profile.callsign) {
+                        setEditCallsign(profile.callsign);
+                    }
                     if (profile.bio) setBio(profile.bio);
                     else if (canonical?.bio) setBio(canonical.bio);
                     if (profile.contact_value) setContact(profile.contact_value);
@@ -703,9 +717,25 @@ export default function SettingsScreen() {
                     if (canonical.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
                     if (canonical.archetype) setArchetypeRaw(canonical.archetype);
                 }
-            }).catch(() => {});
+            }
+        } catch {
+            // Non-fatal: the card falls back to the local identity.
         }
     }, [identity?.publicKey]);
+
+    React.useEffect(() => {
+        void loadProfileForCurrentNode();
+    }, [loadProfileForCurrentNode, anchorUrl]);
+
+    // Re-read whenever the screen regains focus. Switching nodes from GlobalHeader
+    // never touches this screen's state, and `anchorUrl` is only assigned when the
+    // diagnostics panel runs — so focus is the one reliable signal that the anchored
+    // node may have changed underneath us.
+    useFocusEffect(
+        React.useCallback(() => {
+            void loadProfileForCurrentNode();
+        }, [loadProfileForCurrentNode])
+    );
 
     // Load holiday-mode state on mount (queried so an unset flag reads as OFF, not the pref default).
     React.useEffect(() => {
@@ -1086,6 +1116,9 @@ export default function SettingsScreen() {
             if (avatar) localUpdate.avatar_url = avatar;
             if (archetypeRaw) localUpdate.archetype = archetypeRaw;
             await updateMemberProfile(identity.publicKey, localUpdate);
+            // The card renders nodeCallsign, so it would keep showing the pre-edit name
+            // until the screen remounted if we didn't move it here too.
+            setNodeCallsign(newCallsign);
             if (newCallsign !== identity.callsign) {
                 const updated = await updateCallsign(newCallsign);
                 if (updated) setIdentity(updated);
@@ -1421,8 +1454,14 @@ export default function SettingsScreen() {
 
     async function handleNodePurge() {
         if (!identity) return;
-        if (purgeConfirm !== 'DELETE' && purgeConfirm.trim().toLowerCase() !== identity.callsign.trim().toLowerCase()) {
-            Alert.alert("Warning", `You must type exactly 'DELETE' or '${identity.callsign}' to permanently purge your account.`);
+        // Accept either the node-held callsign (what the profile card shows) or the
+        // device-global one — they differ per node, and demanding the invisible one
+        // would leave the user typing the name in front of them and being rejected.
+        const purgeNames = [nodeCallsign, identity.callsign]
+            .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+            .map(c => c.trim().toLowerCase());
+        if (purgeConfirm !== 'DELETE' && !purgeNames.includes(purgeConfirm.trim().toLowerCase())) {
+            Alert.alert("Warning", `You must type exactly 'DELETE' or '${nodeCallsign || identity.callsign || 'CALLSIGN'}' to permanently purge your account.`);
             return;
         }
         const success = await authenticateUser('Confirm authentication to permanently purge your account from the node.');
@@ -1510,7 +1549,7 @@ export default function SettingsScreen() {
                     </Pressable>
 
                     {/* Callsign */}
-                    <Text style={styles.callsignText}>{identity.callsign}</Text>
+                    <Text style={styles.callsignText}>{nodeCallsign || identity.callsign}</Text>
 
                     {/* Bio */}
                     {bio ? <Text style={styles.bioText}>{bio}</Text> : null}
@@ -2862,8 +2901,11 @@ export default function SettingsScreen() {
                     )}
 
                     {wipeType === 'purge' && (() => {
-                        const callsignToMatch = (identity?.callsign || '').trim().toLowerCase();
-                        const isPurgeInputValid = purgeConfirm === 'DELETE' || (callsignToMatch.length > 0 && purgeConfirm.trim().toLowerCase() === callsignToMatch);
+                        const purgeNames = [nodeCallsign, identity?.callsign]
+                            .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+                            .map(c => c.trim().toLowerCase());
+                        const typedPurge = purgeConfirm.trim().toLowerCase();
+                        const isPurgeInputValid = purgeConfirm === 'DELETE' || purgeNames.includes(typedPurge);
 
                         return (
                             <View style={{ gap: 12, marginTop: 4 }}>
@@ -2876,7 +2918,7 @@ export default function SettingsScreen() {
                                     </Text>
                                 </View>
 
-                                <Text style={styles.label}>TYPE 'DELETE' OR '{identity?.callsign || 'CALLSIGN'}' TO CONFIRM</Text>
+                                <Text style={styles.label}>TYPE 'DELETE' OR '{nodeCallsign || identity?.callsign || 'CALLSIGN'}' TO CONFIRM</Text>
                                 <TextInput
                                     style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.feedback.danger.solid, borderColor: colors.feedback.danger.border }]}
                                     value={purgeConfirm}

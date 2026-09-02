@@ -458,6 +458,10 @@ export default function SettingsScreen() {
 
     // --- Protection state ---
     const [protectionResult, setProtectionResult] = useState<KeeperEnrolmentResult | null>(null);
+    // Display name of the node the protection panel is describing. Kept separate from
+    // `anchorUrl`, which is only assigned when the diagnostics panel runs and therefore
+    // sits at 'Detecting...' in normal use.
+    const [protectionNodeLabel, setProtectionNodeLabel] = useState<string | null>(null);
     const [protectionLoading, setProtectionLoading] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     /** Set before an SSO/friend flow leaves the app, so the return trip does not reset the section. */
@@ -515,11 +519,32 @@ export default function SettingsScreen() {
         }, 30000);
     };
 
+    // Resolves a human label for the node we are actually anchored to, preferring the
+    // saved-node alias over the host. Reads the anchor directly rather than trusting
+    // component state.
+    const resolveCommunityLabel = async (): Promise<string | null> => {
+        try {
+            const url = await getAnchorUrl();
+            if (!url) return null;
+            const nodes = savedNodes.length > 0 ? savedNodes : await getSavedNodes();
+            const match = nodes.find(n => n.url === url);
+            if (match?.alias) return match.alias;
+            try {
+                return new URL(url).host || null;
+            } catch {
+                return url.replace(/^https?:\/\//, '').replace(/\/.*$/, '') || null;
+            }
+        } catch {
+            return null;
+        }
+    };
+
     const fetchProtectionStatus = async () => {
         setProtectionLoading(true);
         try {
             const url = await getAnchorUrl();
             if (!url || !identity) { setProtectionLoading(false); return; }
+            resolveCommunityLabel().then(setProtectionNodeLabel).catch(() => {});
             const res = await signedPost(url, '/api/recovery/shares/status', {}, identity);
             if (!res.ok) { setProtectionLoading(false); return; }
             const body = await res.json() as {
@@ -558,9 +583,16 @@ export default function SettingsScreen() {
     const handleDisconnectSso = async (provider: SsoProvider) => {
         if (!identity) return;
         const provName = provider === 'apple' ? 'Apple' : provider === 'google' ? 'Google' : provider === 'facebook' ? 'Facebook' : 'GitHub';
+        // Name the community: this only ever affects recovery on THIS node, and saying
+        // so plainly is the difference between a member knowing where they're covered
+        // and assuming they're covered everywhere.
+        const community = protectionNodeLabel || await resolveCommunityLabel();
+        const message = community
+            ? `On a new phone, this sign-in account will no longer be able to restore your 12 recovery words for ${community}. Your other communities are unaffected.`
+            : `This sign-in account will no longer be able to restore your 12 recovery words on a new phone.`;
         Alert.alert(
             `Disconnect ${provName}?`,
-            `This sign-in account will no longer be able to restore your 12 recovery words on a new phone.`,
+            message,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -2011,6 +2043,7 @@ export default function SettingsScreen() {
                             <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
+                                communityName={protectionNodeLabel || undefined}
                                 onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                     if (prov) setSsoEnrolProvider(prov);
                                     skipNextFocusResetRef.current = true;

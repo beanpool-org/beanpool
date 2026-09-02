@@ -13,13 +13,37 @@ const PROVIDER_NAMES: Record<SsoProvider, string> = {
     github: 'GitHub',
 };
 
+export function formatCommunityName(raw?: string | null): string | null {
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === 'Detecting...' || trimmed === 'Local discovery (or offline)') {
+        return null;
+    }
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        try {
+            const url = new URL(trimmed);
+            return url.host || url.hostname || trimmed;
+        } catch {
+            return trimmed.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+        }
+    }
+    return trimmed;
+}
+
 export function KeeperProtectionPanel({ 
     protection,
+    communityName,
     onProtectSso,
     onDisconnectSso,
     onProtectFriends,
 }: { 
     protection: Protection;
+    /**
+     * The community this protection describes. Keepers are enrolled PER NODE, so a
+     * panel that names no community reads as a property of the account and is how a
+     * member ends up attempting recovery on a node that holds nothing for them.
+     */
+    communityName?: string;
     onProtectSso?: (provider: SsoProvider) => void;
     onDisconnectSso?: (provider: SsoProvider) => void;
     onProtectFriends?: () => void;
@@ -29,6 +53,9 @@ export function KeeperProtectionPanel({
         ? ['apple', 'google', 'facebook', 'github']
         : ['google', 'facebook', 'github'];
 
+    const community = formatCommunityName(communityName);
+    const coveredHeading = community ? `🛡️ You're covered on ${community}` : "🛡️ You're covered";
+
     const renderSsoProviders = () => {
         if (Platform.OS === 'web' || !onProtectSso) return null;
 
@@ -36,7 +63,7 @@ export function KeeperProtectionPanel({
             <View style={styles.ssoGroup}>
                 <Text style={styles.ssoGroupTitle}>Sign-In Recovery Providers (1-of-N)</Text>
                 <Text style={styles.ssoGroupSubtitle}>
-                    Connect multiple accounts for redundant backup. Any single connected account can restore your 12 words.
+                    Connect multiple accounts for redundant backup. Any single connected account plus your community hub can restore your 12 words.
                 </Text>
 
                 {allProviders.map((prov) => {
@@ -125,7 +152,7 @@ export function KeeperProtectionPanel({
         if (protection.tier === 'sso') {
             return (
                 <View style={[styles.panel, styles.covered]}>
-                    <Text style={styles.heading} accessibilityRole="header">🛡️ You're covered</Text>
+                    <Text style={styles.heading} accessibilityRole="header">{coveredHeading}</Text>
                     {protection.holding.map((label, i) => (
                         <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
                             <Text style={styles.tick}>✅</Text>
@@ -159,7 +186,7 @@ export function KeeperProtectionPanel({
         if (protection.tier === 'friends') {
             return (
                 <View style={[styles.panel, styles.covered]}>
-                    <Text style={styles.heading} accessibilityRole="header">🛡️ You're covered</Text>
+                    <Text style={styles.heading} accessibilityRole="header">{coveredHeading}</Text>
                     {protection.holding.map((label, i) => (
                         <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
                             <Text style={styles.tick}>✅</Text>

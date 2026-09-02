@@ -7,7 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
 import { normalizeNodeUrl, looksLikeNodeAddress } from '../utils/node-url';
-import { wipeIdentity } from '../utils/identity';
+import { getSavedNodes, type SavedNode } from '../utils/nodes';
+import { wipeIdentity, getMnemonic, hasMnemonic } from '../utils/identity';
 import { requestSync } from '../services/pillar-sync';
 import { colors, palette } from '../constants/colors';
 
@@ -20,7 +21,7 @@ import { colors, palette } from '../constants/colors';
  */
 export default function NodeMismatchScreen() {
     const router = useRouter();
-    const { setIdentity } = useIdentity();
+    const { identity, setIdentity } = useIdentity();
     const { nodeUrl, recheck } = useNodeStatus();
     const [input, setInput] = useState(nodeUrl || '');
     const [loading, setLoading] = useState(false);
@@ -29,12 +30,33 @@ export default function NodeMismatchScreen() {
     // nodeUrl can resolve after first render; prefill once it's known.
     useEffect(() => { if (nodeUrl && !input) setInput(nodeUrl); }, [nodeUrl]);
 
+    // The communities this device already knows about. Landing here almost always means
+    // the member is anchored to the wrong one of these, so offering the list is a far
+    // better first move than asking them to retype an address — and it is the difference
+    // between one tap and reaching for the destructive option.
+    // Words are revealed in-place before the wipe is offered. The previous dialog
+    // asserted that the 12-word phrase would restore the account, which is only true if
+    // the member was ever shown it and wrote it down — so show it instead of claiming it.
+    const [words, setWords] = useState<string[] | null>(null);
+    const [showWipe, setShowWipe] = useState(false);
+
+    const [otherNodes, setOtherNodes] = useState<SavedNode[]>([]);
+    useEffect(() => {
+        getSavedNodes()
+            .then((nodes) => setOtherNodes(nodes.filter((n) => n.url !== nodeUrl)))
+            .catch(() => {});
+    }, [nodeUrl]);
+
     async function handleReconnect() {
         const url = normalizeNodeUrl(input);
         if (!url || !looksLikeNodeAddress(url)) {
             setError("That node address doesn't look right. Use something like node.yourcommunity.org");
             return;
         }
+        await switchToNode(url);
+    }
+
+    async function switchToNode(url: string) {
         setLoading(true);
         setError(null);
         try {
@@ -45,7 +67,9 @@ export default function NodeMismatchScreen() {
             await initDB();
 
             const result = await recheck();
-            if (result === 'member') {
+            const { isGuestNode } = await import('../utils/nodes');
+            const intentionalGuest = result === 'stranger' && await isGuestNode(url);
+            if (result === 'member' || intentionalGuest) {
                 requestSync().catch(() => {});
                 router.replace('/(tabs)');
             } else if (result === 'stranger') {
@@ -60,14 +84,31 @@ export default function NodeMismatchScreen() {
         }
     }
 
-    function handleLogout() {
+    async function handleStartWipe() {
+        if (hasMnemonic(identity)) {
+            const w = await getMnemonic(identity);
+            setWords(w);
+        } else {
+            setWords(null);
+        }
+        setShowWipe(true);
+    }
+
+    function handleConfirmWipe() {
+        const hasWords = hasMnemonic(identity);
         Alert.alert(
-            'Log out & start over?',
-            "Your 12-word recovery phrase still restores this account later. You'll return to the welcome screen to set things up again.",
+            'Delete this account from this phone?',
+            hasWords
+                ? "Only do this if you have written your 12 words down. They are the only way back in, " +
+                  "apart from a sign-in account linked on a community that holds a recovery piece for you.\n\n" +
+                  "This erases the key for every community, not just this one."
+                : "This account has no 12-word phrase stored on this device, so deleting it is PERMANENT " +
+                  "unless a community holds a recovery piece for you.\n\nSwitching communities is almost " +
+                  "certainly what you want instead.",
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                    text: 'Log out',
+                    text: 'Delete',
                     style: 'destructive',
                     onPress: async () => {
                         await wipeIdentity();
@@ -98,6 +139,33 @@ export default function NodeMismatchScreen() {
                             </View>
                         ) : null}
 
+                        {otherNodes.length > 0 ? (
+                            <View style={styles.pickerWrap}>
+                                <Text style={styles.inputLabel}>Switch to one of your communities</Text>
+                                {otherNodes.map((n) => {
+                                    let host = n.url;
+                                    try { host = new URL(n.url).host; } catch {}
+                                    return (
+                                        <Pressable
+                                            key={n.url}
+                                            style={styles.nodeRow}
+                                            onPress={() => switchToNode(n.url)}
+                                            disabled={loading}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`Switch to ${n.alias || host}`}
+                                        >
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.nodeRowName}>{n.alias || host}</Text>
+                                                {n.alias ? <Text style={styles.nodeRowUrl}>{host}</Text> : null}
+                                            </View>
+                                            <Text style={styles.nodeRowChevron}>›</Text>
+                                        </Pressable>
+                                    );
+                                })}
+                                <Text style={styles.hint}>Or enter a different address below.</Text>
+                            </View>
+                        ) : null}
+
                         <Text style={styles.inputLabel}>Correct community node address</Text>
                         <TextInput
                             style={styles.input}
@@ -118,9 +186,43 @@ export default function NodeMismatchScreen() {
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Reconnect</Text>}
                         </Pressable>
 
-                        <Pressable style={styles.secondaryBtn} onPress={handleLogout} disabled={loading} accessibilityRole="button">
-                            <Text style={styles.secondaryBtnText}>Log out & start over</Text>
-                        </Pressable>
+                        {!showWipe ? (
+                            <Pressable style={styles.secondaryBtn} onPress={handleStartWipe} disabled={loading} accessibilityRole="button">
+                                <Text style={styles.secondaryBtnText}>Delete this account from this phone</Text>
+                            </Pressable>
+                        ) : (
+                            <View style={styles.wipeWrap}>
+                                {words ? (
+                                    <>
+                                        <Text style={styles.wipeTitle}>Write these 12 words down first</Text>
+                                        <Text style={styles.wipeBody}>
+                                            They are the only way back into this account, apart from a linked
+                                            sign-in on a community that holds a recovery piece for you.
+                                        </Text>
+                                        <View style={styles.wordsBox}>
+                                            {words.map((w, i) => (
+                                                <Text key={`${w}-${i}`} style={styles.word}>{i + 1}. {w}</Text>
+                                            ))}
+                                        </View>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Text style={styles.wipeTitle}>No recovery phrase on this device</Text>
+                                        <Text style={styles.wipeBody}>
+                                            This account has no 12 words stored here, so deleting it is permanent
+                                            unless a community holds a recovery piece for you. Switching
+                                            communities above is almost certainly what you want instead.
+                                        </Text>
+                                    </>
+                                )}
+                                <Pressable style={styles.secondaryBtn} onPress={handleConfirmWipe} disabled={loading} accessibilityRole="button">
+                                    <Text style={styles.secondaryBtnText}>I've saved them — delete the account</Text>
+                                </Pressable>
+                                <Pressable style={styles.secondaryBtn} onPress={() => { setShowWipe(false); setWords(null); }} accessibilityRole="button">
+                                    <Text style={styles.cancelWipeText}>Cancel</Text>
+                                </Pressable>
+                            </View>
+                        )}
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -130,6 +232,26 @@ export default function NodeMismatchScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.app },
+    pickerWrap: { marginBottom: 18 },
+    wipeWrap: { marginTop: 4 },
+    wipeTitle: { color: colors.text.heading, fontSize: 15, fontWeight: '700', marginBottom: 6 },
+    wipeBody: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 10 },
+    wordsBox: {
+        flexDirection: 'row', flexWrap: 'wrap', gap: 6,
+        backgroundColor: colors.surface.app, borderRadius: 12, padding: 12,
+        borderWidth: 1, borderColor: colors.border.default, marginBottom: 12,
+    },
+    word: { color: colors.text.heading, fontSize: 13, fontWeight: '600', width: '45%' },
+    cancelWipeText: { color: colors.text.secondary, fontSize: 14, textAlign: 'center', fontWeight: '600' },
+    nodeRow: {
+        flexDirection: 'row', alignItems: 'center', gap: 10,
+        paddingVertical: 14, paddingHorizontal: 14, marginBottom: 8,
+        backgroundColor: colors.surface.app, borderRadius: 12,
+        borderWidth: 1, borderColor: colors.border.default,
+    },
+    nodeRowName: { color: colors.text.heading, fontSize: 15, fontWeight: '700' },
+    nodeRowUrl: { color: colors.text.secondary, fontSize: 12, marginTop: 2 },
+    nodeRowChevron: { color: colors.text.muted, fontSize: 22, fontWeight: '300' },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default },
     emoji: { fontSize: 40, marginBottom: 8 },

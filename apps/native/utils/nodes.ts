@@ -58,3 +58,56 @@ export function getDatabaseFilenameForNode(url: string | null): string {
     const sanitized = url.replace(/[^a-zA-Z0-9]/g, '_');
     return `beanpool_${sanitized}.db`;
 }
+
+// ── Deliberate guest visits ───────────────────────────────────────────────────
+//
+// Browsing a community you are not a member of is a legitimate state (read-only
+// guest), but it is indistinguishable from the error the root layout watches for —
+// "this node doesn't recognise you", i.e. a mistyped address. Without a record of
+// intent the watcher ejects deliberate guests to /node-mismatch, which is how a
+// member gets thrown out of the very Register screen that would fix it (2026-09-02).
+//
+// So intent is recorded explicitly: only set when the member is told they are not a
+// member and chooses to continue anyway. Cleared the moment they register, so a real
+// member is never treated as a guest.
+const GUEST_KEY = 'beanpool_guest_nodes';
+
+async function readGuestNodes(): Promise<string[]> {
+    try {
+        const raw = await AsyncStorage.getItem(GUEST_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter((u): u is string => typeof u === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
+export async function markGuestNode(url: string): Promise<void> {
+    if (!url) return;
+    try {
+        const urls = await readGuestNodes();
+        if (!urls.includes(url)) {
+            urls.push(url);
+            await AsyncStorage.setItem(GUEST_KEY, JSON.stringify(urls));
+        }
+    } catch {
+        // Non-fatal: worst case the watcher diverts to node-mismatch, which is now
+        // escapable via the saved-node picker rather than being a dead end.
+    }
+}
+
+export async function clearGuestNode(url: string): Promise<void> {
+    if (!url) return;
+    try {
+        const urls = await readGuestNodes();
+        const next = urls.filter((u) => u !== url);
+        if (next.length !== urls.length) {
+            await AsyncStorage.setItem(GUEST_KEY, JSON.stringify(next));
+        }
+    } catch {}
+}
+
+export async function isGuestNode(url: string): Promise<boolean> {
+    if (!url) return false;
+    return (await readGuestNodes()).includes(url);
+}

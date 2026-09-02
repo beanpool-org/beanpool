@@ -466,6 +466,14 @@ export default function PeopleScreen() {
                 const { redeemInvite } = await import('../../utils/db');
                 await redeemInvite(parsedCode, identity?.callsign || 'Unknown', identity);
 
+                // Registered — no longer a guest here, so let the watcher resume treating a
+                // 'stranger' result on this node as the real error it is.
+                try {
+                    const { clearGuestNode } = await import('../../utils/nodes');
+                    const current = await AsyncStorage.getItem('beanpool_anchor_url');
+                    if (current) await clearGuestNode(current);
+                } catch {}
+
                 const { requestSync } = await import('../../services/pillar-sync');
                 requestSync().catch(console.error);
 

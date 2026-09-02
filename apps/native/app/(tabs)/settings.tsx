@@ -458,6 +458,10 @@ export default function SettingsScreen() {
 
     // --- Protection state ---
     const [protectionResult, setProtectionResult] = useState<KeeperEnrolmentResult | null>(null);
+    // Display name of the node the protection panel is describing. Kept separate from
+    // `anchorUrl`, which is only assigned when the diagnostics panel runs and therefore
+    // sits at 'Detecting...' in normal use.
+    const [protectionNodeLabel, setProtectionNodeLabel] = useState<string | null>(null);
     const [protectionLoading, setProtectionLoading] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     /** Set before an SSO/friend flow leaves the app, so the return trip does not reset the section. */
@@ -515,11 +519,32 @@ export default function SettingsScreen() {
         }, 30000);
     };
 
+    // Resolves a human label for the node we are actually anchored to, preferring the
+    // saved-node alias over the host. Reads the anchor directly rather than trusting
+    // component state.
+    const resolveCommunityLabel = async (): Promise<string | null> => {
+        try {
+            const url = await getAnchorUrl();
+            if (!url) return null;
+            const nodes = savedNodes.length > 0 ? savedNodes : await getSavedNodes();
+            const match = nodes.find(n => n.url === url);
+            if (match?.alias) return match.alias;
+            try {
+                return new URL(url).host || null;
+            } catch {
+                return url.replace(/^https?:\/\//, '').replace(/\/.*$/, '') || null;
+            }
+        } catch {
+            return null;
+        }
+    };
+
     const fetchProtectionStatus = async () => {
         setProtectionLoading(true);
         try {
             const url = await getAnchorUrl();
             if (!url || !identity) { setProtectionLoading(false); return; }
+            resolveCommunityLabel().then(setProtectionNodeLabel).catch(() => {});
             const res = await signedPost(url, '/api/recovery/shares/status', {}, identity);
             if (!res.ok) { setProtectionLoading(false); return; }
             const body = await res.json() as {
@@ -558,9 +583,16 @@ export default function SettingsScreen() {
     const handleDisconnectSso = async (provider: SsoProvider) => {
         if (!identity) return;
         const provName = provider === 'apple' ? 'Apple' : provider === 'google' ? 'Google' : provider === 'facebook' ? 'Facebook' : 'GitHub';
+        // Name the community: this only ever affects recovery on THIS node, and saying
+        // so plainly is the difference between a member knowing where they're covered
+        // and assuming they're covered everywhere.
+        const community = protectionNodeLabel || await resolveCommunityLabel();
+        const message = community
+            ? `On a new phone, this sign-in account will no longer be able to restore your 12 recovery words for ${community}. Your other communities are unaffected.`
+            : `This sign-in account will no longer be able to restore your 12 recovery words on a new phone.`;
         Alert.alert(
             `Disconnect ${provName}?`,
-            `This sign-in account will no longer be able to restore your 12 recovery words on a new phone.`,
+            message,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -1377,8 +1409,30 @@ export default function SettingsScreen() {
             }
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
             // Inject alias to native node matrix
-            const { addSavedNode } = await import('../../utils/nodes');
+            const { addSavedNode, markGuestNode, clearGuestNode } = await import('../../utils/nodes');
             await addSavedNode(finalAnchorUrl, newNodeAlias.trim() || undefined);
+
+            // Record whether this is a deliberate guest visit. Pointing at a community you
+            // are not a member of is legitimate — you browse read-only, then register from
+            // the People tab — but it probes identically to a mistyped address, so the root
+            // layout needs the intent written down or it ejects you to node-mismatch and you
+            // never reach the Register screen.
+            if (identity?.publicKey) {
+                try {
+                    const probe = await fetch(`${finalAnchorUrl}/api/community/membership/${identity.publicKey}`);
+                    if (probe.ok) {
+                        const data = await probe.json();
+                        if (data?.isMember) {
+                            await clearGuestNode(finalAnchorUrl);
+                        } else {
+                            await markGuestNode(finalAnchorUrl);
+                        }
+                    }
+                } catch {
+                    // Unreachable node: leave the marker alone. 'unknown' recognition never
+                    // diverts, so nothing ejects the member while the node is down.
+                }
+            }
 
             const { closeDB, initDB } = await import('../../utils/db');
             await closeDB();
@@ -2011,6 +2065,7 @@ export default function SettingsScreen() {
                             <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
                             <KeeperProtectionPanel
                                 protection={protectionFrom(protectionResult)}
+                                communityName={protectionNodeLabel || undefined}
                                 onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                     if (prov) setSsoEnrolProvider(prov);
                                     skipNextFocusResetRef.current = true;

@@ -519,7 +519,23 @@ function RootLayoutNav() {
             // brief window before createRecoveryRequest lands and the node starts
             // reporting 'recovering'. They're on that screen on purpose.
             if (root !== 'node-mismatch' && root !== 'welcome' && root !== 'recover-identity') {
-                router.replace('/node-mismatch');
+                // Nor a deliberate guest. Browsing a community you haven't joined is a
+                // real state, and it probes identically to a mistyped address — so it is
+                // distinguished by recorded intent, not by the probe. Without this the
+                // watcher ejects the member from the Register screen that would let them
+                // join (the 2026-09-02 lockout).
+                void (async () => {
+                    try {
+                        const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+                        if (anchor) {
+                            const { isGuestNode } = await import('../utils/nodes');
+                            if (await isGuestNode(anchor)) return;
+                        }
+                    } catch {
+                        // Fall through to the divert: node-mismatch is now escapable.
+                    }
+                    if (isComponentMounted.current) router.replace('/node-mismatch');
+                })();
             }
             return;
         }

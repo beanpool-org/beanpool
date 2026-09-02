@@ -175,7 +175,11 @@ router.post('/api/local/admin/directory/push', async (ctx) => {
         ctx.status = 401;
         return;
     }
-    ctx.body = await pushDirectoryNow();
+    const result = await pushDirectoryNow();
+    if (!result.success) {
+        ctx.status = 400;
+    }
+    ctx.body = result;
 });
 
 // Local directory info endpoint (used by settings preview)

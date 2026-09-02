@@ -1409,8 +1409,30 @@ export default function SettingsScreen() {
             }
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
             // Inject alias to native node matrix
-            const { addSavedNode } = await import('../../utils/nodes');
+            const { addSavedNode, markGuestNode, clearGuestNode } = await import('../../utils/nodes');
             await addSavedNode(finalAnchorUrl, newNodeAlias.trim() || undefined);
+
+            // Record whether this is a deliberate guest visit. Pointing at a community you
+            // are not a member of is legitimate — you browse read-only, then register from
+            // the People tab — but it probes identically to a mistyped address, so the root
+            // layout needs the intent written down or it ejects you to node-mismatch and you
+            // never reach the Register screen.
+            if (identity?.publicKey) {
+                try {
+                    const probe = await fetch(`${finalAnchorUrl}/api/community/membership/${identity.publicKey}`);
+                    if (probe.ok) {
+                        const data = await probe.json();
+                        if (data?.isMember) {
+                            await clearGuestNode(finalAnchorUrl);
+                        } else {
+                            await markGuestNode(finalAnchorUrl);
+                        }
+                    }
+                } catch {
+                    // Unreachable node: leave the marker alone. 'unknown' recognition never
+                    // diverts, so nothing ejects the member while the node is down.
+                }
+            }
 
             const { closeDB, initDB } = await import('../../utils/db');
             await closeDB();

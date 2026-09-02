@@ -23,6 +23,7 @@
  */
 
 import Router from '@koa/router';
+import https from 'node:https';
 import {
     listChannels, listPublicChannels, addChannel, updateChannel, deleteChannel,
     verifyChannelOauth, disconnectChannelOauth,
@@ -271,7 +272,9 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
 
 const ALLOWED_REDIRECT_URIS = new Set([
     'https://beanpool.org/auth/tiktok',
+    'https://beanpool.org/auth/tiktok/',
     'https://beanpool.org/auth/instagram',
+    'https://beanpool.org/auth/instagram/',
     'beanpool://auth/tiktok',
     'beanpool://auth/instagram',
 ]);
@@ -283,6 +286,81 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
         throw new Error(`Unauthorized redirect URI for ${platform}: ${uri}`);
     }
     return uri;
+}
+
+function postFormWithIPv4(urlStr: string, params: Record<string, string>): Promise<{ status: number; json: any }> {
+    return new Promise((resolve, reject) => {
+        const url = new URL(urlStr);
+        const data = new URLSearchParams(params).toString();
+        const req = https.request(
+            url,
+            {
+                method: 'POST',
+                family: 4,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Content-Length': Buffer.byteLength(data),
+                },
+                timeout: 10000,
+            },
+            (res) => {
+                res.setEncoding('utf8');
+                let resData = '';
+                res.on('data', (chunk) => { resData += chunk; });
+                res.on('error', reject);
+                res.on('end', () => {
+                    let json: any;
+                    try {
+                        json = JSON.parse(resData);
+                    } catch {
+                        json = { error: resData || `HTTP ${res.statusCode}` };
+                    }
+                    resolve({ status: res.statusCode || 200, json });
+                });
+            }
+        );
+        req.on('timeout', () => {
+            req.destroy(new Error('Request timed out'));
+        });
+        req.on('error', reject);
+        req.write(data);
+        req.end();
+    });
+}
+
+function getJsonWithIPv4(urlStr: string): Promise<{ status: number; json: any }> {
+    return new Promise((resolve, reject) => {
+        const url = new URL(urlStr);
+        const req = https.request(
+            url,
+            {
+                method: 'GET',
+                family: 4,
+                headers: { 'Accept': 'application/json' },
+                timeout: 10000,
+            },
+            (res) => {
+                res.setEncoding('utf8');
+                let resData = '';
+                res.on('data', (chunk) => { resData += chunk; });
+                res.on('error', reject);
+                res.on('end', () => {
+                    let json: any;
+                    try {
+                        json = JSON.parse(resData);
+                    } catch {
+                        json = { error: resData || `HTTP ${res.statusCode}` };
+                    }
+                    resolve({ status: res.statusCode || 200, json });
+                });
+            }
+        );
+        req.on('timeout', () => {
+            req.destroy(new Error('Request timed out'));
+        });
+        req.on('error', reject);
+        req.end();
+    });
 }
 
     /**
@@ -322,7 +400,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
                     ctx.body = { error: 'Code is required' };
                     return;
                 }
-                params.code = String(body.code).replace(/#_$/, '').replace(/#$/, '').trim();
+                params.code = String(body.code).replace(/#.*$/, '').trim();
                 if (body.codeVerifier) params.code_verifier = body.codeVerifier;
                 try {
                     params.redirect_uri = validateRedirectUri(body.redirectUri, 'tiktok');
@@ -341,18 +419,30 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
             }
 
             try {
-                console.log(`[PulseOAuthRelay] Calling TikTok token endpoint for client_key=${clientKey}`);
-                const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams(params).toString(),
+                console.log(`[PulseOAuthRelay] Calling TikTok token endpoint for client_key=${clientKey}, redirect_uri=${params.redirect_uri}`);
+                const { status, json } = await postFormWithIPv4('https://open.tiktokapis.com/v2/oauth/token/', params);
+                console.log('[PulseOAuthRelay] TikTok token endpoint response:', {
+                    status,
+                    has_access_token: Boolean(json?.access_token || json?.data?.access_token),
+                    has_refresh_token: Boolean(json?.refresh_token || json?.data?.refresh_token),
+                    error: json?.error || json?.data?.error,
+                    error_description: json?.error_description || json?.data?.error_description || json?.message || json?.data?.description,
                 });
-                const json = await res.json();
-                if (!res.ok || json?.error || (json?.data && json?.data?.error_code && json?.data?.error_code !== 'ok')) {
-                    console.warn('[PulseOAuthRelay] TikTok token endpoint returned error:', res.status, JSON.stringify(json));
-                }
-                ctx.status = res.status;
-                ctx.body = json;
+                const normalizedData = {
+                    ...(json.data || {}),
+                    access_token: json.access_token || json.data?.access_token,
+                    refresh_token: json.refresh_token || json.data?.refresh_token,
+                    expires_in: json.expires_in || json.data?.expires_in,
+                    refresh_expires_in: json.refresh_expires_in || json.data?.refresh_expires_in,
+                    open_id: json.open_id || json.data?.open_id,
+                    scope: json.scope || json.data?.scope,
+                    token_type: json.token_type || json.data?.token_type,
+                };
+                ctx.status = status;
+                ctx.body = {
+                    ...json,
+                    data: normalizedData,
+                };
             } catch (e: any) {
                 console.error('[PulseOAuthRelay] TikTok fetch exception:', e);
                 ctx.status = 502;
@@ -376,7 +466,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
                     ctx.body = { error: 'Code is required' };
                     return;
                 }
-                const cleanCode = String(body.code).replace(/#_$/, '').replace(/#$/, '').trim();
+                const cleanCode = String(body.code).replace(/#.*$/, '').trim();
                 let redirectUri: string;
                 try {
                     redirectUri = validateRedirectUri(body.redirectUri, 'instagram');
@@ -387,21 +477,22 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
                 }
                 try {
                     console.log(`[PulseOAuthRelay] Calling Instagram token endpoint for appId=${appId}, redirectUri=${redirectUri}`);
-                    const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({
-                            client_id: appId,
-                            client_secret: appSecret,
-                            grant_type: 'authorization_code',
-                            redirect_uri: redirectUri,
-                            code: cleanCode,
-                        }).toString(),
+                    const { status: tokenStatus, json: tokenJson } = await postFormWithIPv4('https://api.instagram.com/oauth/access_token', {
+                        client_id: appId,
+                        client_secret: appSecret,
+                        grant_type: 'authorization_code',
+                        redirect_uri: redirectUri,
+                        code: cleanCode,
                     });
-                    const tokenJson = await tokenRes.json();
-                    if (!tokenRes.ok) {
-                        console.warn('[PulseOAuthRelay] Instagram token endpoint returned error:', tokenRes.status, JSON.stringify(tokenJson));
-                        ctx.status = tokenRes.status;
+                    console.log('[PulseOAuthRelay] Instagram token endpoint response:', {
+                        status: tokenStatus,
+                        has_access_token: Boolean(tokenJson?.access_token),
+                        error_type: tokenJson?.error_type || tokenJson?.error?.type,
+                        error_message: tokenJson?.error_message || tokenJson?.error?.message || (typeof tokenJson?.error === 'string' ? tokenJson.error : undefined),
+                    });
+
+                    if (tokenStatus >= 400 || !tokenJson.access_token) {
+                        ctx.status = tokenStatus >= 400 ? tokenStatus : 400;
                         ctx.body = tokenJson;
                         return;
                     }
@@ -410,17 +501,14 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
                     let finalToken = tokenJson.access_token;
                     let expiresIn = tokenJson.expires_in || 3600;
                     try {
-                        const longRes = await fetch(
+                        const { status: longStatus, json: longJson } = await getJsonWithIPv4(
                             `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(
                                 appSecret
                             )}&access_token=${encodeURIComponent(tokenJson.access_token)}`
                         );
-                        if (longRes.ok) {
-                            const longJson = await longRes.json();
-                            if (longJson.access_token) {
-                                finalToken = longJson.access_token;
-                                expiresIn = longJson.expires_in || 5184000; // 60 days
-                            }
+                        if (longStatus < 400 && longJson?.access_token) {
+                            finalToken = longJson.access_token;
+                            expiresIn = longJson.expires_in || 5184000; // 60 days
                         }
                     } catch {}
 

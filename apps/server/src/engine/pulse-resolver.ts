@@ -429,7 +429,8 @@ async function resolveAndPinHost(hostname: string): Promise<PinnedResolution> {
         validateIpString(addr.address);
     }
 
-    const selected = addresses[0];
+    // Prefer IPv4 to avoid IPv6 routing issues in container networks
+    const selected = addresses.find((addr) => addr.family === 4) || addresses[0];
     return { pinnedIp: selected.address, family: selected.family };
 }
 

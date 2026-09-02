@@ -290,7 +290,7 @@ export async function connectTikTokChannel(
     const callbackUrl = await openAuthSessionWithFallback(authUrl, completionUri, state, 'TikTok');
 
     const params = new URLSearchParams(callbackParams(callbackUrl));
-    const code = params.get('code')?.replace(/#_$/, '').replace(/#$/, '').trim();
+    const code = params.get('code')?.replace(/#.*$/, '').trim();
     const error = params.get('error') || params.get('error_description');
 
     if (error) {
@@ -333,7 +333,7 @@ export async function connectTikTokChannel(
         throw new PulseOAuthError('network', `Could not reach node for token exchange: ${e.message}`);
     }
 
-    const data = tokenData?.data || {};
+    const data = tokenData?.access_token ? tokenData : (tokenData?.data || {});
     if (!data.access_token) {
         const msg = tokenData?.error_description
             || tokenData?.error_message
@@ -354,7 +354,7 @@ export async function connectTikTokChannel(
     console.log('[PulseOAuth] Fetching TikTok user profile');
     let profileData: any;
     try {
-        const userRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username', {
+        const userRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name', {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
         profileData = await userRes.json();
@@ -366,7 +366,8 @@ export async function connectTikTokChannel(
     const platformUsername = user.username || user.display_name || '';
 
     if (!platformUsername) {
-        throw new PulseOAuthError('provider', 'TikTok did not return an account username.');
+        const errMsg = profileData?.error?.message || 'TikTok did not return an account username.';
+        throw new PulseOAuthError('provider', errMsg);
     }
 
     // Verify ownership on node
@@ -451,7 +452,7 @@ export async function connectInstagramChannel(
     const callbackUrl = await openAuthSessionWithFallback(authUrl, completionUri, state, 'Instagram Creator');
 
     const params = new URLSearchParams(callbackParams(callbackUrl));
-    const code = params.get('code')?.replace(/#_$/, '').replace(/#$/, '').trim();
+    const code = params.get('code')?.replace(/#.*$/, '').trim();
     const error = params.get('error') || params.get('error_description');
 
     if (error || !code) {

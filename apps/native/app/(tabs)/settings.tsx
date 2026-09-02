@@ -683,17 +683,24 @@ export default function SettingsScreen() {
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState<string>('Detecting...');
     
-    React.useEffect(() => {
-        // Load profile data on mount
-        if (identity?.publicKey) {
-            getMemberProfile(identity.publicKey).then(async profile => {
-                const canonical = await getCanonicalProfile().catch(() => null);
+    // Reads the profile from whichever node we are currently anchored to. `getDb()` is
+    // keyed on `beanpool_anchor_url`, so this always resolves against the active node's
+    // database without needing to be told which one that is.
+    const loadProfileForCurrentNode = React.useCallback(async () => {
+        if (!identity?.publicKey) return;
+        try {
+            const profile = await getMemberProfile(identity.publicKey);
+            const canonical = await getCanonicalProfile().catch(() => null);
+            // Assign unconditionally. Setting this only when the node knows us would
+            // leave the previous node's name on the card (and in the purge gate) after
+            // switching to a node that has no profile for this key.
+            setNodeCallsign(profile?.callsign || null);
+            {
                 if (profile) {
                     const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
                     setAvatar(cleaned || canonical?.avatar || null);
                     if (profile.callsign) {
                         setEditCallsign(profile.callsign);
-                        setNodeCallsign(profile.callsign);
                     }
                     if (profile.bio) setBio(profile.bio);
                     else if (canonical?.bio) setBio(canonical.bio);
@@ -710,9 +717,25 @@ export default function SettingsScreen() {
                     if (canonical.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
                     if (canonical.archetype) setArchetypeRaw(canonical.archetype);
                 }
-            }).catch(() => {});
+            }
+        } catch {
+            // Non-fatal: the card falls back to the local identity.
         }
-    }, [identity?.publicKey, anchorUrl]);
+    }, [identity?.publicKey]);
+
+    React.useEffect(() => {
+        void loadProfileForCurrentNode();
+    }, [loadProfileForCurrentNode, anchorUrl]);
+
+    // Re-read whenever the screen regains focus. Switching nodes from GlobalHeader
+    // never touches this screen's state, and `anchorUrl` is only assigned when the
+    // diagnostics panel runs — so focus is the one reliable signal that the anchored
+    // node may have changed underneath us.
+    useFocusEffect(
+        React.useCallback(() => {
+            void loadProfileForCurrentNode();
+        }, [loadProfileForCurrentNode])
+    );
 
     // Load holiday-mode state on mount (queried so an unset flag reads as OFF, not the pref default).
     React.useEffect(() => {
@@ -1093,6 +1116,9 @@ export default function SettingsScreen() {
             if (avatar) localUpdate.avatar_url = avatar;
             if (archetypeRaw) localUpdate.archetype = archetypeRaw;
             await updateMemberProfile(identity.publicKey, localUpdate);
+            // The card renders nodeCallsign, so it would keep showing the pre-edit name
+            // until the screen remounted if we didn't move it here too.
+            setNodeCallsign(newCallsign);
             if (newCallsign !== identity.callsign) {
                 const updated = await updateCallsign(newCallsign);
                 if (updated) setIdentity(updated);
@@ -1435,7 +1461,7 @@ export default function SettingsScreen() {
             .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
             .map(c => c.trim().toLowerCase());
         if (purgeConfirm !== 'DELETE' && !purgeNames.includes(purgeConfirm.trim().toLowerCase())) {
-            Alert.alert("Warning", `You must type exactly 'DELETE' or '${nodeCallsign || identity.callsign}' to permanently purge your account.`);
+            Alert.alert("Warning", `You must type exactly 'DELETE' or '${nodeCallsign || identity.callsign || 'CALLSIGN'}' to permanently purge your account.`);
             return;
         }
         const success = await authenticateUser('Confirm authentication to permanently purge your account from the node.');

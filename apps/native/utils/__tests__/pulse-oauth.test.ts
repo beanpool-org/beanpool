@@ -225,6 +225,13 @@ describe('pulse-oauth utility (native)', () => {
                 'beanpool://auth/tiktok'
             );
 
+            // Without disable_auto_auth=1 TikTok reuses an existing grant and returns a code
+            // with no authorization page, so the creator never sees what they are granting.
+            expect(openAuthSessionAsync).toHaveBeenCalledWith(
+                expect.stringContaining('disable_auto_auth=1'),
+                'beanpool://auth/tiktok'
+            );
+
             // 2. User info endpoint called with username in fields
             expect(mockFetch).toHaveBeenCalledWith(
                 'https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username',

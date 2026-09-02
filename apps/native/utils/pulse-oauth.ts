@@ -278,13 +278,20 @@ export async function connectTikTokChannel(
     const redirectUri = 'https://beanpool.org/auth/tiktok';
     const completionUri = 'beanpool://auth/tiktok';
 
+    // disable_auto_auth=1 makes TikTok always render its authorization page. Left at the
+    // default, TikTok silently reuses an existing grant and hands back a code without the
+    // creator seeing anything — which is wrong twice over. A creator reconnecting a channel
+    // should be told what they are handing over, especially given they are granting read
+    // access to their own video list; and TikTok's own app review requires the integration
+    // to be demonstrable on video, which it is not if the authorization step is invisible.
+    // The cost is one extra tap on reconnect, which is the correct trade.
     const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
         clientKey
     )}&scope=user.info.basic,user.info.profile,video.list&response_type=code&redirect_uri=${encodeURIComponent(
         redirectUri
     )}&state=${encodeURIComponent(state)}&code_challenge=${encodeURIComponent(
         challenge
-    )}&code_challenge_method=S256`;
+    )}&code_challenge_method=S256&disable_auto_auth=1`;
 
     console.log('[PulseOAuth] Opening TikTok authorization session');
     const callbackUrl = await openAuthSessionWithFallback(authUrl, completionUri, state, 'TikTok');

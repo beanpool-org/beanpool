@@ -126,3 +126,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-18 - Memoize friendPubkeys Set Allocation in PWA PeoplePage
 **Learning:** In `apps/pwa/src/pages/PeoplePage.tsx`, `const friendPubkeys = new Set(friends.map(f => f.publicKey))` was constructed unmemoized directly inside the component body, rebuilding the Set and iterating `friends` on every single state change or parent render cycle.
 **Action:** Wrapped `friendPubkeys` (and `guardians`) in `React.useMemo` keyed on `friends`, eliminating redundant array iterations and Set allocations across component re-renders.
+
+## 2026-09-19 - O(N) Array Allocation in Bridge Account Display Name Lookup
+**Learning:** In `apps/server/src/federation-bridge.ts`, resolving human-readable bridge account labels via `bridgeDisplayName` invoked `getConnectors().find(c => c.peerId === peerId)`. Calling `getConnectors()` mapped over the entire connectors array and materialized a `ConnectorStatus` object for every configured connector on every call.
+**Action:** Replaced `getConnectors().find(...)` in `bridgeDisplayName` with `getConnectorByPeerId(peerId)`, which directly iterates the raw internal connectors array and materializes only the single matching record.

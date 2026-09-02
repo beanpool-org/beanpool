@@ -95,3 +95,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-08-31 - PricingGuideModal Accessibility & Keyboard Focus Indicators
 **Learning:** `PricingGuideModal.tsx` close button, category selection pills, and interactive catalog item rows (`role="button"`) lacked visual focus ring indicators (`focus-visible:ring-2`) and explicit screen-reader `aria-label`s on item rows when interactive.
 **Action:** Added `focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to modal close button, category buttons, and item cards. Added dynamic `aria-label` context to item cards.
+
+## 2026-09-01 - PrivacyBadge Accessibility & Keyboard Focus
+**Learning:** `PrivacyBadge.tsx` lacked an explicit `type="button"` attribute, detailed `aria-label` screen reader action context, visual `focus-visible:ring-2` keyboard focus indicators, and `aria-hidden="true"` on the decorative color indicator dot.
+**Action:** Added `type="button"`, dynamic `aria-label={`Privacy level: ${config.name} — ${config.description}. Tap to change.`}`, `focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1`, and `aria-hidden="true"` on the dot element.

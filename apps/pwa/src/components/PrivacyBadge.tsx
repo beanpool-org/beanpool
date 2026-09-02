@@ -25,8 +25,11 @@ export function PrivacyBadge() {
 
     return (
         <button
+            type="button"
             onClick={handleCycle}
+            aria-label={`Privacy level: ${config.name} — ${config.description}. Tap to change.`}
             title={`Privacy: ${config.name} — ${config.description}`}
+            className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
             style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -43,14 +46,17 @@ export function PrivacyBadge() {
                 fontFamily: 'inherit',
             }}
         >
-            <span style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                background: config.color,
-                boxShadow: `0 0 6px ${config.color}80`,
-                flexShrink: 0,
-            }} />
+            <span
+                aria-hidden="true"
+                style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    background: config.color,
+                    boxShadow: `0 0 6px ${config.color}80`,
+                    flexShrink: 0,
+                }}
+            />
             <span style={{ whiteSpace: 'nowrap' }}>{config.name}</span>
         </button>
     );

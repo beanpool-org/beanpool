@@ -12,7 +12,7 @@ Status: complete
   - **Inviolable constraint preserved:** The node NEVER receives, holds, or proxies platform access tokens or refresh tokens. There is no token column in `creator_channels`.
 - **TikTok Login Kit v2 + Display API Integration:**
   - PKCE pair generation (`generatePkcePair`) using `expo-crypto` and `sha256` from `@noble/hashes/sha2.js`.
-  - Authorization endpoint `https://www.tiktok.com/v2/auth/authorize/` with `scope=user.info.basic,video.list`.
+  - Authorization endpoint `https://www.tiktok.com/v2/auth/authorize/` with `scope=user.info.basic,user.info.profile,video.list`.
   - Device-side token exchange via `POST https://open.tiktokapis.com/v2/oauth/token/` with PKCE `code_verifier`.
   - User identity lookup via `GET https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username`.
   - Content fetching via `POST https://open.tiktokapis.com/v2/video/list/?fields=id,title,video_description,duration,cover_image_url,share_url,create_time`.

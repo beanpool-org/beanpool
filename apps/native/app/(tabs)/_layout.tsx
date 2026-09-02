@@ -1,4 +1,5 @@
-import { Tabs } from 'expo-router';
+import { Tabs, ErrorBoundary } from 'expo-router';
+export { ErrorBoundary };
 import { StatusBar } from 'expo-status-bar';
 import { GlobalHeader } from '../../components/GlobalHeader';
 import { View, Image, StyleSheet, Text, Platform, DeviceEventEmitter } from 'react-native';

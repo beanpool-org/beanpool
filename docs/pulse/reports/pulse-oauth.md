@@ -117,28 +117,43 @@ Status: complete
 
 ## What is proven, and what is not
 
-### What is proven
-- **Server endpoint authorization & ownership gating:** `POST /api/member/channels/:id/verify-oauth`, `POST /api/member/channels/:id/disconnect-oauth`, and `POST /api/member/pulse/oauth-ingest` require signed requests from `ctx.state.actor` and strictly refuse unauthenticated requests (401) and foreign actor attempts on another member's channel (403 `NOT_YOURS`).
-- **Account matching logic:** Channel platform and handle verification correctly compares normalized usernames against stored handles and profile URLs; mismatched accounts are refused with 400 `ACCOUNT_MISMATCH`.
-- **Database mutations & retention semantics:** Verification stamps `oauth_verified_at` and enables autolist. Disconnect clears `oauth_verified_at = NULL` and resets `supports_autolist` to platform defaults while preserving all existing `pulse_items` rows in the database.
-- **Batch OAuth ingestion pipeline & deduplication:** `oauth-ingest` updates existing active rows, deduplicates without creating redundant rows, and restores tombstoned rows (`deleted_at = NULL, source = 'oauth'`).
-- **Clean fallback on unconfigured nodes:** When `TIKTOK_CLIENT_KEY` or `INSTAGRAM_APP_ID` are unset, config endpoints return `{ enabled: false }` and the native UI cleanly hides the connect affordance without throwing or erroring.
+**Updated 2026-09-02 — both platforms now verified against live APIs on a physical device.**
 
-### What is NOT proven
-- **No real platform endpoint was ever contacted:** There is currently **no registered TikTok developer app** and **no Instagram app**. No automated or manual test has opened a real network socket to `https://www.tiktok.com/v2/auth/authorize/`, `https://open.tiktokapis.com/v2/oauth/token/`, `https://open.tiktokapis.com/v2/user/info/`, or `https://open.tiktokapis.com/v2/video/list/`. The entire OAuth handshake is completely unexercised against real servers.
-- **Live PKCE exchange & authorization flow:** Browser Custom Tab launches, redirect parameter extraction (`code`, `state`), PKCE verification on TikTok's auth servers, and token grant exchanges have only been tested against local test mocks and client code contracts.
-- **Display API payload format compatibility:** The parsing of TikTok user profiles and video listings (`video/list/`) assumes TikTok's documented response schemas, but has not been verified against actual live responses from a real creator account.
-- **Android App Link / Custom Tab interception on physical devices:** While the multi-source event race (`openAuthSessionWithFallback`) is implemented to mitigate Custom Tab dismissal by installed apps, its real-world behaviour on Android hardware with native TikTok and Facebook apps installed remains completely unverified.
+### Proven live
 
-### What will remain unverified until Marty registers a TikTok developer app:
-1. Live TikTok Login Kit authorization redirect and PKCE code exchange against production TikTok endpoints.
-2. Live TikTok user identity retrieval (`user.info.basic`) and username matching.
-3. Live TikTok video list fetching (`video.list`) and thumbnail URL validity.
-4. Token refresh cycle (`refresh_token`) against live TikTok auth endpoints upon token expiry.
-5. End-to-end device authorization flow on physical Android and iOS hardware.
+- **TikTok, end to end.** Authorize, PKCE token exchange, `user/info/`, channel verification. The
+  channel shows `✓ Verified` and syncs. Ran against a real TikTok app (sandbox client key).
+- **Instagram, end to end.** Authorize, token exchange (HTTP 200 with a real `IGAA` token and
+  `instagram_business_basic` granted), profile read, and channel verification as `beanpool_org`.
+- **The Android Custom Tab / App Link path**, with the Instagram and Facebook apps installed. The
+  callback arrives twice (once via `native-intent`, once via `Linking`); both resolve one promise, so
+  exactly one exchange runs. This was directly observed in logcat.
 
----
+### Still NOT proven
 
+- **The `user.info.profile` scope and `username` field (PR #585).** Added so verification matches a
+  real @handle rather than a display name. The defensive fallback path — TikTok rejecting `username`
+  for a token issued before the scope existed — has never executed against TikTok. Needs an on-device
+  reconnect to confirm.
+- **Token refresh.** `refreshTokenIfNeeded` has never run against a genuinely expired token. The
+  client-key bug that would have broken every refresh (#569) was found by review, not by exercising
+  it.
+- **Any account other than the developer's own.** Both platforms currently gate data access to
+  registered testers, so no third-party member has completed either flow.
+- **Instagram media listing.** Verification reads the profile; fetching and rendering a member's
+  actual posts is unexercised.
+
+### Two configuration traps, both hit and both costly
+
+1. **The Instagram app secret is NOT the Meta App secret.** The Instagram-login use case carries its
+   own 32-hex secret, one screen away from the Meta app's. Sending the wrong one returns
+   *"Error validating verification code. Please make sure your redirect_uri is identical..."* — which
+   names the wrong cause entirely and sent us hunting URL variants for an hour.
+2. **Under Standard Access, an Instagram account must be added as a Tester** via
+   *API setup with Instagram login → Generate access tokens → Add account*. Until then
+   `api.instagram.com` issues a perfectly valid token while `graph.instagram.com` refuses every read
+   with `IGApiException code 100 "Unsupported request - method type: get"` — identical for every
+   endpoint, field and API version. **A valid token proves nothing about data access.**
 ## Code Review Fixes (PR #569)
 
 ### Applied Fixes Summary

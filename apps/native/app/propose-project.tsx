@@ -209,7 +209,7 @@ export default function ProposeProjectModal() {
                                 <Pressable 
                                     onPress={async () => {
                                         const res = await ImagePicker.launchImageLibraryAsync({
-                                            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                                            mediaTypes: ['images'],
                                             allowsEditing: true,
                                             aspect: [16, 9],
                                             quality: 0.8,

@@ -131,7 +131,8 @@ export function createPost(
         }
     })();
 
-    const post = getPosts(db, { id: finalId }).find(p => p.id === finalId)!;
+    // ⚡ Bolt: getPosts filtered by unique post id returns at most 1 item; access index [0] directly in O(1) instead of linear .find() scan
+    const post = getPosts(db, { id: finalId })[0]!;
     broadcast({ type: 'new_post', post });
     try {
         recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, credits });
@@ -203,7 +204,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     fields.push('updated_at = ?');
     values.push(now);
 
-    const existingPost = getPosts(db, { id }).find(p => p.id === id);
+    // ⚡ Bolt: getPosts filtered by unique post id returns at most 1 item; access index [0] directly in O(1) instead of linear .find() scan
+    const existingPost = getPosts(db, { id })[0] ?? null;
     if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
 
     const newTitle = updates.title ?? existingPost.title;
@@ -225,7 +227,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         }
     })();
 
-    const updated = getPosts(db, { id }).find(p => p.id === id) || null;
+    // ⚡ Bolt: getPosts filtered by unique post id returns at most 1 item; access index [0] directly in O(1) instead of linear .find() scan
+    const updated = getPosts(db, { id })[0] ?? null;
     if (updated) broadcast({ type: 'post_updated', post: updated });
     return updated;
 }

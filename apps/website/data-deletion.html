@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Deletion — BeanPool</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=1.4">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">How It Works</a>
+                <a href="rules.html">The Rules</a>
+                <a href="index.html#features">Features</a>
+                <a href="getting-started.html" class="nav-cta">Get Started</a>
+            </div>
+        </div>
+    </nav>
+    <section class="legal-content glass-panel">
+        <h1>Data Deletion Instructions</h1>
+        <p><strong style="color: #94a3b8;">Last Updated: September 3, 2026</strong></p>
+
+        <p>BeanPool has no central account server. Your identity is a cryptographic keypair held on your own device, and your data lives on the community nodes you chose to join. That shapes how deletion works: most of it you can do yourself, immediately, from inside the app.</p>
+
+        <h2>1. Deleting data from a connected platform account (Instagram, TikTok, YouTube, SoundCloud, RSS)</h2>
+        <p>If you connected a publishing account so your public posts appear in your community's Pulse feed, there are two levels of removal.</p>
+
+        <h3>Disconnect the channel</h3>
+        <p>In the app: <strong>Settings &rarr; Channels &amp; showcase</strong>, find the platform card, and tap <strong>Disconnect</strong>.</p>
+        <p>This immediately deletes the platform access token from your device and clears the channel's verified status on the node. No further posts are retrieved. Posts already listed in the feed remain visible until you delete the channel, or until they age out under the 30-day retention window described below.</p>
+
+        <h3>Delete the channel</h3>
+        <p>In the app: <strong>Settings &rarr; Channels &amp; showcase</strong>, open the platform card, and tap <strong>Delete</strong>.</p>
+        <p>This is the complete removal. The node immediately scrubs the channel record and every feed item imported from it — the post URLs, titles, captions and thumbnail URLs are overwritten to <code>NULL</code> in the database, not merely hidden. What remains is an identifier and two timestamps, which exist only so that other nodes replicating the deletion converge on it.</p>
+
+        <h3>Automatic expiry</h3>
+        <p>Independently of anything you do, imported feed items are retained for 30 days and then pruned automatically, with the same scrubbing applied.</p>
+
+        <h2>2. Deleting your entire BeanPool account</h2>
+        <p>In the app: <strong>Settings &rarr; Reset / Wipe Identity</strong>, and confirm by typing your callsign.</p>
+        <p>This erases the identity keypair from your device and, on the community node, scrubs your profile: your callsign, avatar, bio and contact details are cleared, your listings are cancelled, and your member record is reduced to an anonymous placeholder. Connected channels and every feed item imported from them are scrubbed in the same operation, so deleting your account also removes your syndicated Instagram or TikTok posts.</p>
+        <p>Any remaining balance is settled to your community's Commons Pool, since a mutual credit ledger has to stay in balance when a member leaves.</p>
+        <p>For the same reason, ledger entries recording trades between you and other members are retained in the community's transaction history. Those entries are what keep other members' balances correct, and erasing them would silently alter the record of trades other people made in good faith. They carry no profile data once your account is purged.</p>
+        <p><strong>One condition:</strong> the node will refuse to purge an account with a trade still in escrow or a cross-node settlement in flight, because doing so would strand the other party. Complete or cancel those first, then purge.</p>
+
+        <h2>3. Revoking BeanPool's access from the platform's own settings</h2>
+        <p>Deleting data held by BeanPool is separate from revoking the authorisation you granted the platform. You can do that on the platform directly, and we recommend doing both:</p>
+        <ul>
+            <li><strong>Instagram:</strong> Settings and privacy &rarr; Website permissions &rarr; Apps and websites</li>
+            <li><strong>TikTok:</strong> Settings and privacy &rarr; Security and permissions &rarr; Apps and services permissions</li>
+        </ul>
+
+        <h2>4. Requesting deletion by email</h2>
+        <p>If you no longer have access to your device or your identity keypair, you cannot authenticate to the node, and the in-app routes above will not be available to you. In that case, email <a href="mailto:admin@beanpool.org">admin@beanpool.org</a> with the community node you joined and the callsign or platform username you used.</p>
+        <p>We will action verified requests within 30 days. Please note that each community node is operated independently; where a node is run by a local operator rather than by us, we will pass your request to that operator and confirm to you when it has been actioned.</p>
+
+        <h2>Related</h2>
+        <p>Section 6 of our <a href="privacy.html">Privacy Policy</a> sets out exactly what is stored when you connect a publishing account, and what is not.</p>
+    </section>
+</body>
+</html>

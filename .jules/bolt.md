@@ -134,3 +134,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-03 - Redundant .find() After an id-Filtered Single-Row Query
 **Learning:** In `apps/server/src/engine/posts.ts`, a single post was fetched with `getPosts(db, { id }).find(p => p.id === id)`. `getPosts` already appends `AND p.id = ?` and `posts.id` is the primary key, so the array holds at most one row and the `.find()` re-checks a predicate the SQL already guaranteed.
 **Action:** Replaced `.find(p => p.id === id)` with `[0]` in `createPost` and `updatePost`. Note this is a readability change, not a measurable speedup — the scan it removes was over a one-element array.
+
+## 2026-09-20 - O(N*M) Gossip Pin Lookups in Core GossipManager
+**Learning:** In `packages/beanpool-core/src/gossip.ts`, `processIncomingGossip` iterated through incoming gossiped pins and called `localPins.find(p => p.id === incomingPin.id)` for each incoming pin. With $N$ incoming pins and $M$ local pins, this resulted in an $O(N \times M)$ nested array scan on every gossip message received.
+**Action:** Pre-computed `localPinsById` Map before the incoming pin iteration loop, turning local pin lookups into constant-time $O(1)$ retrievals ($O(N + M)$ total).

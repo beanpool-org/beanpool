@@ -235,10 +235,10 @@ const STEP_DETAILS = [
         icon: '🔑',
         tag: 'Cryptographic Identity',
         title: 'Sovereign Identity & Dual-Custody',
-        subtitle: 'Own your keys and trust reputation with passkeys and decentralized social recovery.',
+        subtitle: 'Own your keys and your trust reputation, with hardware-backed custody and decentralized social recovery.',
         points: [
             { title: 'Ed25519 Cryptographic Keys', text: 'Your unique cryptographic identity is generated directly on your mobile device, signed and anchored in the community web of trust.' },
-            { title: 'Dual-Custody Protection', text: 'Hardware passkeys in SecureStore for power users, plus 1-click encrypted Apple/Google SSO backup so everyday members never lose access.' },
+            { title: 'Dual-Custody Protection', text: 'Keys held in your device\'s secure hardware behind biometrics, plus 1-click encrypted Apple/Google SSO backup so everyday members never lose access.' },
             { title: 'Social Guardian Recovery', text: 'Appoint trusted neighborhood friends/vouchers to hold encrypted recovery shards in case your phone is ever lost or damaged.' }
         ],
         primaryAction: { label: 'Read Identity Guide (§3) →', href: 'getting-started.html#3' },
@@ -252,7 +252,7 @@ const STEP_DETAILS = [
         subtitle: 'Value flows directly from community service to service — no debt, no interest, and no banks.',
         points: [
             { title: 'Start at Zero (Zero-Sum)', text: 'No fiat money is ever injected. Every transaction is balanced: one member is debited, another is credited symmetrically.' },
-            { title: 'The Offer Covenant (−200 Beans)', text: 'Posting your first active marketplace offer instantly unlocks a credit line of −200 Beans (≈ 5 hours of community labor).' },
+            { title: 'The Offer Covenant (−200 Beans)', text: 'Your credit line is earned by trading, and live offers meter how much of it you can use — one live offer unlocks −200 Beans, up to −2000 at five.' },
             { title: 'Escrow Protection & Reputation', text: 'Trades are secured in cryptographic escrow until the buyer confirms completion. Successful trades unlock deeper credit lines down to −2,000 Beans.' }
         ],
         primaryAction: { label: 'View Credit Rules (§4) →', href: 'rules.html#4' },
@@ -265,9 +265,9 @@ const STEP_DETAILS = [
         title: 'Keynesian Clearing & Democratic Commons',
         subtitle: 'Trade between towns without fiat currency, while circulation fees fund democratic local projects.',
         points: [
-            { title: 'Keynesian Trade Connectors', text: 'Inspired by John Maynard Keynes\' Bancor, autonomous community nodes trade cross-border with multilateral clearing unions and zero currency drain.' },
+            { title: 'Keynesian Trade Connectors', text: 'Inspired by John Maynard Keynes\' Bancor, autonomous community nodes clear trades in pairs — beans never leave home, and each side caps its own exposure.' },
             { title: 'Progressive Demurrage', text: 'A gentle progressive circulation incentive on idle surplus balances encourages active spending and prevents speculative hoarding.' },
-            { title: '100% Member-Voted Commons', text: 'Circulation demurrage flows directly into a Community Commons pool, voted on democratically by residents for regenerative local projects.' }
+            { title: 'Community Commons Pool', text: '100% of circulation and trade charges flow into a shared Commons — funding projects members vote for, and absorbing bad debt so the ledger always balances.' }
         ],
         primaryAction: { label: 'View Federation Rules (§7) →', href: 'rules.html#7' },
         secondaryAction: { label: '▶ Watch Keynesian Clearing Video', href: 'https://www.youtube.com/@beanpool' }

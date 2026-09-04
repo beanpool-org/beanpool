@@ -62,14 +62,14 @@
         <h2><span class="num">1.</span>Get an Invite Code</h2>
         <p>Because BeanPool is built on a web of trust, you cannot sign up without an invitation. You must receive an invite code from an active member of your local community.</p>
         <ul>
-            <li>Invite codes are usually shared as a text link (e.g. <code>bean-xxxx-xxxx</code>) or via a QR code you can scan.</li>
+            <li>Invite codes are usually shared as a text link (e.g. <code>INV-XXXX-XXXX</code>) or via a QR code you can scan.</li>
             <li>If you do not know anyone in the network, visit local community markets, workshops, or connect with organizers running a local node.</li>
         </ul>
 
         <h2><span class="num">2.</span>Access the App</h2>
         <p>Each local community runs its own independent server (node). You can access the app across any platform:</p>
         <ul>
-            <li><strong style="color:var(--text-primary)">Native iOS &amp; Android Apps:</strong> Download BeanPool directly from the Apple App Store or Google Play Store for the best performance, instant notifications, and hardware passkey protection.</li>
+            <li><strong style="color:var(--text-primary)">Native iOS &amp; Android Apps:</strong> Download BeanPool directly from the Apple App Store or Google Play Store for the best performance, instant notifications, and hardware-backed key storage.</li>
             <li><strong style="color:var(--text-primary)">Web App (PWA):</strong> Open your community's unique node address in any mobile or desktop browser and tap <strong style="color:var(--text-primary)">"Add to Home Screen"</strong> for instant offline-capable access.</li>
         </ul>
 
@@ -79,7 +79,7 @@
             <li><strong>Choose a Public Callsign:</strong> This is your display name (e.g., <code>@BakerBob</code>) seen across the ledger and marketplace.</li>
             <li><strong>Dual-Custody Key Setup:</strong>
                 <ul>
-                    <li><strong style="color:var(--text-primary)">Hardware Passkeys / Seed Phrase:</strong> Private keys remain encrypted in your device's SecureStore with an offline recovery seed.</li>
+                    <li><strong style="color:var(--text-primary)">Hardware-Backed Keys / Seed Phrase:</strong> Private keys stay in your device's secure hardware (iOS Keychain / Android Keystore), unlocked by biometrics, with an offline 12-word recovery phrase.</li>
                     <li><strong style="color:var(--text-primary)">Encrypted SSO Cloud Backup:</strong> 1-click encrypted backup via Apple ID or Google OAuth to effortlessly restore your account on new devices.</li>
                     <li><strong style="color:var(--text-primary)">Social Guardian Recovery:</strong> Appoint trusted community vouchers/friends to hold encrypted recovery shards in case your device is ever lost.</li>
                 </ul>
@@ -90,8 +90,9 @@
         <p>To keep the economy balanced and reciprocal, BeanPool uses the **Offer Covenant** (see <a href="rules.html#4" style="color: #34d399; text-decoration: underline;">Rules §4</a>). New accounts start with a credit line of zero, meaning they can only spend beans they already hold.</p>
         <ul>
             <li>To open your credit line, go to the marketplace and post at least one <strong style="color:var(--text-primary)">Offer</strong> (e.g., general labor, fresh produce, baking, tutoring, or tools for loan).</li>
-            <li>Listing your first active offer automatically unlocks a credit floor of <strong style="color:var(--text-primary)">−200 Beans</strong> (≈ 5 hours of community time).</li>
-            <li>This credit line allows you to immediately accept offers or post Needs to hire others, even though you start with 0 Beans!</li>
+            <li>Your credit line is <strong style="color:var(--text-primary)">earned</strong> — it opens after your first completed trade, or when a community voucher grants you a starter floor.</li>
+            <li>Keeping offers live is what lets you <em>use</em> it. Offers don't create credit; they meter how much of your earned limit you can spend: 1 live offer unlocks −200 Beans, 2 unlocks −500, and so on to −2000 at 5.</li>
+            <li>Until your line is open, you can browse, receive beans, and spend what you actually hold.</li>
         </ul>
 
         <h2><span class="num">5.</span>Make Your First Trade</h2>

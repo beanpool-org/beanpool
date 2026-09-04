@@ -808,6 +808,11 @@ router.get('/api/invite/tree', async (ctx) => {
 
 router.get('/api/invite/mine/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
+    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+        ctx.status = 403;
+        ctx.body = { error: 'You may only read your own invites' };
+        return;
+    }
     const invites = getInvitesByMember(publicKey);
     ctx.body = { invites };
 });
@@ -1084,6 +1089,11 @@ router.get('/api/members/preferences', async (ctx) => {
     if (!publicKey) {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey' };
+        return;
+    }
+    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+        ctx.status = 403;
+        ctx.body = { error: 'You may only read your own preferences' };
         return;
     }
     ctx.body = getMemberPreferences(publicKey);

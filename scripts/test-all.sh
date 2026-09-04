@@ -211,6 +211,20 @@ run_federation_suites() {
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-idor(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-idor"; fi
     rm -rf "$TMP_DIR"
 
+    # Member-read IDOR (A2-16 family) - asserts one member cannot read another members invites
+    # or notification preferences. Runs the suite a SECOND time with enforcement on, because its
+    # 403 assertions sit behind an ENFORCE_READ_AUTH check in the suite itself: in the default
+    # pass above they are skipped and it reports green having never tested what it is named for.
+    # The flag-off pass still earns its place (push-token and preference round-trips), so this is
+    # a second run rather than a move.
+    echo "━━━ test-push-preferences (read auth ON) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-push-preferences.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-push-preferences(readauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-push-preferences(readauth)"; fi
+    rm -rf "$TMP_DIR"
+
     # Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM,
     # preserves metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row.
     echo "━━━ test-messaging-consolidation ━━━"

@@ -102,11 +102,11 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onCancel}>
             <View style={styles.container}>
                 <View style={styles.header}>
-                    <Pressable onPress={onCancel} accessibilityRole="button" style={styles.headerBtn}>
+                    <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel location picker" style={styles.headerBtn}>
                         <Text style={styles.cancelText}>Cancel</Text>
                     </Pressable>
                     <Text style={styles.title}>📍 Location & Radius</Text>
-                    <Pressable onPress={onReset} accessibilityRole="button" style={styles.headerBtn}>
+                    <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel="Reset location and radius" style={styles.headerBtn}>
                         <Text style={styles.resetText}>Reset</Text>
                     </Pressable>
                 </View>

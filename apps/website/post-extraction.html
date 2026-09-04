@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Post-Extraction Economy — BeanPool</title>
+    <meta name="description" content="What a post-extraction economy means, and the specific mechanisms BeanPool uses to build one: mutual credit without interest, circulation instead of hoarding, a member-voted Commons, and federation that doesn't drain the smaller town.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=1.4">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: #f87171; }
+        .pe-col.in h4 { color: #34d399; }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(16,185,129,0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">How It Works</a>
+                <a href="rules.html">The Rules</a>
+                <a href="index.html#features">Features</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorials</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Watch Video Tutorials on YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Join Reddit Community (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="View on GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Get Started</a>
+            </div>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>The Post-Extraction Economy</h1>
+
+        <p class="lede">Most of the tools a community uses to trade are designed to take a cut. Not maliciously — just structurally. A percentage goes to a payment processor, interest goes to a bank, attention goes to an advertiser, and data goes somewhere nobody in the community chose. <strong>BeanPool is built to remove those exits.</strong></p>
+
+        <div class="pe-define">
+            <p><strong>Post-extraction</strong> means infrastructure that lets communities create and retain the value they produce, rather than having it captured by intermediaries. It is not a slogan about being nice. It is a constraint on how the software may be built — and things that would violate it don't get merged.</p>
+        </div>
+
+        <h2>What extraction actually looks like</h2>
+        <p>It is worth being concrete, because "extraction" is usually left vague. When a neighbour pays a neighbour through a conventional platform, value leaves the community through several doors at once:</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ Where value leaves</h4>
+                <ul>
+                    <li><strong>Transaction fees</strong> to a processor headquartered somewhere else.</li>
+                    <li><strong>Interest</strong> on the credit that made the trade possible, paid to a bank.</li>
+                    <li><strong>Advertising</strong> — your attention sold to whoever bids highest.</li>
+                    <li><strong>Data</strong> — your relationships and purchases become someone else's asset.</li>
+                    <li><strong>Platform rent</strong> — once everyone is on it, the price goes up, because leaving means leaving your neighbours.</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ What we do instead</h4>
+                <ul>
+                    <li>Credit is <strong>created by the trade itself</strong>, so there is no lender to pay.</li>
+                    <li>The small fees that exist flow into a <strong>Commons Pool your community votes to spend</strong>.</li>
+                    <li><strong>No ads.</strong> There is no advertiser, so there is nothing to optimise your attention for.</li>
+                    <li><strong>No data harvesting.</strong> Your private key never leaves your device, and direct messages are end-to-end encrypted.</li>
+                    <li><strong>No lock-in.</strong> The protocol is open source and your community runs its own node.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">To be clear about the honest part: <strong>BeanPool is not free of costs.</strong> There is a small circulation charge on large idle balances, and a small charge on trades. The difference is not that the money vanishes — it is <strong>where it goes</strong>. It goes to the Commons Pool, and the community votes on how to spend it. Nothing is paid to a shareholder, because there isn't one.</div>
+
+        <h2>The mechanisms</h2>
+        <p>Each of these is a working part of the protocol, not an aspiration. They are described in full in <a href="rules.html">The Rules</a>.</p>
+
+        <div class="pe-mech">
+            <h3>Money the community makes itself</h3>
+            <p>BeanPool runs on <strong>mutual credit</strong>. When you do three hours of work for a neighbour, three hours of credit come into existence at that moment — your positive balance and their negative balance, created together by the trade. No bank issued it. No one lent it to you. There is no interest, because there is no lender.</p>
+            <p>This is the root of the whole design. If the money supply has to be borrowed into existence, someone outside the community owns a claim on its future work. If the community creates it by trading, nobody does.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Zero is the goal, not a big balance</h3>
+            <p>A balance of <strong>zero</strong> means you have given about as much as you have received. That is the healthy state, and it is a genuinely different target from the one most economies set. There is no prize for accumulating beans, and no way to convert them into a claim on anyone outside the community.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Circulation instead of hoarding</h3>
+            <p>Large idle balances gently reduce over time, at a progressive rate. The effect is to keep beans moving — spent with neighbours, put into local projects — rather than sitting still. An economy where the medium of exchange stops moving is one that has stopped working.</p>
+            <p>Crucially, what is reduced isn't destroyed and isn't taken as profit: <strong>it moves into the Commons Pool.</strong> Negative balances are never charged. Someone in the negative has drawn credit the community extended to them, and charging a person who is already behind would deepen the hole rather than get beans moving — the opposite of the point.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>A Commons that is a loop, not a sink</h3>
+            <p>The Commons Pool holds what circulation and trade charges collect, and what it holds goes two places: absorbing bad debt when someone cannot repay, and funding projects members approve in <strong>voting rounds</strong> — tools for a shared garden, equipment for a workspace, whatever gets proposed and voted through. The community decides what its own surplus builds.</p>
+            <p>It is a closed loop by construction: value is generated locally, held collectively, and spent back into the same community.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Federation that doesn't drain the smaller town</h3>
+            <p>When communities trade with each other, extraction can reappear in a subtler form — the wealthier town quietly draining the smaller one. The answer BeanPool implements is that <strong>local beans never leave the local economy.</strong> Cross-community trade settles through a bridge ledger between the two nodes, with a credit cap on each side, so a neighbouring town can only ever run an imbalance up to an agreed limit.</p>
+            <p>The longer-term design follows John Maynard Keynes' proposal at Bretton Woods, where pressure to correct an imbalance falls on <em>both</em> sides rather than only on the party in deficit. <strong>That fuller mechanism is specified but not yet built</strong> — today the protection is the cap, and cross-community settlement is something each node switches on deliberately.</p>
+            <div class="pe-worked">
+                <strong>Why this matters concretely.</strong> Every positive bean has a matching negative held by a specific member, who clears it by earning. If a member's +50 simply left for another town, the neighbour sitting at −50 could no longer earn it back from local circulation — the counterpart to their debt has gone. Repeat that across many visitors and the smaller community's circulation shrinks permanently. Not through fraud; through transfers that all looked correct. Clearing between communities is settled symmetrically so that this cannot happen.
+            </div>
+        </div>
+
+        <h2>The commitments this rests on</h2>
+        <p>These are the founding values every contribution to BeanPool is judged against. They are published in the project's <a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">contributor guide</a>, and they have teeth: work that conflicts with them is declined, however good the code.</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>Post-extraction</h4>
+                <p>We build infrastructure that enables communities to create and retain value rather than having it captured by intermediaries. Contributions that introduce extractive dynamics — network effects that benefit a single controlling party, proprietary lock-in, surveillance-based monetisation — are not welcome.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Subsidiarity</h4>
+                <p>Local communities should be able to run their own nodes, make their own governance decisions, and operate independently. Contributions that push decision-making upwards to a global authority, or that make local operation impractical, work against the protocol's goals.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Legibility</h4>
+                <p>The protocol should be understandable by the communities it serves — not only by software engineers. Specifications are written in plain language where possible, with technical detail layered underneath.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Consent and privacy</h4>
+                <p>No feature should allow data to move without the explicit, revocable, auditable consent of the party it belongs to. Privacy-invasive features will not be merged regardless of their technical elegance.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Regeneration</h4>
+                <p>We measure success by whether communities, ecologies, and commons are healthier because of BeanPool — not by growth metrics or token price.</p>
+            </div>
+        </div>
+
+        <h2>How to check we mean it</h2>
+        <p>A claim like this is only worth as much as the ability to verify it, so:</p>
+        <ul class="pe-check">
+            <li>The entire protocol is <strong>open source under the MIT licence</strong> — <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">read the code</a>, including every rule described on this page.</li>
+            <li>The economic rules are written out in plain language in <a href="rules.html">The Rules</a> — balances, credit, charges, and where each one goes.</li>
+            <li>Your community can <strong>run its own node</strong>. If we ever became the intermediary, you could leave and take your community with you.</li>
+            <li>There is <strong>no token and no investors</strong>. Beans are mutual credit for real trade, and are never traded on an exchange.</li>
+        </ul>
+
+        <div class="callout">In short: <strong>an economy is post-extraction when the value a community creates has nowhere to leak out to.</strong> Not because everyone is virtuous, but because there are no doors in the design.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Decentralized mutual credit & federated community exchange.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                    <a href="getting-started.html">Getting Started</a>
+                    <a href="rules.html">The Rules</a>
+                    <a href="post-extraction.html">Post-Extraction</a>
+                    <a href="safety.html">Child Safety</a>
+                    <a href="privacy.html">Privacy Policy</a>
+                    <a href="terms.html">Terms of Service</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Open source under MIT license. Made with <img src="bean.png" alt="love" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> by communities, for communities.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

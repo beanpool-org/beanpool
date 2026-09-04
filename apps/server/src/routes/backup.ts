@@ -399,7 +399,9 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
         return;
     }
     ctx.set('Content-Type', 'application/octet-stream');
-    ctx.set('Content-Disposition', `attachment; filename="${path.basename(target)}"`);
+    // eslint-disable-next-line no-control-regex
+    const safeName = path.basename(target).replace(/[\r\n"\x00-\x1F\x7F]/g, '_');
+    ctx.set('Content-Disposition', `attachment; filename="${safeName}"`);
     ctx.body = fs.createReadStream(target);
 });
 

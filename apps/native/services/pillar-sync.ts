@@ -74,7 +74,7 @@ async function discoverAnchor(): Promise<string | null> {
         );
 
         // Attempt to derive Expo LAN IP for physical dev devices
-        const hostUri = Constants.experienceUrl || Constants.expoConfig?.hostUri;
+        const hostUri = Constants.expoConfig?.hostUri;
         if (hostUri) {
             // hostUri is usually something like "192.168.1.100:8081"
             const match = hostUri.match(/([0-9.]+):/);

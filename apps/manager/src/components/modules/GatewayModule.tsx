@@ -78,6 +78,7 @@ export function GatewayModule({
                             <div className="relative">
                                 <input
                                     type={showAdminInput ? 'text' : 'password'}
+                                    autoComplete="off"
                                     value={adminInput}
                                     onChange={(e) => setAdminInput(e.target.value)}
                                     placeholder="Enter node admin password (e.g. admin)"

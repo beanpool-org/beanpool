@@ -81,3 +81,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `EditNodeModal` component in `apps/manager/src/components/nodes/EditNodeModal.tsx` was untested.
 **Learning:** Mocking `fetchDiagnostics` from `../../lib/node-client` allows testing connection state responses (success/failure feedback UI) in component tests.
 **Action:** Identify remaining untested modal and panel components in `apps/manager/src/components/`.
+
+## 2026-08-28 - [manager tests] MemberDetailModal component unit tests
+**Gap:** `MemberDetailModal` component in `apps/manager/src/components/modules/MemberDetailModal.tsx` was untested.
+**Learning:** Testing `MemberDetailModal` required verifying rendered profile/platform metadata, trust score calculations, security flag alerts, freeze/unfreeze toggles, vouch promotion/demotion, operator grants, and prune modal confirmation workflows.
+**Action:** Identify remaining modal/module components in `apps/manager/src/components/modules/` for unit test coverage.

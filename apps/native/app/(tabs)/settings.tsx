@@ -3057,7 +3057,7 @@ export default function SettingsScreen() {
                     <View style={{ backgroundColor: colors.surface.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '80%', borderWidth: 1, borderColor: colors.border.default }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                             <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }}>🚫 Blocked Users</Text>
-                            <Pressable accessibilityRole="button" onPress={() => setShowBlockedModal(false)} style={{ padding: 4 }}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Close blocked users modal" onPress={() => setShowBlockedModal(false)} style={{ padding: 4 }}>
                                 <Text style={{ fontSize: 18, color: colors.text.muted, fontWeight: 'bold' }}>✕</Text>
                             </Pressable>
                         </View>

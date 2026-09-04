@@ -38,7 +38,8 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const pathname = path.split('?')[0];
+    const canonical = `${method}\n${pathname}\n${ts}\n${nonce}\n${bodyString}`;
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
         'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
@@ -101,6 +102,12 @@ async function main() {
     const reactC = await signedFetch('POST', '/api/messages/react', C,
         { messageId: msgId, authorPubkey: C.pubKeyHex, emoji: '👎' });
     assert(reactC.status === 404, `reactions: outsider C is DENIED reacting to message (got ${reactC.status} ${reactC.error ?? ''})`);
+
+    // Marketplace transactions IDOR — subject reads own transactions (200); outsider is denied (403).
+    const txA = await signedFetch('GET', `/api/marketplace/transactions?publicKey=${A.pubKeyHex}`, A);
+    assert(txA.status === 200, `marketplace transactions IDOR: A reads own transactions (got ${txA.status} ${txA.error ?? ''})`);
+    const txC = await signedFetch('GET', `/api/marketplace/transactions?publicKey=${A.pubKeyHex}`, C);
+    assert(txC.status === 403, `marketplace transactions IDOR: C is DENIED A's marketplace transactions (got ${txC.status} ${txC.error ?? ''})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

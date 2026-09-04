@@ -1,10 +1,18 @@
 import React, { useState } from 'react';
 import { loadAiConfig, saveAiConfig, askAiCopilot, type AiConfig } from '../../lib/ai-client';
 import type { NodeProfile } from '../../lib/profiles';
+import type { DiagnosticsResponse, GatewayConfig } from '../../lib/node-client';
+
+export interface CopilotContextData {
+    telemetry?: DiagnosticsResponse | Record<string, unknown> | null;
+    gateway?: GatewayConfig | Record<string, unknown> | null;
+    members?: unknown[];
+    logs?: unknown[];
+}
 
 interface AiServicesModuleProps {
     activeNode: NodeProfile;
-    contextData: { telemetry?: any; gateway?: any; members?: any; logs?: any[] };
+    contextData: CopilotContextData;
 }
 
 export function AiServicesModule({ activeNode, contextData }: AiServicesModuleProps) {

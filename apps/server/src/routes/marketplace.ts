@@ -19,7 +19,7 @@ import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { clampLimit, clampOffset } = deps;
+    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
 
 // ===================== MARKETPLACE API (PUBLIC) =====================
 
@@ -334,6 +334,11 @@ router.get('/api/marketplace/transactions', async (ctx) => {
     if (!publicKey) {
         ctx.status = 400;
         ctx.body = { error: 'publicKey query parameter is required' };
+        return;
+    }
+    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+        ctx.status = 403;
+        ctx.body = { error: 'You may only view your own marketplace transactions' };
         return;
     }
     const limit = clampLimit(ctx.query.limit);

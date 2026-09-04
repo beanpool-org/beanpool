@@ -131,7 +131,9 @@ export function createPost(
         }
     })();
 
-    const post = getPosts(db, { id: finalId }).find(p => p.id === finalId)!;
+    // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
+    // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
+    const post = getPosts(db, { id: finalId })[0]!;
     broadcast({ type: 'new_post', post });
     try {
         recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, credits });
@@ -203,7 +205,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     fields.push('updated_at = ?');
     values.push(now);
 
-    const existingPost = getPosts(db, { id }).find(p => p.id === id);
+    // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
+    // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
+    const existingPost = getPosts(db, { id })[0] ?? null;
     if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
 
     const newTitle = updates.title ?? existingPost.title;
@@ -225,7 +229,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         }
     })();
 
-    const updated = getPosts(db, { id }).find(p => p.id === id) || null;
+    // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
+    // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
+    const updated = getPosts(db, { id })[0] ?? null;
     if (updated) broadcast({ type: 'post_updated', post: updated });
     return updated;
 }

@@ -170,6 +170,7 @@ export async function wipeIdentity(): Promise<void> {
         }
         
         await AsyncStorage.removeItem('beanpool_anchor_url');
+        await AsyncStorage.removeItem('beanpool:identity');
         
         const { getDb } = require('./db');
         const db = await getDb();

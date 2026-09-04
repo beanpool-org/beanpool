@@ -52,3 +52,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `Notifications.addNotificationResponseReceivedListener` used an `any` type for the response parameter.
 **Learning:** Replaced `any` with `import("expo-notifications").NotificationResponse` to provide proper typing for notification interactions.
 **Pattern:** Search for `any` types in Expo SDK callback definitions and replace them with the corresponding explicit type from the library.
+
+## 2026-09-02 - [Replace deprecated ImagePicker.MediaTypeOptions]
+**Issue:** `propose-project.tsx` used `ImagePicker.MediaTypeOptions.Images` which is deprecated in modern Expo SDKs (`expo-image-picker`).
+**Learning:** Replaced `ImagePicker.MediaTypeOptions.Images` with `['images']`.
+**Pattern:** Search for `MediaTypeOptions` usages in Expo apps and replace with string array equivalents like `['images']`.

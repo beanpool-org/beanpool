@@ -158,7 +158,7 @@ run_federation_suites() {
     # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
     # cycle only revealed the next problem. Statuses are collected and all failures reported together.
     FAILED=""
-    for t in test-schema-upgrade test-creator-channels test-pulse-resolver test-pulse-submit test-pulse-oauth test-callsign-predicates test-recovery-shares test-sso test-daily-pulse test-pairing-relay test-pricing-guide test-pricing-aggregator-lifecycle test-activity-feed test-member-purge test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-sso-recovery-roundtrip test-friend-recovery-roundtrip test-keeper-http test-commons-conservation test-treasury-keepership test-treasury-eggs test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-totp-helpers test-moderation-admin test-ledger-export test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement test-admin-auth test-backend-monitors test-backup-hardening test-backup-topology test-cash-also-needed test-crowdfund-ledger-sync test-detached-pwa test-dos-caps test-economic-hardening test-federation-api test-federation-receipt test-genesis test-hardening test-logger-sanitization test-manager-build test-onboarding-funnel test-request-auth test-sync-signature test-trust-value-curve test-voting-round-grant test-vouch-covenant test-wash-sybil-defense test-apple-probe test-recovery-backup-durability test-public-address test-invite-trampoline test-recovery-pin test-request-body test-admin-thresholds test-manager-backups test-push-preferences test-settings test-srv20-ledger-reset; do
+    for t in test-schema-upgrade test-creator-channels test-pulse-resolver test-pulse-submit test-pulse-oauth test-callsign-predicates test-recovery-shares test-sso test-daily-pulse test-pairing-relay test-pricing-guide test-pricing-aggregator-lifecycle test-activity-feed test-member-purge test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-sso-recovery-roundtrip test-friend-recovery-roundtrip test-keeper-http test-commons-conservation test-treasury-keepership test-treasury-eggs test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-totp-helpers test-moderation-admin test-ledger-export test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement test-admin-auth test-backend-monitors test-backup-hardening test-backup-topology test-cash-also-needed test-crowdfund-ledger-sync test-detached-pwa test-dos-caps test-economic-hardening test-federation-api test-federation-receipt test-genesis test-hardening test-logger-sanitization test-manager-build test-onboarding-funnel test-request-auth test-sync-signature test-trust-value-curve test-voting-round-grant test-vouch-covenant test-wash-sybil-defense test-apple-probe test-recovery-backup-durability test-public-address test-invite-trampoline test-recovery-pin test-request-body test-admin-thresholds test-manager-backups test-push-preferences test-settings test-srv20-ledger-reset test-harvester test-membership-probe; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
@@ -209,6 +209,20 @@ run_federation_suites() {
       $SUITE_TIMEOUT pnpm exec tsx src/test-messaging-idor.ts
     RC=$?
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-idor(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-idor"; fi
+    rm -rf "$TMP_DIR"
+
+    # Member-read IDOR (A2-16 family) - asserts one member cannot read another members invites
+    # or notification preferences. Runs the suite a SECOND time with enforcement on, because its
+    # 403 assertions sit behind an ENFORCE_READ_AUTH check in the suite itself: in the default
+    # pass above they are skipped and it reports green having never tested what it is named for.
+    # The flag-off pass still earns its place (push-token and preference round-trips), so this is
+    # a second run rather than a move.
+    echo "━━━ test-push-preferences (read auth ON) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-push-preferences.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-push-preferences(readauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-push-preferences(readauth)"; fi
     rm -rf "$TMP_DIR"
 
     # Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM,

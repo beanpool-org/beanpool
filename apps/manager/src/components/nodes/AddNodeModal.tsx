@@ -64,6 +64,7 @@ export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
                         <div className="relative">
                             <input
                                 type={showPassword ? 'text' : 'password'}
+                                autoComplete="off"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="Node Admin Password"

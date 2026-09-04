@@ -16,6 +16,7 @@ import Constants from 'expo-constants';
 import { BeanPoolMerkleTree } from '@beanpool/core';
 import { applyDelta, fetchFriendsFromServer, getDb } from '../utils/db';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
+import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 
 const SYNC_TIMEOUT_MS = 20_000;
 const MAX_STORED_TRANSACTIONS = 1000;
@@ -52,6 +53,11 @@ async function discoverAnchor(): Promise<string | null> {
     try {
         const savedAnchor = await AsyncStorage.getItem('beanpool_anchor_url');
         if (savedAnchor) {
+            // Block insecure cleartext HTTP connections to public nodes
+            if (shouldBlockCleartextNodeUrl(savedAnchor)) {
+                console.warn('[Pillar Sync] 🚫 Blocked cleartext public node URL:', savedAnchor);
+                return null;
+            }
             // NEVER fallback to a different community if an explicit anchor has been set via Invite.
             return savedAnchor;
         }
@@ -74,7 +80,7 @@ async function discoverAnchor(): Promise<string | null> {
         );
 
         // Attempt to derive Expo LAN IP for physical dev devices
-        const hostUri = Constants.experienceUrl || Constants.expoConfig?.hostUri;
+        const hostUri = Constants.expoConfig?.hostUri;
         if (hostUri) {
             // hostUri is usually something like "192.168.1.100:8081"
             const match = hostUri.match(/([0-9.]+):/);
@@ -88,14 +94,16 @@ async function discoverAnchor(): Promise<string | null> {
     // Clear saved node address temporarily to force Azure discovery
     await AsyncStorage.removeItem('pillar:anchor-url');
 
-    if (candidates.length === 0) {
+    const safeCandidates = candidates.filter(url => !shouldBlockCleartextNodeUrl(url));
+
+    if (safeCandidates.length === 0) {
         return null;
     }
 
     const controllers: AbortController[] = [];
     try {
         const winningUrl = await Promise.any(
-            candidates.map(async (url) => {
+            safeCandidates.map(async (url) => {
                 const controller = new AbortController();
                 controllers.push(controller);
                 const timeoutId = setTimeout(() => controller.abort(), 3000);

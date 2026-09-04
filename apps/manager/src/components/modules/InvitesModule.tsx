@@ -206,9 +206,10 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                         <button
                             onClick={handleGenerate}
                             disabled={isGenerating}
+                            aria-busy={isGenerating}
                             className="px-5 py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50"
                         >
-                            <span>⚡</span>
+                            <span aria-hidden="true" className={isGenerating ? 'animate-spin' : ''}>{isGenerating ? '🔄' : '⚡'}</span>
                             <span>{isGenerating ? 'Generating...' : `Generate ${inviteCount} Pass${inviteCount > 1 ? 'es' : ''}`}</span>
                         </button>
                     </div>
@@ -258,11 +259,23 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
             {/* Empty State */}
             {generatedTokens.length === 0 && (
                 <div className="bg-nature-950/50 border-2 border-dashed border-nature-800/80 rounded-2xl p-12 flex flex-col items-center justify-center text-center space-y-3 animate-fade-in">
-                    <span className="text-4xl opacity-50 grayscale">🎟️</span>
-                    <h4 className="text-sm font-bold text-nature-300 m-0">No Passes Generated Yet</h4>
-                    <p className="text-xs text-nature-500 m-0 max-w-sm">
-                        Select a membership tier and quantity above, then click Generate to create single-use onboarding passes.
-                    </p>
+                    {isGenerating ? (
+                        <>
+                            <span className="text-3xl text-terra-400 animate-spin" aria-hidden="true">🔄</span>
+                            <h4 className="text-sm font-bold text-white m-0">Generating Cryptographic Passes...</h4>
+                            <p className="text-xs text-nature-400 m-0 max-w-sm">
+                                Issuing {inviteCount} single-use onboarding pass{inviteCount > 1 ? 'es' : ''} from node API.
+                            </p>
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-4xl opacity-50 grayscale">🎟️</span>
+                            <h4 className="text-sm font-bold text-nature-300 m-0">No Passes Generated Yet</h4>
+                            <p className="text-xs text-nature-500 m-0 max-w-sm">
+                                Select a membership tier and quantity above, then click Generate to create single-use onboarding passes.
+                            </p>
+                        </>
+                    )}
                 </div>
             )}
 

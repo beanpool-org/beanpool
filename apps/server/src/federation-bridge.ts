@@ -277,7 +277,8 @@ export function bridgeDisplayName(accountId?: string | null): string | null {
     if (peerId) {
         // Trim, and strip a globe the operator may have typed into the callsign themselves — otherwise a
         // community called "🌐 Byron" renders as "🌐 🌐 Byron", and a callsign of "   " renders as "🌐    ".
-        const callsign = getConnectors().find(c => c.peerId === peerId)?.callsign?.replace(/^🌐\s*/, '').trim();
+        // ⚡ Bolt: Iterate raw connectors array via getConnectorByPeerId instead of calling getConnectors() which materializes every connector.
+        const callsign = getConnectorByPeerId(peerId)?.callsign?.replace(/^🌐\s*/, '').trim();
         if (callsign) return `🌐 ${callsign}`;
     }
 

@@ -127,6 +127,10 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 **Learning:** In `apps/pwa/src/pages/PeoplePage.tsx`, `const friendPubkeys = new Set(friends.map(f => f.publicKey))` was constructed unmemoized directly inside the component body, rebuilding the Set and iterating `friends` on every single state change or parent render cycle.
 **Action:** Wrapped `friendPubkeys` (and `guardians`) in `React.useMemo` keyed on `friends`, eliminating redundant array iterations and Set allocations across component re-renders.
 
-## 2026-09-03 - O(N) Array Scan on Single Post Lookups by ID
-**Learning:** In `apps/server/src/engine/posts.ts`, looking up a newly created or updated marketplace post via `getPosts(db, { id })` was appended with `.find(p => p.id === id)`. Since `getPosts` already filters by unique `id` in SQL (`WHERE id = ?`) and returns at most 1 item, calling `.find()` caused an unnecessary $O(N)$ linear array scan on the single-item array.
-**Action:** Replaced `.find(p => p.id === id)` with direct index `[0]` lookups in `createPost` and `updatePost`, converting single-post retrieval after mutations into constant-time $O(1)$ operations.
+## 2026-09-19 - O(N) Array Allocation in Bridge Account Display Name Lookup
+**Learning:** In `apps/server/src/federation-bridge.ts`, resolving human-readable bridge account labels via `bridgeDisplayName` invoked `getConnectors().find(c => c.peerId === peerId)`. Calling `getConnectors()` mapped over the entire connectors array and materialized a `ConnectorStatus` object for every configured connector on every call.
+**Action:** Replaced `getConnectors().find(...)` in `bridgeDisplayName` with `getConnectorByPeerId(peerId)`, which directly iterates the raw internal connectors array and materializes only the single matching record.
+
+## 2026-09-03 - Redundant .find() After an id-Filtered Single-Row Query
+**Learning:** In `apps/server/src/engine/posts.ts`, a single post was fetched with `getPosts(db, { id }).find(p => p.id === id)`. `getPosts` already appends `AND p.id = ?` and `posts.id` is the primary key, so the array holds at most one row and the `.find()` re-checks a predicate the SQL already guaranteed.
+**Action:** Replaced `.find(p => p.id === id)` with `[0]` in `createPost` and `updatePost`. Note this is a readability change, not a measurable speedup — the scan it removes was over a one-element array.

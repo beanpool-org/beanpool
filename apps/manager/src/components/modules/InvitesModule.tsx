@@ -132,7 +132,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
                 <div style="display: flex; gap: 20px; align-items: center;">
                     <div style="background: #ffffff; padding: 10px; border-radius: 12px; display: inline-block;">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(item.fullUrl)}" width="140" height="140" style="display: block;" />
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${escapeHtml(encodeURIComponent(item.fullUrl))}" width="140" height="140" style="display: block;" />
                     </div>
 
                     <div style="flex: 1; space-y: 8px;">

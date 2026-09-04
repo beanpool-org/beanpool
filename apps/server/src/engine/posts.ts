@@ -131,7 +131,8 @@ export function createPost(
         }
     })();
 
-    // ⚡ Bolt: getPosts filtered by unique post id returns at most 1 item; access index [0] directly in O(1) instead of linear .find() scan
+    // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
+    // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
     const post = getPosts(db, { id: finalId })[0]!;
     broadcast({ type: 'new_post', post });
     try {
@@ -204,7 +205,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     fields.push('updated_at = ?');
     values.push(now);
 
-    // ⚡ Bolt: getPosts filtered by unique post id returns at most 1 item; access index [0] directly in O(1) instead of linear .find() scan
+    // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
+    // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
     const existingPost = getPosts(db, { id })[0] ?? null;
     if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
 
@@ -227,7 +229,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         }
     })();
 
-    // ⚡ Bolt: getPosts filtered by unique post id returns at most 1 item; access index [0] directly in O(1) instead of linear .find() scan
+    // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
+    // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
     const updated = getPosts(db, { id })[0] ?? null;
     if (updated) broadcast({ type: 'post_updated', post: updated });
     return updated;

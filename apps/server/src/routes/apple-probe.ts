@@ -214,12 +214,14 @@ derive keys from <code>sub</code>. Different means it cannot.</p>
         const err = form.get('error');
 
         if (err) {
+            ctx.status = 400;
             ctx.type = 'html';
             ctx.body = page('Apple probe — error', `<h1>Apple returned an error</h1>
 <pre>${escapeHtml(err)}</pre>`);
             return;
         }
         if (!idToken) {
+            ctx.status = 400;
             ctx.type = 'html';
             ctx.body = page('Apple probe — no token', `<h1>No <code>id_token</code> in the callback</h1>
 <p class="sub">Fields Apple sent: <code>${escapeHtml([...form.keys()].join(', ') || '(none)')}</code></p>`);
@@ -228,6 +230,7 @@ derive keys from <code>sub</code>. Different means it cannot.</p>
 
         const claims = decodeJwtPayload(idToken);
         if (!claims) {
+            ctx.status = 400;
             ctx.type = 'html';
             ctx.body = page('Apple probe — undecodable', `<h1>Could not decode the token</h1>`);
             return;

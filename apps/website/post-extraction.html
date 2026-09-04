@@ -68,6 +68,13 @@
         .pe-content .callout strong { color: var(--text-primary); }
 
         .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent); }
         .pe-check { margin-top: 1rem; }
         .pe-check a { color: var(--accent); }
 
@@ -138,6 +145,30 @@
         </div>
 
         <div class="callout">To be clear about the honest part: <strong>BeanPool is not free of costs.</strong> There is a small circulation charge on large idle balances, and a small charge on trades. The difference is not that the money vanishes — it is <strong>where it goes</strong>. It goes to the Commons Pool, and the community votes on how to spend it. Nothing is paid to a shareholder, because there isn't one.</div>
+
+        <h2>We didn't invent this critique</h2>
+        <p>The pattern above has been studied carefully, and named several times over, by people who have spent years on it. We think the analysis is right; where we differ is that we are trying to build the way out rather than describe the trap. If you want the argument in full rather than our summary of it, these are the places to start.</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>Platform Capitalism <span>— Nick Srnicek, 2016</span></h4>
+                <p>Treats the platform as a business model rather than a technology: position yourself between two groups who need to reach each other, then take a share of every connection. Because the value of the platform grows with the number of people on it, leaving gets harder as the cut gets larger.</p>
+            </div>
+            <div class="pe-book">
+                <h4>The Age of Surveillance Capitalism <span>— Shoshana Zuboff, 2019</span></h4>
+                <p>Describes a second extraction running alongside the first. Ordinary human experience is treated as unclaimed raw material, refined into predictions about what people will do next, and sold to whoever benefits from knowing. The person the data came from is not the customer.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Technofeudalism <span>— Yanis Varoufakis, 2023</span></h4>
+                <p>The sharpest version of the argument. What a platform owner collects is not profit from producing anything — it is <em>rent</em>, charged for access to a space they own. Varoufakis's point is that this makes the arrangement older than capitalism rather than newer: a landlord relationship wearing a technology company's clothes.</p>
+            </div>
+        </div>
+
+        <p>There is a plainer phrase for how that arrangement feels from underneath — <strong>digital sharecropping</strong>. You do the work, on land you do not own, and the owner takes a share of everything you grow. It describes the driver, the seller, the musician and the delivery rider equally well, which is usually a sign a description is getting at something real.</p>
+
+        <p>Our answer is not a fairer landlord or a smaller cut. It is that <strong>there should be no land to rent in the first place.</strong> Two neighbours trading an afternoon's work do not need to pass through a space that anyone owns. So the community holds the node, the protocol is open for anyone to run or fork, and the only charge that exists goes to the community's own Commons. There is no position in the middle for anyone to sell access to — including us.</p>
+
+        <p class="pe-credit">A good way in, if you would rather watch than read: Benn Jordan's <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">“You Are Witnessing the Death of American Capitalism”</a>, which covers this ground and points to all three books above.</p>
 
         <h2>The mechanisms</h2>
         <p>Each of these is a working part of the protocol, not an aspiration. They are described in full in <a href="rules.html">The Rules</a>.</p>

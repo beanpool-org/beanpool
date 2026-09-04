@@ -82,3 +82,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-08-29 - Add accessibilityLabel to Close button in Blocked Users modal
 **Learning:** Close buttons rendering symbolic glyphs like '✕' inside modal headers lack explicit accessibility labels, leaving screen readers with ambiguous text.
 **Action:** Always provide `accessibilityLabel="Close ..."` on icon or symbol close buttons inside modals.
+
+## 2026-09-02 - Add accessibilityLabel to trust filter items in TrustPickerSheet
+**Learning:** Selection buttons with emoji and text labels read raw emoji characters or omit filter labels on screen readers unless an explicit `accessibilityLabel` is assigned.
+**Action:** Always provide explicit `accessibilityLabel={f.label}` on selection items containing emoji icons.

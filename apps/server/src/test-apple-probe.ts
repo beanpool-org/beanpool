@@ -42,7 +42,7 @@ async function main() {
         },
         body: 'a=1'
     });
-    assert(res3.status === 200, 'POST /apple-probe works');
+    assert(res3.status === 400, 'POST /apple-probe without token returns 400');
     const text3 = await res3.text();
     assert(text3.includes('No <code>id_token</code>'), 'POST without token handles error');
 
@@ -54,6 +54,7 @@ async function main() {
         },
         body: 'error=invalid_client'
     });
+    assert(res4.status === 400, 'POST /apple-probe with Apple error returns 400');
     const text4 = await res4.text();
     assert(text4.includes('invalid_client'), 'POST handles Apple error');
 

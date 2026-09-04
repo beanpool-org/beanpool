@@ -67,6 +67,7 @@
         .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(16,185,129,0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
         .pe-content .callout strong { color: var(--text-primary); }
 
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
         .pe-check { margin-top: 1rem; }
         .pe-check a { color: var(--accent); }
 
@@ -166,11 +167,13 @@
 
         <div class="pe-mech">
             <h3>Federation that doesn't drain the smaller town</h3>
-            <p>When communities trade with each other, extraction can reappear in a subtler form — the wealthier town quietly draining the smaller one. The answer BeanPool implements is that <strong>local beans never leave the local economy.</strong> Cross-community trade settles through a bridge ledger between the two nodes, with a credit cap on each side, so a neighbouring town can only ever run an imbalance up to an agreed limit.</p>
-            <p>The longer-term design follows John Maynard Keynes' proposal at Bretton Woods, where pressure to correct an imbalance falls on <em>both</em> sides rather than only on the party in deficit. <strong>That fuller mechanism is specified but not yet built</strong> — today the protection is the cap, and cross-community settlement is something each node switches on deliberately.</p>
+            <p>When communities trade with each other, extraction can reappear in a subtler form — the wealthier town quietly draining the smaller one. This is the problem John Maynard Keynes set out to solve at Bretton Woods, and BeanPool's inter-community clearing is built on his answer.</p>
+            <p><strong>Beans never cross the border.</strong> A trade between two communities settles through a pair of bridge ledgers, one held by each node, recording what each owes the other in work. Each side sets its own limit on how far that can run — so a neighbouring community can only ever owe you an amount you chose in advance.</p>
+            <p>Two things follow, and they are the reason this isn't just a spending limit. <strong>Clearing what you owe is never blocked</strong> — the cap restrains the direction that extends credit, never the direction that settles it. And a community holding a surplus doesn't simply sit on it: <strong>the more one town is owed, the more work it can commission from the town that owes it</strong>, turning an imbalance back into trade rather than leaving it as a debt.</p>
             <div class="pe-worked">
-                <strong>Why this matters concretely.</strong> Every positive bean has a matching negative held by a specific member, who clears it by earning. If a member's +50 simply left for another town, the neighbour sitting at −50 could no longer earn it back from local circulation — the counterpart to their debt has gone. Repeat that across many visitors and the smaller community's circulation shrinks permanently. Not through fraud; through transfers that all looked correct. Clearing between communities is settled symmetrically so that this cannot happen.
+                <strong>Why the design has to work this way.</strong> Every positive bean has a matching negative held by a specific member, who clears it by earning. If a member's +50 simply left for another town, the neighbour sitting at −50 could no longer earn it back from local circulation — the counterpart to their debt has gone. Repeat that across many visitors and the smaller community's circulation shrinks permanently. Not through fraud; through transfers that all looked correct.
             </div>
+            <p class="pe-edges">Where the edges are, plainly: a community in deficit is <em>never</em> charged for being in deficit — Keynes' argument, and ours, is that pressure should only fall on someone with the power to act on it. The one remaining lever, a charge on a surplus deliberately left idle, is specified and deliberately unbuilt until it can pass that same fairness test. Clearing runs between pairs of communities rather than across a wider network, and each community's operator turns it on by choice.</p>
         </div>
 
         <h2>The commitments this rests on</h2>

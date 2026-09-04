@@ -130,7 +130,7 @@
                     <li>Credit is <strong>created by the trade itself</strong>, so there is no lender to pay.</li>
                     <li>The small fees that exist flow into a <strong>Commons Pool your community votes to spend</strong>.</li>
                     <li><strong>No ads.</strong> There is no advertiser, so there is nothing to optimise your attention for.</li>
-                    <li><strong>No data harvesting.</strong> Your keys and your messages stay on your device.</li>
+                    <li><strong>No data harvesting.</strong> Your private key never leaves your device, and direct messages are end-to-end encrypted.</li>
                     <li><strong>No lock-in.</strong> The protocol is open source and your community runs its own node.</li>
                 </ul>
             </div>
@@ -155,18 +155,19 @@
         <div class="pe-mech">
             <h3>Circulation instead of hoarding</h3>
             <p>Large idle balances gently reduce over time, at a progressive rate. The effect is to keep beans moving — spent with neighbours, put into local projects — rather than sitting still. An economy where the medium of exchange stops moving is one that has stopped working.</p>
-            <p>Crucially, what is reduced isn't destroyed and isn't taken as profit: <strong>it moves into the Commons Pool.</strong> Negative balances are never charged, because someone carrying a negative is already extending credit to everyone else.</p>
+            <p>Crucially, what is reduced isn't destroyed and isn't taken as profit: <strong>it moves into the Commons Pool.</strong> Negative balances are never charged. Someone in the negative has drawn credit the community extended to them, and charging a person who is already behind would deepen the hole rather than get beans moving — the opposite of the point.</p>
         </div>
 
         <div class="pe-mech">
             <h3>A Commons that is a loop, not a sink</h3>
-            <p>The Commons Pool holds what circulation and trade charges collect. It exists to cover bad debt and to fund things the community votes for — tools for a shared garden, equipment for a workspace, whatever gets proposed and approved. Surplus beyond what is needed for solvency is <strong>continuously returned through member-voted funding rounds</strong>.</p>
+            <p>The Commons Pool holds what circulation and trade charges collect, and what it holds goes two places: absorbing bad debt when someone cannot repay, and funding projects members approve in <strong>voting rounds</strong> — tools for a shared garden, equipment for a workspace, whatever gets proposed and voted through. The community decides what its own surplus builds.</p>
             <p>It is a closed loop by construction: value is generated locally, held collectively, and spent back into the same community.</p>
         </div>
 
         <div class="pe-mech">
             <h3>Federation that doesn't drain the smaller town</h3>
-            <p>When communities trade with each other, extraction can reappear in a subtler form — the wealthier town quietly draining the smaller one. BeanPool's inter-community clearing follows the design John Maynard Keynes proposed at Bretton Woods, where <strong>pressure to correct an imbalance falls on both sides</strong>, not only on the party in deficit.</p>
+            <p>When communities trade with each other, extraction can reappear in a subtler form — the wealthier town quietly draining the smaller one. The answer BeanPool implements is that <strong>local beans never leave the local economy.</strong> Cross-community trade settles through a bridge ledger between the two nodes, with a credit cap on each side, so a neighbouring town can only ever run an imbalance up to an agreed limit.</p>
+            <p>The longer-term design follows John Maynard Keynes' proposal at Bretton Woods, where pressure to correct an imbalance falls on <em>both</em> sides rather than only on the party in deficit. <strong>That fuller mechanism is specified but not yet built</strong> — today the protection is the cap, and cross-community settlement is something each node switches on deliberately.</p>
             <div class="pe-worked">
                 <strong>Why this matters concretely.</strong> Every positive bean has a matching negative held by a specific member, who clears it by earning. If a member's +50 simply left for another town, the neighbour sitting at −50 could no longer earn it back from local circulation — the counterpart to their debt has gone. Repeat that across many visitors and the smaller community's circulation shrinks permanently. Not through fraud; through transfers that all looked correct. Clearing between communities is settled symmetrically so that this cannot happen.
             </div>

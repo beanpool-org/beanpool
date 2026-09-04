@@ -99,3 +99,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-01 - PrivacyBadge Accessibility & Focus Ring Styling
 **Learning:** `PrivacyBadge.tsx` lacked an explicit `type="button"` attribute, descriptive screen-reader `aria-label` text communicating privacy mode and action, decorative status dot hiding (`aria-hidden="true"`), and visible keyboard focus ring styling (`focus-visible:ring-2`).
 **Action:** Added `type="button"`, dynamic `aria-label`, `aria-hidden="true"` on status indicator dot, and `focus-visible:ring-2 focus-visible:ring-emerald-500` focus ring styling.
+
+## 2026-09-02 - RadiusPickerPage Modal Accessibility & Keyboard Navigation
+**Learning:** `RadiusPickerPage.tsx` full-screen location modal overlay lacked ARIA modal semantics (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`), Escape key press dismiss listener, explicit `type="button"` attributes on action buttons, descriptive `aria-label` text on buttons and range slider, and visible focus-visible ring indicators.
+**Action:** Added `role="dialog"`, `aria-modal="true"`, `aria-labelledby="radius-picker-title"`, `id="radius-picker-title"`, `useEffect` Escape key handler, explicit `type="button"`, `aria-label` text, and `focus-visible:ring-2 focus-visible:ring-amber-500` focus rings.

@@ -86,3 +86,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `MemberDetailModal` component in `apps/manager/src/components/modules/MemberDetailModal.tsx` was untested.
 **Learning:** Testing `MemberDetailModal` required verifying rendered profile/platform metadata, trust score calculations, security flag alerts, freeze/unfreeze toggles, vouch promotion/demotion, operator grants, and prune modal confirmation workflows.
 **Action:** Identify remaining modal/module components in `apps/manager/src/components/modules/` for unit test coverage.
+
+## 2026-08-29 - [manager tests] ThreatReviewModal component unit tests
+**Gap:** `ThreatReviewModal` component in `apps/manager/src/components/modules/ThreatReviewModal.tsx` was untested.
+**Learning:** Testing `ThreatReviewModal` required wrapping async timer-based action dismissals and clipboard interactions in `act()` to handle React state updates cleanly.
+**Action:** Continue expanding test coverage for modal and module components in `apps/manager/src/components/modules/`.

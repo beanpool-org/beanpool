@@ -106,6 +106,15 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
         };
     }, []);
 
+    // Handle Escape key to cancel
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onCancel();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onCancel]);
+
     // Update circle when radius changes
     useEffect(() => {
         const km = RADIUS_STEPS[radiusIdx];
@@ -137,11 +146,16 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
     };
 
     return (
-        <div style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            display: 'flex', flexDirection: 'column',
-            background: 'var(--bg-primary)',
-        }}>
+        <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="radius-picker-title"
+            style={{
+                position: 'fixed', inset: 0, zIndex: 9999,
+                display: 'flex', flexDirection: 'column',
+                background: 'var(--bg-primary)',
+            }}
+        >
             {/* Header */}
             <div style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -151,7 +165,10 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 zIndex: 10,
             }}>
                 <button
+                    type="button"
                     onClick={onCancel}
+                    aria-label="Cancel location selection"
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-md"
                     style={{
                         background: 'none', border: 'none', color: 'var(--text-muted)',
                         fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit',
@@ -159,11 +176,14 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 >
                     Cancel
                 </button>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>
+                <h3 id="radius-picker-title" style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>
                     📍 Set Location & Radius
                 </h3>
                 <button
+                    type="button"
                     onClick={onReset}
+                    aria-label="Reset location settings"
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-md"
                     style={{
                         background: 'none', border: 'none', color: '#ef4444',
                         fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'inherit',
@@ -179,7 +199,10 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 
                 {/* Floating GPS Button */}
                 <button
+                    type="button"
                     onClick={handleGpsLocate}
+                    aria-label="Center map on my location"
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                     style={{
                         position: 'absolute',
                         right: '1rem',
@@ -240,10 +263,12 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 {/* Slider */}
                 <input
                     type="range"
+                    aria-label="Search radius"
                     min={0}
                     max={RADIUS_STEPS.length - 1}
                     value={radiusIdx}
                     onChange={(e) => setRadiusIdx(Number(e.target.value))}
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-sm"
                     style={{
                         width: '100%',
                         accentColor: '#f59e0b',
@@ -274,12 +299,14 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
 
                 {/* Apply button */}
                 <button
+                    type="button"
                     onClick={() => onApply({
                         lat: center[0],
                         lng: center[1],
                         radiusKm,
                         label: radiusKm < 1 ? `${Math.round(radiusKm * 1000)}m radius` : `${radiusKm}km radius`,
                     })}
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                     style={{
                         width: '100%', padding: '0.85rem', borderRadius: '12px',
                         background: 'linear-gradient(135deg, #f59e0b, #d97706)',
@@ -292,7 +319,9 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 </button>
                 {initial && (
                     <button
+                        type="button"
                         onClick={onReset}
+                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                         style={{
                             width: '100%', padding: '0.85rem', borderRadius: '12px',
                             background: 'transparent',

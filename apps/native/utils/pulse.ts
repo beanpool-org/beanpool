@@ -26,6 +26,68 @@ export interface PulseFeedItem {
     isVerified: boolean;
 }
 
+/**
+ * Which lane of the feed an item belongs to.
+ *
+ * SKETCH ONLY. In production this must be a server-side flag on the channel
+ * (creator_channels.is_official, set when an admin creates the channel) and the
+ * lane should be a query parameter on GET /api/pulse/feed so pagination stays
+ * correct. Deriving it on the client the way this does is a prototype shortcut:
+ * it cannot see items that live on later pages.
+ */
+export function isOfficialSource(item: PulseFeedItem): boolean {
+    return item.source === 'official';
+}
+
+/**
+ * Sample "local news" items, so the Local lane can be judged before any real
+ * admin feed exists. Not shipped: gated behind SHOW_LOCAL_PREVIEW in pulse.tsx.
+ */
+export const PULSE_LOCAL_PREVIEW_ITEMS: readonly PulseFeedItem[] = [
+    {
+        id: 'item_local_01',
+        ownerPubkey: 'ffff000000000000000000000000000000000000000000000000000000000001',
+        callsign: 'The Echo',
+        avatarUrl: null,
+        platform: 'rss',
+        category: 'community',
+        url: 'https://www.echo.net.au/',
+        title: 'Council votes to extend the Mullumbimby community garden lease',
+        thumbnailUrl: null,
+        publishedAt: new Date(Date.now() - 55 * 60 * 1000).toISOString(),
+        source: 'official',
+        isVerified: true,
+    },
+    {
+        id: 'item_local_02',
+        ownerPubkey: 'ffff000000000000000000000000000000000000000000000000000000000001',
+        callsign: 'The Echo',
+        avatarUrl: null,
+        platform: 'rss',
+        category: 'community',
+        url: 'https://www.echo.net.au/',
+        title: 'Repair cafe returns to the Drill Hall this Saturday morning',
+        thumbnailUrl: null,
+        publishedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+        source: 'official',
+        isVerified: true,
+    },
+    {
+        id: 'item_local_03',
+        ownerPubkey: 'ffff000000000000000000000000000000000000000000000000000000000002',
+        callsign: 'Byron Shire Council',
+        avatarUrl: null,
+        platform: 'rss',
+        category: 'community',
+        url: 'https://www.byron.nsw.gov.au/',
+        title: 'Green waste collection moves to fortnightly from March',
+        thumbnailUrl: null,
+        publishedAt: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
+        source: 'official',
+        isVerified: true,
+    },
+];
+
 export interface PulseFeedResponse {
     items: PulseFeedItem[];
     nextCursor: string | null;

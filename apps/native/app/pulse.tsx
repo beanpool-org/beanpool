@@ -31,6 +31,8 @@ import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import {
     fetchPulseFeed,
+    isOfficialSource,
+    PULSE_LOCAL_PREVIEW_ITEMS,
     mutePulseItem,
     type PulseFeedItem,
 } from '../utils/pulse';
@@ -41,6 +43,11 @@ export default function PulseScreen() {
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
 
+    // SKETCH: the Local lane has no real admin feed yet, so preview items stand in
+    // so the split can be judged. Flip to false to see the lane as it ships today.
+    const SHOW_LOCAL_PREVIEW = true;
+
+    const [lane, setLane] = useState<'neighbours' | 'local'>('neighbours');
     const [items, setItems] = useState<PulseFeedItem[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<ChannelCategory | 'all'>('all');
     const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -48,6 +55,14 @@ export default function PulseScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Client-side split is a prototype shortcut — see isOfficialSource(). Production
+    // should pass the lane to the API so pagination stays correct per lane.
+    const localItems = SHOW_LOCAL_PREVIEW
+        ? [...PULSE_LOCAL_PREVIEW_ITEMS, ...items.filter(isOfficialSource)]
+        : items.filter(isOfficialSource);
+    const neighbourItems = items.filter(i => !isOfficialSource(i));
+    const visibleItems = lane === 'local' ? localItems : neighbourItems;
 
     // Track active category for async callbacks
     const activeCategoryRef = useRef(selectedCategory);
@@ -234,8 +249,39 @@ export default function PulseScreen() {
                 <View style={styles.titleRow}>
                     <Text style={styles.title}>The Pulse</Text>
                     <Text style={styles.subtitle}>
-                        What your neighbours are creating and sharing
+                        {lane === 'local'
+                            ? 'News and notices from around the shire'
+                            : 'What your neighbours are creating and sharing'}
                     </Text>
+                </View>
+
+                {/* Lane switch — keeps member work from competing with a news firehose */}
+                <View style={styles.laneBar}>
+                    {([
+                        { id: 'neighbours' as const, label: 'Neighbours', icon: '\u{1F465}', count: neighbourItems.length },
+                        { id: 'local' as const, label: 'Local', icon: '\u{1F4F0}', count: localItems.length },
+                    ]).map(l => {
+                        const active = lane === l.id;
+                        return (
+                            <Pressable
+                                key={l.id}
+                                onPress={() => setLane(l.id)}
+                                style={[styles.laneTab, active && styles.laneTabActive]}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected: active }}
+                                accessibilityLabel={`${l.label} feed, ${l.count} items`}
+                            >
+                                <Text style={[styles.laneTabText, active && styles.laneTabTextActive]}>
+                                    {l.icon}  {l.label}
+                                </Text>
+                                {l.count > 0 ? (
+                                    <Text style={[styles.laneCount, active && styles.laneCountActive]}>
+                                        {l.count}
+                                    </Text>
+                                ) : null}
+                            </Pressable>
+                        );
+                    })}
                 </View>
 
                 {/* Category Filter Bar */}
@@ -318,7 +364,7 @@ export default function PulseScreen() {
                 </View>
             ) : (
                 <FlatList
-                    data={items}
+                    data={visibleItems}
                     keyExtractor={item => item.id}
                     renderItem={({ item }) => (
                         <PulseFeedCard
@@ -411,6 +457,50 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             gap: 8,
             flexDirection: 'row',
             alignItems: 'center',
+        },
+        laneBar: {
+            flexDirection: 'row',
+            marginHorizontal: 16,
+            marginBottom: 12,
+            backgroundColor: colors.surface.sunken ?? colors.surface.app,
+            borderRadius: 12,
+            padding: 3,
+            gap: 3,
+        },
+        laneTab: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            paddingVertical: 9,
+            borderRadius: 9,
+        },
+        laneTabActive: {
+            backgroundColor: colors.surface.card,
+            shadowColor: '#000',
+            shadowOpacity: 0.08,
+            shadowRadius: 3,
+            shadowOffset: { width: 0, height: 1 },
+            elevation: 2,
+        },
+        laneTabText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.text.secondary,
+        },
+        laneTabTextActive: {
+            color: colors.text.heading,
+            fontWeight: '800',
+        },
+        laneCount: {
+            fontSize: 11,
+            fontWeight: '700',
+            color: colors.text.muted,
+            overflow: 'hidden',
+        },
+        laneCountActive: {
+            color: colors.accent.primary,
         },
         categoryChip: {
             paddingVertical: 6,

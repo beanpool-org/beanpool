@@ -103,3 +103,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-02 - RadiusPickerPage Modal Accessibility & Keyboard Navigation
 **Learning:** `RadiusPickerPage.tsx` full-screen location modal overlay lacked ARIA modal semantics (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`), Escape key press dismiss listener, explicit `type="button"` attributes on action buttons, descriptive `aria-label` text on buttons and range slider, and visible focus-visible ring indicators.
 **Action:** Added `role="dialog"`, `aria-modal="true"`, `aria-labelledby="radius-picker-title"`, `id="radius-picker-title"`, `useEffect` Escape key handler, explicit `type="button"`, `aria-label` text, and `focus-visible:ring-2 focus-visible:ring-amber-500` focus rings.
+
+## 2026-09-03 - ToggleSwitch ARIA Switch Semantics & Focus Ring Styling
+**Learning:** `ToggleSwitch` in `SettingsPage.tsx` rendered custom interactive buttons without `role="switch"` or `aria-checked`, lacked descriptive `aria-label` text, and suppressed outline styling with `outline-none` without providing focus-visible ring indicators.
+**Action:** Added `role="switch"`, `aria-checked={checked}`, `aria-label={label}`, and `focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2` styling to `ToggleSwitch`, and updated all usages in `SettingsPage.tsx` with explicit descriptive `label` props.

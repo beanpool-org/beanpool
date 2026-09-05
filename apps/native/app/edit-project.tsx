@@ -123,7 +123,9 @@ export default function EditProjectModal() {
                         try {
                             await deleteCrowdfundProjectApi(params.id);
                             Alert.alert("Project Deleted", "The project has been successfully erased and any pledges held in trust have been refunded.", [
-                                { text: "OK", onPress: () => router.push('/projects') }
+                            { text: "OK", onPress: () => {
+                                if (router.canGoBack()) router.back(); else router.replace('/(tabs)/projects');
+                            }}
                             ]);
                         } catch (e: any) {
                             Alert.alert("Delete Failed", e.message || "Could not delete project.");

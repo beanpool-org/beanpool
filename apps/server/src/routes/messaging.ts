@@ -176,13 +176,25 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
 });
 
 router.post('/api/messages/mark-read', async (ctx) => {
-    const { pubkey, conversationId } = (ctx as any).requestBody || {};
-    if (!pubkey || !conversationId) {
+    const actor = (ctx.state.actor as string | undefined) || (ctx as any).requestBody?.pubkey;
+    const { conversationId } = (ctx as any).requestBody || {};
+    if (!actor || !conversationId) {
         ctx.status = 400;
         ctx.body = { error: 'Missing pubkey or conversationId' };
         return;
     }
-    markConversationRead(pubkey, conversationId);
+    const conv = getConversation(conversationId);
+    if (!conv) {
+        ctx.status = 404;
+        ctx.body = { error: 'Conversation not found' };
+        return;
+    }
+    if (!conv.participants.includes(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'You are not a participant in this conversation' };
+        return;
+    }
+    markConversationRead(actor, conversationId);
     ctx.body = { success: true };
 });
 

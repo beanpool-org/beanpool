@@ -32,10 +32,16 @@ export function initDirectoryPublisher() {
     // Convert hours to milliseconds
     const intervalMs = intervalHours * 60 * 60 * 1000;
     
-    pushTimer = setInterval(pushDirectoryNow, intervalMs);
+    const safePush = () => {
+        pushDirectoryNow().catch(err => {
+            console.error('[Directory] Unhandled error in scheduled directory push:', err?.message || err);
+        });
+    };
+
+    pushTimer = setInterval(safePush, intervalMs);
     
     // Initial push 30s after boot
-    setTimeout(pushDirectoryNow, 30_000);
+    setTimeout(safePush, 30_000);
     console.log(`[Directory] 📡 Push publisher initialized (Interval: ${intervalHours}h)`);
 }
 

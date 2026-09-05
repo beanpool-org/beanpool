@@ -1,11 +1,76 @@
 import React, { useState } from 'react';
-import { ThreatReviewModal } from './ThreatReviewModal';
+import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { MemberDetailModal } from './MemberDetailModal';
+import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, type NodeTreasury } from '../../lib/node-client';
 
+export interface MemberItem {
+    publicKey?: string;
+    pubkey?: string;
+    name?: string;
+    displayName?: string;
+    callsign?: string;
+    handle?: string;
+    avatarUrl?: string;
+    avatar?: string;
+    tier?: string;
+    standing?: string;
+    role?: string;
+    earnedCredit?: number;
+    earned_credit?: number;
+    canVouch?: boolean;
+    isVoucher?: boolean;
+    canOperate?: boolean;
+    can_operate?: boolean;
+    isOperator?: boolean;
+    creditFrozen?: boolean;
+    isFrozen?: boolean;
+    status?: string;
+    platform?: string;
+    [key: string]: unknown;
+}
+
+export interface ProfileItem {
+    publicKey?: string;
+    pubkey?: string;
+    name?: string;
+    displayName?: string;
+    callsign?: string;
+    handle?: string;
+    avatarUrl?: string;
+    avatar?: string;
+}
+
+export interface SecurityFlagItem {
+    id?: string;
+    type?: string;
+    severity?: string;
+    description?: string;
+    [key: string]: unknown;
+}
+
+export interface UserReportItem {
+    id?: string;
+    targetPubkey?: string;
+    reason?: string;
+    isReport?: boolean;
+    [key: string]: unknown;
+}
+
+export interface NodeDataPayload {
+    members?: MemberItem[];
+    profiles?: ProfileItem[];
+    posts?: unknown[];
+    health?: {
+        healthScore?: number;
+        flags?: SecurityFlagItem[];
+    };
+    reports?: UserReportItem[];
+}
+
 interface MembersModuleProps {
-    nodeData: any | null;
+    nodeData: NodeDataPayload | null;
     nodeDataLoading: boolean;
     activeNodeUrl?: string;
     adminPassword?: string;
@@ -17,7 +82,7 @@ interface MembersModuleProps {
     onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
 }
 
-export function getMemberAvatar(m: any, profiles: any[] | Map<string, any> = []): string | null {
+export function getMemberAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
     const pub = m?.publicKey || m?.pubkey || '';
     const profile = profiles instanceof Map
         ? profiles.get(pub)
@@ -45,7 +110,7 @@ export function fmtLastActive(iso?: string | null): string {
     return `Active ${d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
 }
 
-export function getMemberDisplayName(m: any, profiles: any[] | Map<string, any> = []): string {
+export function getMemberDisplayName(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string {
     const pub = m?.publicKey || m?.pubkey || '';
     if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'System Node Operator';
 
@@ -76,7 +141,7 @@ export function getMemberDisplayName(m: any, profiles: any[] | Map<string, any> 
     return pub || 'Sovereign Member';
 }
 
-export function getMemberTier(m: any): string {
+export function getMemberTier(m: MemberItem | null | undefined): string {
     if (!m) return 'Citizen';
     const pub = m.publicKey || m.pubkey || '';
     if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'Elder';
@@ -97,9 +162,9 @@ export function getMemberTier(m: any): string {
 
 export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminPassword, onRefresh, onFreezeUser, onPruneUser, onUpdateTier, onToggleVoucher, onToggleOperator }: MembersModuleProps) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [activeThreat, setActiveThreat] = useState<any | null>(null);
-    const [selectedMember, setSelectedMember] = useState<any | null>(null);
-    const [tierEditMember, setTierEditMember] = useState<any | null>(null);
+    const [activeThreat, setActiveThreat] = useState<ThreatItem | null>(null);
+    const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);
+    const [tierEditMember, setTierEditMember] = useState<MemberItem | null>(null);
     const [selectedTierValue, setSelectedTierValue] = useState<'Newcomer' | 'Resident' | 'Steward' | 'Elder'>('Resident');
     const [isUpdatingTier, setIsUpdatingTier] = useState(false);
     const [frozenPubkeys, setFrozenPubkeys] = useState<Set<string>>(new Set());
@@ -164,25 +229,25 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
         if (nodeData?.members) {
             const serverFrozen = new Set<string>(
                 nodeData.members
-                    .filter((m: any) => m.creditFrozen || m.isFrozen || m.status === 'frozen')
-                    .map((m: any) => m.publicKey || m.pubkey)
-                    .filter(Boolean)
+                    .filter((m: MemberItem) => m.creditFrozen || m.isFrozen || m.status === 'frozen')
+                    .map((m: MemberItem) => m.publicKey || m.pubkey)
+                    .filter((pk): pk is string => Boolean(pk))
             );
             setFrozenPubkeys(serverFrozen);
 
             const serverVouchers = new Set<string>(
                 nodeData.members
-                    .filter((m: any) => m.canVouch || m.isVoucher)
-                    .map((m: any) => m.publicKey || m.pubkey)
-                    .filter(Boolean)
+                    .filter((m: MemberItem) => m.canVouch || m.isVoucher)
+                    .map((m: MemberItem) => m.publicKey || m.pubkey)
+                    .filter((pk): pk is string => Boolean(pk))
             );
             setCustomVouchers(serverVouchers);
 
             const serverOperators = new Set<string>(
                 nodeData.members
-                    .filter((m: any) => m.canOperate || m.isOperator || m.can_operate)
-                    .map((m: any) => m.publicKey || m.pubkey)
-                    .filter(Boolean)
+                    .filter((m: MemberItem) => m.canOperate || m.isOperator || m.can_operate)
+                    .map((m: MemberItem) => m.publicKey || m.pubkey)
+                    .filter((pk): pk is string => Boolean(pk))
             );
             setCustomOperators(serverOperators);
         }
@@ -328,7 +393,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
         return new Set();
     });
 
-    const handleDismissThreat = (threat: any) => {
+    const handleDismissThreat = (threat: ThreatItem | null) => {
         if (!threat) return;
         const key = threat.id || threat.type || threat.description || threat.targetPubkey || threat.reason;
         setDismissedFlags((prev) => {
@@ -348,7 +413,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
 
     // O(1) profile lookup map derived from profiles array to avoid O(N*M) nested scans during render & search
     const profilesMap = React.useMemo(() => {
-        const map = new Map<string, any>();
+        const map = new Map<string, ProfileItem>();
         if (Array.isArray(profiles)) {
             for (const p of profiles) {
                 if (!p) continue;
@@ -363,13 +428,13 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
     const rawFlags = health?.flags || [];
 
     const flags = rawFlags.filter(
-        (f: any) => !dismissedFlags.has(f.id || f.type || f.description)
+        (f: SecurityFlagItem) => !dismissedFlags.has(f.id || f.type || f.description || '')
     );
     const reports = rawReports.filter(
-        (r: any) => !dismissedFlags.has(r.id || r.targetPubkey || r.reason)
+        (r: UserReportItem) => !dismissedFlags.has(r.id || r.targetPubkey || r.reason || '')
     );
 
-    const filteredMembers = members.filter((m: any) => {
+    const filteredMembers = members.filter((m: MemberItem) => {
         if (m.status === 'pruned') return false;
         const name = getMemberDisplayName(m, profilesMap).toLowerCase();
         const pub = (m.publicKey || '').toLowerCase();
@@ -383,7 +448,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
         let pwa = 0;
         let unknown = 0;
 
-        members.forEach((m: any) => {
+        members.forEach((m: MemberItem) => {
             const plat = (m.platform || '').toLowerCase();
             if (plat === 'ios') ios++;
             else if (plat === 'android') android++;
@@ -491,7 +556,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                     </div>
 
                     <div className="space-y-2 text-xs">
-                        {flags.map((flag: any, idx: number) => (
+                        {flags.map((flag: SecurityFlagItem, idx: number) => (
                             <div key={idx} className="p-3 bg-nature-950/80 border border-red-900/60 rounded-xl flex items-start justify-between gap-3">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
@@ -513,7 +578,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                             </div>
                         ))}
 
-                        {reports.map((report: any, idx: number) => (
+                        {reports.map((report: UserReportItem, idx: number) => (
                             <div key={idx} className="p-3 bg-nature-950/80 border border-amber-900/60 rounded-xl flex items-start justify-between gap-3">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
@@ -561,7 +626,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Active Vouchers</span>
                             <span className="text-2xl font-black text-emerald-400 font-mono">
-                                {members.filter((m: any) => {
+                                {members.filter((m: MemberItem) => {
                                     const pk = m.publicKey || m.pubkey || '';
                                     const frozen = Array.from(frozenPubkeys).some(f => pk === f || (pk && f && (pk.startsWith(f) || f.startsWith(pk))));
                                     if (frozen) return false;
@@ -606,7 +671,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                     <div className="col-span-2 text-right">Actions</div>
                                 </div>
                                 <div className="divide-y divide-nature-800/60">
-                                    {filteredMembers.map((m: any, idx: number) => {
+                                    {filteredMembers.map((m: MemberItem, idx: number) => {
                                         const displayName = getMemberDisplayName(m, profilesMap);
                                         const pubkey = m.publicKey || m.pubkey || '';
                                         const initial = displayName.charAt(0).toUpperCase();
@@ -696,10 +761,10 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                                                 e.stopPropagation();
                                                                 setTierEditMember(m);
                                                                 const currentTier = getMemberTier(m);
-                                                                const valid = ['Newcomer', 'Resident', 'Steward', 'Elder'].find(
+                                                                const valid = (['Newcomer', 'Resident', 'Steward', 'Elder'] as const).find(
                                                                     (t) => t.toLowerCase() === currentTier.toLowerCase()
                                                                 );
-                                                                setSelectedTierValue((valid as any) || 'Elder');
+                                                                setSelectedTierValue(valid || 'Elder');
                                                             }}
                                                             title="Click to upgrade or edit member standing tier"
                                                             className="px-2.5 py-1 rounded bg-nature-900 hover:bg-nature-800 text-amber-400 hover:text-amber-300 font-bold text-xs border border-nature-800 transition-all hover:scale-105 flex items-center gap-1.5 cursor-pointer shadow-sm"
@@ -822,20 +887,20 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             {activeThreat && (
                 <ThreatReviewModal
                     threat={activeThreat}
-                    profiles={profiles}
+                    profiles={profiles as NodeProfile[]}
                     members={members}
                     frozenPubkeys={frozenPubkeys}
                     onClose={() => setActiveThreat(null)}
                     onDismiss={handleDismissThreat}
                     onFreezePubkeys={handleFreezePubkeys}
-                    onInspectMember={(m) => setSelectedMember(m)}
+                    onInspectMember={(m) => setSelectedMember(m as MemberItem)}
                 />
             )}
 
             {selectedMember && (
                 <MemberDetailModal
                     member={selectedMember}
-                    profiles={profiles}
+                    profiles={profiles as Record<string, unknown>[]}
                     flags={flags}
                     isFrozen={
                         Array.from(frozenPubkeys).some((f) => {
@@ -911,7 +976,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                                 name="tier"
                                                 value={t.id}
                                                 checked={selectedTierValue === t.id}
-                                                onChange={() => setSelectedTierValue(t.id as any)}
+                                                onChange={() => setSelectedTierValue(t.id as 'Newcomer' | 'Resident' | 'Steward' | 'Elder')}
                                                 className="mt-0.5 accent-terra-500"
                                             />
                                             <div>

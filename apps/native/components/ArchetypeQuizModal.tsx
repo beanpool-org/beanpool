@@ -209,6 +209,7 @@ export function ArchetypeQuizModal({
                         {/* Mode Card: Quick Spark */}
                         <Pressable
                             accessibilityRole="button"
+                            accessibilityLabel="Quick Spark: 9 questions, approx 1 minute. A fast 60-second snapshot to discover your core community rhythm."
                             style={({ pressed }) => [
                                 styles.modeCard,
                                 {
@@ -264,6 +265,7 @@ export function ArchetypeQuizModal({
                         {/* Mode Card: Deep Resonance */}
                         <Pressable
                             accessibilityRole="button"
+                            accessibilityLabel="Deep Resonance: 27 questions, approx 3 minutes. Recommended for deep accuracy."
                             style={({ pressed }) => [
                                 styles.modeCard,
                                 {
@@ -624,6 +626,7 @@ export function ArchetypeQuizModal({
                             {mode === 'quick' && (
                                 <Pressable
                                     accessibilityRole="button"
+                                    accessibilityLabel="Deepen with 27 Questions, approx 3 minutes"
                                     style={styles.secondaryActionBtn}
                                     onPress={() => {
                                         setMode('deep');

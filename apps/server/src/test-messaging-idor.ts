@@ -103,6 +103,15 @@ async function main() {
         { messageId: msgId, authorPubkey: C.pubKeyHex, emoji: '👎' });
     assert(reactC.status === 404, `reactions: outsider C is DENIED reacting to message (got ${reactC.status} ${reactC.error ?? ''})`);
 
+    // Mark-read authorization — participant A can mark read; outsider C is rejected (403).
+    const markA = await signedFetch('POST', '/api/messages/mark-read', A,
+        { pubkey: A.pubKeyHex, conversationId: conv.id });
+    assert(markA.status === 200, `mark-read: participant A can mark read (got ${markA.status})`);
+
+    const markC = await signedFetch('POST', '/api/messages/mark-read', C,
+        { pubkey: C.pubKeyHex, conversationId: conv.id });
+    assert(markC.status === 403, `mark-read: outsider C is DENIED marking conversation read (got ${markC.status} ${markC.error ?? ''})`);
+
     // Marketplace transactions IDOR — subject reads own transactions (200); outsider is denied (403).
     const txA = await signedFetch('GET', `/api/marketplace/transactions?publicKey=${A.pubKeyHex}`, A);
     assert(txA.status === 200, `marketplace transactions IDOR: A reads own transactions (got ${txA.status} ${txA.error ?? ''})`);

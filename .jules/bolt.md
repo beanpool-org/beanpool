@@ -138,3 +138,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-20 - O(N*M) Gossip Pin Lookups in Core GossipManager
 **Learning:** In `packages/beanpool-core/src/gossip.ts`, `processIncomingGossip` iterated through incoming gossiped pins and called `localPins.find(p => p.id === incomingPin.id)` for each incoming pin. With $N$ incoming pins and $M$ local pins, this resulted in an $O(N \times M)$ nested array scan on every gossip message received.
 **Action:** Pre-computed `localPinsById` Map before the incoming pin iteration loop, turning local pin lookups into constant-time $O(1)$ retrievals ($O(N + M)$ total).
+
+## 2026-09-21 - N+1 Member Queries in Admin Commons Projects Route
+**Learning:** In `apps/server/src/routes/admin.ts`, the `/api/local/admin/commons/projects` route mapped through `crowdfundProjects` and called `getMember(p.creator_pubkey)` for every project. This triggered $N$ separate SQLite database queries ($N+1$ query pattern) when mapping project creators to UI representations.
+**Action:** Pre-fetched members using `getAllMembers()` into a `Map<string, Member>` indexed by `publicKey` before mapping projects, converting per-project creator resolution into constant-time $O(1)$ Map retrievals.

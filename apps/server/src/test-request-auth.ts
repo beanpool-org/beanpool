@@ -78,10 +78,16 @@ async function main() {
 
     const body = { pubkey: pubKeyHex, conversationId: 'test-conv' };
 
-    // 1. Valid replay-proof request → middleware passes (route returns 200).
+    // 1. Valid replay-proof request → middleware passes and the route is reached.
+    //    This suite uses mark-read purely as a canary for the signing middleware, and
+    //    signs with a throwaway keypair that is a participant in nothing. Now that the
+    //    route enforces participation, reaching the handler surfaces as 404
+    //    "Conversation not found" — which is the proof the signature was accepted. A
+    //    middleware rejection would be 401/403 naming the signature instead.
     const fresh = crypto.randomBytes(16).toString('hex');
     const r1 = await signedFetch(ENDPOINT, body, { nonce: fresh });
-    assert(r1.status === 200, `valid replay-proof request accepted (got ${r1.status} ${r1.error ?? ''})`);
+    assert(r1.status === 404 && /not found/i.test(r1.error ?? ''),
+        `valid replay-proof request reaches the route (got ${r1.status} ${r1.error ?? ''})`);
 
     // 2. Replaying the same nonce → rejected.
     const r2 = await signedFetch(ENDPOINT, body, { nonce: fresh });

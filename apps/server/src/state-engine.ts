@@ -5,6 +5,7 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
+import { getVersion } from './version.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
@@ -43,7 +44,6 @@ import {
     redeemOfflineTicket as redeemOfflineTicketEngine
 } from './engine/invites.js';
 import {
-import { getVersion } from './version.js';
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,

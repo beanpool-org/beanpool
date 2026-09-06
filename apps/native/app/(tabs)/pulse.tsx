@@ -43,9 +43,10 @@ export default function PulseScreen() {
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
 
-    // SKETCH: the Local lane has no real admin feed yet, so preview items stand in
-    // so the split can be judged. Flip to false to see the lane as it ships today.
-    const SHOW_LOCAL_PREVIEW = true;
+    // Stand-in items for judging the two-lane layout before any admin feed exists. MUST stay
+    // false on a shipping build — these are invented headlines and would read as real local
+    // news. Flip to true only to look at the design.
+    const SHOW_LOCAL_PREVIEW = false;
 
     const [lane, setLane] = useState<'neighbours' | 'local'>('neighbours');
     const [items, setItems] = useState<PulseFeedItem[]>([]);
@@ -62,7 +63,7 @@ export default function PulseScreen() {
         ? [...PULSE_LOCAL_PREVIEW_ITEMS, ...items.filter(isOfficialSource)]
         : items.filter(isOfficialSource);
     const neighbourItems = items.filter(i => !isOfficialSource(i));
-    const visibleItems = lane === 'local' ? localItems : neighbourItems;
+    const visibleItems = (lane === 'local' && localItems.length > 0) ? localItems : neighbourItems;
 
     // Track active category for async callbacks
     const activeCategoryRef = useRef(selectedCategory);
@@ -261,7 +262,10 @@ export default function PulseScreen() {
                     </Text>
                 </View>
 
-                {/* Lane switch — keeps member work from competing with a news firehose */}
+                {/* Lane switch — keeps member work from competing with a news firehose. Hidden
+                    until an official source actually exists, so members are not shown an empty
+                    tab that can never fill. */}
+                {localItems.length > 0 && (
                 <View style={styles.laneBar}>
                     {([
                         { id: 'neighbours' as const, label: 'Neighbours', icon: '\u{1F465}', count: neighbourItems.length },
@@ -289,6 +293,7 @@ export default function PulseScreen() {
                         );
                     })}
                 </View>
+                )}
 
                 {/* Category Filter Bar */}
                 <ScrollView

@@ -675,11 +675,18 @@ export default function RootLayout() {
                 const lastRunVersion = await AsyncStorage.getItem('beanpool_last_run_version');
                 const currentVersion = appConfig.expo.version;
                 if (lastRunVersion !== currentVersion) {
-                    await AsyncStorage.removeItem('beanpool_latest_known_version');
-                    await AsyncStorage.removeItem('beanpool_last_version_check_time');
-                    if (lastRunVersion) {
-                        await AsyncStorage.removeItem(`beanpool_dismissed_update_${lastRunVersion}`);
-                    }
+                    // Dismissals are keyed by the STORE version, never by the app's own, so
+                    // removing the key named after the version we just left cleared the wrong
+                    // one and the right ones accumulated forever. After an update every stored
+                    // dismissal is spent anyway, and each node's floor is re-sent within 30s.
+                    const staleKeys = (await AsyncStorage.getAllKeys()).filter(
+                        k => k.startsWith('beanpool_dismissed_update_') || k.startsWith('beanpool_min_app_version')
+                    );
+                    await AsyncStorage.multiRemove([
+                        'beanpool_latest_known_version',
+                        'beanpool_last_version_check_time',
+                        ...staleKeys,
+                    ]);
                     await AsyncStorage.setItem('beanpool_last_run_version', currentVersion);
                 }
             } catch (e) {

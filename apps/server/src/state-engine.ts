@@ -6,6 +6,7 @@ import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { getVersion } from './version.js';
+import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
@@ -2433,7 +2434,7 @@ export function getPostCount(filter?: { type?: string; category?: string; status
 
 export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
 export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
-export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
+export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
 
 // Reads the host watchdog's status file (dropped into the data dir by
 // ops/watchdog). Absent file = no watchdog on this host (not an error). A file
@@ -2763,7 +2764,12 @@ export function getCommunityHealth(): CommunityHealth {
     return {
         nodeName: getDirectoryInfo()?.name || 'Local Discovery',
         version: getVersion(),
-        minAppVersion: '1.0.75',
+        // The app reads both of these. `minAppVersion` is this node's floor — below it
+        // the app says so and will not let you dismiss it. `appVersions` is what the
+        // stores are publishing, looked up here so 1.1 MB of Play Store HTML is not
+        // downloaded onto a phone on a metered off-grid connection to learn one number.
+        minAppVersion: getMinAppVersion(),
+        appVersions: getAppStoreVersions(),
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
         tree: { totalMembers, maxDepth: 0, widestBranch: { callsign: 'db-optimized', children: 0 }, avgBranchSize: 0 },
         activity: {

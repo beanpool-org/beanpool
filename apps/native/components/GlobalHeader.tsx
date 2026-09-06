@@ -34,7 +34,17 @@ const fetchWithTimeout = async (resource: RequestInfo, options: RequestInit & { 
     }
 };
 
-export function GlobalHeader() {
+// Deliberately larger than the 32pt pill so the avatar spills past its edge. The pill's own
+// height and width are unchanged — only its clipping, which had to become visible.
+const AVATAR_PILL_SIZE = 43;
+
+/**
+ * `onMeasure` reports the header's real rendered height — including the update banner,
+ * which appears and disappears. The map screen floats this header absolutely and has to
+ * reserve the equivalent space for the tab bar below it; a constant would be wrong the
+ * moment a banner shows.
+ */
+export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => void } = {}) {
     const insets = useSafeAreaInsets();
     const pathname = usePathname();
     const { colors } = useTheme();
@@ -77,7 +87,7 @@ export function GlobalHeader() {
         headerLeftControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: theme === 'dark' ? colors.brand.primary : 'rgba(16, 185, 129, 0.3)', height: 32, width: 80, overflow: 'hidden' },
         headerLeftControlsGuest: { borderColor: colors.feedback.warning.border, backgroundColor: colors.feedback.warning.bg },
         headerLeftControlsDisconnected: { borderColor: colors.feedback.danger.border, backgroundColor: colors.feedback.danger.bg },
-        headerRightControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border.default, height: 32, width: 72, overflow: 'hidden' },
+        headerRightControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border.default, height: 32, width: 72, overflow: 'visible' },
         controlPillBtn: { flex: 1, height: '100%', justifyContent: 'center', alignItems: 'center' },
         modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center' },
         modalContent: { backgroundColor: colors.surface.card, width: '85%', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
@@ -312,9 +322,15 @@ export function GlobalHeader() {
 
     useEffect(() => {
         if (!identity?.publicKey) return;
-        getMemberProfile(identity.publicKey)
-            .then(p => { if (p?.avatar_url) setMyAvatar(p.avatar_url); })
+        // Assign whatever the profile says, including null. Guarding on truthiness meant
+        // clearing your avatar left the old image in the header until an app restart.
+        const load = () => getMemberProfile(identity.publicKey)
+            .then(p => setMyAvatar(p?.avatar_url ?? null))
             .catch(() => {});
+        load();
+        // Without this the pill kept the old picture until the header happened to remount.
+        const sub = DeviceEventEmitter.addListener('profile_updated', load);
+        return () => sub.remove();
     }, [identity?.publicKey]);
 
     useEffect(() => {
@@ -441,7 +457,10 @@ export function GlobalHeader() {
     const isMapScreen = pathname === '/map';
 
     return (
-        <View style={[styles.headerWrapper, isMapScreen && styles.headerAbsolute]}>
+        <View
+            style={[styles.headerWrapper, isMapScreen && styles.headerAbsolute]}
+            onLayout={onMeasure ? (e) => onMeasure(e.nativeEvent.layout.height) : undefined}
+        >
             <View style={StyleSheet.absoluteFillObject}>
                 <Image
                     source={require('../assets/images/neon-vines-banner.jpg')}
@@ -513,9 +532,10 @@ export function GlobalHeader() {
                                 >
                                     {pathname === '/' || pathname === '/market' ? 'Marketplace' :
                                      pathname === '/projects' ? 'Projects' :
-                                     pathname === '/chats' ? 'Messages' :
+                                     pathname === '/chats' ? 'Talk' :
                                      pathname === '/people' ? 'People' :
                                      pathname === '/ledger' ? 'Ledger' :
+                                     pathname === '/pulse' ? 'The Pulse' :
                                      pathname === '/settings' ? 'Settings' : 'BeanPool'}
                                 </Text>
                                 <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid, borderWidth: 1, borderColor: '#fff' }} />
@@ -529,20 +549,8 @@ export function GlobalHeader() {
                     <View style={styles.headerRightControls}>
                         <TouchableOpacity
                             accessibilityRole="button"
-                            accessibilityLabel="Open profile"
-                            style={[styles.controlPillBtn, { borderRightWidth: 1, borderColor: colors.border.default }]}
-                            onPress={() => {
-                                if (identity?.publicKey) {
-                                    router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } });
-                                }
-                            }}
-                        >
-                            <MemberAvatar avatarUrl={myAvatar} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || '?'} size={24} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            accessibilityRole="button"
                             accessibilityLabel="Settings"
-                            style={styles.controlPillBtn}
+                            style={[styles.controlPillBtn, { borderRightWidth: 1, borderColor: colors.border.default }]}
                             onPress={() => {
                                 if (pathname === '/settings') {
                                     if (router.canGoBack()) {
@@ -556,6 +564,18 @@ export function GlobalHeader() {
                             }}
                         >
                             <MaterialCommunityIcons name="tune" size={17} color={pathname === '/settings' ? colors.accent.primary : colors.text.secondary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Open profile"
+                            style={styles.controlPillBtn}
+                            onPress={() => {
+                                if (identity?.publicKey) {
+                                    router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } });
+                                }
+                            }}
+                        >
+                            <MemberAvatar avatarUrl={myAvatar} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || '?'} size={AVATAR_PILL_SIZE} />
                         </TouchableOpacity>
                     </View>
                 </View>

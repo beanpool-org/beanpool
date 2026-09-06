@@ -2,17 +2,122 @@ import { Tabs, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { StatusBar } from 'expo-status-bar';
 import { GlobalHeader } from '../../components/GlobalHeader';
-import { View, Image, StyleSheet, Text, Platform, DeviceEventEmitter } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { View, Text, Platform, DeviceEventEmitter, useWindowDimensions } from 'react-native';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
+import { usePathname } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getGlobalUnreadCount, syncMessages, getPosts, getMarketplaceTransactions } from '../../utils/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { palette } from '../../constants/colors';
 import { useTheme } from '../ThemeContext';
+
+// Tab bar sits under the brand header, so its height is fixed here rather than left to
+// the library, which would add the status-bar inset a second time (GlobalHeader already
+// consumes it). The column inside is vertically centred by the library's icon wrapper, so
+// this height is the only lever on the gap between the banner and the label: the leftover
+// space splits evenly above and below. 58 leaves ~5 either side.
+const TAB_BAR_HEIGHT = 58;
+
+// Label sits ABOVE the icon. The focused icon grows by raising its own fontSize rather than
+// by transform: scale. A scaled child overflows its wrapper's bounds and Android clips it,
+// which is what was cutting the bottom off. Growing the glyph enlarges the line box instead,
+// and because the column is top-aligned that growth goes downwards, away from the text.
+const ICON_SIZE = 24;
+const ICON_SIZE_FOCUSED = 31;
+// Six tabs share the width. At the 320dp floor that is ~53dp each, where the full-size glyph
+// plus the badge padding overflows the cell and Android clips the icon's right edge. Below
+// this much room per tab, everything steps down a size.
+const VISIBLE_TABS = 6;
+const COMPACT_TAB_WIDTH = 58;
+
+function TabItem({ label, icon, focused, color, count, badge }: {
+    label: string;
+    icon: string;
+    focused: boolean;
+    color: string;
+    /** Unread/pending count, drawn against the icon. */
+    count?: number;
+    badge?: React.ReactNode;
+}) {
+    const { width } = useWindowDimensions();
+    const compact = width / VISIBLE_TABS < COMPACT_TAB_WIDTH;
+    const iconSize = compact
+        ? (focused ? ICON_SIZE_FOCUSED - 7 : ICON_SIZE - 5)
+        : (focused ? ICON_SIZE_FOCUSED : ICON_SIZE);
+    const iconBoxHeight = (compact ? ICON_SIZE_FOCUSED - 7 : ICON_SIZE_FOCUSED) + 2;
+
+    return (
+        <View style={{ alignItems: 'center', width: '100%', paddingTop: 2 }}>
+            {/* adjustsFontSizeToFit rather than a hard cap: "Commons" is the longest label and
+                truncated to "Comm..." at 320dp. Shrinking beats an ellipsis on a nav label. */}
+            <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                maxFontSizeMultiplier={1.15}
+                style={{ fontSize: compact ? 9 : 10, fontWeight: '700', marginBottom: 0, color }}
+            >
+                {label}
+            </Text>
+            {/* includeFontPadding strips Android's extra glyph padding, which was most of the
+                gap between the text and the icon. Tightening it here buys the headroom the
+                focused size needs. */}
+            {/* Fixed to the focused size so the column's height never changes. The icon lives
+                inside an absolutely-centred wrapper, so a taller focused item would otherwise
+                re-centre and visibly nudge the label up on selection. */}
+            <View style={{ height: iconBoxHeight, justifyContent: 'flex-start', paddingHorizontal: compact ? 7 : 11 }}>
+                <Text allowFontScaling={false} style={{
+                    fontSize: iconSize,
+                    lineHeight: iconSize + 2,
+                    includeFontPadding: false,
+                }}>
+                    {icon}
+                </Text>
+                {/* The library anchors tabBarBadge to the icon wrapper, and tabBarIconStyle
+                    stretches that wrapper to the whole tab — so the built-in badge lands in the
+                    tab top-right corner level with the label, colliding with a long label like
+                    Commons and crowding the next tab at 320dp. Drawn here instead, inside the
+                    wrapper padding, since Android clips children that overflow their parent. */}
+                {count !== undefined && count > 0 && (
+                    <View style={{
+                        position: 'absolute', top: -2, right: 0, minWidth: compact ? 14 : 16, height: compact ? 14 : 16,
+                        borderRadius: 8, paddingHorizontal: 4, backgroundColor: '#dc2626',
+                        alignItems: 'center', justifyContent: 'center',
+                    }}>
+                        <Text allowFontScaling={false} style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+                            {count > 99 ? '99+' : count}
+                        </Text>
+                    </View>
+                )}
+            </View>
+            {badge}
+        </View>
+    );
+}
 
 export default function TabLayout() {
     const { theme, colors } = useTheme();
     const { identity } = useIdentity();
+    const pathname = usePathname();
+    const insets = useSafeAreaInsets();
+    // GlobalHeader positions itself absolutely on /map (styles.headerAbsolute) so it can float
+    // over the map. Absolute means it reserves no layout space, so with the tab bar now beneath
+    // it, the header painted straight over the tabs. Reserve the height here instead of touching
+    // GlobalHeader. Mirrors its own `Math.max(insets.top + 10, 40) + 56`.
+    const headerHeight = Math.max(insets.top + 10, 40) + 56;
+    const isMapScreen = pathname === '/map';
+    // Starts at the header-row height and grows if GlobalHeader renders an update banner.
+    const [measuredHeaderHeight, setMeasuredHeaderHeight] = useState(headerHeight);
+    const lastMeasuredRef = useRef(headerHeight);
+    // GlobalHeader's onLayout can fire inside THIS component's own mount commit, and a
+    // setState at that point is a render-phase update: React warns "state update on a
+    // component that hasn't mounted yet" and drops it. Deferring past the commit fixes
+    // that, and the equality guard stops every relayout from re-rendering the navigator.
+    const onHeaderMeasure = useCallback((h: number) => {
+        if (Math.abs(lastMeasuredRef.current - h) < 1) return;
+        lastMeasuredRef.current = h;
+        requestAnimationFrame(() => setMeasuredHeaderHeight(h));
+    }, []);
     const [unread, setUnread] = useState(0);
     const [dealsCount, setDealsCount] = useState(0);
     const [needsBackup, setNeedsBackup] = useState(false);
@@ -88,82 +193,96 @@ export default function TabLayout() {
             {/* Tab screens always sit under the dark-green vine header, so the status-bar
                 text must be light regardless of the app's light/dark theme. */}
             <StatusBar style="light" />
+            {/* EXPERIMENT (feat/top-tabs): tab bar moved to the top, UNDER the brand band.
+                A top tab bar renders before the screen container, so a per-screen `header`
+                would land above the tabs. Rendering GlobalHeader here instead keeps the
+                logo on top; it reads its route from usePathname(), not navigator context,
+                so it behaves identically outside the navigator. */}
+            {/* On the map the header floats (position: absolute, zIndex 100), so it
+                contributes no height and this spacer reserves the room the tab bar needs
+                to sit below it. `headerHeight` alone measures the header ROW only — when
+                the update banner appears the header grows, and the extra painted straight
+                over the tab bar at zIndex 100, swallowing its touches and stranding anyone
+                on the map. GlobalHeader reports what it actually measured instead. */}
+            <View style={isMapScreen ? { height: measuredHeaderHeight } : undefined}>
+                <GlobalHeader onMeasure={onHeaderMeasure} />
+            </View>
             <Tabs backBehavior="none" screenOptions={{
-                header: () => <GlobalHeader />,
-                tabBarBackground: () => (
-                    <View style={{ 
-                        position: 'absolute', 
-                        top: 0, left: 0, right: 0, bottom: 0, 
-                        backgroundColor: 'transparent',
-                        overflow: 'hidden' 
-                    }}>
-                        <Image 
-                            source={require('../../assets/images/neon-vines-banner.jpg')} 
-                            style={[StyleSheet.absoluteFillObject, { width: '100%', height: '100%', transform: [{ scale: 1.5 }] }]}
-                            resizeMode="cover"
-                        />
-                        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.65)' }]} />
-                    </View>
-                ),
+                tabBarPosition: 'top',
+                headerShown: false,
+                // The vine banner stays in GlobalHeader above; the icon strip is a flat fill so
+                // the two do not fight. green950 is what the vine read as under its 65% black
+                // overlay, so losing the image is not a colour change.
                 tabBarStyle: { 
-                    backgroundColor: 'transparent', 
+                    backgroundColor: colors.surface.app, 
                     borderTopWidth: 0,
                     elevation: 0,
+                    height: TAB_BAR_HEIGHT,
+                    paddingTop: 0,
                 },
-                tabBarActiveTintColor: colors.text.inverse,
-                tabBarInactiveTintColor: 'rgba(255,255,255,0.6)',
-                tabBarLabelStyle: {
-                    textShadowColor: 'rgba(0,0,0,1)',
-                    textShadowOffset: { width: 0, height: 0 },
-                    textShadowRadius: 5,
-                    fontWeight: '700',
-                    fontSize: 10,
-                },
+                tabBarActiveTintColor: colors.accent.primary,
+                tabBarInactiveTintColor: colors.text.secondary,
+                // TabItem draws its own label above the icon, so the built-in one (which always
+                // sits below) is turned off. Tint colours above still feed it via `color`.
+                tabBarShowLabel: false,
+                // The icon wrapper is hard-coded to 31x28 (ICON_SIZE_WIDE/TALL in TabBarIcon),
+                // which clips any label longer than "Chat". tabBarIconStyle is merged last in
+                // that component's style array, so this widens it to the whole tab.
+                tabBarIconStyle: { width: '100%', height: '100%' },
             }}>
                 <Tabs.Screen
                     name="index"
                     options={{
                         title: 'Market',
-                        tabBarBadge: dealsCount > 0 ? dealsCount : undefined,
-                        tabBarIcon: ({ focused }) => <Text style={{ fontSize: 24, transform: [{ scale: focused ? 1.3 : 1 }, { translateY: focused ? -4 : 0 }], opacity: 1, textShadowColor: 'rgba(0,0,0,1)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>🤝</Text>
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Market" icon="🤝" focused={focused} color={color} count={dealsCount} />
                     }}
                 />
                 <Tabs.Screen
                     name="map"
                     options={{
                         title: 'Map',
-                        headerTransparent: true,
-                        tabBarIcon: ({ focused }) => <Text style={{ fontSize: 24, transform: [{ scale: focused ? 1.3 : 1 }, { translateY: focused ? -4 : 0 }], opacity: 1, textShadowColor: 'rgba(0,0,0,1)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>🗺️</Text>
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Map" icon="🗺️" focused={focused} color={color} />
                     }}
                 />
 
-                <Tabs.Screen 
-                    name="chats" 
-                    options={{ 
-                        title: 'Chat',
-                        tabBarBadge: unread > 0 ? unread : undefined,
-                        tabBarIcon: ({ focused }) => <Text style={{ fontSize: 24, transform: [{ scale: focused ? 1.3 : 1 }, { translateY: focused ? -4 : 0 }], opacity: 1, textShadowColor: 'rgba(0,0,0,1)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>💬</Text> 
-                    }} 
+                {/* Talk hosts Messages + People behind a segmented control. Merging them frees
+                    the slot Pulse needs — six labelled tabs is the ceiling at 320dp. */}
+                <Tabs.Screen
+                    name="chats"
+                    options={{
+                        title: 'Talk',
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Talk" icon="💬" focused={focused} color={color} count={unread} />
+                    }}
                 />
-                <Tabs.Screen 
-                    name="people" 
-                    options={{ 
+                {/* Still a route: GlobalHeader and public-profile deep-link here with a `view`
+                    param, so it stays mounted. Hidden from the bar — Talk is its home now. */}
+                <Tabs.Screen
+                    name="people"
+                    options={{
                         title: 'People',
-                        tabBarIcon: ({ focused }) => <Text style={{ fontSize: 24, transform: [{ scale: focused ? 1.3 : 1 }, { translateY: focused ? -4 : 0 }], opacity: 1, textShadowColor: 'rgba(0,0,0,1)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>👥</Text> 
-                    }} 
+                        href: null,
+                        tabBarIcon: ({ focused, color }) => <TabItem label="People" icon="👥" focused={focused} color={color} />
+                    }}
+                />
+                <Tabs.Screen
+                    name="pulse"
+                    options={{
+                        title: 'Pulse',
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Pulse" icon="📡" focused={focused} color={color} />
+                    }}
                 />
                 <Tabs.Screen 
                     name="projects" 
                     options={{ 
                         title: 'Commons',
-                        tabBarIcon: ({ focused }) => <Text style={{ fontSize: 24, transform: [{ scale: focused ? 1.3 : 1 }, { translateY: focused ? -4 : 0 }], opacity: 1, textShadowColor: 'rgba(0,0,0,1)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>{Platform.OS === 'ios' ? '🌱' : '🌳'}</Text> 
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Commons" icon={Platform.OS === 'ios' ? '🌱' : '🌳'} focused={focused} color={color} /> 
                     }} 
                 />
                 <Tabs.Screen 
                     name="ledger" 
                     options={{ 
                         title: 'Ledger',
-                        tabBarIcon: ({ focused }) => <Text style={{ fontSize: 24, transform: [{ scale: focused ? 1.3 : 1 }, { translateY: focused ? -4 : 0 }], opacity: 1, textShadowColor: 'rgba(0,0,0,1)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>📊</Text> 
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Ledger" icon="📊" focused={focused} color={color} /> 
                     }} 
                 />
                 <Tabs.Screen 
@@ -171,13 +290,16 @@ export default function TabLayout() {
                     options={{ 
                         title: 'Settings',
                         href: null,
-                        tabBarIcon: ({ focused }) => (
-                            <View style={{ transform: [{ scale: focused ? 1.3 : 1 }, { translateY: focused ? -4 : 0 }] }}>
-                                <Text style={{ fontSize: 24, opacity: 1, textShadowColor: 'rgba(0,0,0,1)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 }}>⚙️</Text>
-                                {needsBackup && (
-                                    <View style={{ position: 'absolute', top: -5, right: -5, backgroundColor: colors.feedback.danger.solid, width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: palette.green950 }} />
-                                )}
-                            </View>
+                        tabBarIcon: ({ focused, color }) => (
+                            <TabItem
+                                label="Settings"
+                                icon="⚙️"
+                                focused={focused}
+                                color={color}
+                                badge={needsBackup ? (
+                                    <View style={{ position: 'absolute', top: 4, right: '30%', backgroundColor: colors.feedback.danger.solid, width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: colors.surface.app }} />
+                                ) : null}
+                            />
                         )
                     }} 
                 />

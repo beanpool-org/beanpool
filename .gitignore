@@ -90,3 +90,8 @@ scratch/
 # Federation operator harness: holds TEST identity PRIVATE KEYS. Never commit.
 scripts/federation/fed-state.json
 /ios/
+
+# Local build artifacts — a 145MB APK swept into a commit gets the whole push
+# rejected by GitHub, and the only fix is rewriting history.
+*.apk
+*.aab

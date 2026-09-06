@@ -8,11 +8,18 @@ import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist'
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
+import { useLocalSearchParams } from 'expo-router';
+import PeopleScreen from './people';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
     const { identity } = useIdentity();
+    // Talk = Messages + People. People is rendered inline rather than as its own route so the
+    // Talk tab stays highlighted; /people survives for the deep links that pass a `view` param,
+    // and PeopleScreen reads that param off whichever route it is mounted on.
+    const talkParams = useLocalSearchParams<{ view?: string }>();
+    const [talkView, setTalkView] = useState<'messages' | 'people'>(talkParams.view ? 'people' : 'messages');
     const [conversations, setConversations] = useState<any[]>([]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -25,6 +32,32 @@ export default function ChatsScreen() {
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
+        talkBar: {
+            flexDirection: 'row',
+            marginHorizontal: 16,
+            marginTop: 10,
+            backgroundColor: colors.surface.subtle,
+            borderRadius: 12,
+            padding: 3,
+            gap: 3,
+        },
+        talkTab: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 9,
+            borderRadius: 9,
+        },
+        talkTabActive: {
+            backgroundColor: colors.surface.card,
+            shadowColor: '#000',
+            shadowOpacity: 0.08,
+            shadowRadius: 3,
+            shadowOffset: { width: 0, height: 1 },
+            elevation: 2,
+        },
+        talkTabText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
+        talkTabTextActive: { color: colors.text.heading, fontWeight: '800' },
         header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
         title: { fontSize: 32, fontWeight: '800', color: colors.text.body, letterSpacing: -0.5 },
         newChatBtn: { padding: 8, backgroundColor: colors.accent.tint, borderRadius: 12 },
@@ -464,8 +497,43 @@ export default function ChatsScreen() {
         </>
     );
 
+    const talkSwitch = (
+        <View style={styles.talkBar}>
+            {([
+                { id: 'messages' as const, label: 'Messages', icon: '\u{1F4AC}' },
+                { id: 'people' as const, label: 'People', icon: '\u{1F465}' },
+            ]).map(t => {
+                const active = talkView === t.id;
+                return (
+                    <Pressable
+                        key={t.id}
+                        onPress={() => setTalkView(t.id)}
+                        style={[styles.talkTab, active && styles.talkTabActive]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={t.label}
+                    >
+                        <Text style={[styles.talkTabText, active && styles.talkTabTextActive]}>
+                            {t.icon}  {t.label}
+                        </Text>
+                    </Pressable>
+                );
+            })}
+        </View>
+    );
+
+    if (talkView === 'people') {
+        return (
+            <View style={styles.safeArea}>
+                {talkSwitch}
+                <PeopleScreen />
+            </View>
+        );
+    }
+
     return (
         <View style={styles.safeArea}>
+            {talkSwitch}
             <View style={[styles.header, { borderBottomWidth: 0, paddingBottom: 8 }]}>
                 <Text style={styles.title}>Inbox</Text>
                 <Pressable accessibilityRole="button" accessibilityLabel="New message" style={styles.newChatBtn} onPress={() => {

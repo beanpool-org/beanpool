@@ -27,20 +27,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { CATEGORIES, type ChannelCategory } from '@beanpool/core';
-import { useIdentity } from './IdentityContext';
-import { useTheme, useStyles } from './ThemeContext';
+import { useIdentity } from '../IdentityContext';
+import { useTheme, useStyles } from '../ThemeContext';
 import {
     fetchPulseFeed,
+    isOfficialSource,
     mutePulseItem,
     type PulseFeedItem,
-} from '../utils/pulse';
-import { PulseFeedCard } from '../components/PulseFeedCard';
+} from '../../utils/pulse';
+import { PulseFeedCard } from '../../components/PulseFeedCard';
 
 export default function PulseScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
 
+    const [lane, setLane] = useState<'neighbours' | 'local'>('neighbours');
     const [items, setItems] = useState<PulseFeedItem[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<ChannelCategory | 'all'>('all');
     const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -48,6 +50,14 @@ export default function PulseScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Client-side split is a prototype shortcut — see isOfficialSource(). Production
+    // should pass the lane to the API so pagination stays correct per lane.
+    const localItems = items.filter(isOfficialSource);
+    const neighbourItems = items.filter(i => !isOfficialSource(i));
+    const localLaneAvailable = localItems.length > 0;
+    const activeLane = (lane === 'local' && localLaneAvailable) ? 'local' : 'neighbours';
+    const visibleItems = activeLane === 'local' ? localItems : neighbourItems;
 
     // Track active category for async callbacks
     const activeCategoryRef = useRef(selectedCategory);
@@ -206,20 +216,29 @@ export default function PulseScreen() {
         );
     };
 
+    // No 'top' edge: Pulse is a tab now, and GlobalHeader above it already consumes the top
+    // safe-area inset. Keeping it here applied the status-bar/notch inset a SECOND time,
+    // leaving a dead gap under the tab bar — worst on the small screens we support, where
+    // the header, tab bar and gap stack up before any content gets a chance.
     return (
-        <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+        <SafeAreaView style={styles.screen} edges={['left', 'right']}>
             {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerTop}>
-                    <Pressable
-                        onPress={() => router.back()}
-                        style={styles.backBtn}
-                        accessibilityRole="button"
-                        accessibilityLabel="Go back"
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                        <Text style={styles.backText}>‹ Back</Text>
-                    </Pressable>
+                    {/* Pulse is a tab now, but settings still pushes to /pulse (kept as a
+                        fallback while the app-review instructions reference that path), so
+                        Back only makes sense when we actually arrived on a stack. */}
+                    {router.canGoBack() ? (
+                        <Pressable
+                            onPress={() => router.back()}
+                            style={styles.backBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel="Go back"
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                            <Text style={styles.backText}>‹ Back</Text>
+                        </Pressable>
+                    ) : <View />}
 
                     <Pressable
                         onPress={() => router.push('/channels')}
@@ -231,12 +250,48 @@ export default function PulseScreen() {
                     </Pressable>
                 </View>
 
+                {/* Title lives in GlobalHeader now that Pulse is a tab; keeping it here too
+                    would say "The Pulse" twice and cost a line of vertical space. */}
                 <View style={styles.titleRow}>
-                    <Text style={styles.title}>The Pulse</Text>
                     <Text style={styles.subtitle}>
-                        What your neighbours are creating and sharing
+                        {activeLane === 'local'
+                            ? 'News and notices from around the shire'
+                            : 'What your neighbours are creating and sharing'}
                     </Text>
                 </View>
+
+                {/* Lane switch — keeps member work from competing with a news firehose. Hidden
+                    until an official source actually exists, so members are not shown an empty
+                    tab that can never fill. */}
+                {localLaneAvailable && (
+                <View style={styles.laneBar}>
+                    {([
+                        { id: 'neighbours' as const, label: 'Neighbours', icon: '\u{1F465}', count: neighbourItems.length },
+                        { id: 'local' as const, label: 'Local', icon: '\u{1F4F0}', count: localItems.length },
+                    ]).map(l => {
+                        const active = activeLane === l.id;
+                        return (
+                            <Pressable
+                                key={l.id}
+                                onPress={() => setLane(l.id)}
+                                style={[styles.laneTab, active && styles.laneTabActive]}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected: active }}
+                                accessibilityLabel={`${l.label} feed, ${l.count} items`}
+                            >
+                                <Text style={[styles.laneTabText, active && styles.laneTabTextActive]}>
+                                    {l.icon}  {l.label}
+                                </Text>
+                                {l.count > 0 ? (
+                                    <Text style={[styles.laneCount, active && styles.laneCountActive]}>
+                                        {l.count}
+                                    </Text>
+                                ) : null}
+                            </Pressable>
+                        );
+                    })}
+                </View>
+                )}
 
                 {/* Category Filter Bar */}
                 <ScrollView
@@ -318,7 +373,7 @@ export default function PulseScreen() {
                 </View>
             ) : (
                 <FlatList
-                    data={items}
+                    data={visibleItems}
                     keyExtractor={item => item.id}
                     renderItem={({ item }) => (
                         <PulseFeedCard
@@ -411,6 +466,50 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             gap: 8,
             flexDirection: 'row',
             alignItems: 'center',
+        },
+        laneBar: {
+            flexDirection: 'row',
+            marginHorizontal: 16,
+            marginBottom: 12,
+            backgroundColor: colors.surface.subtle,
+            borderRadius: 12,
+            padding: 3,
+            gap: 3,
+        },
+        laneTab: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            paddingVertical: 9,
+            borderRadius: 9,
+        },
+        laneTabActive: {
+            backgroundColor: colors.surface.card,
+            shadowColor: '#000',
+            shadowOpacity: 0.08,
+            shadowRadius: 3,
+            shadowOffset: { width: 0, height: 1 },
+            elevation: 2,
+        },
+        laneTabText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.text.secondary,
+        },
+        laneTabTextActive: {
+            color: colors.text.heading,
+            fontWeight: '800',
+        },
+        laneCount: {
+            fontSize: 11,
+            fontWeight: '700',
+            color: colors.text.muted,
+            overflow: 'hidden',
+        },
+        laneCountActive: {
+            color: colors.accent.primary,
         },
         categoryChip: {
             paddingVertical: 6,

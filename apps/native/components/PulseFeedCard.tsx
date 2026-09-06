@@ -28,7 +28,7 @@ import {
     categoryMeta,
     VIDEO_PLATFORMS,
 } from '@beanpool/core';
-import { type PulseFeedItem, formatRelativeTime } from '../utils/pulse';
+import { type PulseFeedItem, formatRelativeTime, isOfficialSource } from '../utils/pulse';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
@@ -121,8 +121,12 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                             ) : null}
                         </View>
                         <View style={styles.metaRow}>
-                            <Text style={styles.platformBadge}>
-                                {platMeta.icon} {platMeta.label}
+                            {/* An official source rendered identically to a neighbour's post
+                                reads as the community endorsing it, so it is labelled as a
+                                source rather than by the platform that carried it. "Blog /
+                                RSS" also means nothing to someone reading the local paper. */}
+                            <Text style={isOfficialSource(item) ? styles.sourceBadge : styles.platformBadge}>
+                                {isOfficialSource(item) ? '\u{1F4F0} Local source' : `${platMeta.icon} ${platMeta.label}`}
                             </Text>
                             {timeAgo ? (
                                 <Text style={styles.timeText}> · {timeAgo}</Text>
@@ -278,6 +282,11 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             fontSize: 12,
             fontWeight: '600',
             color: colors.text.secondary,
+        },
+        sourceBadge: {
+            fontSize: 12,
+            fontWeight: '700',
+            color: colors.accent.primary,
         },
         timeText: {
             fontSize: 12,

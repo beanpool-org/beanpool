@@ -55,7 +55,9 @@ export default function PulseScreen() {
     // should pass the lane to the API so pagination stays correct per lane.
     const localItems = items.filter(isOfficialSource);
     const neighbourItems = items.filter(i => !isOfficialSource(i));
-    const visibleItems = (lane === 'local' && localItems.length > 0) ? localItems : neighbourItems;
+    const localLaneAvailable = localItems.length > 0;
+    const activeLane = (lane === 'local' && localLaneAvailable) ? 'local' : 'neighbours';
+    const visibleItems = activeLane === 'local' ? localItems : neighbourItems;
 
     // Track active category for async callbacks
     const activeCategoryRef = useRef(selectedCategory);
@@ -248,7 +250,7 @@ export default function PulseScreen() {
                     would say "The Pulse" twice and cost a line of vertical space. */}
                 <View style={styles.titleRow}>
                     <Text style={styles.subtitle}>
-                        {lane === 'local'
+                        {activeLane === 'local'
                             ? 'News and notices from around the shire'
                             : 'What your neighbours are creating and sharing'}
                     </Text>
@@ -257,13 +259,13 @@ export default function PulseScreen() {
                 {/* Lane switch — keeps member work from competing with a news firehose. Hidden
                     until an official source actually exists, so members are not shown an empty
                     tab that can never fill. */}
-                {localItems.length > 0 && (
+                {localLaneAvailable && (
                 <View style={styles.laneBar}>
                     {([
                         { id: 'neighbours' as const, label: 'Neighbours', icon: '\u{1F465}', count: neighbourItems.length },
                         { id: 'local' as const, label: 'Local', icon: '\u{1F4F0}', count: localItems.length },
                     ]).map(l => {
-                        const active = lane === l.id;
+                        const active = activeLane === l.id;
                         return (
                             <Pressable
                                 key={l.id}

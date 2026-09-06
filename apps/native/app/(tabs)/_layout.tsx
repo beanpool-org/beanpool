@@ -2,7 +2,7 @@ import { Tabs, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { StatusBar } from 'expo-status-bar';
 import { GlobalHeader } from '../../components/GlobalHeader';
-import { View, Text, Platform, DeviceEventEmitter } from 'react-native';
+import { View, Text, Platform, DeviceEventEmitter, useWindowDimensions } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname } from 'expo-router';
@@ -24,17 +24,39 @@ const TAB_BAR_HEIGHT = 58;
 // and because the column is top-aligned that growth goes downwards, away from the text.
 const ICON_SIZE = 24;
 const ICON_SIZE_FOCUSED = 31;
+// Six tabs share the width. At the 320dp floor that is ~53dp each, where the full-size glyph
+// plus the badge padding overflows the cell and Android clips the icon's right edge. Below
+// this much room per tab, everything steps down a size.
+const VISIBLE_TABS = 6;
+const COMPACT_TAB_WIDTH = 58;
 
-function TabItem({ label, icon, focused, color, badge }: {
+function TabItem({ label, icon, focused, color, count, badge }: {
     label: string;
     icon: string;
     focused: boolean;
     color: string;
+    /** Unread/pending count, drawn against the icon. */
+    count?: number;
     badge?: React.ReactNode;
 }) {
+    const { width } = useWindowDimensions();
+    const compact = width / VISIBLE_TABS < COMPACT_TAB_WIDTH;
+    const iconSize = compact
+        ? (focused ? ICON_SIZE_FOCUSED - 7 : ICON_SIZE - 5)
+        : (focused ? ICON_SIZE_FOCUSED : ICON_SIZE);
+    const iconBoxHeight = (compact ? ICON_SIZE_FOCUSED - 7 : ICON_SIZE_FOCUSED) + 2;
+
     return (
         <View style={{ alignItems: 'center', width: '100%', paddingTop: 2 }}>
-            <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: '700', marginBottom: 0, color }}>
+            {/* adjustsFontSizeToFit rather than a hard cap: "Commons" is the longest label and
+                truncated to "Comm..." at 320dp. Shrinking beats an ellipsis on a nav label. */}
+            <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+                maxFontSizeMultiplier={1.15}
+                style={{ fontSize: compact ? 9 : 10, fontWeight: '700', marginBottom: 0, color }}
+            >
                 {label}
             </Text>
             {/* includeFontPadding strips Android's extra glyph padding, which was most of the
@@ -43,14 +65,30 @@ function TabItem({ label, icon, focused, color, badge }: {
             {/* Fixed to the focused size so the column's height never changes. The icon lives
                 inside an absolutely-centred wrapper, so a taller focused item would otherwise
                 re-centre and visibly nudge the label up on selection. */}
-            <View style={{ height: ICON_SIZE_FOCUSED + 2, justifyContent: 'flex-start' }}>
-                <Text style={{
-                    fontSize: focused ? ICON_SIZE_FOCUSED : ICON_SIZE,
-                    lineHeight: focused ? ICON_SIZE_FOCUSED + 2 : ICON_SIZE + 2,
+            <View style={{ height: iconBoxHeight, justifyContent: 'flex-start', paddingHorizontal: compact ? 7 : 11 }}>
+                <Text allowFontScaling={false} style={{
+                    fontSize: iconSize,
+                    lineHeight: iconSize + 2,
                     includeFontPadding: false,
                 }}>
                     {icon}
                 </Text>
+                {/* The library anchors tabBarBadge to the icon wrapper, and tabBarIconStyle
+                    stretches that wrapper to the whole tab — so the built-in badge lands in the
+                    tab top-right corner level with the label, colliding with a long label like
+                    Commons and crowding the next tab at 320dp. Drawn here instead, inside the
+                    wrapper padding, since Android clips children that overflow their parent. */}
+                {count !== undefined && count > 0 && (
+                    <View style={{
+                        position: 'absolute', top: -2, right: 0, minWidth: compact ? 14 : 16, height: compact ? 14 : 16,
+                        borderRadius: 8, paddingHorizontal: 4, backgroundColor: '#dc2626',
+                        alignItems: 'center', justifyContent: 'center',
+                    }}>
+                        <Text allowFontScaling={false} style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+                            {count > 99 ? '99+' : count}
+                        </Text>
+                    </View>
+                )}
             </View>
             {badge}
         </View>
@@ -178,8 +216,7 @@ export default function TabLayout() {
                     name="index"
                     options={{
                         title: 'Market',
-                        tabBarBadge: dealsCount > 0 ? dealsCount : undefined,
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Market" icon="🤝" focused={focused} color={color} />
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Market" icon="🤝" focused={focused} color={color} count={dealsCount} />
                     }}
                 />
                 <Tabs.Screen
@@ -196,8 +233,7 @@ export default function TabLayout() {
                     name="chats"
                     options={{
                         title: 'Talk',
-                        tabBarBadge: unread > 0 ? unread : undefined,
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Talk" icon="💬" focused={focused} color={color} />
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Talk" icon="💬" focused={focused} color={color} count={unread} />
                     }}
                 />
                 {/* Still a route: GlobalHeader and public-profile deep-link here with a `view`

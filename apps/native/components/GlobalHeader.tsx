@@ -316,8 +316,10 @@ export function GlobalHeader() {
 
     useEffect(() => {
         if (!identity?.publicKey) return;
+        // Assign whatever the profile says, including null. Guarding on truthiness meant
+        // clearing your avatar left the old image in the header until an app restart.
         const load = () => getMemberProfile(identity.publicKey)
-            .then(p => { if (p?.avatar_url) setMyAvatar(p.avatar_url); })
+            .then(p => setMyAvatar(p?.avatar_url ?? null))
             .catch(() => {});
         load();
         // Without this the pill kept the old picture until the header happened to remount.

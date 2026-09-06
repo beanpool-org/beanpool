@@ -24,6 +24,14 @@ describe('normaliseVersion', () => {
         expect(normaliseVersion(undefined)).toBeNull();
         expect(normaliseVersion(12)).toBeNull();
     });
+
+    it('rejects a hyphenated build tag instead of scrubbing it into a real version', () => {
+        // Stripping every non-digit would turn "1.2.3-1" into "1.2.31" — a version that
+        // exists, is wrong, and would tell someone on 1.2.4 they are 27 releases behind.
+        expect(normaliseVersion('1.2.3-1')).toBeNull();
+        expect(normaliseVersion('1.2.31-beta')).toBeNull();
+        expect(normaliseVersion('1.2.31 (253)')).toBeNull();
+    });
 });
 
 describe('isVersionOlder', () => {
@@ -55,6 +63,10 @@ describe('pickStoreVersion', () => {
         expect(pickStoreVersion(payload, 'android')).toBe('1.2.31');
     });
 
+    it('has no store to point at on web', () => {
+        expect(pickStoreVersion(payload, 'web')).toBeNull();
+    });
+
     it('handles a node that has not looked the versions up yet', () => {
         expect(pickStoreVersion({ android: null, ios: null, checkedAt: null }, 'android')).toBeNull();
         // An older node sends no appVersions field at all.
@@ -78,6 +90,8 @@ describe('evaluateUpdate', () => {
     });
 
     it('falls back to the floor itself when no store version is known', () => {
+        // An older node sends minAppVersion but no appVersions. The floor is the only thing
+        // we can name, and a build old enough to fall below it has an update waiting.
         expect(evaluateUpdate('1.0.70', null, '1.0.75')).toEqual({ kind: 'required', version: '1.0.75' });
     });
 
@@ -85,12 +99,24 @@ describe('evaluateUpdate', () => {
         expect(evaluateUpdate('1.2.31', null, null)).toEqual({ kind: 'none' });
     });
 
-    it('still requires a floor set above every published build', () => {
-        // An operator who raises MIN_APP_VERSION past what the stores have shipped strands
-        // their own community on an undismissible banner. That is their decision to make and
-        // to undo — the client does not second-guess the floor, which is why the default
-        // (1.0.75) sits far below anything in the field.
-        expect(evaluateUpdate('1.2.31', '1.2.31', '1.9.0')).toEqual({ kind: 'required', version: '1.9.0' });
+    it('never demands a version the stores cannot supply', () => {
+        // An operator raises MIN_APP_VERSION to 1.9.0 ahead of the release. The newest
+        // published build is 1.2.31. Demanding 1.9.0 undismissibly would strand the whole
+        // community behind a banner that survives doing exactly what it asked.
+        expect(evaluateUpdate('1.2.30', '1.2.31', '1.9.0')).toEqual({ kind: 'available', version: '1.2.31' });
+        // And with nothing left to install, it says nothing rather than nagging.
+        expect(evaluateUpdate('1.2.31', '1.2.31', '1.9.0')).toEqual({ kind: 'none' });
+    });
+
+    it('points a below-floor app at a published build that clears the floor', () => {
+        // The floor is 1.2.0 and 1.2.31 is published: following the banner ends the banner.
+        expect(evaluateUpdate('1.1.90', '1.2.31', '1.2.0')).toEqual({ kind: 'required', version: '1.2.31' });
+    });
+
+    it('does not send you to an intermediate build that still fails the floor', () => {
+        // Floor 1.3.0, store 1.2.32: naming 1.2.32 as REQUIRED would promise a fix it cannot
+        // deliver, and the banner would come straight back after the update.
+        expect(evaluateUpdate('1.2.30', '1.2.32', '1.3.0')).toEqual({ kind: 'available', version: '1.2.32' });
     });
 
     it('does not raise a banner off a malformed payload', () => {

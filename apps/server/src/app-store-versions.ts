@@ -64,15 +64,19 @@ export function getAppStoreVersions(): AppStoreVersions {
  * Coerce whatever a store hands back into a bare dotted version, or null.
  *
  * Apple's "V1.2.31" is the specific case that broke the client for the life of the
- * feature, but anything decorative ("1.2.31-beta", " 1.2.31 ") lands here too. The
- * shape check afterwards is what keeps a marketing string out of the payload: a
- * partial parse that yields "1..31" or "" is worse than admitting we do not know.
+ * feature, so a leading v/V and surrounding whitespace come off. Nothing else does:
+ * stripping every non-digit would fold "1.2.3-1" into "1.2.31", a version that exists
+ * and is the wrong one. Anything that is not already a dotted version is refused —
+ * "we do not know" is a safe answer here, a wrong number is not.
+ *
+ * Mirrors apps/native/utils/app-version.ts, which has to make the same judgement about
+ * whatever an older node sends it.
  */
 export function normaliseVersion(raw: unknown): string | null {
     if (typeof raw !== 'string') return null;
-    const stripped = raw.replace(/[^0-9.]/g, '');
-    if (!/^\d+(\.\d+){0,2}$/.test(stripped)) return null;
-    return stripped;
+    const trimmed = raw.trim().replace(/^[vV]\s*/, '');
+    if (!/^\d+(\.\d+){0,2}$/.test(trimmed)) return null;
+    return trimmed;
 }
 
 /** Pull the version out of an itunes.apple.com/lookup response body. */
@@ -117,6 +121,19 @@ export function __resetAppStoreVersionsForTest(): void {
     cached = { android: null, ios: null, checkedAt: null };
 }
 
+/** Numeric segment-wise compare, for the operator warning below. */
+function isOlder(a: string, b: string): boolean {
+    const pa = a.split('.').map(n => parseInt(n, 10));
+    const pb = b.split('.').map(n => parseInt(n, 10));
+    for (let i = 0; i < 3; i++) {
+        const l = pa[i] || 0;
+        const r = pb[i] || 0;
+        if (l < r) return true;
+        if (l > r) return false;
+    }
+    return false;
+}
+
 const FETCH_TIMEOUT_MS = 15000;
 
 async function fetchIosVersion(): Promise<string | null> {
@@ -159,6 +176,15 @@ export async function checkAppStoreVersions(): Promise<AppStoreVersions> {
         logger.warn('SYS', `[AppVersions] store check incomplete (android=${android ?? 'miss'} ios=${ios ?? 'miss'})`);
     } else {
         logger.info('SYS', `[AppVersions] android=${android} ios=${ios}`);
+    }
+    // An operator who sets the floor above what the stores actually serve gets a banner
+    // their community cannot act on. The app degrades that to a dismissible notice rather
+    // than trapping anyone, but the operator still wants to hear about it — this is the
+    // only place that knows both numbers.
+    const floor = getMinAppVersion();
+    const unreachable = [next.android, next.ios].filter((v): v is string => !!v).every(v => isOlder(v, floor));
+    if (unreachable && (next.android || next.ios)) {
+        logger.warn('SYS', `[AppVersions] MIN_APP_VERSION=${floor} is above every published build (android=${next.android ?? '?'} ios=${next.ios ?? '?'}) — nobody can reach it`);
     }
     return next;
 }

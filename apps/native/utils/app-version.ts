@@ -19,16 +19,19 @@ export interface AppStoreVersions {
 }
 
 /**
- * Strip anything that is not a digit or a dot, then insist on a real dotted version.
+ * Drop the decoration we actually understand, then insist on a real dotted version.
  *
- * The stripping is what fixes iOS. The shape check is what stops a half-parsed
- * string ("1..31", "") from being treated as a version and compared against.
+ * A leading v/V is the App Store's "V1.2.31" and is what fixes iOS. Everything else is
+ * rejected rather than scrubbed: stripping every non-digit would turn "1.2.3-1" into
+ * "1.2.31" — a version that exists and is the wrong one, which is worse than admitting
+ * we do not know. The shape check is what stops a half-parse ("1..31", "") from being
+ * compared against at all.
  */
 export function normaliseVersion(raw: unknown): string | null {
     if (typeof raw !== 'string') return null;
-    const stripped = raw.replace(/[^0-9.]/g, '');
-    if (!/^\d+(\.\d+){0,2}$/.test(stripped)) return null;
-    return stripped;
+    const trimmed = raw.trim().replace(/^[vV]\s*/, '');
+    if (!/^\d+(\.\d+){0,2}$/.test(trimmed)) return null;
+    return trimmed;
 }
 
 export function isVersionOlder(local: string, latest: string): boolean {
@@ -52,7 +55,10 @@ export function isVersionOlder(local: string, latest: string): boolean {
 /** The store version for the platform this build is running on. */
 export function pickStoreVersion(versions: AppStoreVersions | null | undefined, platform: string): string | null {
     if (!versions) return null;
-    return normaliseVersion(platform === 'ios' ? versions.ios : versions.android);
+    if (platform === 'ios') return normaliseVersion(versions.ios);
+    if (platform === 'android') return normaliseVersion(versions.android);
+    // Anywhere else (expo web) there is no store to send anyone to.
+    return null;
 }
 
 export type UpdateState =
@@ -78,12 +84,24 @@ export function evaluateUpdate(
     if (!local) return { kind: 'none' };
     const latestClean = normaliseVersion(latest);
     const minClean = normaliseVersion(minimum);
+    const updateExists = !!latestClean && isVersionOlder(local, latestClean);
+
     if (minClean && isVersionOlder(local, minClean)) {
-        // Point at the newest build we know exists, falling back to the floor itself.
-        return { kind: 'required', version: latestClean && isVersionOlder(local, latestClean) ? latestClean : minClean };
+        // Below the node's floor. Refuse dismissal ONLY when doing what the banner asks
+        // would actually clear it. A floor the stores cannot satisfy yet — an operator who
+        // raised MIN_APP_VERSION ahead of a release — would otherwise leave the user behind
+        // an undismissible banner after they had already done everything it told them to.
+        if (latestClean && !isVersionOlder(latestClean, minClean)) {
+            return { kind: 'required', version: latestClean };
+        }
+        // No published version known at all (an older node sends no appVersions): the floor
+        // is the only thing we can name, and the store will have something newer than a
+        // build old enough to fall below it.
+        if (!latestClean) return { kind: 'required', version: minClean };
+        // The newest published build is itself below the floor. Say the honest, dismissible
+        // thing rather than promise an update that cannot fix it.
+        return updateExists ? { kind: 'available', version: latestClean } : { kind: 'none' };
     }
-    if (latestClean && isVersionOlder(local, latestClean)) {
-        return { kind: 'available', version: latestClean };
-    }
+    if (updateExists) return { kind: 'available', version: latestClean as string };
     return { kind: 'none' };
 }

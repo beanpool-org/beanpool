@@ -14,6 +14,11 @@ import Constants from 'expo-constants';
 import appConfig from '../app.json';
 import { evaluateUpdate, normaliseVersion, pickStoreVersion } from '../utils/app-version';
 
+// The floor is a property of the COMMUNITY, not of the phone: two nodes can disagree about
+// which builds they still work with. Cached per node so switching community — or being
+// offline on a different one — cannot carry the wrong floor across.
+const minVersionKey = (nodeUrl: string) => `beanpool_min_app_version_${nodeUrl}`;
+
 // React Native's fetch doesn't support AbortSignal.timeout natively
 const fetchWithTimeout = async (resource: RequestInfo, options: RequestInit & { timeout?: number } = {}) => {
     const { timeout = 3000, ...fetchOptions } = options;
@@ -145,8 +150,14 @@ export function GlobalHeader() {
         // can be busy applying a sync. Only show offline after 2 consecutive misses AND
         // when no pillar sync landed recently — a recent sync proves the node is reachable
         // regardless of what this lightweight ping does.
-        const markHealthFailure = async () => {
+        const markHealthFailure = async (nodeUrl: string) => {
             if (!isMounted) return;
+            // A ping that resolves after the user switched community is answering about a
+            // node they have left. An 8-second timeout on a slow node used to land after a
+            // fast one had already answered, and painted the fast one offline.
+            try {
+                if ((await AsyncStorage.getItem('beanpool_anchor_url')) !== nodeUrl) return;
+            } catch { /* storage unavailable — fall through and count it */ }
             healthFailuresRef.current += 1;
             let syncedRecently = false;
             try {
@@ -182,26 +193,38 @@ export function GlobalHeader() {
         // should not clear a banner it has nothing to say about, and a phone with no anchor,
         // an offline node, or guest mode should still show what it already knows. The whole
         // check used to sit inside `if (r.ok)`, so none of those states checked at all.
-        const applyVersionStateWithCache = async (latest: string | null, minimum: string | null) => {
-            try {
-                const [cachedLatest, cachedMin] = await Promise.all([
-                    AsyncStorage.getItem('beanpool_latest_known_version'),
-                    AsyncStorage.getItem('beanpool_min_app_version'),
-                ]);
-                await applyVersionState(latest ?? cachedLatest, minimum ?? cachedMin);
-            } catch { /* storage unavailable — leave the banner as it is */ }
+        const applyVersionStateWithCache = async (latest: string | null, minimum: string | null, nodeUrl: string | null) => {
+            const [cachedLatest, cachedMin] = await Promise.all([
+                AsyncStorage.getItem('beanpool_latest_known_version'),
+                nodeUrl ? AsyncStorage.getItem(minVersionKey(nodeUrl)) : Promise.resolve(null),
+            ]);
+            await applyVersionState(latest ?? cachedLatest, minimum ?? cachedMin);
         };
-        // Recorded whatever the outcome. The old code wrote this only inside the success
-        // branch, so a failed check looked like no check at all and the app retried on
-        // every 30-second ping — 1.1 MB a time, on a metered connection.
-        const recordVersionCheckAttempt = () =>
-            AsyncStorage.setItem('beanpool_last_version_check_time', String(Date.now())).catch(() => {});
+        // Everything the banner touches in storage lives in here, deliberately OUTSIDE the
+        // try whose catch marks the node offline: these writes used to sit inside it, so a
+        // storage failure would have painted a perfectly healthy community red.
+        const updateVersionBanner = async (nodeUrl: string | null, data: any | null) => {
+            try {
+                // A community switch can land while a ping is in flight. Applying the old
+                // node's floor to the new one would be wrong, so drop the stale answer.
+                if (nodeUrl && (await AsyncStorage.getItem('beanpool_anchor_url')) !== nodeUrl) return;
+                const latest = data ? pickStoreVersion(data?.appVersions, Platform.OS) : null;
+                const minimum = data ? normaliseVersion(data?.minAppVersion) : null;
+                // Recorded whatever the outcome. The old code wrote this only inside the
+                // success branch, so a failed check looked like no check at all and the app
+                // retried on every 30-second ping — 1.1 MB a time, on a metered connection.
+                await AsyncStorage.setItem('beanpool_last_version_check_time', String(Date.now()));
+                if (latest) await AsyncStorage.setItem('beanpool_latest_known_version', latest);
+                if (minimum && nodeUrl) await AsyncStorage.setItem(minVersionKey(nodeUrl), minimum);
+                await applyVersionStateWithCache(latest, minimum, nodeUrl);
+            } catch { /* storage unavailable — the banner keeps whatever it already had */ }
+        };
 
         const pingActive = async () => {
             const active = await AsyncStorage.getItem('beanpool_anchor_url');
             if (!active) {
                 if (isMounted) { setIsOffline(true); setHasAnchorUrl(false); }
-                await applyVersionStateWithCache(null, null);
+                await updateVersionBanner(null, null);
                 return;
             }
             if (isMounted) setHasAnchorUrl(true);
@@ -211,22 +234,14 @@ export function GlobalHeader() {
                     healthFailuresRef.current = 0;
                     if (isMounted) setIsOffline(false);
                     const data = await r.json();
-
-                    const latest = pickStoreVersion(data?.appVersions, Platform.OS);
-                    const minimum = normaliseVersion(data?.minAppVersion);
-                    await recordVersionCheckAttempt();
-                    if (latest) await AsyncStorage.setItem('beanpool_latest_known_version', latest);
-                    if (minimum) await AsyncStorage.setItem('beanpool_min_app_version', minimum);
-                    await applyVersionStateWithCache(latest, minimum);
+                    await updateVersionBanner(active, data);
                 } else {
-                    await markHealthFailure();
-                    await recordVersionCheckAttempt();
-                    await applyVersionStateWithCache(null, null);
+                    await markHealthFailure(active);
+                    await updateVersionBanner(active, null);
                 }
             } catch (e) {
-                await markHealthFailure();
-                await recordVersionCheckAttempt();
-                await applyVersionStateWithCache(null, null);
+                await markHealthFailure(active);
+                await updateVersionBanner(active, null);
             }
         };
         pingActive();
@@ -357,11 +372,15 @@ export function GlobalHeader() {
         }
     };
 
+    // The header ROW's height. Deliberately not applied to the wrapper below: the wrapper
+    // is `overflow: hidden`, so pinning it to this height clipped the update banner out of
+    // existence — the banner rendered, on both platforms, and could never be seen. The
+    // wrapper now sizes to its children (header row + banner, when there is one).
     const headerHeight = Math.max(insets.top + 10, 40) + 56;
     const isMapScreen = pathname === '/map';
 
     return (
-        <View style={[styles.headerWrapper, isMapScreen && styles.headerAbsolute, { height: headerHeight }]}>
+        <View style={[styles.headerWrapper, isMapScreen && styles.headerAbsolute]}>
             <View style={StyleSheet.absoluteFillObject}>
                 <Image
                     source={require('../assets/images/neon-vines-banner.jpg')}
@@ -487,8 +506,8 @@ export function GlobalHeader() {
                         <Text style={{ fontSize: 18 }}>{updateRequired ? '⚠️' : '💡'}</Text>
                         <Text style={styles.softUpdateText} numberOfLines={2}>
                             {updateRequired
-                                ? `This app is too old for this community — update to v${softUpdateVersion} to keep everything working.`
-                                : `Update available: upgrade to v${softUpdateVersion} for the latest community features!`}
+                                ? `Your app is too old for this community — update to v${softUpdateVersion}.`
+                                : `Update available — v${softUpdateVersion} has the latest community features.`}
                         </Text>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -517,8 +536,12 @@ export function GlobalHeader() {
                                 accessibilityLabel="Close"
                                 style={styles.softUpdateDismissBtn}
                                 onPress={async () => {
-                                    const dismissedKey = `beanpool_dismissed_update_${softUpdateVersion}`;
-                                    await AsyncStorage.setItem(dismissedKey, 'true');
+                                    // A failed write should cost you the MEMORY of the dismissal,
+                                    // not the ability to dismiss: an unhandled rejection here left
+                                    // the banner on screen with its close button doing nothing.
+                                    try {
+                                        await AsyncStorage.setItem(`beanpool_dismissed_update_${softUpdateVersion}`, 'true');
+                                    } catch { /* dismissed for this session only */ }
                                     setSoftUpdateVersion(null);
                                 }}
                             >

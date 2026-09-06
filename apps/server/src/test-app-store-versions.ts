@@ -38,6 +38,8 @@ async function main() {
     assert(normaliseVersion('1.2.31') === '1.2.31', 'a plain version passes through');
     assert(normaliseVersion('  1.2.31 ') === '1.2.31', 'surrounding whitespace is stripped');
     assert(normaliseVersion('1..31') === null, 'a half-parsed version is rejected, not repaired');
+    assert(normaliseVersion('1.2.3-1') === null, 'a hyphenated build tag is rejected, not scrubbed into 1.2.31');
+    assert(normaliseVersion('1.2.31-beta') === null, 'a prerelease tag is rejected');
     assert(normaliseVersion('varies by device') === null, 'a marketing string is rejected');
     assert(normaliseVersion(undefined) === null, 'a missing version is rejected');
 
@@ -83,7 +85,7 @@ async function main() {
     delete process.env.MIN_APP_VERSION;
     assert(getMinAppVersion() === '1.0.75', 'the default floor is unchanged and below anything in the field');
     process.env.MIN_APP_VERSION = 'v1.1.0';
-    assert(getMinAppVersion() === '1.1.0', 'an operator can raise the floor, decoration and all');
+    assert(getMinAppVersion() === '1.1.0', 'an operator can raise the floor, leading v and all');
     process.env.MIN_APP_VERSION = 'nonsense';
     assert(getMinAppVersion() === '1.0.75', 'an unparseable floor falls back to the default, not to a banner');
     delete process.env.MIN_APP_VERSION;

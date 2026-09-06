@@ -156,12 +156,15 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
             {/* Sub-nav pills */}
-            <div className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800">
+            <div role="tablist" aria-label="People section views" className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800">
                 {(['friends', 'community', 'invites', 'guardians'] as SubView[]).map(v => (
                     <button
                         key={v}
+                        type="button"
+                        role="tab"
+                        aria-selected={view === v}
                         onClick={() => setView(v)}
-                        className={`flex-1 py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                        className={`flex-1 py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                             view === v 
                                 ? 'bg-white dark:bg-nature-800 text-rainbow shadow-sm border border-nature-200/50 dark:border-nature-700/50 scale-95 drop-shadow-sm' 
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-700 dark:hover:text-oat-50 hover:bg-oat-200 dark:hover:bg-nature-800'

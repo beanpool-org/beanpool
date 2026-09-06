@@ -230,10 +230,19 @@ export default function PublicProfileScreen() {
             paddingVertical: 10,
             paddingHorizontal: 16,
             borderRadius: 10,
-            alignSelf: 'flex-start',
-            marginTop: 8,
             borderWidth: 1,
             borderColor: colors.border.default,
+        },
+        quizBtnRow: {
+            flexDirection: 'row',
+            gap: 8,
+            marginTop: 4,
+        },
+        quizBtnFlex: {
+            flex: 1,
+            alignSelf: 'auto',
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         synergyRetakeBtnText: {
             color: colors.text.secondary,
@@ -1082,24 +1091,28 @@ export default function PublicProfileScreen() {
                                     </Text>
                                 </View>
 
-                                {mine.mode === 'quick' && (
+                                {/* "Deepen" said nothing about what you'd get. The longer quiz's
+                                    selling point is a more accurate result, so say that. */}
+                                <View style={styles.quizBtnRow}>
+                                    {mine.mode === 'quick' && (
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Take the longer 27 question quiz for a more accurate result"
+                                            style={[styles.synergyTakeQuizBtn, styles.quizBtnFlex]}
+                                            onPress={() => { setQuizInitialMode('deep'); setShowQuizModal(true); }}
+                                        >
+                                            <Text style={styles.synergyTakeQuizBtnText} numberOfLines={1}>🧭 More accurate</Text>
+                                        </Pressable>
+                                    )}
                                     <Pressable
                                         accessibilityRole="button"
-                                        accessibilityLabel="Deepen working style quiz with 27 questions"
-                                        style={styles.synergyTakeQuizBtn}
-                                        onPress={() => { setQuizInitialMode('deep'); setShowQuizModal(true); }}
+                                        accessibilityLabel="Retake community working style quiz"
+                                        style={[styles.synergyRetakeBtn, styles.quizBtnFlex]}
+                                        onPress={() => { setQuizInitialMode('quick'); setShowQuizModal(true); }}
                                     >
-                                        <Text style={styles.synergyTakeQuizBtnText}>🧭 Deepen (27 Qs)</Text>
+                                        <Text style={styles.synergyRetakeBtnText} numberOfLines={1}>🔄 Retake</Text>
                                     </Pressable>
-                                )}
-                                <Pressable
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Retake community working style quiz"
-                                    style={styles.synergyRetakeBtn}
-                                    onPress={() => { setQuizInitialMode('quick'); setShowQuizModal(true); }}
-                                >
-                                    <Text style={styles.synergyRetakeBtnText}>🔄 Retake quiz</Text>
-                                </Pressable>
+                                </View>
                             </View>
                         );
                     }

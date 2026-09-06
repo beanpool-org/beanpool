@@ -316,9 +316,13 @@ export function GlobalHeader() {
 
     useEffect(() => {
         if (!identity?.publicKey) return;
-        getMemberProfile(identity.publicKey)
+        const load = () => getMemberProfile(identity.publicKey)
             .then(p => { if (p?.avatar_url) setMyAvatar(p.avatar_url); })
             .catch(() => {});
+        load();
+        // Without this the pill kept the old picture until the header happened to remount.
+        const sub = DeviceEventEmitter.addListener('profile_updated', load);
+        return () => sub.remove();
     }, [identity?.publicKey]);
 
     useEffect(() => {

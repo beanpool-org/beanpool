@@ -34,7 +34,6 @@ import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../..
 import { RecoveryPinModal } from '../../components/RecoveryPinModal';
 import { IncomingRecoveryApprovalModal } from '../../components/IncomingRecoveryApprovalModal';
 import { getPinStatus } from '../../utils/pin';
-import { ArchetypeQuizModal } from '../../components/ArchetypeQuizModal';
 import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 
@@ -709,8 +708,6 @@ export default function SettingsScreen() {
     const [contact, setContact] = useState('');
     const [contactVisibility, setContactVisibility] = useState<'hidden' | 'trade_partners' | 'friends' | 'community'>('community');
     const [archetypeRaw, setArchetypeRaw] = useState<string | null>(null);
-    const [showQuizModal, setShowQuizModal] = useState(false);
-    const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
     const [loading, setLoading] = useState(false);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState<string>('Detecting...');
@@ -1638,108 +1635,6 @@ export default function SettingsScreen() {
 
             {mode === 'menu' && (
                 <>
-                {/* ─── Community Working Style & Archetype ─── */}
-                <Text style={styles.sectionHeader}>COMMUNITY WORKING STYLE</Text>
-                {(() => {
-                    const parsed = parseArchetype(archetypeRaw);
-                    const primary = parsed ? ARCHETYPES[parsed.primary] : null;
-                    const secondary = parsed ? ARCHETYPES[parsed.secondary] : null;
-
-                    if (parsed && primary) {
-                        return (
-                            <View style={styles.archetypeCard}>
-                                <View style={styles.archetypeHeaderRow}>
-                                    <Text style={styles.archetypeEmoji}>{primary.emoji}</Text>
-                                    <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={styles.archetypeName}>{primary.name}</Text>
-                                        <Text style={styles.archetypeTagline}>{primary.tagline}</Text>
-                                    </View>
-                                    <View style={styles.archetypeModeBadge}>
-                                        <Text style={styles.archetypeModeText}>
-                                            {parsed.mode === 'deep' ? '27 Qs' : '9 Qs'}
-                                        </Text>
-                                    </View>
-                                </View>
-
-                                <Text style={styles.archetypeDescText}>{primary.description}</Text>
-
-                                {secondary && (
-                                    <View style={styles.archetypeSecondaryRow}>
-                                        <Text style={styles.archetypeSecondaryText}>
-                                            Secondary Rhythm: {secondary.emoji} {secondary.name}
-                                        </Text>
-                                    </View>
-                                )}
-
-                                <View style={styles.archetypeDivider} />
-
-                                <Text style={styles.archetypeSectionTitle}>🌟 Your Community Superpowers</Text>
-                                {primary.superpowers.map((p, i) => (
-                                    <View key={i} style={styles.archetypeBulletRow}>
-                                        <Text style={styles.archetypeBullet}>•</Text>
-                                        <Text style={styles.archetypeBulletText}>{p}</Text>
-                                    </View>
-                                ))}
-
-                                <View style={styles.archetypeBtnRow}>
-                                    {parsed.mode === 'quick' && (
-                                        <Pressable
-                                            accessibilityRole="button"
-                                            accessibilityLabel="Deepen working style quiz with 27 questions"
-                                            style={styles.archetypeActionBtn}
-                                            onPress={() => {
-                                                setQuizInitialMode('deep');
-                                                setShowQuizModal(true);
-                                            }}
-                                        >
-                                            <Text style={styles.archetypeActionBtnText}>🧭 Deepen (27 Qs)</Text>
-                                        </Pressable>
-                                    )}
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Retake community working style quiz"
-                                        style={[styles.archetypeActionBtn, styles.archetypeActionBtnSubtle]}
-                                        onPress={() => {
-                                            setQuizInitialMode('quick');
-                                            setShowQuizModal(true);
-                                        }}
-                                    >
-                                        <Text style={styles.archetypeActionBtnSubtleText}>🔄 Retake Quiz</Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        );
-                    }
-
-                    return (
-                        <View style={styles.archetypeEmptyCard}>
-                            <View style={styles.archetypeEmptyHeader}>
-                                <View style={styles.archetypeEmptyIconWrap}>
-                                    <Text style={{ fontSize: 24 }}>🌱</Text>
-                                </View>
-                                <View style={{ flex: 1, marginLeft: 12 }}>
-                                    <Text style={styles.archetypeEmptyTitle}>Discover Your Archetype</Text>
-                                    <Text style={styles.archetypeEmptyDesc}>
-                                        Take the 60-second quiz to uncover your collaborative superpowers and see relational synergy with neighbours.
-                                    </Text>
-                                </View>
-                            </View>
-                            <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel="Take 60-second community working style quiz"
-                                style={styles.archetypeStartBtn}
-                                onPress={() => {
-                                    setQuizInitialMode('quick');
-                                    setShowQuizModal(true);
-                                }}
-                            >
-                                <Text style={styles.archetypeStartBtnText}>⚡ Take 60s Quiz</Text>
-                            </Pressable>
-                        </View>
-                    );
-                })()}
-
-                {/* ─── Account & Identity ─── */}
                 <Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/profile-setup')} accessibilityRole="button">
@@ -3121,14 +3016,6 @@ export default function SettingsScreen() {
                     </View>
                 </View>
             </Modal>
-
-            {/* Archetype Quiz Modal */}
-            <ArchetypeQuizModal
-                visible={showQuizModal}
-                initialMode={quizInitialMode}
-                onClose={() => setShowQuizModal(false)}
-                onComplete={handleQuizComplete}
-            />
 
             {/* Community Pricing Guide Modal */}
             <PricingGuideModal

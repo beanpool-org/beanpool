@@ -9,7 +9,7 @@ import { blockUser } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
 import { getCanonicalProfile } from '../utils/canonical-profile';
 import { ChannelChips } from '../components/ChannelChips';
 import { fetchPublicChannels } from '../utils/channels';
@@ -226,6 +226,20 @@ export default function PublicProfileScreen() {
             borderRadius: 10,
             alignSelf: 'flex-start',
         },
+        synergyRetakeBtn: {
+            paddingVertical: 10,
+            paddingHorizontal: 16,
+            borderRadius: 10,
+            alignSelf: 'flex-start',
+            marginTop: 8,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+        },
+        synergyRetakeBtnText: {
+            color: colors.text.secondary,
+            fontWeight: '700',
+            fontSize: 13,
+        },
         synergyTakeQuizBtnText: {
             color: colors.text.inverse,
             fontSize: 13,
@@ -367,6 +381,7 @@ export default function PublicProfileScreen() {
     const [editingReview, setEditingReview] = useState<any | null>(null);
     const [viewerProfile, setViewerProfile] = useState<any>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
+    const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
     const [channels, setChannels] = useState<PublicCreatorChannel[]>([]);
 
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
@@ -1020,11 +1035,95 @@ export default function PublicProfileScreen() {
                             DeviceEventEmitter.emit('set_people_view', { view: 'guardians' });
                             router.push({ pathname: '/(tabs)/people', params: { view: 'guardians' } });
                         }}>
-                            <Text style={[styles.statTileNum, guardianCount >= 3 ? { color: colors.brand.primary } : guardianCount === 0 ? { color: colors.feedback.danger.solid } : null]} numberOfLines={1}>{guardianCount}/5</Text>
+                            <Text style={[styles.statTileNum, guardianCount >= 3 ? { color: colors.brand.primary } : guardianCount === 0 ? { color: colors.text.muted } : null]} numberOfLines={1}>{guardianCount}/5</Text>
                             <Text style={styles.statTileLabel} numberOfLines={1}>Guardians{guardianCount >= 3 ? ' ✓' : ''}</Text>
                         </Pressable>
                     </View>
                 )}
+
+                {/* Working style (self). The synergy panel above is inside a !isSelf block, so
+                    your own archetype had no home — which also made the "take the quiz on your
+                    profile" chat nudge point at a screen that had no quiz on it. */}
+                {isSelf && (() => {
+                    const mine = parseArchetype(profile?.archetype) || parseArchetype(viewerProfile?.archetype);
+                    const primary = mine ? ARCHETYPES[mine.primary] : null;
+                    const secondary = mine ? ARCHETYPES[mine.secondary] : null;
+
+                    if (mine && primary) {
+                        return (
+                            <View style={styles.synergyCard}>
+                                <View style={styles.synergyHeaderRow}>
+                                    <Text style={styles.synergyEmoji}>{primary.emoji}</Text>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.synergyTitle}>{primary.name}</Text>
+                                        <Text style={styles.synergyHeadline}>{primary.tagline}</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.synergySummary}>{primary.description}</Text>
+
+                                {secondary && (
+                                    <Text style={styles.synergyHeadline}>
+                                        Secondary rhythm: {secondary.emoji} {secondary.name}
+                                    </Text>
+                                )}
+
+                                <View style={styles.synergyStrengthsWrap}>
+                                    {primary.superpowers.map((sp: string, idx: number) => (
+                                        <View key={idx} style={styles.synergyStrengthRow}>
+                                            <Text style={styles.synergyBullet}>✓</Text>
+                                            <Text style={styles.synergyStrengthText}>{sp}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+
+                                <View style={styles.synergyTipBox}>
+                                    <Text style={styles.synergyTipText}>
+                                        💡 <Text style={{ fontWeight: '700' }}>How you work best:</Text> {primary.collaborationStyle}
+                                    </Text>
+                                </View>
+
+                                {mine.mode === 'quick' && (
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Deepen working style quiz with 27 questions"
+                                        style={styles.synergyTakeQuizBtn}
+                                        onPress={() => { setQuizInitialMode('deep'); setShowQuizModal(true); }}
+                                    >
+                                        <Text style={styles.synergyTakeQuizBtnText}>🧭 Deepen (27 Qs)</Text>
+                                    </Pressable>
+                                )}
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Retake community working style quiz"
+                                    style={styles.synergyRetakeBtn}
+                                    onPress={() => { setQuizInitialMode('quick'); setShowQuizModal(true); }}
+                                >
+                                    <Text style={styles.synergyRetakeBtnText}>🔄 Retake quiz</Text>
+                                </Pressable>
+                            </View>
+                        );
+                    }
+
+                    return (
+                        <View style={styles.synergyInviteCard}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                <Text style={{ fontSize: 20, marginRight: 8 }}>✨</Text>
+                                <Text style={styles.synergyInviteTitle}>Your Working Style</Text>
+                            </View>
+                            <Text style={styles.synergyInviteDesc}>
+                                Take the 60-second quiz to uncover your collaborative superpowers. Neighbours can then see how the two of you work together.
+                            </Text>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel="Take 60 second community working style quiz"
+                                style={styles.synergyTakeQuizBtn}
+                                onPress={() => { setQuizInitialMode('quick'); setShowQuizModal(true); }}
+                            >
+                                <Text style={styles.synergyTakeQuizBtnText}>⚡ Take 60s Quiz</Text>
+                            </Pressable>
+                        </View>
+                    );
+                })()}
 
                 {loading ? (
                     <ActivityIndicator size="large" color={colors.brand.primary} style={{ marginTop: 40 }} />
@@ -1290,7 +1389,7 @@ export default function PublicProfileScreen() {
 
             <ArchetypeQuizModal
                 visible={showQuizModal}
-                initialMode="quick"
+                initialMode={quizInitialMode}
                 onClose={() => setShowQuizModal(false)}
                 onComplete={handleQuizComplete}
             />

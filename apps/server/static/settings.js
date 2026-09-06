@@ -1175,7 +1175,15 @@
         // Community Health dashboard
         async function loadHealthDashboard() {
             try {
-                const res = await fetch('/api/community/health');
+                // The admin route, not the public one: GET /api/community/health deliberately
+                // omits `flags` (fraud analysis + member public keys) because it answers
+                // unauthenticated to anyone who can reach the node. This dashboard only ever
+                // runs after login, so it can ask for the full picture.
+                const res = await fetch('/api/local/admin/health', {
+                    method: 'POST',
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+                    body: '{}'
+                });
                 if (!res.ok) return;
                 const h = await res.json();
 
@@ -1210,10 +1218,11 @@
 
                 // Flags
                 const fEl = document.getElementById('health-flags');
-                if (h.flags.length === 0) {
+                const healthFlags = h.flags || [];
+                if (healthFlags.length === 0) {
                     fEl.innerHTML = '<div style="text-align:center;padding:0.75rem;border:1px solid #1a3a1a;border-radius:10px;background:rgba(34,197,94,0.05);"><div style="font-size:1.2rem;margin-bottom:0.15rem;">✅</div><div style="color:#22c55e;font-size:0.85rem;">No issues detected</div></div>';
                 } else {
-                    fEl.innerHTML = h.flags.map(f => {
+                    fEl.innerHTML = healthFlags.map(f => {
                         const icon = f.type === 'wash_trading' ? '🔄' : f.type === 'isolated_branch' ? '🏝️' : '💤';
                         const borderColor = f.severity === 'alert' ? '#ef444466' : '#f59e0b44';
                         const bgColor = f.severity === 'alert' ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.05)';

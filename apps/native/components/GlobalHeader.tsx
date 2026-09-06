@@ -140,6 +140,18 @@ export function GlobalHeader() {
     const [isGuestOnActive, setIsGuestOnActive] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
     const [hasAnchorUrl, setHasAnchorUrl] = useState(true);
+    // In-memory mirror of the version facts already on disk. Storage is read once and written
+    // only when something actually changes. The node refreshes its store lookup every 6 hours
+    // and the app's own version cannot change while it is running, so the 30-second ping was
+    // re-writing byte-identical values roughly 2,880 times a day for nothing.
+    const versionRef = useRef<{
+        latestLoaded: boolean;
+        latest: string | null;
+        minKey: string | null;
+        minimum: string | null;
+        dismissed: Map<string, boolean>;
+        attemptAt: number;
+    }>({ latestLoaded: false, latest: null, minKey: null, minimum: null, dismissed: new Map(), attemptAt: 0 });
     // Consecutive failed health pings — see the ping effect below (debounce + recent-sync grace).
     const healthFailuresRef = useRef(0);
 
@@ -173,50 +185,99 @@ export function GlobalHeader() {
         // and rides along in the health payload this ping already fetches. The phone
         // compares two short strings; it no longer downloads the 1.1 MB Play Store
         // listing page over its own connection to read one number out of it.
+        // How often the "we checked" timestamp is worth persisting. Nothing reads it on a hot
+        // path — it is a diagnostic — so writing it on every 30-second tick was 2,880 SQLite
+        // transactions a day to record the same fact.
+        const ATTEMPT_RECORD_MS = 30 * 60 * 1000;
+
+        // Only a positive is remembered. Caching "not dismissed" would freeze a transient read
+        // failure into the session — and each tab screen builds its own header, so one tab
+        // caching a stale negative would keep showing a banner another tab had just cleared.
+        // A miss costs one read, and only while a banner is actually on screen.
+        const isDismissed = async (version: string) => {
+            const cache = versionRef.current.dismissed;
+            if (cache.get(version)) return true;
+            try {
+                if ((await AsyncStorage.getItem(`beanpool_dismissed_update_${version}`)) === 'true') {
+                    cache.set(version, true);
+                    return true;
+                }
+            } catch { /* storage unavailable — treat as not dismissed, and ask again next tick */ }
+            return false;
+        };
+
         const applyVersionState = async (latest: string | null, minimum: string | null) => {
             const state = evaluateUpdate(appConfig.expo.version, latest, minimum);
             if (state.kind === 'none') {
                 if (isMounted) { setSoftUpdateVersion(null); setUpdateRequired(false); }
                 return;
             }
-            if (state.kind === 'available') {
-                const dismissed = await AsyncStorage.getItem(`beanpool_dismissed_update_${state.version}`);
-                if (dismissed) {
-                    if (isMounted) { setSoftUpdateVersion(null); setUpdateRequired(false); }
-                    return;
-                }
+            if (state.kind === 'available' && await isDismissed(state.version)) {
+                if (isMounted) { setSoftUpdateVersion(null); setUpdateRequired(false); }
+                return;
             }
             if (isMounted) { setSoftUpdateVersion(state.version); setUpdateRequired(state.kind === 'required'); }
         };
-        // Fresh values win; anything the node did not send falls back to what it told us
-        // last time. That matters in two directions: an older node sends neither field and
-        // should not clear a banner it has nothing to say about, and a phone with no anchor,
-        // an offline node, or guest mode should still show what it already knows. The whole
-        // check used to sit inside `if (r.ok)`, so none of those states checked at all.
-        const applyVersionStateWithCache = async (latest: string | null, minimum: string | null, nodeUrl: string | null) => {
-            const [cachedLatest, cachedMin] = await Promise.all([
-                AsyncStorage.getItem('beanpool_latest_known_version'),
-                nodeUrl ? AsyncStorage.getItem(minVersionKey(nodeUrl)) : Promise.resolve(null),
-            ]);
-            await applyVersionState(latest ?? cachedLatest, minimum ?? cachedMin);
-        };
+
         // Everything the banner touches in storage lives in here, deliberately OUTSIDE the
         // try whose catch marks the node offline: these writes used to sit inside it, so a
         // storage failure would have painted a perfectly healthy community red.
+        //
+        // Fresh values win; anything the node did not send falls back to what it told us last
+        // time. That matters in two directions: an older node sends neither field and should
+        // not clear a banner it has nothing to say about, and a phone with no anchor, an
+        // offline node, or guest mode should still show what it already knows. The whole check
+        // used to sit inside `if (r.ok)`, so none of those states checked at all.
         const updateVersionBanner = async (nodeUrl: string | null, data: any | null) => {
             try {
                 // A community switch can land while a ping is in flight. Applying the old
                 // node's floor to the new one would be wrong, so drop the stale answer.
                 if (nodeUrl && (await AsyncStorage.getItem('beanpool_anchor_url')) !== nodeUrl) return;
+                const v = versionRef.current;
+                const now = Date.now();
+                const minKey = nodeUrl ? minVersionKey(nodeUrl) : null;
+
+                // Seed the mirror from disk once — and again for a community we have not seen
+                // this session, since the floor is per node.
+                if (!v.latestLoaded) {
+                    v.latest = await AsyncStorage.getItem('beanpool_latest_known_version');
+                    v.latestLoaded = true;
+                }
+                if (minKey !== v.minKey) {
+                    // Read FIRST, then commit both together. Assigning the key before the read
+                    // means a storage error leaves the new node's key paired with the previous
+                    // node's floor — the cross-community poisoning this key exists to prevent,
+                    // reintroduced through the error path. Failing here retries next tick.
+                    const loaded = minKey ? await AsyncStorage.getItem(minKey) : null;
+                    v.minKey = minKey;
+                    v.minimum = loaded;
+                }
+
                 const latest = data ? pickStoreVersion(data?.appVersions, Platform.OS) : null;
                 const minimum = data ? normaliseVersion(data?.minAppVersion) : null;
-                // Recorded whatever the outcome. The old code wrote this only inside the
+
+                // Recorded whatever the outcome — the old code wrote this only inside the
                 // success branch, so a failed check looked like no check at all and the app
-                // retried on every 30-second ping — 1.1 MB a time, on a metered connection.
-                await AsyncStorage.setItem('beanpool_last_version_check_time', String(Date.now()));
-                if (latest) await AsyncStorage.setItem('beanpool_latest_known_version', latest);
-                if (minimum && nodeUrl) await AsyncStorage.setItem(minVersionKey(nodeUrl), minimum);
-                await applyVersionStateWithCache(latest, minimum, nodeUrl);
+                // retried on every ping, 1.1 MB a time on a metered connection. Rate-limited
+                // because it is the only one of these writes with nothing to compare against.
+                if (now - v.attemptAt > ATTEMPT_RECORD_MS) {
+                    v.attemptAt = now;
+                    await AsyncStorage.setItem('beanpool_last_version_check_time', String(now));
+                }
+                // Commit the mirror only once the write has landed — the same rule as the read
+                // path above, and for the same reason. Marking it written first means a storage
+                // throw leaves memory claiming a value disk does not have, the next tick sees no
+                // difference and never retries, and a restart silently reverts to the old one.
+                if (latest && latest !== v.latest) {
+                    await AsyncStorage.setItem('beanpool_latest_known_version', latest);
+                    v.latest = latest;
+                }
+                if (minimum && minKey && minimum !== v.minimum) {
+                    await AsyncStorage.setItem(minKey, minimum);
+                    v.minimum = minimum;
+                }
+
+                await applyVersionState(latest ?? v.latest, minimum ?? v.minimum);
             } catch { /* storage unavailable — the banner keeps whatever it already had */ }
         };
 
@@ -536,13 +597,16 @@ export function GlobalHeader() {
                                 accessibilityLabel="Close"
                                 style={styles.softUpdateDismissBtn}
                                 onPress={async () => {
+                                    // Remember it in memory too, so the next 30-second ping does not
+                                    // read the same key back off disk to re-learn what we just did.
+                                    if (softUpdateVersion) versionRef.current.dismissed.set(softUpdateVersion, true);
+                                    setSoftUpdateVersion(null);
                                     // A failed write should cost you the MEMORY of the dismissal,
                                     // not the ability to dismiss: an unhandled rejection here left
                                     // the banner on screen with its close button doing nothing.
                                     try {
                                         await AsyncStorage.setItem(`beanpool_dismissed_update_${softUpdateVersion}`, 'true');
                                     } catch { /* dismissed for this session only */ }
-                                    setSoftUpdateVersion(null);
                                 }}
                             >
                                 <MaterialCommunityIcons name="close" size={16} color="#ffffff" />

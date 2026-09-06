@@ -148,6 +148,20 @@ router.get('/api/local/admin/sync-audit-log', async (ctx) => {
 
 // ===================== ADMIN ACTIONS (Requires Password) =====================
 
+/**
+ * Full community health, including `flags`.
+ *
+ * The public GET /api/community/health deliberately omits `flags` — it answers
+ * unauthenticated and the flags carry fraud analysis and member public keys. The node's
+ * own settings dashboard is an admin surface and still needs them, so it asks here.
+ * checkAdminAuth tarpits wrong passwords; the public route must never be given an
+ * auth check of its own, or it becomes an unthrottled password oracle.
+ */
+router.post('/api/local/admin/health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = getCommunityHealth();
+});
+
 router.post('/api/local/admin/data', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     

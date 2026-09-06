@@ -104,6 +104,27 @@ async function main() {
     assert(body.appVersions.ios === '1.2.32', 'health serves the cached App Store version');
     assert(body.appVersions.checkedAt === '2026-09-06T07:00:00.000Z', 'health serves checkedAt');
 
+    // ── The public payload carries no moderation analysis ────────────────────────
+    // /api/community/health is in PUBLIC_READ_EXACT, so anything in it is readable by
+    // anyone who can reach the node — and it is re-sent to every phone every 30 seconds.
+    assert(body.flags === undefined, 'the public health payload does NOT carry fraud/moderation flags');
+    assert(getCommunityHealth().flags !== undefined, 'getCommunityHealth() still returns flags for the authenticated admin route');
+    assert(!!body.nodeName && !!body.currency && !!body.tree && !!body.activity,
+        'the fields clients actually read are still served');
+    assert(
+        JSON.stringify(body).length < 800,
+        `the public payload stays small (was 2048 bytes with flags, now ${JSON.stringify(body).length})`
+    );
+
+    // The node's own settings dashboard reads flags from the ADMIN route, which is how it
+    // keeps the feature the public payload gave up. Wrong password must not answer.
+    const adminRes = await fetch(`${BASE}/api/local/admin/health`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': 'definitely-not-the-password' },
+        body: '{}',
+    });
+    assert(adminRes.status === 401, 'POST /api/local/admin/health rejects a bad password');
+
     // A node that has not looked yet must say so rather than omit the field: the app
     // treats a null as "keep what you already know", and a missing object identically.
     __resetAppStoreVersionsForTest();

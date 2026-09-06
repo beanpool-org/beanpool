@@ -3,6 +3,7 @@
  */
 
 import Router from '@koa/router';
+import { getVersion } from '../version.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
@@ -197,25 +198,8 @@ router.get('/api/directory/info', async (ctx) => {
 
 // ===================== VERSION & UPDATES =====================
 
-// Read version from root package.json
-function getVersion(): string {
-    // Priority: APP_VERSION env (from Docker build arg) > .version file > package.json
-    if (process.env.APP_VERSION) return process.env.APP_VERSION;
-    try {
-        const versionFile = path.resolve('/app/.version');
-        if (fs.existsSync(versionFile)) {
-            return fs.readFileSync(versionFile, 'utf-8').trim();
-        }
-    } catch { /* fall through */ }
-    try {
-        let pkgPath = path.resolve('package.json');
-        if (!fs.existsSync(pkgPath)) {
-            pkgPath = path.resolve('../../package.json');
-        }
-        const rootPkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        return rootPkg.version || '0.0.0';
-    } catch { return '0.0.0'; }
-}
+// Version now lives in ../version.js so /api/version and /api/community/health
+// cannot drift apart again.
 
 // Get git commit hash
 function getCommitHash(): string {

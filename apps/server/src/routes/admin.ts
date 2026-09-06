@@ -632,9 +632,11 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 router.post('/api/local/admin/commons/projects', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const crowdfundProjects = getCrowdfundProjects();
+    // ⚡ Bolt: Pre-fetch members Map for O(1) proposer lookup instead of N+1 getMember queries
+    const membersMap = new Map(getAllMembers().map(m => [m.publicKey, m]));
     // Map crowdfund schema to commons admin UI shape
     const projects = crowdfundProjects.map(p => {
-        const member = getMember(p.creator_pubkey);
+        const member = membersMap.get(p.creator_pubkey);
         return {
             id: p.id,
             title: p.title,

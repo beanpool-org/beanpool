@@ -15,7 +15,7 @@
  *     and because the "last checked" timestamp was only written on success, it
  *     retried on every 30-second ping — 1.1 MB a time, on metered data.
  *
- * So the node does it instead: twice a day, once, for the whole community, and
+ * So the node does it instead: every six hours, once, for the whole community, and
  * hands the answer to every phone in the `/api/community/health` payload they
  * already fetch. The phone compares two short strings and spends no bytes of its
  * own. The Play scrape can still break when Google changes their markup, but it

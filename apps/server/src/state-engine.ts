@@ -2529,14 +2529,16 @@ export function getCommunityHealth(): CommunityHealth {
     // 2. Wash Trading / Sybil Ring soft enforcement (Change 3)
     try {
         const enforcement = getWashTradingEnforcement();
+        // ⚡ Bolt: Pre-fetch member callsigns into a Map for O(1) lookups during health flag formatting
+        const callsignsMap = new Map((db.prepare("SELECT public_key, callsign FROM members").all() as any[]).map(m => [m.public_key, m.callsign]));
         for (const pairKey of enforcement.flaggedPairs) {
             const [a, b] = pairKey.split('|');
             // Skip if all involved accounts are already credit-frozen by admin
             const frozenCount = (db.prepare("SELECT COUNT(*) as cnt FROM members WHERE public_key IN (?, ?) AND credit_frozen = 1").get(a, b) as any)?.cnt || 0;
             if (frozenCount >= 2) continue;
 
-            const callsignA = (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(a) as any)?.callsign || a.substring(0, 8);
-            const callsignB = (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(b) as any)?.callsign || b.substring(0, 8);
+            const callsignA = callsignsMap.get(a) || a.substring(0, 8);
+            const callsignB = callsignsMap.get(b) || b.substring(0, 8);
             const details = enforcement.pairDetails.find(p => (p.a === a && p.b === b) || (p.a === b && p.b === a));
             const gross = details ? details.gross : 0;
             const r = details ? details.r : 0;
@@ -2555,7 +2557,7 @@ export function getCommunityHealth(): CommunityHealth {
                 if (frozenCount >= detail.members.length) continue;
 
                 const names = detail.members.map((m: string) => {
-                    return (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(m) as any)?.callsign || m.substring(0, 8);
+                    return callsignsMap.get(m) || m.substring(0, 8);
                 }).join(', ');
                 flags.push({
                     type: 'sybil_ring',

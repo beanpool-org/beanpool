@@ -146,3 +146,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-22 - O(1) Selected Member Lookup in PWA LedgerPage
 **Learning:** In `apps/pwa/src/pages/LedgerPage.tsx`, looking up selected recipient member details via `members.find(m => m.publicKey === sendTo)` ran an $O(M)$ array scan on render cycles.
 **Action:** Pre-computed `membersMap` using `useMemo` indexed by `publicKey` to convert recipient resolution into an $O(1)$ lookup.
+
+## 2026-09-22 - N+1 Member Callsign Queries in Community Health Flags
+**Learning:** In `apps/server/src/state-engine.ts`, `getCommunityHealth` formatted wash trading and Sybil ring health flag descriptions by executing `db.prepare("SELECT callsign FROM members WHERE public_key=?")` for every flagged pair or ring member. This caused repeated SQLite queries per flagged member during health checks.
+**Action:** Pre-fetched member callsigns into a `callsignsMap` before evaluating health flags, converting per-member callsign resolution into constant-time $O(1)$ Map retrievals.

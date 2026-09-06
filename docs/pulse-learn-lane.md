@@ -1,9 +1,9 @@
 # The Pulse — Learn lane and curated content
 
 > **Status: SPEC / not yet built.** Written 2026-09-07 after diagnosing why the Pulse feed is empty
-> on every node. Covers a `learn` category, a genesis-seeded BeanPool channel, a third Pulse lane,
-> and cadence injection ("the drip"). Does **not** cover the 30-day intake bug, which is a separate
-> defect documented in §1.3 and needs its own fix.
+> on every node. Covers a `learn` category, a seeded BeanPool channel, a third Pulse lane, cadence
+> injection ("the drip"), and a retention rule that replaces both the 30-day intake filter and the
+> 30-day pruner (§2.3) — that rule is what fixes the empty feed diagnosed in §0.
 
 ---
 
@@ -124,9 +124,10 @@ So curated items cannot be free-floating rows. They need an **active member** to
 **channel** to hang off. This forces the attribution decision rather than leaving it open: the feed
 renders a callsign and avatar per card, so those videos will visibly belong to *someone*.
 
-**Decision: a `BeanPool` system member + channel, seeded at genesis on every node.** Not the admin's
-personal account — official content should not look like one person's posts. There is precedent for
-synthetic members: treasuries are members so they can trade.
+**Decision: a `BeanPool` system member + channel on every node** (see §2.2 — an idempotent migration,
+not a genesis-only step, or every existing community is skipped). Not the admin's personal account —
+official content should not look like one person's posts. There is precedent for synthetic members:
+treasuries are members so they can trade.
 
 ### 1.2 Pagination is keyset, not offset
 
@@ -198,25 +199,78 @@ with `{ id: 'learn', icon: '📚', label: 'How it works' }` in the core label ma
 
 This alone gives a filterable home: `GET /api/pulse/feed?category=learn` already works.
 
-### 2.2 A genesis-seeded BeanPool channel
+### 2.2 A seeded BeanPool channel
 
-At genesis, alongside the Commons pool account, seed:
+Seed alongside the Commons pool account:
 
 - a member `BeanPool` with `status = 'active'` and a distinct avatar
 - one `creator_channels` row owned by it, `platform = 'youtube'`, `category = 'learn'`,
   `syndicate_to_node = 1`, `supports_autolist = 0` (its items are curated, not polled)
 - the instructional videos as `pulse_items` with `source = 'curated'` and `curated = 1`
 
-Seeding at genesis rather than fetching means **it works on a node with no internet**, and every new
+Seeding locally rather than fetching means **it works on a node with no internet**, and every new
 community is non-empty from its first boot.
 
-### 2.3 Curated items never expire
+**This must be a migration, not only a genesis step.** Genesis runs once, so a genesis-only seed
+reaches new nodes and never touches mullum, bindarrabi or any other community already running —
+exactly the nodes that need it most. The seed has to be idempotent and run on upgrade: create the
+member and channel if absent, insert any curated items not already present by `external_id`, and
+leave everything else alone.
 
-Add `curated INTEGER NOT NULL DEFAULT 0` to `pulse_items`, and one clause to the pruner:
+### 2.3 Retention: keep the latest N per channel, not a time window
+
+This replaces both the 30-day intake filter (§0.2) and the 30-day pruner (§1.3). It is simpler than
+either and it is the piece that makes the feature fair.
+
+**Why not a bigger window or a global cap.** A global limit — "120 days", "max 500 posts", "max 1000
+posts" — does not do the thing it looks like it does. A node capped at 1000 posts still lets one
+member own 750 of them. The concern is real; a bigger bucket is not the answer to it.
+
+And a **time window is structurally unfair**, favouring volume over substance:
+
+| Creator | Rate | Kept under a 120-day window |
+|---|---|---|
+| Daily poster | 1/day | ~120 items |
+| Seasonal maker | 3/year | ~1 item |
+| The channel in §0.1 | 5 videos, 33–36 days old | **0** |
+
+It rewards the prolific and erases the occasional — the exact people a small community is built
+around.
+
+**The rule instead:** keep the **most recent 20 items per channel**, curated items exempt. Drop the
+time cutoff from intake and retention entirely.
+
+- **Flooding becomes impossible by construction.** A 750-post archive keeps 20, like everyone else.
+- **Fair to the quiet creator.** Three posts a year keeps three posts.
+- **Fixes §0.1 immediately** — 36-day-old videos are simply "your latest five".
+- **Fixes cold start** — a new community shows real content instead of waiting for someone to post
+  this month.
+
+**20 is not arbitrary.** Measured 2026-09-07: YouTube's RSS serves at most **15 entries regardless of
+archive size** — a channel with thousands of videos returns 15, the channel in §0.1 returns 5. So for
+YouTube the flood is already bounded upstream; the risk is generic **RSS/website** feeds, which can
+serve hundreds in one document and which the resolver currently does not cap at all.
+
+Storage is a non-issue: 32 members × 20 items is 640 rows; 500 members is 10,000.
+
+Feed *freshness* becomes a sorting concern rather than a retention one, which is where it belongs.
+Combined with per-page author spreading (§5), one prolific channel cannot own consecutive slots
+either.
+
+Schema: add `curated INTEGER NOT NULL DEFAULT 0` to `pulse_items`. The pruner becomes a per-channel
+trim:
 
 ```sql
-WHERE deleted_at IS NULL AND published_at < ? AND curated = 0
+-- tombstone everything below the newest N for each channel, curated exempt
+WHERE deleted_at IS NULL AND curated = 0 AND id NOT IN (
+    SELECT id FROM pulse_items p2
+     WHERE p2.channel_id = pulse_items.channel_id AND p2.deleted_at IS NULL
+     ORDER BY p2.published_at DESC, p2.id DESC LIMIT ?
+)
 ```
+
+A very generous absolute bound (say two years) is harmless for storage hygiene, but it must not be
+the thing doing the fairness work.
 
 ### 2.4 The drip — cadence injection
 
@@ -293,9 +347,12 @@ Three small PRs, each reviewable alone.
 
 ## 5. Explicitly out of scope
 
-- **The 30-day intake bug (§0.2).** Real, separate, and needs its own decision: seed the latest *N*
-  items regardless of age on a channel's first resolve, and/or surface `last_error` when items parsed
-  but were all filtered by age — currently that case reports success and says nothing.
+- **Surfacing a silent no-op.** §2.3 removes the age filter that caused §0.2, but the resolver can
+  still return `{count: 0}` with `fail_count: 0` and `last_error: null` for other reasons. It should
+  say something when a feed parsed but produced nothing.
+- **Whether a silent channel eventually drops off entirely.** Under §2.3 a channel that goes quiet
+  for years keeps its last 20 forever, as a kind of community archive. That may be right or wrong —
+  it is a values call about what the Pulse is for, not a technical one.
 - **Author spreading across the feed.** Within a page it is a cheap greedy reorder (take the cursor
   from the chronologically-last item, not the display-last). *Across* pages it is incompatible with
   keyset pagination and would mean a materialised feed ordering — a re-architecture, not a change.

@@ -30,22 +30,27 @@ function ToggleSwitch({
     checked,
     onChange,
     disabled,
+    label,
     activeBgClass = 'bg-emerald-500 border-emerald-600',
     inactiveBgClass = 'bg-nature-200 dark:bg-nature-700 border-nature-300 dark:border-nature-600',
 }: {
     checked: boolean;
     onChange: () => void;
     disabled?: boolean;
+    label?: string;
     activeBgClass?: string;
     inactiveBgClass?: string;
 }) {
     return (
         <button
             type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={label}
             onClick={onChange}
             disabled={disabled}
             style={{ width: '48px', height: '26px' }}
-            className={`rounded-full relative cursor-pointer outline-none transition-colors duration-300 border shrink-0 disabled:opacity-50 ${
+            className={`rounded-full relative cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 transition-colors duration-300 border shrink-0 disabled:opacity-50 ${
                 checked ? activeBgClass : inactiveBgClass
             }`}
         >
@@ -522,6 +527,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <ToggleSwitch
                                         checked={theme === 'dark'}
                                         onChange={onToggleTheme}
+                                        label="Dark Appearance"
                                         activeBgClass="bg-slate-700 border-slate-600"
                                         inactiveBgClass="bg-terra-100 border-terra-200"
                                     />
@@ -554,6 +560,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <ToggleSwitch
                                         checked={privacyTier === '3'}
                                         onChange={handleTogglePrivacy}
+                                        label="Live Location Sharing"
                                         activeBgClass="bg-red-500 border-red-600"
                                     />
                                 </div>
@@ -570,6 +577,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <ToggleSwitch
                                         checked={useModernMarkers}
                                         onChange={handleToggleModernMarkers}
+                                        label="Modern Map Pins"
                                         activeBgClass="bg-emerald-500 border-emerald-600"
                                     />
                                 </div>
@@ -589,6 +597,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                         checked={holidayMode}
                                         onChange={handleToggleHoliday}
                                         disabled={holidayLoading}
+                                        label="Holiday Mode"
                                         activeBgClass="bg-amber-500 border-amber-600"
                                     />
                                 </div>
@@ -1053,6 +1062,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <ToggleSwitch
                                         checked={notifChat}
                                         onChange={() => handleToggleNotif('chat')}
+                                        label="Chat Messages Notifications"
                                     />
                                 </div>
 
@@ -1064,6 +1074,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <ToggleSwitch
                                         checked={notifMarketplace}
                                         onChange={() => handleToggleNotif('marketplace')}
+                                        label="Marketplace Activity Notifications"
                                     />
                                 </div>
 
@@ -1075,6 +1086,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <ToggleSwitch
                                         checked={notifEscrow}
                                         onChange={() => handleToggleNotif('escrow')}
+                                        label="Escrow & Deals Notifications"
                                     />
                                 </div>
                             </div>

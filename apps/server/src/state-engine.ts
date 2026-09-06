@@ -5,6 +5,7 @@ import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
+import { getVersion } from './version.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
@@ -2761,7 +2762,7 @@ export function getCommunityHealth(): CommunityHealth {
     
     return {
         nodeName: getDirectoryInfo()?.name || 'Local Discovery',
-        version: '1.2.5',
+        version: getVersion(),
         minAppVersion: '1.0.75',
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
         tree: { totalMembers, maxDepth: 0, widestBranch: { callsign: 'db-optimized', children: 0 }, avgBranchSize: 0 },

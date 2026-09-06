@@ -84,6 +84,16 @@ async function main(): Promise<void> {
     });
     assert(downloadHistoryTraversal.status === 400, `download-history rejects path-traversal filename (got ${downloadHistoryTraversal.status})`);
 
+    const downloadHistoryBackslash = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=node1&filename=..\\secret.txt`, {
+        headers: { 'X-Admin-Password': ADMIN_PW },
+    });
+    assert(downloadHistoryBackslash.status === 400, `download-history rejects backslash traversal filename (got ${downloadHistoryBackslash.status})`);
+
+    const downloadHistoryInvalidPattern = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=node1&filename=arbitrary.txt`, {
+        headers: { 'X-Admin-Password': ADMIN_PW },
+    });
+    assert(downloadHistoryInvalidPattern.status === 400, `download-history rejects non-snapshot filename pattern (got ${downloadHistoryInvalidPattern.status})`);
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);
     console.log('⭐️ Fleet Manager Backups tests PASSED.');

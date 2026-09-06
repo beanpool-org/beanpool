@@ -34,6 +34,10 @@ const fetchWithTimeout = async (resource: RequestInfo, options: RequestInit & { 
     }
 };
 
+// Deliberately larger than the 32pt pill so the avatar spills past its edge. The pill's own
+// height and width are unchanged — only its clipping, which had to become visible.
+const AVATAR_PILL_SIZE = 43;
+
 export function GlobalHeader() {
     const insets = useSafeAreaInsets();
     const pathname = usePathname();
@@ -77,7 +81,7 @@ export function GlobalHeader() {
         headerLeftControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: theme === 'dark' ? colors.brand.primary : 'rgba(16, 185, 129, 0.3)', height: 32, width: 80, overflow: 'hidden' },
         headerLeftControlsGuest: { borderColor: colors.feedback.warning.border, backgroundColor: colors.feedback.warning.bg },
         headerLeftControlsDisconnected: { borderColor: colors.feedback.danger.border, backgroundColor: colors.feedback.danger.bg },
-        headerRightControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border.default, height: 32, width: 72, overflow: 'hidden' },
+        headerRightControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border.default, height: 32, width: 72, overflow: 'visible' },
         controlPillBtn: { flex: 1, height: '100%', justifyContent: 'center', alignItems: 'center' },
         modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center' },
         modalContent: { backgroundColor: colors.surface.card, width: '85%', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
@@ -530,20 +534,8 @@ export function GlobalHeader() {
                     <View style={styles.headerRightControls}>
                         <TouchableOpacity
                             accessibilityRole="button"
-                            accessibilityLabel="Open profile"
-                            style={[styles.controlPillBtn, { borderRightWidth: 1, borderColor: colors.border.default }]}
-                            onPress={() => {
-                                if (identity?.publicKey) {
-                                    router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } });
-                                }
-                            }}
-                        >
-                            <MemberAvatar avatarUrl={myAvatar} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || '?'} size={24} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            accessibilityRole="button"
                             accessibilityLabel="Settings"
-                            style={styles.controlPillBtn}
+                            style={[styles.controlPillBtn, { borderRightWidth: 1, borderColor: colors.border.default }]}
                             onPress={() => {
                                 if (pathname === '/settings') {
                                     if (router.canGoBack()) {
@@ -557,6 +549,18 @@ export function GlobalHeader() {
                             }}
                         >
                             <MaterialCommunityIcons name="tune" size={17} color={pathname === '/settings' ? colors.accent.primary : colors.text.secondary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Open profile"
+                            style={styles.controlPillBtn}
+                            onPress={() => {
+                                if (identity?.publicKey) {
+                                    router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } });
+                                }
+                            }}
+                        >
+                            <MemberAvatar avatarUrl={myAvatar} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || '?'} size={AVATAR_PILL_SIZE} />
                         </TouchableOpacity>
                     </View>
                 </View>

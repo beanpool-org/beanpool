@@ -2,6 +2,8 @@
  * Sovereign AI Copilot Client — Fleet Intelligence & Diagnostics Assistant
  */
 
+import type { DiagnosticsResponse, GatewayConfig } from './node-client';
+
 export interface AiConfig {
     provider: 'ollama' | 'openrouter' | 'custom';
     baseUrl: string;
@@ -31,7 +33,12 @@ export function saveAiConfig(config: AiConfig): void {
 
 export async function askAiCopilot(
     prompt: string,
-    contextData: { telemetry?: any; gateway?: any; members?: any; logs?: any[] },
+    contextData: {
+        telemetry?: DiagnosticsResponse | Record<string, unknown> | null;
+        gateway?: GatewayConfig | Record<string, unknown> | null;
+        members?: unknown[];
+        logs?: unknown[];
+    },
     config: AiConfig = loadAiConfig()
 ): Promise<string> {
     const systemPrompt = `You are BeanPool Sovereign Fleet AI Copilot — an autonomous node diagnostics and community assistant.
@@ -58,7 +65,7 @@ Provide clear, professional, concise, actionable advice in Markdown format.`;
             if (!res.ok) throw new Error(`Ollama HTTP ${res.status}: ${res.statusText}`);
             const data = await res.json();
             return data.response || 'No response received from Ollama.';
-        } catch (e: any) {
+        } catch {
             // Fallback simulation / helpful guidance if Ollama local server is not reachable right now
             return `### 🤖 Sovereign AI Copilot Analysis (Local Diagnostic Mode)
 
@@ -66,7 +73,7 @@ Provide clear, professional, concise, actionable advice in Markdown format.`;
 
 **Node Health Assessment:**
 - **Status:** Target node status is \`${contextData.telemetry?.status || 'ONLINE'}\`.
-- **Database Storage:** ${(contextData.telemetry?.dbSizeBytes ? contextData.telemetry.dbSizeBytes / (1024 * 1024) : 0).toFixed(2)} MB.
+- **Database Storage:** ${(typeof contextData.telemetry?.dbSizeBytes === 'number' ? contextData.telemetry.dbSizeBytes / (1024 * 1024) : 0).toFixed(2)} MB.
 - **WebSocket & P2P Connections:** ${contextData.telemetry?.activeWsConnections || 0} active WebSocket streams, ${contextData.telemetry?.p2pActivePeers || 0} P2P peers.
 
 **Recommendations:**
@@ -93,8 +100,9 @@ Provide clear, professional, concise, actionable advice in Markdown format.`;
             if (!res.ok) throw new Error(`OpenRouter HTTP ${res.status}: ${res.statusText}`);
             const data = await res.json();
             return data.choices?.[0]?.message?.content || 'No response from OpenRouter.';
-        } catch (e: any) {
-            return `❌ OpenRouter API Request Failed: ${e.message}. Please verify your API key and network connection.`;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            return `❌ OpenRouter API Request Failed: ${msg}. Please verify your API key and network connection.`;
         }
     }
 

@@ -71,3 +71,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-08-25 - Replace any types in ThreatReviewModal
 **Learning:** `ThreatReviewModal.tsx` relied on `any` types for `threat`, `profiles`, `members`, and callback props, weakening type safety in security review dialogs.
 **Action:** Define strict interfaces (`ThreatItem`, `MemberItem`) for modal props and lookup maps to enhance DX and autocompletion.
+
+## 2026-08-25 - Replace any types in lib/ai-client.ts
+**Learning:** `ai-client.ts` used `any` types for `contextData` fields (`telemetry`, `gateway`, `members`, `logs`) and catch error blocks, reducing developer experience and autocomplete support when interfacing with Copilot diagnostic payloads.
+**Action:** Import and use strict types (`DiagnosticsResponse`, `GatewayConfig`, `unknown[]`) and safe error message extraction for AI client functions.

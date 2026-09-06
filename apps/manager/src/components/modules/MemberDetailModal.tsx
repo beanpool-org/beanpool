@@ -13,6 +13,7 @@ export interface MemberModalItem {
     lastActiveAt?: string;
     last_active_at?: string;
     last_seen?: string;
+    [key: string]: unknown;
 }
 
 export interface MemberFlag {

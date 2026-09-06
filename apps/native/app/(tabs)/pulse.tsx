@@ -27,16 +27,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { CATEGORIES, type ChannelCategory } from '@beanpool/core';
-import { useIdentity } from './IdentityContext';
-import { useTheme, useStyles } from './ThemeContext';
+import { useIdentity } from '../IdentityContext';
+import { useTheme, useStyles } from '../ThemeContext';
 import {
     fetchPulseFeed,
     isOfficialSource,
     PULSE_LOCAL_PREVIEW_ITEMS,
     mutePulseItem,
     type PulseFeedItem,
-} from '../utils/pulse';
-import { PulseFeedCard } from '../components/PulseFeedCard';
+} from '../../utils/pulse';
+import { PulseFeedCard } from '../../components/PulseFeedCard';
 
 export default function PulseScreen() {
     const { colors, theme } = useTheme();
@@ -226,15 +226,20 @@ export default function PulseScreen() {
             {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerTop}>
-                    <Pressable
-                        onPress={() => router.back()}
-                        style={styles.backBtn}
-                        accessibilityRole="button"
-                        accessibilityLabel="Go back"
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                        <Text style={styles.backText}>‹ Back</Text>
-                    </Pressable>
+                    {/* Pulse is a tab now, but settings still pushes to /pulse (kept as a
+                        fallback while the app-review instructions reference that path), so
+                        Back only makes sense when we actually arrived on a stack. */}
+                    {router.canGoBack() ? (
+                        <Pressable
+                            onPress={() => router.back()}
+                            style={styles.backBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel="Go back"
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                            <Text style={styles.backText}>‹ Back</Text>
+                        </Pressable>
+                    ) : <View />}
 
                     <Pressable
                         onPress={() => router.push('/channels')}
@@ -246,8 +251,9 @@ export default function PulseScreen() {
                     </Pressable>
                 </View>
 
+                {/* Title lives in GlobalHeader now that Pulse is a tab; keeping it here too
+                    would say "The Pulse" twice and cost a line of vertical space. */}
                 <View style={styles.titleRow}>
-                    <Text style={styles.title}>The Pulse</Text>
                     <Text style={styles.subtitle}>
                         {lane === 'local'
                             ? 'News and notices from around the shire'
@@ -462,7 +468,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             flexDirection: 'row',
             marginHorizontal: 16,
             marginBottom: 12,
-            backgroundColor: colors.surface.sunken ?? colors.surface.app,
+            backgroundColor: colors.surface.subtle,
             borderRadius: 12,
             padding: 3,
             gap: 3,

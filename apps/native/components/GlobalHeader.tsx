@@ -513,9 +513,10 @@ export function GlobalHeader() {
                                 >
                                     {pathname === '/' || pathname === '/market' ? 'Marketplace' :
                                      pathname === '/projects' ? 'Projects' :
-                                     pathname === '/chats' ? 'Messages' :
+                                     pathname === '/chats' ? 'Talk' :
                                      pathname === '/people' ? 'People' :
                                      pathname === '/ledger' ? 'Ledger' :
+                                     pathname === '/pulse' ? 'The Pulse' :
                                      pathname === '/settings' ? 'Settings' : 'BeanPool'}
                                 </Text>
                                 <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid, borderWidth: 1, borderColor: '#fff' }} />

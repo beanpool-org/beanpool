@@ -190,20 +190,32 @@ export default function TabLayout() {
                     }}
                 />
 
-                <Tabs.Screen 
-                    name="chats" 
-                    options={{ 
-                        title: 'Chat',
+                {/* Talk hosts Messages + People behind a segmented control. Merging them frees
+                    the slot Pulse needs — six labelled tabs is the ceiling at 320dp. */}
+                <Tabs.Screen
+                    name="chats"
+                    options={{
+                        title: 'Talk',
                         tabBarBadge: unread > 0 ? unread : undefined,
-                        tabBarIcon: ({ focused, color }) => <TabItem label="Chat" icon="💬" focused={focused} color={color} /> 
-                    }} 
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Talk" icon="💬" focused={focused} color={color} />
+                    }}
                 />
-                <Tabs.Screen 
-                    name="people" 
-                    options={{ 
+                {/* Still a route: GlobalHeader and public-profile deep-link here with a `view`
+                    param, so it stays mounted. Hidden from the bar — Talk is its home now. */}
+                <Tabs.Screen
+                    name="people"
+                    options={{
                         title: 'People',
-                        tabBarIcon: ({ focused, color }) => <TabItem label="People" icon="👥" focused={focused} color={color} /> 
-                    }} 
+                        href: null,
+                        tabBarIcon: ({ focused, color }) => <TabItem label="People" icon="👥" focused={focused} color={color} />
+                    }}
+                />
+                <Tabs.Screen
+                    name="pulse"
+                    options={{
+                        title: 'Pulse',
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Pulse" icon="📡" focused={focused} color={color} />
+                    }}
                 />
                 <Tabs.Screen 
                     name="projects" 

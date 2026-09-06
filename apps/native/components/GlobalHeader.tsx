@@ -190,16 +190,20 @@ export function GlobalHeader() {
         // transactions a day to record the same fact.
         const ATTEMPT_RECORD_MS = 30 * 60 * 1000;
 
+        // Only a positive is remembered. Caching "not dismissed" would freeze a transient read
+        // failure into the session — and each tab screen builds its own header, so one tab
+        // caching a stale negative would keep showing a banner another tab had just cleared.
+        // A miss costs one read, and only while a banner is actually on screen.
         const isDismissed = async (version: string) => {
             const cache = versionRef.current.dismissed;
-            const known = cache.get(version);
-            if (known !== undefined) return known;
-            let dismissed = false;
+            if (cache.get(version)) return true;
             try {
-                dismissed = (await AsyncStorage.getItem(`beanpool_dismissed_update_${version}`)) === 'true';
-            } catch { /* storage unavailable — treat as not dismissed */ }
-            cache.set(version, dismissed);
-            return dismissed;
+                if ((await AsyncStorage.getItem(`beanpool_dismissed_update_${version}`)) === 'true') {
+                    cache.set(version, true);
+                    return true;
+                }
+            } catch { /* storage unavailable — treat as not dismissed, and ask again next tick */ }
+            return false;
         };
 
         const applyVersionState = async (latest: string | null, minimum: string | null) => {
@@ -260,13 +264,17 @@ export function GlobalHeader() {
                     v.attemptAt = now;
                     await AsyncStorage.setItem('beanpool_last_version_check_time', String(now));
                 }
+                // Commit the mirror only once the write has landed — the same rule as the read
+                // path above, and for the same reason. Marking it written first means a storage
+                // throw leaves memory claiming a value disk does not have, the next tick sees no
+                // difference and never retries, and a restart silently reverts to the old one.
                 if (latest && latest !== v.latest) {
-                    v.latest = latest;
                     await AsyncStorage.setItem('beanpool_latest_known_version', latest);
+                    v.latest = latest;
                 }
                 if (minimum && minKey && minimum !== v.minimum) {
-                    v.minimum = minimum;
                     await AsyncStorage.setItem(minKey, minimum);
+                    v.minimum = minimum;
                 }
 
                 await applyVersionState(latest ?? v.latest, minimum ?? v.minimum);

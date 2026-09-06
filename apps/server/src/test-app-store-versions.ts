@@ -116,6 +116,15 @@ async function main() {
         `the public payload stays small (was 2048 bytes with flags, now ${JSON.stringify(body).length})`
     );
 
+    // The node's own settings dashboard reads flags from the ADMIN route, which is how it
+    // keeps the feature the public payload gave up. Wrong password must not answer.
+    const adminRes = await fetch(`${BASE}/api/local/admin/health`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': 'definitely-not-the-password' },
+        body: '{}',
+    });
+    assert(adminRes.status === 401, 'POST /api/local/admin/health rejects a bad password');
+
     // A node that has not looked yet must say so rather than omit the field: the app
     // treats a null as "keep what you already know", and a missing object identically.
     __resetAppStoreVersionsForTest();

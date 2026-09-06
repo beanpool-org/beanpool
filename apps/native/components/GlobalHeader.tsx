@@ -38,7 +38,13 @@ const fetchWithTimeout = async (resource: RequestInfo, options: RequestInit & { 
 // height and width are unchanged — only its clipping, which had to become visible.
 const AVATAR_PILL_SIZE = 43;
 
-export function GlobalHeader() {
+/**
+ * `onMeasure` reports the header's real rendered height — including the update banner,
+ * which appears and disappears. The map screen floats this header absolutely and has to
+ * reserve the equivalent space for the tab bar below it; a constant would be wrong the
+ * moment a banner shows.
+ */
+export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => void } = {}) {
     const insets = useSafeAreaInsets();
     const pathname = usePathname();
     const { colors } = useTheme();
@@ -451,7 +457,10 @@ export function GlobalHeader() {
     const isMapScreen = pathname === '/map';
 
     return (
-        <View style={[styles.headerWrapper, isMapScreen && styles.headerAbsolute]}>
+        <View
+            style={[styles.headerWrapper, isMapScreen && styles.headerAbsolute]}
+            onLayout={onMeasure ? (e) => onMeasure(e.nativeEvent.layout.height) : undefined}
+        >
             <View style={StyleSheet.absoluteFillObject}>
                 <Image
                     source={require('../assets/images/neon-vines-banner.jpg')}

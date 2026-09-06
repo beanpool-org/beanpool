@@ -216,8 +216,12 @@ export default function PulseScreen() {
         );
     };
 
+    // No 'top' edge: Pulse is a tab now, and GlobalHeader above it already consumes the top
+    // safe-area inset. Keeping it here applied the status-bar/notch inset a SECOND time,
+    // leaving a dead gap under the tab bar — worst on the small screens we support, where
+    // the header, tab bar and gap stack up before any content gets a chance.
     return (
-        <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+        <SafeAreaView style={styles.screen} edges={['left', 'right']}>
             {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerTop}>

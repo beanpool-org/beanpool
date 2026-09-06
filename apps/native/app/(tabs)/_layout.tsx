@@ -3,7 +3,7 @@ export { ErrorBoundary };
 import { StatusBar } from 'expo-status-bar';
 import { GlobalHeader } from '../../components/GlobalHeader';
 import { View, Text, Platform, DeviceEventEmitter, useWindowDimensions } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -106,6 +106,18 @@ export default function TabLayout() {
     // GlobalHeader. Mirrors its own `Math.max(insets.top + 10, 40) + 56`.
     const headerHeight = Math.max(insets.top + 10, 40) + 56;
     const isMapScreen = pathname === '/map';
+    // Starts at the header-row height and grows if GlobalHeader renders an update banner.
+    const [measuredHeaderHeight, setMeasuredHeaderHeight] = useState(headerHeight);
+    const lastMeasuredRef = useRef(headerHeight);
+    // GlobalHeader's onLayout can fire inside THIS component's own mount commit, and a
+    // setState at that point is a render-phase update: React warns "state update on a
+    // component that hasn't mounted yet" and drops it. Deferring past the commit fixes
+    // that, and the equality guard stops every relayout from re-rendering the navigator.
+    const onHeaderMeasure = useCallback((h: number) => {
+        if (Math.abs(lastMeasuredRef.current - h) < 1) return;
+        lastMeasuredRef.current = h;
+        requestAnimationFrame(() => setMeasuredHeaderHeight(h));
+    }, []);
     const [unread, setUnread] = useState(0);
     const [dealsCount, setDealsCount] = useState(0);
     const [needsBackup, setNeedsBackup] = useState(false);
@@ -186,8 +198,14 @@ export default function TabLayout() {
                 would land above the tabs. Rendering GlobalHeader here instead keeps the
                 logo on top; it reads its route from usePathname(), not navigator context,
                 so it behaves identically outside the navigator. */}
-            <View style={isMapScreen ? { height: headerHeight } : undefined}>
-                <GlobalHeader />
+            {/* On the map the header floats (position: absolute, zIndex 100), so it
+                contributes no height and this spacer reserves the room the tab bar needs
+                to sit below it. `headerHeight` alone measures the header ROW only — when
+                the update banner appears the header grows, and the extra painted straight
+                over the tab bar at zIndex 100, swallowing its touches and stranding anyone
+                on the map. GlobalHeader reports what it actually measured instead. */}
+            <View style={isMapScreen ? { height: measuredHeaderHeight } : undefined}>
+                <GlobalHeader onMeasure={onHeaderMeasure} />
             </View>
             <Tabs backBehavior="none" screenOptions={{
                 tabBarPosition: 'top',

@@ -23,6 +23,10 @@ function isAndroid(): boolean {
 }
 
 const DISMISS_KEY = 'beanpool-install-dismissed';
+// A separate key rather than a sentinel inside DISMISS_KEY: that field holds a timestamp and
+// is read with Number(), so parking a string like 'forever' in it would evaluate to NaN and
+// silently fail the comparison.
+const DISMISS_FOREVER_KEY = 'beanpool-install-dismissed-forever';
 const DISMISS_DAYS = 7;
 
 export function InstallPrompt() {
@@ -33,6 +37,9 @@ export function InstallPrompt() {
     useEffect(() => {
         // Don't show if already installed
         if (isInstalled()) return;
+
+        // Don't show if the member asked never to see it again
+        if (localStorage.getItem(DISMISS_FOREVER_KEY) === '1') return;
 
         // Don't show if recently dismissed
         const dismissed = localStorage.getItem(DISMISS_KEY);
@@ -56,6 +63,11 @@ export function InstallPrompt() {
 
     function handleDismiss() {
         localStorage.setItem(DISMISS_KEY, String(Date.now()));
+        setShow(false);
+    }
+
+    function handleDismissForever() {
+        localStorage.setItem(DISMISS_FOREVER_KEY, '1');
         setShow(false);
     }
 
@@ -151,10 +163,26 @@ export function InstallPrompt() {
                         }}
                         className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
-                        {showSteps ? 'Hide' : 'How?'}
+                        {showSteps ? 'Hide steps' : 'How?'}
                     </button>
                 )}
             </div>
+
+            {/* The X only snoozes for a week. This is the way out for someone who is never
+                going to install it — and it now survives signing out. */}
+            <button
+                type="button"
+                onClick={handleDismissForever}
+                style={{
+                    alignSelf: 'flex-start', marginTop: '0.15rem', padding: '0.25rem 0',
+                    background: 'none', border: 'none', color: '#94a3b8',
+                    fontSize: '0.78rem', fontFamily: 'inherit', cursor: 'pointer',
+                    textDecoration: 'underline', textUnderlineOffset: '2px',
+                }}
+                className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+                Don&rsquo;t show this again
+            </button>
 
             {/* Device-specific instructions */}
             {showSteps && (

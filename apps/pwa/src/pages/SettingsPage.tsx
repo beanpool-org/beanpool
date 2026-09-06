@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
+import { clearAccountStorage } from '../lib/device-prefs';
 import {
     getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getPendingRecoveryRequests,
@@ -750,7 +751,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                                 setIsPurging(true);
                                                 try {
                                                     await wipeIdentity();
-                                                    localStorage.clear();
+                                                    clearAccountStorage();
                                                     setDeletionMode('purged');
                                                     setTimeout(() => window.location.reload(), 1500);
                                                 } finally {
@@ -816,7 +817,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                                     try {
                                                         await purgeAccountApi();
                                                         await wipeIdentity();
-                                                        localStorage.clear();
+                                                        clearAccountStorage();
                                                         setDeletionMode('purged');
                                                         setTimeout(() => window.location.reload(), 1500);
                                                     } catch (e: any) {

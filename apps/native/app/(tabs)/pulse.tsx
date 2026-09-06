@@ -32,7 +32,6 @@ import { useTheme, useStyles } from '../ThemeContext';
 import {
     fetchPulseFeed,
     isOfficialSource,
-    PULSE_LOCAL_PREVIEW_ITEMS,
     mutePulseItem,
     type PulseFeedItem,
 } from '../../utils/pulse';
@@ -42,11 +41,6 @@ export default function PulseScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
-
-    // Stand-in items for judging the two-lane layout before any admin feed exists. MUST stay
-    // false on a shipping build — these are invented headlines and would read as real local
-    // news. Flip to true only to look at the design.
-    const SHOW_LOCAL_PREVIEW = false;
 
     const [lane, setLane] = useState<'neighbours' | 'local'>('neighbours');
     const [items, setItems] = useState<PulseFeedItem[]>([]);
@@ -59,9 +53,7 @@ export default function PulseScreen() {
 
     // Client-side split is a prototype shortcut — see isOfficialSource(). Production
     // should pass the lane to the API so pagination stays correct per lane.
-    const localItems = SHOW_LOCAL_PREVIEW
-        ? [...PULSE_LOCAL_PREVIEW_ITEMS, ...items.filter(isOfficialSource)]
-        : items.filter(isOfficialSource);
+    const localItems = items.filter(isOfficialSource);
     const neighbourItems = items.filter(i => !isOfficialSource(i));
     const visibleItems = (lane === 'local' && localItems.length > 0) ? localItems : neighbourItems;
 

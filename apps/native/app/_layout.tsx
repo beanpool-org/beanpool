@@ -676,6 +676,7 @@ export default function RootLayout() {
                 const currentVersion = appConfig.expo.version;
                 if (lastRunVersion !== currentVersion) {
                     await AsyncStorage.removeItem('beanpool_latest_known_version');
+                    await AsyncStorage.removeItem('beanpool_min_app_version');
                     await AsyncStorage.removeItem('beanpool_last_version_check_time');
                     if (lastRunVersion) {
                         await AsyncStorage.removeItem(`beanpool_dismissed_update_${lastRunVersion}`);

@@ -1339,6 +1339,7 @@ export default function SettingsScreen() {
                             const keysToRemove: string[] = [
                                 'beanpool_last_version_check_time',
                                 'beanpool_latest_known_version',
+                                'beanpool_min_app_version',
                                 'pillar_sync_members_last_sync'
                             ];
                             for (const u of urlsToClear) {

@@ -676,7 +676,18 @@ router.get('/api/community/info', async (ctx) => {
 });
 
 router.get('/api/community/health', async (ctx) => {
-    ctx.body = getCommunityHealth();
+    // `flags` is the node's fraud and moderation analysis — wash-trading findings, sybil-ring
+    // findings, delinquency, and the PUBLIC KEYS of every member involved. This route is in
+    // PUBLIC_READ_EXACT, so all of that was served unauthenticated to anyone who could reach
+    // the node, and re-sent to every phone every 30 seconds by the header's health ping:
+    // 1552 of the payload's 2048 bytes on the test node, which no client has ever read.
+    //
+    // The fleet manager — the only thing that displays flags — reads them from
+    // POST /api/local/admin/data, which calls getCommunityHealth() in-process behind
+    // checkAdminAuth. Nothing changes for it.
+    const { flags, ...publicHealth } = getCommunityHealth();
+    void flags;
+    ctx.body = publicHealth;
 });
 
 // Lightweight membership probe — returns whether a public key is a registered member or recovering

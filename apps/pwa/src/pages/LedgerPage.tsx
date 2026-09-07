@@ -5,7 +5,7 @@
  * Mirrors the native app's Trust Level and Financials tab layout and visualizations.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
     getBalance, getTransactions, sendTransfer, getMembers,
@@ -188,7 +188,9 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     const canInvite = balanceInfo?.tier?.canInvite ?? true;
     const hoursEquivalent = Math.abs(balance) / 40;
 
-    const selectedMember = members.find(m => m.publicKey === sendTo);
+    // ⚡ Bolt: O(1) Map lookup for selected member recipient instead of O(M) .find() scans
+    const membersMap = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
+    const selectedMember = membersMap.get(sendTo);
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
 
     return (

@@ -18,6 +18,10 @@
  *   - a real member holding the reserved callsign is RENAMED, never reactivated. Flipping
  *     someone back to 'active' to claim a name would undo an admin suspension silently, on
  *     every restart.
+ *   - the seeded channel sets supports_autolist = 1 so the resolver keeps it current,
+ *     polling for newly published videos. Re-resolving does not duplicate the seeded items
+ *     because idx_pulse_items_dedupe is UNIQUE on (channel_id, external_id) for live rows,
+ *     causing re-resolves to conflict and update instead of inserting duplicates.
  */
 import { db } from '../db/db.js';
 import { createTreasury } from '../state-engine.js';
@@ -43,7 +47,7 @@ export const CURATED_LEARN_ITEMS: readonly CuratedItemDef[] = [
 ] as const;
 
 /** The BeanPool treasury's public key, creating it if this node has none yet. */
-function ensureBeanPoolIdentity(): string {
+export function ensureBeanPoolIdentity(): string {
     const existing = db.prepare(
         `SELECT public_key, is_treasury FROM members
           WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned')`
@@ -83,12 +87,12 @@ export function seedPulseCurated(): number {
                 `INSERT INTO creator_channels
                     (id, owner_pubkey, platform, url, handle, category, is_primary_video,
                      supports_autolist, syndicate_to_node, created_at, updated_at)
-                 VALUES (?, ?, 'youtube', ?, '@BeanPool', 'learn', 1, 0, 1, ?, ?)
+                 VALUES (?, ?, 'youtube', ?, '@BeanPool', 'learn', 1, 1, 1, ?, ?)
                  ON CONFLICT(id) DO UPDATE SET
                      owner_pubkey     = excluded.owner_pubkey,
                      url              = excluded.url,
                      category         = 'learn',
-                     supports_autolist = 0,
+                     supports_autolist = 1,
                      syndicate_to_node = 1,
                      deleted_at       = NULL,
                      updated_at       = excluded.updated_at`

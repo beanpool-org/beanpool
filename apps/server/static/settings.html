@@ -722,6 +722,7 @@
                 <button class="tab-btn" data-tab="invites">🎫 Invites</button>
                 <button class="tab-btn" data-tab="system">⚙️ System</button>
                 <button class="tab-btn" data-tab="commons">🏛️ Commons</button>
+                <button class="tab-btn" data-tab="pulse">📚 Pulse Content</button>
                 <button class="tab-btn" data-tab="comms">📥 Inbox</button>
                 <button class="tab-btn" data-tab="connections">🔌 Connections</button>
                 <a href="/manager/" target="_blank" rel="noopener" class="fleet-link" title="Opens the Fleet Manager in a new tab">🎮 Fleet Manager ↗</a>
@@ -1489,6 +1490,48 @@
                 </div>
                 <div class="status-msg" id="commons-thresholds-status"></div>
 
+            </div>
+
+            <!-- Pulse Content (Curated Channels) -->
+            <div class="glass" data-tab="pulse" style="display:none;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                    <h3 style="margin:0;">📚 Pulse Content</h3>
+                    <button class="btn btn-outline" id="refresh-pulse-channels-btn" style="padding:0.3rem 0.75rem;font-size:0.8rem;">🔄 Refresh</button>
+                </div>
+                <p style="font-size:0.8rem;color:#64748b;margin-bottom:1rem;">
+                    Manage curated channels for the community Pulse feed. Channel-shaped YouTube URLs and RSS feeds update automatically.
+                </p>
+
+                <!-- Add Channel Form -->
+                <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:1rem;margin-bottom:1.25rem;">
+                    <h4 style="font-size:0.85rem;color:#e2e8f0;margin-bottom:0.75rem;">➕ Add Curated Channel</h4>
+                    <div class="field">
+                        <label>Channel / Feed URL</label>
+                        <input type="text" id="pulse-new-url" placeholder="https://www.youtube.com/@channel or RSS feed URL" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="field">
+                        <label>Category</label>
+                        <select id="pulse-new-category">
+                            <option value="learn" selected>📚 How it works (learn)</option>
+                            <option value="community">📣 Community</option>
+                            <option value="food">🌱 Food &amp; growing</option>
+                            <option value="craft">🔨 Making &amp; craft</option>
+                            <option value="repair">🔧 Repair &amp; reuse</option>
+                            <option value="art">🎨 Art &amp; music</option>
+                            <option value="business">☕ Business</option>
+                            <option value="other">✨ Other</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-full" id="pulse-add-btn">Add Channel</button>
+                    <div class="status-msg" id="pulse-add-status" style="margin-top:0.5rem;"></div>
+                </div>
+
+                <!-- Channels List -->
+                <h4 style="font-size:0.85rem;color:#e2e8f0;margin-bottom:0.5rem;">Curated Channels</h4>
+                <div id="pulse-channels-list" style="border:1px solid #1e293b;border-radius:8px;overflow:hidden;margin-bottom:1rem;">
+                    <div style="padding:1rem;text-align:center;color:#64748b;">Loading channels...</div>
+                </div>
+                <div class="status-msg" id="pulse-channels-status"></div>
             </div>
 
             <!-- Inbox & Global Comms -->

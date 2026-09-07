@@ -79,7 +79,7 @@ async function main(): Promise<void> {
     assert(chan.platform === 'youtube', 'Channel platform is youtube');
     assert(chan.category === 'learn', 'Channel category is learn');
     assert(chan.syndicate_to_node === 1, 'Channel syndicate_to_node is 1');
-    assert(chan.supports_autolist === 0, 'Channel supports_autolist is 0 (curated, not polled)');
+    assert(chan.supports_autolist === 1, 'Channel supports_autolist is 1 (polls itself via resolver)');
     assert(chan.url === BEANPOOL_LEARN_CHANNEL_URL, 'Channel URL matches official YouTube URL');
 
     // Check curated items

@@ -101,14 +101,26 @@ export function seedPulseCurated(): number {
                 ).get(BEANPOOL_LEARN_CHANNEL_ID, item.externalId) as { id: string } | undefined;
 
                 if (already) {
-                    // Keep ownership and the curated flag true even if a previous run or an
-                    // import left them wrong; do not overwrite an operator's edited title.
+                    // Restore the CONTENT as well as clearing the tombstone. A tombstone is
+                    // scrubbed — scrubPulseItems NULLs url/title/thumbnail — so setting
+                    // deleted_at = NULL alone would put an item back on the feed with no
+                    // title and no link: a broken card that renders worse than nothing.
+                    // These are system-managed rows, so the canonical values always win.
                     db.prepare(
                         `UPDATE pulse_items
                             SET curated = 1, source = 'curated', category = 'learn',
-                                owner_pubkey = ?, deleted_at = NULL, updated_at = ?
+                                owner_pubkey = ?, url = ?, title = ?, thumbnail_url = ?,
+                                published_at = ?, deleted_at = NULL, updated_at = ?
                           WHERE id = ?`
-                    ).run(owner, now, already.id);
+                    ).run(
+                        owner,
+                        `https://www.youtube.com/watch?v=${item.externalId}`,
+                        item.title,
+                        `https://i.ytimg.com/vi/${item.externalId}/hqdefault.jpg`,
+                        item.publishedAt,
+                        now,
+                        already.id,
+                    );
                     continue;
                 }
 

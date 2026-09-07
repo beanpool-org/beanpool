@@ -1760,7 +1760,18 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
         // Ingest all parsed items without an intake age filter. A 30-day intake window
         // silently dropped every item from any channel whose latest post was over a month old,
         // which is most channels — see docs/pulse-learn-lane.md section 0.2.
-        // Retention is handled per-channel by prunePulseItems.
+        // Cap intake at the retention budget. Without this the dedupe index — which is
+        // PARTIAL (`WHERE external_id IS NOT NULL AND deleted_at IS NULL`) — lets a
+        // tombstoned row fall out of the index, so the next resolve does not conflict with
+        // it and inserts a brand new duplicate. A 50-item blog feed would then loop every
+        // five minutes: resolve inserts 50, prune tombstones 30, resolve re-inserts those
+        // 30 as new rows, forever. Taking only the newest N means prune never has anything
+        // of this channel's to tombstone, so the cycle cannot start. It also bounds the
+        // blast radius of an RSS feed that serves hundreds of items in one document.
+        const intake = [...parsed.items]
+            .sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0))
+            .slice(0, PULSE_KEEP_PER_CHANNEL);
+
         let insertedOrUpdated = 0;
 
         const insertItem = db.prepare(
@@ -1778,7 +1789,7 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
         );
 
         db.transaction(() => {
-            for (const item of parsed.items) {
+            for (const item of intake) {
 
                 const itemId = `item_${crypto.randomBytes(12).toString('hex')}`;
                 insertItem.run(

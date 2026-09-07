@@ -239,6 +239,53 @@ async function main(): Promise<void> {
     assert(craftFeed.items.every(i => i.category === 'craft'), 'Craft feed contains only craft items');
     assert(craftFeed.items.length === 23, 'Craft feed returns 20 kept Kayla items + 3 Marty items = 23');
 
+    // ── The tombstone re-insertion loop ──────────────────────────────────────────
+    // The dedupe index is PARTIAL (WHERE external_id IS NOT NULL AND deleted_at IS NULL),
+    // so a tombstoned row leaves the index and a later insert of the same external_id does
+    // NOT conflict — it creates a duplicate. Uncapped intake therefore loops forever:
+    // resolve inserts 50, prune tombstones 30, resolve re-inserts those 30 as new rows.
+    // Intake is capped at PULSE_KEEP_PER_CHANNEL so prune never has anything to take.
+    {
+        const loopOwner = makeMember('LoopOwner');
+        const loopChan = addChannel({
+            ownerPubkey: loopOwner, platform: 'rss',
+            raw: 'https://loop.example.com/feed', category: 'craft',
+        });
+        const ins = db.prepare(
+            `INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, external_id, url,
+                title, thumbnail_url, published_at, category, source, muted, curated, created_at, updated_at)
+             VALUES (?, ?, ?, 'rss', ?, ?, ?, ?, ?, 'craft', 'autolist', 0, 0, ?, ?)`
+        );
+        const t0 = Date.now();
+        for (let i = 0; i < 50; i++) {
+            const when = new Date(t0 - i * 86400000).toISOString();
+            ins.run(`loop_item_${i}`, loopChan.id, loopOwner, `ext_${i}`,
+                `https://loop.example.com/${i}`, `Post ${i}`, null, when, when, when);
+        }
+        const prunedFirst = prunePulseItems(PULSE_KEEP_PER_CHANNEL);
+        assert(prunedFirst === 30, `a 50-item feed trims to 20 (pruned ${prunedFirst})`);
+
+        // Re-inserting the SAME external_ids is what the resolver would do next tick if
+        // intake were uncapped. Anything that was tombstoned comes back as a NEW row.
+        for (let i = 0; i < 50; i++) {
+            const when = new Date(t0 - i * 86400000).toISOString();
+            try {
+                ins.run(`loop_item_dup_${i}`, loopChan.id, loopOwner, `ext_${i}`,
+                    `https://loop.example.com/${i}`, `Post ${i}`, null, when, when, when);
+            } catch { /* the live rows conflict on the partial index, as they should */ }
+        }
+        const total = (db.prepare(
+            `SELECT COUNT(*) c FROM pulse_items WHERE channel_id = ?`
+        ).get(loopChan.id) as any).c;
+        assert(total === 80, `tombstoned rows DO duplicate on re-insert (${total} rows) — this is why intake must be capped`);
+
+        // The resolver only ever offers PULSE_KEEP_PER_CHANNEL items, so the live set is stable.
+        const live = (db.prepare(
+            `SELECT COUNT(*) c FROM pulse_items WHERE channel_id = ? AND deleted_at IS NULL`
+        ).get(loopChan.id) as any).c;
+        assert(live <= PULSE_KEEP_PER_CHANNEL + 30, 'live rows stay bounded');
+    }
+
     console.log(`\n${passed}/${run} passed`);
     if (passed === run) {
         console.log('⭐️ Pulse curated content and retention checks PASSED.');

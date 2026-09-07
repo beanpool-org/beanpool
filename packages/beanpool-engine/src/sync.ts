@@ -120,6 +120,9 @@ export interface SyncPulseItem {
     category: string;
     source: string;
     muted: boolean;
+    /** Curated system content. Must cross the wire: a replica that imports it as 0 would
+     *  expose it to per-channel retention and lose it on failover. */
+    curated: boolean;
     createdAt: string;
     updatedAt: string;
     deletedAt: string | null;
@@ -499,6 +502,7 @@ export function exportSyncState(
             category: row.category,
             source: row.source,
             muted: row.muted === 1,
+            curated: row.curated === 1,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
             deletedAt: row.deleted_at ?? null,

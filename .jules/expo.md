@@ -57,3 +57,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `propose-project.tsx` used `ImagePicker.MediaTypeOptions.Images` which is deprecated in modern Expo SDKs (`expo-image-picker`).
 **Learning:** Replaced `ImagePicker.MediaTypeOptions.Images` with `['images']`.
 **Pattern:** Search for `MediaTypeOptions` usages in Expo apps and replace with string array equivalents like `['images']`.
+
+## 2026-09-07 - [Strongly type Notifications module instance]
+**Issue:** `push-notifications.ts` used `let Notifications: any = null;` for dynamic loading of expo-notifications.
+**Learning:** Replaced `any` with `typeof import('expo-notifications') | null` to ensure type safety on dynamic module methods.
+**Pattern:** Use `typeof import('module-name') | null` for dynamically required modules in Expo services.

@@ -140,6 +140,7 @@ export function initSchema() {
     // not boot. Adding the column afterwards is too late — the exec has already thrown.
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE pulse_items ADD COLUMN curated INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
 
     // #104 step 3b: the settlement exchange needs four more columns on `settlements`.
     //

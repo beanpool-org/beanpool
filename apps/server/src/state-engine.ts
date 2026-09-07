@@ -19,6 +19,7 @@ import { pruneFunnel } from './engine/funnel.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
+import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
@@ -304,6 +305,7 @@ const wsClients: Set<any> = new Set();
 export function initStateEngine(): void {
     initSchema();
     migrateLegacyState();
+    seedPulseCurated();
     
     // Seed SYSTEM user securely
     db.pragma('foreign_keys = OFF');

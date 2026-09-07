@@ -6,7 +6,7 @@
  */
 
 export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'soundcloud' | 'website' | 'rss';
-export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
+export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'learn' | 'other';
 
 /**
  * How each platform behaves once added, in the member's terms:
@@ -53,6 +53,7 @@ export const CATEGORIES: readonly CategoryInfo[] = [
     { id: 'repair', icon: '🔧', label: 'Repair & reuse' },
     { id: 'art', icon: '🎨', label: 'Art & music' },
     { id: 'business', icon: '☕', label: 'Business' },
+    { id: 'learn', icon: '📚', label: 'How it works' },
     { id: 'other', icon: '✨', label: 'Other' },
 ] as const;
 

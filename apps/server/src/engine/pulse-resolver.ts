@@ -1757,7 +1757,10 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
         }
 
         const parsed = parseFeedXml(xml, feedUrl);
-        const thirtyDaysAgoMs = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        // Ingest all parsed items without an intake age filter. A 30-day intake window
+        // silently dropped every item from any channel whose latest post was over a month old,
+        // which is most channels — see docs/pulse-learn-lane.md section 0.2.
+        // Retention is handled per-channel by prunePulseItems.
         let insertedOrUpdated = 0;
 
         const insertItem = db.prepare(
@@ -1776,10 +1779,6 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
 
         db.transaction(() => {
             for (const item of parsed.items) {
-                const pubMs = Date.parse(item.publishedAt);
-                if (!isNaN(pubMs) && pubMs < thirtyDaysAgoMs) {
-                    continue;
-                }
 
                 const itemId = `item_${crypto.randomBytes(12).toString('hex')}`;
                 insertItem.run(
@@ -1858,19 +1857,29 @@ export function scrubPulseItems(
     return info.changes;
 }
 
+export const PULSE_KEEP_PER_CHANNEL = 20;
+
 /**
- * Prunes pulse items older than 30 days by tombstoning them.
+ * Retention: keep the latest N items per channel, replacing the time pruner.
+ * Tombstones every non-curated item that is not among the newest keepPerChannel
+ * for its channel, ordered by published_at DESC, id DESC. Curated items (curated = 1)
+ * are never pruned, and are excluded from the keep-set too — otherwise they would eat
+ * into a channel's budget and silently retain fewer of the member's own posts.
  */
-export function prunePulseItems(maxAgeDays = 30): number {
+export function prunePulseItems(keepPerChannel = PULSE_KEEP_PER_CHANNEL): number {
     const now = new Date().toISOString();
-    const cutoffMs = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
-    const cutoff = new Date(cutoffMs).toISOString();
 
     const info = db.prepare(
         `UPDATE pulse_items
             SET deleted_at = ?, url = NULL, title = NULL, thumbnail_url = NULL, updated_at = ?
-          WHERE deleted_at IS NULL AND published_at < ?`
-    ).run(now, now, cutoff);
+          WHERE deleted_at IS NULL AND curated = 0 AND id NOT IN (
+              SELECT id FROM pulse_items p2
+               WHERE p2.channel_id = pulse_items.channel_id AND p2.deleted_at IS NULL
+                 AND p2.curated = 0
+               ORDER BY p2.published_at DESC, p2.id DESC
+               LIMIT ?
+          )`
+    ).run(now, now, keepPerChannel);
 
     return info.changes;
 }
@@ -1887,7 +1896,7 @@ export async function runPulseSchedulerTick(): Promise<void> {
     isSchedulerRunning = true;
 
     try {
-        prunePulseItems(30);
+        prunePulseItems(PULSE_KEEP_PER_CHANNEL);
 
         const channels = db.prepare(
             `SELECT id FROM creator_channels

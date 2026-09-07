@@ -16,7 +16,9 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 process.env.ADMIN_PASSWORD = 'AdminPulseTestSecret123!';
 
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { db } from './db/db.js';
+import { addChannel } from './engine/creator-channels.js';
 import { initStateEngine } from './state-engine.js';
 import { initAdminPassword } from './config/local-config.js';
 import { checkAdminAuth } from './admin-auth.js';
@@ -268,45 +270,51 @@ async function main(): Promise<void> {
 
         // Simulate resolver inserting items with matching channel_id and external_id
         // (the exact statement from resolveChannel in pulse-resolver.ts)
-        const insertItem = db.prepare(
+        // Test the INVARIANT the resolver depends on, not a copy of the resolver.
+        //
+        // The previous version of this test pasted resolveChannel's INSERT ... ON CONFLICT
+        // into the test body and ran that. It passed, and proved nothing: it asserted that
+        // SQL written in the test behaves as written. If the resolver's own statement ever
+        // lost its ON CONFLICT clause, that test would still have gone green.
+        //
+        // What actually protects the seeded items is idx_pulse_items_dedupe — UNIQUE on
+        // (channel_id, external_id) WHERE external_id IS NOT NULL AND deleted_at IS NULL.
+        // So assert the index itself: a second LIVE row for the same pair must be REFUSED
+        // by SQLite. A plain INSERT with no conflict clause is the only way to observe that.
+        const plainInsert = db.prepare(
             `INSERT INTO pulse_items
-                (id, channel_id, owner_pubkey, platform, external_id,
-                 url, title, thumbnail_url, published_at, category,
-                 source, muted, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'autolist', 0, ?, ?)
-             ON CONFLICT(channel_id, external_id) WHERE external_id IS NOT NULL AND deleted_at IS NULL
-             DO UPDATE SET
-                url           = excluded.url,
-                title         = excluded.title,
-                thumbnail_url = excluded.thumbnail_url,
-                updated_at    = excluded.updated_at`
+                (id, channel_id, owner_pubkey, platform, external_id, url, title,
+                 thumbnail_url, published_at, category, source, muted, curated,
+                 created_at, updated_at)
+             VALUES (?, ?, ?, 'youtube', ?, ?, ?, ?, ?, 'learn', 'autolist', 0, 0, ?, ?)`
         );
+        const dupTarget = CURATED_LEARN_ITEMS[0];
+        const nowIso = new Date().toISOString();
+        let refused = false;
+        try {
+            plainInsert.run(
+                'item_should_not_exist', BEANPOOL_LEARN_CHANNEL_ID, bpOwner,
+                dupTarget.externalId, 'https://example.com/dup', 'Duplicate attempt',
+                null, dupTarget.publishedAt, nowIso, nowIso,
+            );
+        } catch (e: any) {
+            refused = /UNIQUE|constraint/i.test(String(e?.message || e));
+        }
+        assert(refused, 'the dedupe index REFUSES a second live row for the same (channel_id, external_id)');
 
-        const now = new Date().toISOString();
-        let conflictsHandled = 0;
+        const stillFive = (db.prepare(
+            `SELECT COUNT(*) c FROM pulse_items WHERE channel_id = ? AND deleted_at IS NULL`
+        ).get(BEANPOOL_LEARN_CHANNEL_ID) as any).c;
+        assert(stillFive === 5, `the seeded channel still has exactly 5 live items (got ${stillFive})`);
 
-        db.transaction(() => {
-            for (const item of CURATED_LEARN_ITEMS) {
-                const randomNewId = `item_resolved_${crypto.randomBytes(8).toString('hex')}`;
-                insertItem.run(
-                    randomNewId,
-                    BEANPOOL_LEARN_CHANNEL_ID,
-                    bpOwner,
-                    'youtube',
-                    item.externalId,
-                    `https://www.youtube.com/watch?v=${item.externalId}`,
-                    `${item.title} (Fresh Upstream Title)`,
-                    `https://i.ytimg.com/vi/${item.externalId}/hqdefault.jpg`,
-                    item.publishedAt,
-                    'learn',
-                    now,
-                    now
-                );
-                conflictsHandled++;
-            }
-        })();
-
-        assert(conflictsHandled === 5, 'Executed resolver insert statement for all 5 curated videos');
+        // And the resolver's statement really does carry the conflict clause that relies on
+        // that index — checked against the source, because the alternative is a network call
+        // to YouTube from a unit test.
+        const resolverSrc = readFileSync(new URL('./engine/pulse-resolver.ts', import.meta.url), 'utf-8');
+        assert(
+            /ON CONFLICT\(channel_id, external_id\)[\s\S]{0,120}DO UPDATE SET/.test(resolverSrc),
+            'resolveChannel still inserts with ON CONFLICT(channel_id, external_id) DO UPDATE'
+        );
 
         const totalItemsAfterResolve = (db.prepare('SELECT COUNT(*) as c FROM pulse_items WHERE channel_id = ?').get(BEANPOOL_LEARN_CHANNEL_ID) as any).c;
         assert(totalItemsAfterResolve === 5, `Total rows remains 5 (not 10) — re-resolve did not duplicate items (got ${totalItemsAfterResolve})`);
@@ -314,10 +322,11 @@ async function main(): Promise<void> {
         const liveItemsAfterResolve = (db.prepare('SELECT COUNT(*) as c FROM pulse_items WHERE channel_id = ? AND deleted_at IS NULL').get(BEANPOOL_LEARN_CHANNEL_ID) as any).c;
         assert(liveItemsAfterResolve === 5, 'Live item count remains exactly 5');
 
-        // Verify updated title on conflicting rows
+        // The seeded row keeps its deterministic id, so a re-seed or a resolve updates it in
+        // place rather than leaving a second copy behind under a random id.
         const sampleRow = db.prepare('SELECT title, id FROM pulse_items WHERE external_id = ? AND channel_id = ?').get(CURATED_LEARN_ITEMS[0].externalId, BEANPOOL_LEARN_CHANNEL_ID) as any;
-        assert(sampleRow.title.includes('(Fresh Upstream Title)'), 'ON CONFLICT DO UPDATE updated the title without creating a duplicate row');
-        assert(sampleRow.id === `item_curated_${CURATED_LEARN_ITEMS[0].externalId}`, 'Original item ID was preserved');
+        assert(sampleRow.id === `item_curated_${CURATED_LEARN_ITEMS[0].externalId}`, 'the seeded item keeps its deterministic id');
+        assert(sampleRow.title === CURATED_LEARN_ITEMS[0].title, 'the seeded title is the canonical one');
 
         // Re-running seedPulseCurated also does not duplicate
         seedPulseCurated();
@@ -348,6 +357,27 @@ async function main(): Promise<void> {
         assert(bareEntry.isSeeded === false, 'Bare video channel has isSeeded = false');
     }
 
+
+    // ── The panel renders operator input into innerHTML ──────────────────────────
+    // Every interpolation in loadPulseChannels() goes through esc(), which stops attribute
+    // breakout — but esc() cannot stop a javascript: scheme reaching an href. The node
+    // settings page is where the admin password lives, so a stored javascript: URL there
+    // would be the highest-value XSS target on the node. addChannel must refuse it before
+    // it can ever be stored.
+    for (const hostile of [
+        'javascript:alert(document.cookie)',
+        'data:text/html,<script>alert(1)</script>',
+        'http://localhost:8443/api/local/admin/data',
+        'http://169.254.169.254/latest/meta-data/',
+    ]) {
+        let rejected = false;
+        try {
+            addChannel({ ownerPubkey: bpOwner, platform: 'website', raw: hostile, category: 'learn' });
+        } catch {
+            rejected = true;
+        }
+        assert(rejected, `addChannel refuses ${hostile.slice(0, 34)}`);
+    }
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {
         console.error('❌ Pulse admin channels checks FAILED.');

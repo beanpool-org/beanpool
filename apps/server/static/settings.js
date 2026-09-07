@@ -86,7 +86,6 @@
             }
             // Load data for admin tabs
             if (tabName === 'moderation' || tabName === 'members') loadAdminData();
-                loadPulseChannels();
             if (tabName === 'members') loadThresholdGroup(AUDIT_THRESHOLD_KEYS);
             if (tabName === 'comms') loadAdminInbox();
             if (tabName === 'commons') { loadCommonsData(); loadNodeConfig(); loadThresholdGroup(COMMONS_THRESHOLD_KEYS); }

@@ -1022,6 +1022,7 @@ CREATE TABLE IF NOT EXISTS pulse_items (
                                     -- retro-relabel items already on the feed
     source         TEXT NOT NULL,   -- 'autolist' | 'manual'
     muted          INTEGER NOT NULL DEFAULT 0,
+    curated        INTEGER NOT NULL DEFAULT 0,
     created_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at     DATETIME

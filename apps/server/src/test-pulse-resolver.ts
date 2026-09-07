@@ -522,6 +522,8 @@ async function main(): Promise<void> {
 
     // ── 5. Database Channel & Items Insertion & Deduplication ────────────────────────────
     console.log('\n--- 5. Database Items & Deduplication ---');
+    db.prepare("DELETE FROM pulse_items WHERE curated = 1").run();
+    db.prepare("DELETE FROM creator_channels WHERE category = 'learn'").run();
     const ch = addChannel({
         ownerPubkey: kayla,
         platform: 'youtube',
@@ -635,12 +637,12 @@ async function main(): Promise<void> {
     assert(scrubbedRow.title === null, 'title NULLed on tombstone');
     assert(scrubbedRow.thumbnail_url === null, 'thumbnail_url NULLed on tombstone');
 
-    // 30-Day Pruner: insert an old item and run prunePulseItems
+    // Per-Channel Pruner: insert an old item and run prunePulseItems with keepPerChannel = 1
     const oldPublished = new Date(Date.now() - (35 * 24 * 60 * 60 * 1000)).toISOString();
     insertStmt.run('item_old', ch.id, kayla, 'youtube', 'vid_old', 'https://youtube.com/watch?v=vid_old', 'Old Video', 'https://img.com/old.jpg', oldPublished, 'craft', now, now);
 
-    const prunedCount = prunePulseItems(30);
-    assert(prunedCount === 1, 'prunePulseItems tombstoned the 35-day-old item');
+    const prunedCount = prunePulseItems(1);
+    assert(prunedCount === 1, 'prunePulseItems tombstoned the item beyond keepPerChannel (age is no longer the rule)');
     const oldRow = db.prepare('SELECT deleted_at, url FROM pulse_items WHERE id = ?').get('item_old') as any;
     assert(oldRow.deleted_at !== null && oldRow.url === null, 'Old item tombstoned and content nullified');
 

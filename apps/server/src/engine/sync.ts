@@ -736,8 +736,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 const importPulseItem = db.prepare(`INSERT INTO pulse_items
                                     (id, channel_id, owner_pubkey, platform, external_id,
                                      url, title, thumbnail_url, published_at, category,
-                                     source, muted, created_at, updated_at, deleted_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                     source, muted, curated, created_at, updated_at, deleted_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     channel_id    = excluded.channel_id,
                                     owner_pubkey  = excluded.owner_pubkey,
@@ -750,6 +750,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                                     category      = excluded.category,
                                     source        = excluded.source,
                                     muted         = excluded.muted,
+                                    curated       = excluded.curated,
                                     deleted_at    = excluded.deleted_at,
                                     updated_at    = excluded.updated_at
                                 WHERE excluded.updated_at > pulse_items.updated_at`);
@@ -767,6 +768,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         item.category,
                         item.source,
                         item.muted ? 1 : 0,
+                        // An older peer omits this; 0 is safe because every node re-seeds its
+                        // own curated content on boot.
+                        item.curated ? 1 : 0,
                         item.createdAt,
                         item.updatedAt,
                         item.deletedAt ?? null

@@ -27,7 +27,7 @@ import crypto from 'node:crypto';
 import { scrubPulseItems } from './pulse-resolver.js';
 
 export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'soundcloud' | 'website' | 'rss';
-export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
+export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'learn' | 'other';
 
 export const CHANNEL_PLATFORMS: readonly ChannelPlatform[] =
     ['youtube', 'tiktok', 'instagram', 'facebook', 'soundcloud', 'website', 'rss'] as const;
@@ -36,7 +36,7 @@ export const CHANNEL_PLATFORMS: readonly ChannelPlatform[] =
 // 'other'. `community` is additive: every other id keeps its meaning and its stored rows, only the
 // labels the client renders were rewritten.
 export const CHANNEL_CATEGORIES: readonly ChannelCategory[] =
-    ['community', 'food', 'craft', 'business', 'repair', 'art', 'other'] as const;
+    ['community', 'food', 'craft', 'business', 'repair', 'art', 'learn', 'other'] as const;
 
 /**
  * Platforms whose items the node can list unaided.

@@ -205,7 +205,12 @@ Seed alongside the Commons pool account:
 
 - a member `BeanPool` with `status = 'active'` and a distinct avatar
 - one `creator_channels` row owned by it, `platform = 'youtube'`, `category = 'learn'`,
-  `syndicate_to_node = 1`, `supports_autolist = 0` (its items are curated, not polled)
+  `syndicate_to_node = 1`, `supports_autolist = 1` — the channel polls itself, so a new video
+  reaches every node within six hours with no operator action and no code change. (This was 0
+  in the first draft, when the hardcoded items existed to work around the intake filter of
+  §0.2. With that filter gone the channel can keep itself current; the hardcoded five remain
+  as an offline-safe floor.) A re-resolve updates rather than duplicates, because
+  `idx_pulse_items_dedupe` is UNIQUE on `(channel_id, external_id)` for live rows
 - the instructional videos as `pulse_items` with `source = 'curated'` and `curated = 1`
 
 Seeding locally rather than fetching means **it works on a node with no internet**, and every new
@@ -344,6 +349,21 @@ Three small PRs, each reviewable alone.
    Delivers the filterable home and makes every new node non-empty on day one. Server + core only.
 2. **The Learn lane** in `pulse.tsx`, server-filtered. Client only.
 3. **The drip** — cadence injection in `getPulseFeed`, plus the onboarding entry point.
+
+## 4a. Known limitation: the same video via two channels
+
+The dedupe key is `(channel_id, external_id)`, so two DIFFERENT channels syndicating the same
+underlying video produce two cards. Observed live on mullum immediately after deploy: the five
+videos appeared twice — once as `autolist` under the member's own channel, once as `curated`
+under BeanPool.
+
+Adding a channel by handle (`@BeanPool`) rather than canonical URL (`/channel/UC…`) reaches the
+same place from the other direction: they normalise differently, so the duplicate check does not
+recognise them as the same channel.
+
+Neither is data loss, and the remedy today is manual — remove one of the channels. A real fix is
+either canonicalising a handle to its `UC…` id before the duplicate check, or deduplicating the
+FEED on `external_id` and preferring the curated copy. Both are design decisions, not bug fixes.
 
 ## 5. Explicitly out of scope
 

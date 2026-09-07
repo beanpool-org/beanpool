@@ -89,6 +89,7 @@
             if (tabName === 'members') loadThresholdGroup(AUDIT_THRESHOLD_KEYS);
             if (tabName === 'comms') loadAdminInbox();
             if (tabName === 'commons') { loadCommonsData(); loadNodeConfig(); loadThresholdGroup(COMMONS_THRESHOLD_KEYS); }
+            if (tabName === 'pulse') loadPulseChannels();
             if (tabName === 'diagnostics') {
                 unseenWarningErrorCount = 0;
                 updateDiagBadge();
@@ -1549,6 +1550,158 @@
                 await loadCommonsData();
             } catch (e) { alert('Failed: ' + e.message); }
         }
+
+        // ======================== PULSE CONTENT / CURATED CHANNELS ========================
+        async function loadPulseChannels() {
+            const listEl = document.getElementById('pulse-channels-list');
+            if (!listEl) return;
+            try {
+                const res = await fetch('/api/local/admin/pulse/channels', {
+                    headers: adminHeaders()
+                });
+                if (!res.ok) {
+                    listEl.innerHTML = '<div style="padding:1rem;text-align:center;color:#ef4444;">Failed to load curated channels</div>';
+                    return;
+                }
+                const data = await res.json();
+                const channels = data.channels || [];
+                if (channels.length === 0) {
+                    listEl.innerHTML = '<div style="padding:1rem;text-align:center;color:#64748b;">No curated channels configured yet</div>';
+                    return;
+                }
+
+                const platformIcons = {
+                    youtube: '🎥',
+                    rss: '✍️',
+                    website: '🌐',
+                    soundcloud: '🎧',
+                    instagram: '📷',
+                    tiktok: '🎵',
+                    facebook: '📘'
+                };
+
+                listEl.innerHTML = channels.map(c => {
+                    const icon = platformIcons[c.platform] || '🔗';
+                    const platformName = c.platform ? (c.platform.charAt(0).toUpperCase() + c.platform.slice(1)) : 'Unknown';
+                    const autolistBadge = c.supportsAutolist
+                        ? '<span style="font-size:0.7rem;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.15);color:#10b981;font-weight:600;">⚡ Updates automatically</span>'
+                        : '<span style="font-size:0.7rem;padding:2px 6px;border-radius:4px;background:rgba(245,158,11,0.15);color:#f59e0b;font-weight:600;">⚠️ Manual / No feed</span>';
+
+                    let producingStatus = '';
+                    if (c.itemCount > 0) {
+                        producingStatus = `<span style="font-size:0.75rem;color:#22c55e;font-weight:600;">● Producing (${c.itemCount} item${c.itemCount !== 1 ? 's' : ''})</span>`;
+                    } else if (c.lastError) {
+                        producingStatus = `<span style="font-size:0.75rem;color:#ef4444;font-weight:600;" title="${esc(c.lastError)}">⚠️ 0 items (${esc(c.lastError.slice(0, 50))})</span>`;
+                    } else if (c.supportsAutolist) {
+                        producingStatus = '<span style="font-size:0.75rem;color:#f59e0b;">⏳ 0 items (awaiting first sync)</span>';
+                    } else {
+                        producingStatus = '<span style="font-size:0.75rem;color:#94a3b8;">⚠️ 0 items (autolist disabled)</span>';
+                    }
+
+                    const actionBtn = c.isSeeded
+                        ? '<span style="font-size:0.7rem;padding:3px 8px;border-radius:4px;background:#1e293b;color:#94a3b8;border:1px solid #334155;" title="The seeded BeanPool channel cannot be removed">🔒 Seeded</span>'
+                        : `<button class="btn btn-sm btn-danger" onclick="removePulseChannel('${esc(c.id)}')">🗑️ Remove</button>`;
+
+                    const urlDisplay = c.url
+                        ? `<a href="${esc(c.url)}" target="_blank" rel="noopener" style="color:#38bdf8;text-decoration:none;font-size:0.8rem;word-break:break-all;">${esc(c.url)}</a>`
+                        : `<span style="color:#64748b;font-size:0.8rem;">(no url)</span>`;
+
+                    return `<div style="padding:0.75rem;border-bottom:1px solid #1e293b;background:#0f172a;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;margin-bottom:0.4rem;">
+                            <div style="flex:1;">
+                                <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.25rem;flex-wrap:wrap;">
+                                    <span style="font-size:0.95rem;">${icon}</span>
+                                    <strong style="font-size:0.85rem;color:#f8fafc;">${esc(platformName)}</strong>
+                                    <span style="font-size:0.7rem;padding:1px 6px;border-radius:4px;background:#334155;color:#cbd5e1;">${esc(c.category || 'learn')}</span>
+                                    ${autolistBadge}
+                                </div>
+                                <div style="margin-bottom:0.35rem;">
+                                    ${urlDisplay}
+                                </div>
+                                <div>
+                                    ${producingStatus}
+                                </div>
+                            </div>
+                            <div style="flex-shrink:0;">
+                                ${actionBtn}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch (err) {
+                listEl.innerHTML = '<div style="padding:1rem;text-align:center;color:#ef4444;">Error loading channels</div>';
+            }
+        }
+
+        async function addPulseChannel() {
+            const urlInput = document.getElementById('pulse-new-url');
+            const catSelect = document.getElementById('pulse-new-category');
+            const btn = document.getElementById('pulse-add-btn');
+            const statusId = 'pulse-add-status';
+
+            const url = (urlInput.value || '').trim();
+            const category = catSelect.value || 'learn';
+
+            if (!url) {
+                showStatus(statusId, 'Please enter a channel or feed URL', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            showStatus(statusId, 'Adding channel and resolving...', 'success');
+
+            try {
+                const res = await fetch('/api/local/admin/pulse/channels', {
+                    method: 'POST',
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ url, category })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    urlInput.value = '';
+                    showStatus(statusId, data.message || '✅ Channel added!', 'success');
+                    await loadPulseChannels();
+                } else {
+                    showStatus(statusId, data.error || 'Failed to add channel', 'error');
+                }
+            } catch (err) {
+                showStatus(statusId, 'Network error adding channel', 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function removePulseChannel(id) {
+            if (!confirm('Are you sure you want to remove this curated channel? Its items will also be removed from the feed.')) {
+                return;
+            }
+            const statusId = 'pulse-channels-status';
+            try {
+                const res = await fetch('/api/local/admin/pulse/channels/remove', {
+                    method: 'POST',
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showStatus(statusId, '✅ Channel removed', 'success');
+                    await loadPulseChannels();
+                } else {
+                    showStatus(statusId, data.error || 'Failed to remove channel', 'error');
+                }
+            } catch (err) {
+                showStatus(statusId, 'Network error removing channel', 'error');
+            }
+        }
+
+        window.removePulseChannel = removePulseChannel;
+
+        const refreshPulseBtn = document.getElementById('refresh-pulse-channels-btn');
+        if (refreshPulseBtn) refreshPulseBtn.addEventListener('click', loadPulseChannels);
+
+        const addPulseBtn = document.getElementById('pulse-add-btn');
+        if (addPulseBtn) addPulseBtn.addEventListener('click', addPulseChannel);
 
         async function saveNodeConfig() {
             if (!authToken) return;

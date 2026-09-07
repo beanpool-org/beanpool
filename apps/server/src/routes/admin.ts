@@ -35,6 +35,9 @@ import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { issueCsrfToken, issueWsTicket } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
+import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
+import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
+import { resolveChannel } from '../engine/pulse-resolver.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -680,6 +683,157 @@ router.post('/api/local/admin/gateway', async (ctx) => {
     const body = (ctx as any).requestBody || {};
     const updated = updateGatewayConfig(body);
     ctx.body = { success: true, gateway: updated };
+});
+
+
+function inferPulsePlatform(url: string): ChannelPlatform {
+    const raw = (url || '').toLowerCase();
+    if (raw.includes('youtube.com') || raw.includes('youtu.be')) return 'youtube';
+    if (raw.includes('soundcloud.com') || raw.includes('snd.sc')) return 'soundcloud';
+    if (raw.includes('instagram.com') || raw.includes('instagr.am')) return 'instagram';
+    if (raw.includes('tiktok.com')) return 'tiktok';
+    if (raw.includes('facebook.com') || raw.includes('fb.com') || raw.includes('fb.me')) return 'facebook';
+    if (/(\/feed\b|\/rss\b|\/atom\b|\.xml(\?|$)|\.rss(\?|$)|\/feeds?\/)/i.test(raw)) return 'rss';
+    return 'website';
+}
+
+// ===================== CURATED PULSE CHANNELS =====================
+// #pulse: Node operator curated channels for the Pulse feed.
+// Channels added here belong to the BeanPool system identity, not the admin's personal account.
+
+router.get('/api/local/admin/pulse/channels', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        const owner = ensureBeanPoolIdentity();
+        const rows = db.prepare(
+            `SELECT c.id, c.owner_pubkey, c.platform, c.url, c.handle, c.category,
+                    c.supports_autolist, c.fail_count, c.last_error, c.is_stale,
+                    c.created_at, c.updated_at,
+                    (SELECT COUNT(*) FROM pulse_items p WHERE p.channel_id = c.id AND p.deleted_at IS NULL) as item_count
+               FROM creator_channels c
+              WHERE c.owner_pubkey = ? AND c.deleted_at IS NULL
+              ORDER BY c.created_at ASC`
+        ).all(owner) as any[];
+
+        const channels = rows.map(r => ({
+            id: r.id,
+            ownerPubkey: r.owner_pubkey,
+            platform: r.platform,
+            url: r.url,
+            handle: r.handle,
+            category: r.category,
+            supportsAutolist: r.supports_autolist === 1,
+            supports_autolist: r.supports_autolist,
+            failCount: r.fail_count || 0,
+            lastError: r.last_error || null,
+            isStale: r.is_stale === 1,
+            itemCount: r.item_count || 0,
+            item_count: r.item_count || 0,
+            isSeeded: r.id === BEANPOOL_LEARN_CHANNEL_ID,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+        }));
+
+        ctx.body = { success: true, channels };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to list curated channels' };
+    }
+});
+
+router.post('/api/local/admin/pulse/channels', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { url, category, platform } = (ctx as any).requestBody || {};
+    if (!url || typeof url !== 'string' || !url.trim()) {
+        ctx.status = 400;
+        ctx.body = { error: 'url is required' };
+        return;
+    }
+
+    const trimmedUrl = url.trim();
+    const cat = (category && typeof category === 'string' && category.trim()) ? category.trim() : 'learn';
+    const plat = (platform && typeof platform === 'string' && platform.trim())
+        ? platform.trim()
+        : inferPulsePlatform(trimmedUrl);
+
+    try {
+        const owner = ensureBeanPoolIdentity();
+        const channel = addChannel({
+            ownerPubkey: owner,
+            platform: plat,
+            raw: trimmedUrl,
+            category: cat,
+            syndicateToNode: true,
+        });
+
+        let resolve: { count: number; error?: string } | null = null;
+        if (channel.supportsAutolist) {
+            try {
+                resolve = await resolveChannel(channel.id);
+            } catch (err: any) {
+                resolve = { count: 0, error: err?.message || String(err) };
+            }
+        } else {
+            resolve = { count: 0, error: 'URL does not support automatic updates' };
+        }
+
+        const fresh = getChannel(channel.id) || channel;
+        const msg = fresh.supportsAutolist
+            ? (resolve && resolve.count > 0 ? `Channel added and imported ${resolve.count} items.` : 'Channel added (updates automatically).')
+            : 'Channel added, but this URL does not support automatic updates (not a channel/feed URL).';
+
+        ctx.body = {
+            success: true,
+            channel: fresh,
+            supportsAutolist: fresh.supportsAutolist,
+            supports_autolist: fresh.supportsAutolist ? 1 : 0,
+            resolve,
+            message: msg,
+        };
+    } catch (e: any) {
+        if (e instanceof ChannelError) {
+            ctx.status = 400;
+            ctx.body = { error: e.message, code: e.code };
+            return;
+        }
+        ctx.status = 500;
+        ctx.body = { error: e?.message || 'Failed to add curated channel' };
+    }
+});
+
+router.post('/api/local/admin/pulse/channels/remove', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { id } = (ctx as any).requestBody || {};
+    if (!id || typeof id !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'id is required' };
+        return;
+    }
+
+    if (id === BEANPOOL_LEARN_CHANNEL_ID) {
+        ctx.status = 400;
+        ctx.body = { error: 'The seeded BeanPool learn channel cannot be removed (it is recreated on boot).' };
+        return;
+    }
+
+    const owner = ensureBeanPoolIdentity();
+    try {
+        const deleted = deleteChannel(owner, id);
+        if (!deleted) {
+            ctx.status = 404;
+            ctx.body = { error: 'Channel not found or already removed' };
+            return;
+        }
+        ctx.body = { success: true, message: 'Channel removed' };
+    } catch (e: any) {
+        if (e instanceof ChannelError) {
+            ctx.status = 400;
+            ctx.body = { error: e.message };
+            return;
+        }
+        ctx.status = 500;
+        ctx.body = { error: e?.message || 'Failed to remove channel' };
+    }
 });
 
     return router;

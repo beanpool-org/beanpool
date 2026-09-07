@@ -46,13 +46,18 @@ router.post('/api/messages/conversation', async (ctx) => {
         ctx.body = { error: 'Creator must be a participant of the conversation' };
         return;
     }
-    const conv = createConversation(type, participants, createdBy, name, postId);
-    if (!conv) {
+    try {
+        const conv = createConversation(type, participants, createdBy, name, postId);
+        if (!conv) {
+            ctx.status = 400;
+            ctx.body = { error: 'Failed to create conversation — check all participants are registered' };
+            return;
+        }
+        ctx.body = { success: true, conversation: conv };
+    } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: 'Failed to create conversation — check all participants are registered' };
-        return;
+        ctx.body = { error: e.message || 'Failed to create conversation' };
     }
-    ctx.body = { success: true, conversation: conv };
 });
 
 router.post('/api/messages/send', async (ctx) => {
@@ -83,7 +88,9 @@ router.post('/api/messages/send', async (ctx) => {
             ctx.body = { error: 'Message id already exists' };
             return;
         }
-        throw e;
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to send message' };
+        return;
     }
     if (!msg) {
         ctx.status = 400;

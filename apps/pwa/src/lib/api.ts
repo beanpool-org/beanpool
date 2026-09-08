@@ -1332,33 +1332,59 @@ export async function approveInboundRecovery(
 }
 
 /**
- * Fetches pending keeper actions from the legacy guardian requests endpoint if available.
- * Note: Pure two-layer keeper collections do not have a server-side polling route;
- * they are discovered via push notifications on native, or entered manually by session code in PWA Settings.
+ * Fetches pending keeper actions where this member is needed to approve an open recovery session.
+ * Backed by the authenticated server route POST /api/recovery/approve-keeper/pending (with legacy fallback).
  */
 export async function getPendingKeeperActions(): Promise<PendingKeeperAction[]> {
     const identity = await loadIdentity();
     if (!identity?.publicKey) return [];
 
+    const actions: PendingKeeperAction[] = [];
+
+    // 1. Two-Layer Keeper recovery collections pending for this member
+    try {
+        const res = await request<{ pending: PendingKeeperAction[] } | PendingKeeperAction[]>(
+            'POST',
+            '/api/recovery/approve-keeper/pending',
+            {}
+        );
+        const list = Array.isArray(res) ? res : res?.pending || [];
+        for (const item of list) {
+            if (item && item.collectionId) {
+                actions.push({
+                    collectionId: item.collectionId,
+                    ownerPubkey: item.ownerPubkey,
+                    callsign: item.callsign,
+                    expiresAt: item.expiresAt,
+                });
+            }
+        }
+    } catch (e: any) {
+        console.warn('[KeeperActions] Two-layer pending check failed:', e?.message || e);
+    }
+
+    // 2. Legacy guardian requests (if any exist)
     try {
         const legacy = await request<any[]>('GET', `/api/recovery/pending/${encodeURIComponent(identity.publicKey)}`);
-        const actions: PendingKeeperAction[] = [];
         for (const r of legacy || []) {
             if (Array.isArray(r.keeperActionRequired)) {
                 for (const a of r.keeperActionRequired) {
-                    actions.push({
-                        collectionId: a.collectionId,
-                        ownerPubkey: a.ownerPubkey || r.oldPubkey,
-                        callsign: r.oldCallsign || r.callsign,
-                        expiresAt: a.expiresAt,
-                    });
+                    if (!actions.some(existing => existing.collectionId === a.collectionId)) {
+                        actions.push({
+                            collectionId: a.collectionId,
+                            ownerPubkey: a.ownerPubkey || r.oldPubkey,
+                            callsign: r.oldCallsign || r.callsign,
+                            expiresAt: a.expiresAt,
+                        });
+                    }
                 }
             }
         }
-        return actions;
     } catch {
-        return [];
+        // Ignore legacy failures
     }
+
+    return actions;
 }
 
 /**

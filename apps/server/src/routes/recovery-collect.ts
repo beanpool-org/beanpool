@@ -339,6 +339,76 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         };
     });
 
+    /**
+     * Discovery for keepers: which open collections need this member's approval?
+     *
+     * Answers ONLY for the authenticated caller (ctx.state.actor). A member never sees
+     * someone else's keeper obligations or discovers recoveries they are not a keeper for.
+     * Returns minimal metadata needed to render the banner and open the approval modal
+     * (collectionId, ownerPubkey, callsign, createdAt, expiresAt). No fragments or key material.
+     *
+     * Reuses humanKeepersOf to resolve keepers, collectionState for generation/expiry/cancellation
+     * liveness semantics, and listReleases to stop reporting once approved.
+     */
+    async function pendingKeeperHandler(ctx: any): Promise<void> {
+        const keeper = ctx.state?.actor as string | undefined;
+        if (!keeper || !getMember(keeper)) {
+            ctx.status = 401;
+            ctx.body = { error: 'Sign in first.' };
+            return;
+        }
+
+        try {
+            const now = new Date().toISOString();
+            const rows = db.prepare(`
+                SELECT id FROM recovery_collections
+                WHERE status = 'open' AND expires_at > ?
+                ORDER BY created_at DESC
+            `).all(now) as { id: string }[];
+
+            const pending: {
+                collectionId: string;
+                ownerPubkey: string;
+                callsign: string;
+                createdAt: string;
+                expiresAt: string;
+            }[] = [];
+
+            for (const row of rows) {
+                const state = collectionState(row.id);
+                if (!state || !state.live) continue;
+                // A member cannot approve their own recovery as a keeper
+                if (state.collection.ownerPubkey === keeper) continue;
+
+                const keepers = humanKeepersOf(state.collection.ownerPubkey, state.collection.generation);
+                if (!keepers.includes(keeper)) continue;
+
+                // Stop reporting once this keeper has released their fragment
+                const releases = listReleases(state.collection.id);
+                if (releases.some(r => r.holderType === 'member' && r.releasedBy === keeper)) {
+                    continue;
+                }
+
+                const owner = getMember(state.collection.ownerPubkey);
+                pending.push({
+                    collectionId: state.collection.id,
+                    ownerPubkey: state.collection.ownerPubkey,
+                    callsign: owner?.callsign ?? 'Unknown Member',
+                    createdAt: state.collection.createdAt,
+                    expiresAt: state.collection.expiresAt,
+                });
+            }
+
+            ctx.status = 200;
+            ctx.body = { pending };
+        } catch (e) {
+            return fail(ctx, e);
+        }
+    }
+
+    router.post('/api/recovery/approve-keeper/pending', pendingKeeperHandler);
+    router.post('/api/recovery/collect/pending-keeper', pendingKeeperHandler);
+
     /** R1's cheap stop — reachable by the OWNER, who is the one without the attacker's session id. */
     router.post('/api/recovery/collect/cancel', async (ctx) => {
         const owner = ctx.state?.actor as string | undefined;

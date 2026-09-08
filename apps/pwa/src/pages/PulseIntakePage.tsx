@@ -133,6 +133,7 @@ export function PulseIntakePage({
                     thumbnailUrl: p.thumbnailUrl,
                     platform: p.platform,
                     category: p.category,
+                    externalId: p.externalId || null,
                     isDuplicate: p.alreadyImported,
                     duplicateItemId: p.existingItemId,
                     authorCallsign: identity.callsign,
@@ -209,6 +210,7 @@ export function PulseIntakePage({
 
     const handleSubmit = async () => {
         if (!identity) return;
+        if (resolving) return;
         if (!urlInput.trim()) {
             setUrlError('Please enter a post URL.');
             return;
@@ -232,7 +234,7 @@ export function PulseIntakePage({
                 title: previewData?.title || undefined,
                 thumbnailUrl: previewData?.thumbnailUrl || undefined,
                 category: selectedCategory || previewData?.category || undefined,
-                externalId: previewData?.duplicateItemId || undefined,
+                externalId: previewData?.externalId || undefined,
             });
 
             setSubmitSuccess(true);
@@ -440,13 +442,18 @@ export function PulseIntakePage({
             <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={submitting || submitSuccess || !urlInput.trim() || channels.length === 0}
+                disabled={submitting || resolving || submitSuccess || !urlInput.trim() || channels.length === 0}
                 className="w-full py-3.5 px-6 rounded-2xl font-bold text-base bg-terra-600 hover:bg-terra-500 disabled:opacity-50 text-white cursor-pointer shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2"
             >
                 {submitting ? (
                     <>
                         <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"></div>
                         <span>Submitting...</span>
+                    </>
+                ) : resolving ? (
+                    <>
+                        <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin"></div>
+                        <span>Resolving preview...</span>
                     </>
                 ) : (
                     <span>{previewData?.isDuplicate ? 'Update on Pulse' : 'Share to Pulse'}</span>

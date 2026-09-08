@@ -130,11 +130,30 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
             await load();
         } catch (e: any) {
             if (optimistic && prev) {
-                setChannels(cs => cs.map(c => (c.id === id ? { ...c, ...prev } : c)));
+                setChannels(cs => cs.map(c => {
+                    if (c.id !== id) return c;
+                    const restored: MemberCreatorChannel = { ...c };
+                    for (const key of Object.keys(optimistic) as (keyof MemberCreatorChannel)[]) {
+                        (restored as any)[key] = (prev as any)[key];
+                    }
+                    return restored;
+                }));
             }
             setListError(e?.message || 'Could not save that change.');
         }
     };
+
+    useEffect(() => {
+        if (!crossPostPrompt && !channelToRemove) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setCrossPostPrompt(null);
+                setChannelToRemove(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [crossPostPrompt, channelToRemove]);
 
     const handleSetPrimary = (id: string) => handlePatch(id, { isPrimaryVideo: true });
 
@@ -282,7 +301,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                                 className="sr-only peer"
                                                 aria-label={`Show ${meta.label} on the local feed`}
                                             />
-                                            <div className="w-11 h-6 bg-nature-200 peer-focus:outline-none rounded-full peer dark:bg-nature-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-terra-500"></div>
+                                            <div className="w-11 h-6 bg-nature-200 peer-focus-visible:ring-2 peer-focus-visible:ring-terra-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-nature-900 rounded-full peer dark:bg-nature-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-terra-500"></div>
                                         </label>
                                     </div>
 
@@ -295,33 +314,38 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                         <button
                                             type="button"
                                             onClick={() => setEditingId(editingId === channel.id ? null : channel.id)}
-                                            className="text-xs font-bold text-terra-600 dark:text-terra-400 hover:text-terra-700 bg-transparent border-none cursor-pointer py-1 px-2"
-                                            aria-label={editingId === channel.id ? `Done changing category for ${meta.label}` : `Change category for ${meta.label}`}
+                                            className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 cursor-pointer transition-colors"
                                         >
-                                            {editingId === channel.id ? 'Done' : 'Change'}
+                                            {editingId === channel.id ? 'Done' : 'Change category'}
                                         </button>
                                     </div>
 
+                                    {/* Inline category picker drawer */}
                                     {editingId === channel.id && (
-                                        <div className="flex flex-wrap gap-2 pt-2 pb-3">
-                                            {CATEGORIES.map(c => {
-                                                const on = c.id === channel.category;
-                                                return (
-                                                    <button
-                                                        key={c.id}
-                                                        type="button"
-                                                        onClick={() => handleChangeCategory(channel.id, c.id)}
-                                                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
-                                                            on
-                                                                ? 'bg-terra-500 border-terra-500 text-white shadow-sm'
-                                                                : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700'
-                                                        }`}
-                                                        aria-pressed={on}
-                                                    >
-                                                        {c.icon} {c.label}
-                                                    </button>
-                                                );
-                                            })}
+                                        <div className="p-3 my-2 rounded-xl bg-nature-50 dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 animate-in fade-in duration-150">
+                                            <div className="text-xs font-bold text-nature-700 dark:text-nature-300 mb-2">
+                                                Select Category
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                {CATEGORIES.map(cat => {
+                                                    const isSelected = channel.category === cat.id;
+                                                    return (
+                                                        <button
+                                                            key={cat.id}
+                                                            type="button"
+                                                            onClick={() => handleChangeCategory(channel.id, cat.id)}
+                                                            className={`flex items-center gap-1.5 p-2 rounded-lg text-xs font-semibold border text-left cursor-pointer transition-colors ${
+                                                                isSelected
+                                                                    ? 'bg-terra-500 border-terra-500 text-white shadow-xs'
+                                                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-100 dark:hover:bg-nature-700'
+                                                            }`}
+                                                        >
+                                                            <span>{cat.icon}</span>
+                                                            <span className="truncate">{cat.label}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
                                     )}
 
@@ -334,13 +358,15 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
 
                                     {/* Channel Actions */}
                                     <div className="flex flex-wrap items-center gap-2 pt-3 mt-1 border-t border-nature-100 dark:border-nature-800/60">
-                                        <button
-                                            type="button"
-                                            onClick={() => onSharePost(channel.id)}
-                                            className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-colors"
-                                        >
-                                            + Share post
-                                        </button>
+                                        {!channel.supportsAutolist && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onSharePost(channel.id)}
+                                                className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-colors"
+                                            >
+                                                + Share post
+                                            </button>
+                                        )}
 
                                         {VIDEO_PLATFORMS.includes(channel.platform) && !channel.isPrimaryVideo && videoChannels.length > 1 && (
                                             <button
@@ -485,9 +511,18 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
 
             {/* Cross-post warning modal */}
             {crossPostPrompt && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
-                        <h4 className="text-base sm:text-lg font-bold text-nature-900 dark:text-white mb-2">
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+                    onClick={() => setCrossPostPrompt(null)}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="cross-post-dialog-title"
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-3xl max-w-md w-full p-6 shadow-2xl"
+                    >
+                        <h4 id="cross-post-dialog-title" className="text-base sm:text-lg font-bold text-nature-900 dark:text-white mb-2">
                             {crossPostPrompt.several ? 'You post video in more than one place' : 'You post video in two places'}
                         </h4>
                         <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed">
@@ -531,9 +566,18 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
 
             {/* Remove channel confirmation modal */}
             {channelToRemove && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
-                        <h4 className="text-base font-bold text-nature-900 dark:text-white mb-2">
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+                    onClick={() => setChannelToRemove(null)}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="remove-channel-dialog-title"
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl"
+                    >
+                        <h4 id="remove-channel-dialog-title" className="text-base font-bold text-nature-900 dark:text-white mb-2">
                             Remove this channel?
                         </h4>
                         <p className="text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed">

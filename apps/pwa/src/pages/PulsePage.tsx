@@ -20,6 +20,7 @@ import {
     getPulseFeed,
     getMemberChannels,
     mutePulseItem,
+    deletePulseItem,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { isOfficialSource } from '../lib/pulse';
@@ -31,10 +32,9 @@ import { PulseIntakePage } from './PulseIntakePage';
 interface Props {
     identity: BeanPoolIdentity | null;
     onOpenProfile: (pubkey: string) => void;
-    onNavigate?: (tab: string, contextId?: string) => void;
 }
 
-export function PulsePage({ identity, onOpenProfile, onNavigate }: Props) {
+export function PulsePage({ identity, onOpenProfile }: Props) {
     const [view, setView] = useState<'feed' | 'channels' | 'intake'>('feed');
     const [intakeParams, setIntakeParams] = useState<{ url?: string; channelId?: string }>({});
 
@@ -166,6 +166,33 @@ export function PulsePage({ identity, onOpenProfile, onNavigate }: Props) {
         }
     };
 
+    const handleDelete = async (itemId: string) => {
+        if (!identity) return;
+
+        const itemToDelete = items.find(i => i.id === itemId);
+        if (!itemToDelete) return;
+
+        // Optimistic removal from feed
+        setItems(prev => prev.filter(i => i.id !== itemId));
+
+        try {
+            await deletePulseItem(itemId);
+        } catch (e: any) {
+            // Revert only the specific item on failure
+            setItems(prev => {
+                if (prev.some(i => i.id === itemId)) return prev;
+                const updated = [...prev, itemToDelete];
+                updated.sort((a, b) => {
+                    const da = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+                    const db = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+                    return db - da;
+                });
+                return updated;
+            });
+            setError(e?.message || 'Could not delete that item.');
+        }
+    };
+
     const openIntakeWithParam = (param?: string) => {
         if (!param) {
             setIntakeParams({});
@@ -198,8 +225,8 @@ export function PulsePage({ identity, onOpenProfile, onNavigate }: Props) {
                 onBack={() => setView('feed')}
                 onManageChannels={() => setView('channels')}
                 onSuccess={() => {
+                    // Transitioning to 'feed' view re-runs the feed load effect without concurrent double-fetching
                     setView('feed');
-                    void loadFeed(true, selectedCategory);
                 }}
             />
         );
@@ -207,20 +234,32 @@ export function PulsePage({ identity, onOpenProfile, onNavigate }: Props) {
 
     return (
         <div className="max-w-2xl mx-auto p-4 sm:p-6 pb-24 min-h-full">
-            {/* Header: Title, subtitle, + Channels button */}
+            {/* Header: Title, subtitle, refresh & channels actions */}
             <div className="mb-4">
                 <div className="flex items-center justify-between gap-3 mb-1">
                     <h1 className="text-xl sm:text-2xl font-black text-nature-950 dark:text-white m-0 tracking-tight">
                         The Pulse
                     </h1>
-                    <button
-                        type="button"
-                        onClick={() => setView('channels')}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700/80 cursor-pointer shadow-sm transition-colors"
-                        aria-label="Manage your channels"
-                    >
-                        <span>+ Channels</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => void handleRefresh()}
+                            disabled={refreshing || loading}
+                            className="inline-flex items-center justify-center p-1.5 rounded-xl text-xs sm:text-sm font-bold bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700/80 cursor-pointer shadow-sm transition-colors disabled:opacity-50"
+                            aria-label="Refresh feed"
+                            title="Refresh feed"
+                        >
+                            <span className={refreshing ? 'inline-block animate-spin' : ''}>🔄</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setView('channels')}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700/80 cursor-pointer shadow-sm transition-colors"
+                            aria-label="Manage your channels"
+                        >
+                            <span>+ Channels</span>
+                        </button>
+                    </div>
                 </div>
                 <p className="text-xs sm:text-sm text-nature-500 dark:text-nature-400 m-0">
                     {activeLane === 'local'
@@ -380,6 +419,7 @@ export function PulsePage({ identity, onOpenProfile, onNavigate }: Props) {
                             item={item}
                             currentPubkey={identity?.publicKey}
                             onMute={handleMute}
+                            onDelete={handleDelete}
                             onOpenProfile={onOpenProfile}
                         />
                     ))}

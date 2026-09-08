@@ -9,7 +9,7 @@
  * - Responsive at 320dp and 1.3x font scale without horizontal overflow.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     isWebUrl,
     platformMeta,
@@ -24,12 +24,14 @@ interface Props {
     item: PulseFeedItem;
     currentPubkey?: string | null;
     onMute?: (itemId: string) => void | Promise<void>;
+    onDelete?: (itemId: string) => void | Promise<void>;
     onOpenProfile?: (pubkey: string) => void;
 }
 
-export function PulseFeedCard({ item, currentPubkey, onMute, onOpenProfile }: Props) {
+export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenProfile }: Props) {
     const [imageFailed, setImageFailed] = useState(false);
     const [showMuteConfirm, setShowMuteConfirm] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
     const platMeta = platformMeta(item.platform);
@@ -67,6 +69,30 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onOpenProfile }: Pr
             void onMute(item.id);
         }
     };
+
+    const handleDeleteClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmDelete = () => {
+        setShowDeleteConfirm(false);
+        if (onDelete) {
+            void onDelete(item.id);
+        }
+    };
+
+    useEffect(() => {
+        if (!showMuteConfirm && !showDeleteConfirm) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setShowMuteConfirm(false);
+                setShowDeleteConfirm(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [showMuteConfirm, showDeleteConfirm]);
 
     return (
         <article
@@ -123,15 +149,29 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onOpenProfile }: Pr
                         <span className="hidden xs:inline">{catMeta.label}</span>
                     </span>
 
-                    {isOwner && onMute && (
-                        <button
-                            type="button"
-                            onClick={handleMuteClick}
-                            className="text-xs font-semibold px-2 py-1 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900/40 cursor-pointer transition-colors"
-                            aria-label="Hide this item from feed"
-                        >
-                            Hide
-                        </button>
+                    {isOwner && (
+                        <div className="flex items-center gap-1.5">
+                            {onMute && (
+                                <button
+                                    type="button"
+                                    onClick={handleMuteClick}
+                                    className="text-xs font-semibold px-2 py-1 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 border border-nature-200 dark:border-nature-700 cursor-pointer transition-colors"
+                                    aria-label="Hide this item from feed"
+                                >
+                                    Hide
+                                </button>
+                            )}
+                            {onDelete && (
+                                <button
+                                    type="button"
+                                    onClick={handleDeleteClick}
+                                    className="text-xs font-semibold px-2 py-1 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900/40 cursor-pointer transition-colors"
+                                    aria-label="Delete this post"
+                                >
+                                    Delete
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
@@ -141,7 +181,12 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onOpenProfile }: Pr
                 onClick={handleOpenPost}
                 role="link"
                 tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleOpenPost(); }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleOpenPost();
+                    }
+                }}
                 className="cursor-pointer group block focus:outline-none focus:ring-2 focus:ring-terra-400"
                 aria-label={`Open post on ${platMeta.label}`}
             >
@@ -187,9 +232,18 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onOpenProfile }: Pr
 
             {/* Mute confirmation modal */}
             {showMuteConfirm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
-                        <h4 className="text-base font-bold text-nature-900 dark:text-white mb-2">
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+                    onClick={() => setShowMuteConfirm(false)}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby={`mute-dialog-title-${item.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl"
+                    >
+                        <h4 id={`mute-dialog-title-${item.id}`} className="text-base font-bold text-nature-900 dark:text-white mb-2">
                             Hide this post from feed?
                         </h4>
                         <p className="text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed">
@@ -206,9 +260,48 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onOpenProfile }: Pr
                             <button
                                 type="button"
                                 onClick={confirmMute}
-                                className="px-4 py-2 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer"
+                                className="px-4 py-2 rounded-xl text-sm font-bold bg-nature-800 hover:bg-nature-900 dark:bg-nature-700 dark:hover:bg-nature-600 text-white transition-colors cursor-pointer"
                             >
                                 Hide from feed
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete confirmation modal */}
+            {showDeleteConfirm && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+                    onClick={() => setShowDeleteConfirm(false)}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby={`delete-dialog-title-${item.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl"
+                    >
+                        <h4 id={`delete-dialog-title-${item.id}`} className="text-base font-bold text-nature-900 dark:text-white mb-2">
+                            Delete this post?
+                        </h4>
+                        <p className="text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed">
+                            "{item.title || 'This item'}" will be permanently removed from The Pulse.
+                        </p>
+                        <div className="flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteConfirm(false)}
+                                className="px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 transition-colors cursor-pointer"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmDelete}
+                                className="px-4 py-2 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer"
+                            >
+                                Delete permanently
                             </button>
                         </div>
                     </div>

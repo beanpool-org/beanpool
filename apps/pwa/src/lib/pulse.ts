@@ -35,7 +35,13 @@ export function formatRelativeTime(dateString: string | null | undefined): strin
 }
 
 /**
- * Check whether a pulse item comes from an official community source.
+ * Which lane of the feed an item belongs to.
+ *
+ * SKETCH ONLY. In production this must be a server-side flag on the channel
+ * (creator_channels.is_official, set when an admin creates the channel) and the
+ * lane should be a query parameter on GET /api/pulse/feed so pagination stays
+ * correct. Deriving it on the client the way this does is a prototype shortcut:
+ * it cannot see items that live on later pages.
  */
 export function isOfficialSource(item: { source?: string; isOfficial?: boolean }): boolean {
     return item.source === 'official' || Boolean(item.isOfficial);

@@ -53,6 +53,23 @@ export function PulseNudges({
         try {
             // Note: readText() can reject if page doesn't have focus or permission is denied
             if (typeof document !== 'undefined' && !document.hasFocus()) return;
+
+            // Avoid unprompted system permission popups: check permissions API if available
+            if ('permissions' in navigator && typeof (navigator.permissions as any)?.query === 'function') {
+                try {
+                    const perm = await (navigator.permissions as any).query({ name: 'clipboard-read' });
+                    if (perm && perm.state !== 'granted') {
+                        return;
+                    }
+                } catch {
+                    // Querying clipboard-read not supported in this browser; do not background poll
+                    return;
+                }
+            } else {
+                // Permissions API not available; do not background poll
+                return;
+            }
+
             const text = await navigator.clipboard.readText();
             if (!text || !text.trim()) return;
 

@@ -10,6 +10,8 @@ import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult } from '@beanpool/core';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
+import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
+import { ReportModal } from '../components/ReportModal';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -45,6 +47,45 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [channels, setChannels] = useState<PublicCreatorChannel[]>([]);
 
     const isSelf = pubkey === identity.publicKey;
+    const [isBlocked, setIsBlocked] = useState(() => isUserBlocked(pubkey));
+    const [isBlocking, setIsBlocking] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+
+    useEffect(() => {
+        setIsBlocked(isUserBlocked(pubkey));
+        const unsub = onBlocklistUpdated(() => {
+            setIsBlocked(isUserBlocked(pubkey));
+        });
+        return unsub;
+    }, [pubkey]);
+
+    const handleBlock = async () => {
+        if (isBlocking) return;
+        const targetName = profile?.callsign || 'this user';
+        const confirmed = window.confirm(
+            `Block ${targetName}?\n\nThis will instantly hide all posts, offers, and messages from ${targetName}, and notify moderation.`
+        );
+        if (!confirmed) return;
+
+        try {
+            setIsBlocking(true);
+            await blockUser(pubkey, identity.publicKey, 'Abusive user reported via Trust Profile');
+            setIsBlocked(true);
+            alert(`${targetName} has been blocked and removed from your feed.`);
+        } catch (e: any) {
+            alert(e?.message || 'Failed to block user. Please try again.');
+        } finally {
+            setIsBlocking(false);
+        }
+    };
+
+    const handleUnblock = () => {
+        const targetName = profile?.callsign || 'this user';
+        if (!window.confirm(`Unblock ${targetName}?`)) return;
+        unblockUser(pubkey);
+        setIsBlocked(false);
+        alert(`${targetName} has been unblocked.`);
+    };
 
     const handleQuizComplete = async (quizResult: QuizResult) => {
         const publicArchetype = JSON.stringify({
@@ -163,7 +204,31 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         ✏️ Edit
                     </button>
                 ) : (
-                    <div className="w-[60px]"></div>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => setShowReportModal(true)}
+                            title="Report member"
+                            aria-label={`Report user ${profile?.callsign || ''}`}
+                            className="px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors flex items-center gap-1"
+                        >
+                            <span>🚩</span> <span className="hidden sm:inline">Report</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={isBlocked ? handleUnblock : handleBlock}
+                            disabled={isBlocking}
+                            aria-label={`${isBlocked ? 'Unblock' : 'Block'} user ${profile?.callsign || ''}`}
+                            className={`px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center gap-1 ${
+                                isBlocked
+                                    ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                    : 'border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
+                            }`}
+                        >
+                            <span>{isBlocked ? '🛡️' : '🚫'}</span>
+                            <span>{isBlocking ? 'Blocking…' : isBlocked ? 'Unblock' : 'Block'}</span>
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -209,15 +274,21 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     <ChannelChips channels={channels} />
 
                     {!isSelf && (
-                        <button 
-                            onClick={() => onMessage(pubkey)}
-                            className="mt-6 bg-emerald-600 hover:bg-emerald-500 text-white border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
-                        >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                            </svg>
-                            Send Message
-                        </button>
+                        isBlocked ? (
+                            <div className="mt-6 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-bold flex flex-wrap items-center gap-2 break-words">
+                                <span>🚫</span> <span className="min-w-0 flex-1 break-words">You have blocked this member. Messaging is disabled.</span>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => onMessage(pubkey)}
+                                className="mt-6 bg-emerald-600 hover:bg-emerald-500 text-white border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                                Send Message
+                            </button>
+                        )
                     )}
 
                     {canVouch && (
@@ -771,6 +842,36 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         </div>
                     </>
                 )}
+
+                {!isSelf && (
+                    <div className="mx-4 mt-8 mb-6 flex flex-col items-center gap-2">
+                        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
+                            <button
+                                type="button"
+                                onClick={() => setShowReportModal(true)}
+                                className="flex-1 py-3 px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold text-sm cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                            >
+                                <span>🚩</span> Report Member
+                            </button>
+                            <button
+                                type="button"
+                                onClick={isBlocked ? handleUnblock : handleBlock}
+                                disabled={isBlocking}
+                                className={`flex-1 py-3 px-4 rounded-xl border font-bold text-sm cursor-pointer transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-60 ${
+                                    isBlocked
+                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                        : 'border-red-300 dark:border-red-900/60 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
+                                }`}
+                            >
+                                <span>{isBlocked ? '🛡️' : '🚫'}</span>
+                                <span>{isBlocking ? 'Blocking…' : isBlocked ? 'Unblock Member' : `Block ${profile?.callsign || 'Member'}`}</span>
+                            </button>
+                        </div>
+                        <p className="text-center text-xs text-nature-500 dark:text-nature-400 max-w-xs mt-1 leading-relaxed">
+                            Blocking will instantly hide their content from your feed and notify moderation.
+                        </p>
+                    </div>
+                )}
             </div>
 
             {/* Edit Review Modal */}
@@ -856,6 +957,17 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 onClose={() => setShowQuizModal(false)}
                 onComplete={handleQuizComplete}
             />
+
+            {/* Report Modal */}
+            {showReportModal && (
+                <ReportModal
+                    isOpen={showReportModal}
+                    onClose={() => setShowReportModal(false)}
+                    reporterPubkey={identity.publicKey}
+                    targetPubkey={pubkey}
+                    targetName={profile?.callsign || 'Member'}
+                />
+            )}
         </div>
     );
 }

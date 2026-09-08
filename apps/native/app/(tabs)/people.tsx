@@ -129,7 +129,7 @@ export default function PeopleScreen() {
         },
     }));
 
-    const params = useLocalSearchParams<{ view: string }>();
+    const params = useLocalSearchParams<{ view?: string }>();
     const [view, setView] = useState<SubView>((params.view as SubView) || 'community');
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 

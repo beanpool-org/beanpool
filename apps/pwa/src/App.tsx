@@ -4,7 +4,7 @@
  * Handles:
  * - Identity gate (first-run → WelcomePage)
  * - Tab routing (Marketplace / Ledger)
- * - Persistent header with SyncStatus + PrivacyBadge
+ * - Persistent header with SyncStatus
  */
 
 import { useState, useEffect } from 'react';
@@ -18,10 +18,13 @@ import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
+import { normaliseVersion, isVersionOlder } from './lib/app-version';
+import { retryPendingReports } from './lib/blocklist';
 const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
+import { PulsePage } from './pages/PulsePage';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { ProfileSetup } from './components/ProfileSetup';
@@ -72,13 +75,14 @@ function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenP
     );
 }
 
-type Tab = 'map' | 'marketplace' | 'messages' | 'people' | 'ledger' | 'projects';
+type Tab = 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
 
 // What the header reads out of GET /api/community/health. `online` is ours, not the
 // node's: it records whether that call answered at all.
 interface NodeHealthState {
     online: boolean;
     version?: string;
+    minAppVersion?: string;
     nodeName?: string;
     callsign?: string;
     memberCount?: number;
@@ -109,6 +113,7 @@ export function App() {
     const [communityHealth, setCommunityHealth] = useState<NodeHealthState | null>(null);
     // The node's own version, once health has answered; the baked-in bundle version until then.
     const displayVersion = communityHealth?.version?.trim() || __APP_VERSION__;
+    const isVersionOutdated = !!(communityHealth?.minAppVersion && isVersionOlder(__APP_VERSION__, communityHealth.minAppVersion));
 
     const toggleCommunityStatus = () => {
         if (showCommunityStatus) {
@@ -153,7 +158,16 @@ export function App() {
             .then(h => { if (mounted) setCommunityHealth({ ...h, online: true }); })
             .catch(() => { if (mounted) setCommunityHealth(prev => ({ ...prev, online: false })); });
 
-        return () => { mounted = false; };
+        retryPendingReports().catch(() => {});
+        const handleOnline = () => {
+            retryPendingReports().catch(() => {});
+        };
+        window.addEventListener('online', handleOnline);
+
+        return () => {
+            mounted = false;
+            window.removeEventListener('online', handleOnline);
+        };
     }, []);
 
     // Connect to BeanPool Node once identity is loaded
@@ -238,6 +252,7 @@ export function App() {
 
     const TABS: { id: Tab; label: string; emoji: string }[] = [
         { id: 'marketplace', label: 'Market', emoji: '🤝' },
+        { id: 'pulse', label: 'Pulse', emoji: '📡' },
         { id: 'map', label: 'Map', emoji: '🗺️' },
         { id: 'projects', label: 'Commons', emoji: '🌱' },
         { id: 'messages', label: 'Chat', emoji: '💬' },
@@ -348,6 +363,32 @@ export function App() {
 
             {/* Main Content Viewport */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+                {/* Minimum Version Gate Banner (Non-dismissible) */}
+                {isVersionOutdated && (
+                    <div
+                        role="alert"
+                        aria-live="assertive"
+                        className="w-full bg-amber-600 dark:bg-amber-700 text-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-md z-[120] text-sm font-medium border-b border-amber-700 dark:border-amber-800 shrink-0"
+                    >
+                        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                            <span className="text-lg shrink-0" aria-hidden="true">⚠️</span>
+                            <div className="leading-tight">
+                                <span className="font-bold">App update required: </span>
+                                <span className="text-amber-100 text-xs sm:text-sm">
+                                    Your app version ({__APP_VERSION__}) is too old for this community (minimum required: v{normaliseVersion(communityHealth?.minAppVersion)}). Please refresh or reinstall to update.
+                                </span>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => window.location.reload()}
+                            className="px-3 py-1.5 bg-white text-amber-900 font-bold rounded-lg text-xs hover:bg-amber-50 active:scale-95 transition-all cursor-pointer border-none shadow-sm shrink-0"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                )}
+
                 {/* Header with Premium Dynamic AI Banner (Mobile only) */}
                 <header className="relative shadow-md md:hidden" style={{
                     display: 'flex',
@@ -377,7 +418,7 @@ export function App() {
                                 style={{ marginTop: '8px' }}
                                 onClick={toggleCommunityStatus}
                             >
-                                {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label}
+                                {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label === 'Pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label}
                             </span>
                         ) : (
                             <div 
@@ -475,6 +516,7 @@ export function App() {
                         <>
                             {activeTab === 'map' && <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}><MapPage identity={identity} openNewPost={openNewPost} onOpenNewPostHandled={() => setOpenNewPost(false)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} /></Suspense>}
                             {activeTab === 'marketplace' && <MarketplacePage identity={identity} marketClickCount={marketClickCount} openPostId={openMarketPostId} onPostOpened={() => setOpenMarketPostId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab === 'pulse' && <PulsePage identity={identity} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
                             {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} />}
@@ -528,7 +570,7 @@ export function App() {
                     padding: '0.2rem 4px',
                 }}>
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
-                    <div className="relative z-10 w-full flex gap-1">
+                    <div className="relative z-10 w-full flex gap-0.5 sm:gap-1">
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab.id && !showSettings;
                         return (
@@ -547,6 +589,7 @@ export function App() {
                             }}
                             style={{
                                 flex: 1,
+                                minWidth: 0,
                                 padding: 0,
                                 background: 'transparent',
                                 border: 'none',
@@ -559,8 +602,9 @@ export function App() {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 margin: '0 auto',
+                                width: '100%',
                                 gap: '0.1rem',
-                                padding: '0.15rem 0.5rem',
+                                padding: '0.15rem 2px',
                                 borderRadius: '10px',
                                 background: 'rgba(0,0,0,0.45)',
                                 border: '1px solid rgba(255,255,255,0.05)',
@@ -617,7 +661,7 @@ export function App() {
                                         </span>
                                     )}
                                 </span>
-                                <span className={isActive ? 'text-rainbow text-dark-aura' : 'text-dark-aura'} style={{ fontSize: '0.65rem', fontWeight: isActive ? 800 : 600 }}>
+                                <span className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: '0.6rem', lineHeight: 1.1 }}>
                                     {tab.label}
                                 </span>
                             </div>

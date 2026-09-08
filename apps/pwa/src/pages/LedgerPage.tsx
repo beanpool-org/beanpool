@@ -477,7 +477,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                                 {(balanceInfo?.commonsBalance ?? 0).toFixed(1)}
                                 <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt="B" />
                             </p>
-                            <p className="text-nature-450 dark:text-nature-450 text-[10px] mt-1 font-semibold">
+                            <p className="text-nature-500 dark:text-nature-400 text-[10px] mt-1 font-semibold">
                                 🌱 View Solvency & Tax
                             </p>
                         </button>

@@ -159,15 +159,24 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         const nodeId = String(ctx.query.nodeId || '');
         const filename = String(ctx.query.filename || '');
 
-        if (!nodeId || !filename || filename.includes('/') || filename.includes('..')) {
+        if (
+            !nodeId ||
+            !filename ||
+            filename !== path.basename(filename) ||
+            filename.includes('/') ||
+            filename.includes('\\') ||
+            filename.includes('..') ||
+            !/^beanpool-[\w-]+\.db$/.test(filename)
+        ) {
             ctx.status = 400;
             ctx.body = { error: 'Invalid parameters' };
             return;
         }
 
         const slug = nodeSlug(nodeId);
-        const filePath = path.join(BACKUPS_DIR, slug, 'history', filename);
-        if (!fs.existsSync(filePath)) {
+        const historyDir = path.resolve(BACKUPS_DIR, slug, 'history');
+        const filePath = path.resolve(historyDir, filename);
+        if (path.dirname(filePath) !== historyDir || !fs.existsSync(filePath)) {
             ctx.status = 404;
             ctx.body = { error: 'Archive file not found' };
             return;

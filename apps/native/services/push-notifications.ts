@@ -10,13 +10,13 @@ import { loadIdentity } from '../utils/identity';
 import { buildSignedHeaders } from '../utils/crypto';
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-let Notifications: any = null;
+let Notifications: typeof import('expo-notifications') | null = null;
 
 if (!isExpoGo) {
     try {
         Notifications = require('expo-notifications');
         // Configure how notifications appear when app is in foreground
-        Notifications.setNotificationHandler({
+        Notifications?.setNotificationHandler({
             handleNotification: async () => ({
                 shouldShowAlert: true,
                 shouldPlaySound: true,

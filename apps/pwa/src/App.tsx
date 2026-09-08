@@ -4,7 +4,7 @@
  * Handles:
  * - Identity gate (first-run → WelcomePage)
  * - Tab routing (Marketplace / Ledger)
- * - Persistent header with SyncStatus + PrivacyBadge
+ * - Persistent header with SyncStatus
  */
 
 import { useState, useEffect } from 'react';
@@ -18,6 +18,8 @@ import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
+import { normaliseVersion, isVersionOlder } from './lib/app-version';
+import { retryPendingReports } from './lib/blocklist';
 const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
@@ -79,6 +81,7 @@ type Tab = 'map' | 'marketplace' | 'messages' | 'people' | 'ledger' | 'projects'
 interface NodeHealthState {
     online: boolean;
     version?: string;
+    minAppVersion?: string;
     nodeName?: string;
     callsign?: string;
     memberCount?: number;
@@ -109,6 +112,7 @@ export function App() {
     const [communityHealth, setCommunityHealth] = useState<NodeHealthState | null>(null);
     // The node's own version, once health has answered; the baked-in bundle version until then.
     const displayVersion = communityHealth?.version?.trim() || __APP_VERSION__;
+    const isVersionOutdated = !!(communityHealth?.minAppVersion && isVersionOlder(__APP_VERSION__, communityHealth.minAppVersion));
 
     const toggleCommunityStatus = () => {
         if (showCommunityStatus) {
@@ -153,7 +157,16 @@ export function App() {
             .then(h => { if (mounted) setCommunityHealth({ ...h, online: true }); })
             .catch(() => { if (mounted) setCommunityHealth(prev => ({ ...prev, online: false })); });
 
-        return () => { mounted = false; };
+        retryPendingReports().catch(() => {});
+        const handleOnline = () => {
+            retryPendingReports().catch(() => {});
+        };
+        window.addEventListener('online', handleOnline);
+
+        return () => {
+            mounted = false;
+            window.removeEventListener('online', handleOnline);
+        };
     }, []);
 
     // Connect to BeanPool Node once identity is loaded
@@ -348,6 +361,32 @@ export function App() {
 
             {/* Main Content Viewport */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+                {/* Minimum Version Gate Banner (Non-dismissible) */}
+                {isVersionOutdated && (
+                    <div
+                        role="alert"
+                        aria-live="assertive"
+                        className="w-full bg-amber-600 dark:bg-amber-700 text-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-md z-[120] text-sm font-medium border-b border-amber-700 dark:border-amber-800 shrink-0"
+                    >
+                        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                            <span className="text-lg shrink-0" aria-hidden="true">⚠️</span>
+                            <div className="leading-tight">
+                                <span className="font-bold">App update required: </span>
+                                <span className="text-amber-100 text-xs sm:text-sm">
+                                    Your app version ({__APP_VERSION__}) is too old for this community (minimum required: v{normaliseVersion(communityHealth?.minAppVersion)}). Please refresh or reinstall to update.
+                                </span>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => window.location.reload()}
+                            className="px-3 py-1.5 bg-white text-amber-900 font-bold rounded-lg text-xs hover:bg-amber-50 active:scale-95 transition-all cursor-pointer border-none shadow-sm shrink-0"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                )}
+
                 {/* Header with Premium Dynamic AI Banner (Mobile only) */}
                 <header className="relative shadow-md md:hidden" style={{
                     display: 'flex',

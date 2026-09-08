@@ -101,12 +101,17 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
     ];
     const FEE_TICKS = [80, 90, 98]; // 500 / 1000 / 2000 boundaries
 
+    const valuemin = floor;
+    const valuemax = feeFreeMax;
+    const valuenow = Math.min(valuemax, Math.max(valuemin, balance));
+
     return (
         <div
             role="meter"
             aria-label="Credit balance gauge"
-            aria-valuenow={balance}
-            aria-valuemin={floor}
+            aria-valuenow={valuenow}
+            aria-valuemin={valuemin}
+            aria-valuemax={valuemax}
             aria-valuetext={`${fmt(balance)} Beans`}
             className={`select-none ${className}`}
             style={{ paddingTop: 28, position: 'relative' }}

@@ -113,5 +113,6 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 **Action:** Added `role="tablist"` and `aria-label="People navigation"` to the sub-nav wrapper, `type="button"`, `role="tab"`, and `aria-selected` to tab buttons, explicit `type="button"`, `aria-label`, and `focus-visible:ring-2` focus rings to avatar profile triggers and action buttons (Message 💬, Remove friend, + Add friend).
 
 ## 2026-09-05 - CreditBar ARIA Meter Semantics & Decorative Emoji Hiding
-**Learning:** `CreditBar.tsx` rendered a visual credit balance gauge without ARIA meter semantics (`role="meter"`, `aria-label`, `aria-valuenow`, `aria-valuemin`, `aria-valuetext`), rendering the gauge invisible to screen-reader users, and included raw decorative emoji icons (`⚖️`, `🎣`) that created noise in screen-reader navigation.
-**Action:** Added `role="meter"`, `aria-label="Credit balance gauge"`, `aria-valuenow={balance}`, `aria-valuemin={floor}`, and `aria-valuetext={`${fmt(balance)} Beans`}` to the container div, and wrapped decorative emojis with `<span aria-hidden="true">`.
+**Learning:** `CreditBar.tsx` rendered a visual credit balance gauge without ARIA meter semantics (`role="meter"`, `aria-label`, `aria-valuenow`, `aria-valuemin`, `aria-valuemax`, `aria-valuetext`), rendering the gauge invisible or invalid to screen-reader users, and included raw decorative emoji icons (`⚖️`, `🎣`) that created noise in screen-reader navigation.
+**Action:** Added `role="meter"`, `aria-label="Credit balance gauge"`, `aria-valuenow` clamped within `[floor, feeFreeMax]`, `aria-valuemin={floor}`, `aria-valuemax={feeFreeMax}`, and `aria-valuetext={`${fmt(balance)} Beans`}` to the container div, and wrapped decorative emojis with `<span aria-hidden="true">`.
+

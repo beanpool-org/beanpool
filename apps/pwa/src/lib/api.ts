@@ -262,6 +262,7 @@ export interface MemberProfile {
     joinedAt?: string;
     elderVouchedBy?: string | null;
     elderVouchedByCallsign?: string | null;
+    archetype?: string | null;
 }
 
 export async function updateMemberProfile(publicKey: string, update: {
@@ -269,6 +270,7 @@ export async function updateMemberProfile(publicKey: string, update: {
     bio?: string;
     contact?: { value: string; visibility: 'hidden' | 'trade_partners' | 'community' | 'friends' } | null;
     callsign?: string;
+    archetype?: string | null;
 }): Promise<{ success: boolean; profile: MemberProfile }> {
     return request('POST', '/api/profile/update', { publicKey, ...update });
 }

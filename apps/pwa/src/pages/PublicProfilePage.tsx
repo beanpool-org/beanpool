@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import {
-    getMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
+    getMemberProfile, updateMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
     submitRating, vouchMemberApi, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
     type PublicCreatorChannel
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ChannelChips } from '../components/ChannelChips';
+import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
+import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
 
@@ -22,6 +25,9 @@ interface Props {
 
 export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab }: Props) {
     const [profile, setProfile] = useState<MemberProfile | null>(null);
+    const [viewerProfile, setViewerProfile] = useState<MemberProfile | null>(null);
+    const [showQuizModal, setShowQuizModal] = useState(false);
+    const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
     const [ratings, setRatings] = useState<Rating[]>([]);
     const [stats, setStats] = useState<any>(null);
     const [activePosts, setActivePosts] = useState<MarketplacePost[]>([]);
@@ -81,6 +87,26 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         alert(`${targetName} has been unblocked.`);
     };
 
+    const handleQuizComplete = async (quizResult: QuizResult) => {
+        const publicArchetype = JSON.stringify({
+            primary: quizResult.primary,
+            secondary: quizResult.secondary,
+            mode: quizResult.mode,
+            updatedAt: quizResult.updatedAt,
+        });
+        const jsonStr = JSON.stringify(quizResult);
+        setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
+        if (isSelf) {
+            setProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
+        }
+        try {
+            await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
+        } catch (e) {
+            console.warn('[Archetype] Save failed:', e);
+            throw e;
+        }
+    };
+
     useEffect(() => {
         let cancelled = false;
         setLoading(true);
@@ -101,8 +127,16 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             isSelf ? getFriends(pubkey).catch(() => []) : Promise.resolve([]),
             // Viewer's own balance (when viewing someone else) — drives the Elder vouch button.
             isSelf ? Promise.resolve(null) : getBalance(identity.publicKey).catch(() => null),
-        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerBal]) => {
+            // Viewer's own profile (when viewing someone else) — drives Collaboration Chemistry synergy card.
+            isSelf ? Promise.resolve(null) : getMemberProfile(identity.publicKey, identity.publicKey).catch(() => null),
+        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerBal, viewerProf]) => {
+            if (cancelled) return;
             if (prof) setProfile(prof);
+            if (isSelf) {
+                setViewerProfile(prof);
+            } else if (viewerProf) {
+                setViewerProfile(viewerProf);
+            }
             if (viewerBal) setViewerBalance(viewerBal as BalanceInfo);
             if (rat) {
                 setStats({ average: rat.average, count: rat.count, asProvider: rat.asProvider, asReceiver: rat.asReceiver });
@@ -278,6 +312,152 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     )}
                 </div>
 
+                {/* ─── Collaboration Chemistry ─── */}
+                {(() => {
+                    if (loading || !profile) return null;
+                    const viewerArchetype = parseArchetype(viewerProfile?.archetype);
+                    const targetArchetype = parseArchetype(profile?.archetype);
+                    const synergy = (!isSelf && viewerArchetype && targetArchetype)
+                        ? calculateSynergy(viewerArchetype.primary, targetArchetype.primary)
+                        : null;
+
+                    if (synergy) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-5 shadow-sm space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-3xl select-none" aria-hidden="true">{synergy.emoji}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-base font-extrabold text-nature-950 dark:text-white truncate">
+                                            {synergy.title}
+                                        </div>
+                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                                            {synergy.headline}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-300 leading-relaxed m-0">
+                                    {synergy.summary}
+                                </p>
+
+                                <div className="space-y-1.5 pt-1">
+                                    {synergy.strengths.map((str: string, idx: number) => (
+                                        <div key={idx} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓</span>
+                                            <span>{str}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {synergy.collaborationTip && (
+                                    <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-300 leading-normal">
+                                        💡 <strong className="font-bold">Collaboration tip:</strong> {synergy.collaborationTip}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="button"
+                                    aria-label={`Collaborate with ${profile?.callsign || 'member'}`}
+                                    onClick={() => {
+                                        const viewerName = viewerArchetype ? (ARCHETYPES[viewerArchetype.primary]?.name || viewerArchetype.primary) : '';
+                                        const targetName = targetArchetype ? (ARCHETYPES[targetArchetype.primary]?.name || targetArchetype.primary) : '';
+                                        const message = buildSynergyCollabMessage(profile?.callsign, synergy.headline, viewerName, targetName);
+                                        setChatPrefill(message, pubkey);
+                                        onMessage(pubkey);
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                >
+                                    💬 Collaborate with {profile?.callsign || 'Member'}
+                                </button>
+                            </div>
+                        );
+                    }
+
+                    if (!isSelf && !viewerArchetype && targetArchetype) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-5 shadow-sm space-y-2.5">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl" aria-hidden="true">✨</span>
+                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white">
+                                        Collaboration Chemistry
+                                    </div>
+                                </div>
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                    Take the 60-second quiz to discover your working style alignment and project synergy with {profile?.callsign || 'this member'}.
+                                </p>
+                                <button
+                                    type="button"
+                                    aria-label="Take 60 second quiz to discover collaboration synergy"
+                                    onClick={() => {
+                                        setQuizInitialMode('quick');
+                                        setShowQuizModal(true);
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                >
+                                    ⚡ Take 60s Quiz
+                                </button>
+                            </div>
+                        );
+                    }
+
+                    if (!isSelf && viewerArchetype && !targetArchetype) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-5 shadow-sm space-y-2.5">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl" aria-hidden="true">✨</span>
+                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white">
+                                        Collaboration Chemistry
+                                    </div>
+                                </div>
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                    {profile?.callsign || 'This member'} hasn't taken their Archetype quiz yet. Send them a friendly nudge in chat to discover your working style alignment!
+                                </p>
+                                <button
+                                    type="button"
+                                    aria-label={`Nudge ${profile?.callsign || 'member'} to take Archetype quiz`}
+                                    onClick={() => {
+                                        const message = buildSynergyNudgeMessage(profile?.callsign);
+                                        setChatPrefill(message, pubkey);
+                                        onMessage(pubkey);
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                >
+                                    💬 Nudge {profile?.callsign || 'Member'} in Chat
+                                </button>
+                            </div>
+                        );
+                    }
+
+                    if (!isSelf && !viewerArchetype && !targetArchetype) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-5 shadow-sm space-y-2.5">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl" aria-hidden="true">✨</span>
+                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white">
+                                        Collaboration Chemistry
+                                    </div>
+                                </div>
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                    Take the 60-second quiz to discover your working style alignment and project synergy with {profile?.callsign || 'this member'}.
+                                </p>
+                                <button
+                                    type="button"
+                                    aria-label="Take 60 second quiz to discover collaboration synergy"
+                                    onClick={() => {
+                                        setQuizInitialMode('quick');
+                                        setShowQuizModal(true);
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                >
+                                    ⚡ Take 60s Quiz
+                                </button>
+                            </div>
+                        );
+                    }
+
+                    return null;
+                })()}
+
                 {/* Trust summary card (self only) — links to Ledger */}
                 {isSelf && balanceInfo && (
                     <div 
@@ -336,6 +516,109 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         </button>
                     </div>
                 )}
+
+                {/* Working style (self) */}
+                {isSelf && (() => {
+                    if (loading || !profile) return null;
+                    const mine = parseArchetype(profile?.archetype) || parseArchetype(viewerProfile?.archetype);
+                    const primary = mine ? ARCHETYPES[mine.primary] : null;
+                    const secondary = mine ? ARCHETYPES[mine.secondary] : null;
+
+                    if (mine && primary) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-3 p-5 shadow-sm space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-base font-extrabold text-nature-950 dark:text-white truncate">
+                                            {primary.name}
+                                        </div>
+                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                                            {primary.tagline}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-300 leading-relaxed m-0">
+                                    {primary.description}
+                                </p>
+
+                                {secondary && (
+                                    <div className="text-xs font-semibold text-nature-700 dark:text-nature-300">
+                                        Secondary rhythm: {secondary.emoji} {secondary.name}
+                                    </div>
+                                )}
+
+                                <div className="space-y-1.5 pt-1">
+                                    {primary.superpowers.map((sp: string, idx: number) => (
+                                        <div key={idx} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓</span>
+                                            <span>{sp}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-300 leading-normal">
+                                    💡 <strong className="font-bold">How you work best:</strong> {primary.collaborationStyle}
+                                </div>
+
+                                <div className="flex gap-2 pt-2">
+                                    {mine.mode === 'quick' && (
+                                        <button
+                                            type="button"
+                                            aria-label="Take the longer 27 question quiz for a more accurate result"
+                                            onClick={() => {
+                                                setQuizInitialMode('deep');
+                                                setShowQuizModal(true);
+                                            }}
+                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                        >
+                                            🧭 More accurate
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        aria-label="Retake community working style quiz"
+                                        onClick={() => {
+                                            setQuizInitialMode('quick');
+                                            setShowQuizModal(true);
+                                        }}
+                                        className={`py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                            mine.mode === 'quick' ? 'flex-1' : 'w-full'
+                                        }`}
+                                    >
+                                        🔄 Retake
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-3 p-5 shadow-sm space-y-2.5">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xl" aria-hidden="true">✨</span>
+                                <div className="text-[15px] font-bold text-nature-950 dark:text-white">
+                                    Your Working Style
+                                </div>
+                            </div>
+                            <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                Take the 60-second quiz to uncover your collaborative superpowers. Neighbours can then see how the two of you work together.
+                            </p>
+                            <button
+                                type="button"
+                                aria-label="Take 60 second community working style quiz"
+                                onClick={() => {
+                                    setQuizInitialMode('quick');
+                                    setShowQuizModal(true);
+                                }}
+                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                            >
+                                ⚡ Take 60s Quiz
+                            </button>
+                        </div>
+                    );
+                })()}
 
                 {loading ? (
                     <div className="flex justify-center p-12">
@@ -667,6 +950,13 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     </div>
                 </div>
             )}
+
+            <ArchetypeQuizModal
+                visible={showQuizModal}
+                initialMode={quizInitialMode}
+                onClose={() => setShowQuizModal(false)}
+                onComplete={handleQuizComplete}
+            />
 
             {/* Report Modal */}
             {showReportModal && (

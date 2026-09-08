@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
 import {
-    getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
+    getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getPendingRecoveryRequests,
     approveRecoveryRequest, rejectRecoveryRequest, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, purgeAccountApi
@@ -15,6 +15,8 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
 import { type Theme } from '../lib/useTheme';
+import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
+import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
 import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 
 interface Props {
@@ -329,6 +331,35 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
     const [success, setSuccess] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [profile, setProfile] = useState<MemberProfile | null>(null);
+    const [showQuizModal, setShowQuizModal] = useState(false);
+    const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
+
+    const handleQuizComplete = async (quizResult: QuizResult) => {
+        const publicArchetype = JSON.stringify({
+            primary: quizResult.primary,
+            secondary: quizResult.secondary,
+            mode: quizResult.mode,
+            updatedAt: quizResult.updatedAt,
+        });
+        try {
+            const res = await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
+            if (res?.profile) {
+                setProfile(res.profile);
+            } else {
+                setProfile(prev => prev ? { ...prev, archetype: JSON.stringify(quizResult) } : {
+                    publicKey: identity.publicKey,
+                    callsign: identity.callsign,
+                    avatar: null,
+                    bio: '',
+                    contact: null,
+                    archetype: JSON.stringify(quizResult),
+                });
+            }
+        } catch (e) {
+            console.warn('[Archetype] Save failed:', e);
+            throw e;
+        }
+    };
     const [showPrivateKey, setShowPrivateKey] = useState(false);
     const [deletionMode, setDeletionMode] = useState<'none' | 'options' | 'confirm_local' | 'confirm_purge' | 'purged'>('none');
     const [purgeError, setPurgeError] = useState<string | null>(null);
@@ -471,6 +502,123 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
                 {mode === 'menu' && (
                     <div className="space-y-6">
+                        {/* ─── COMMUNITY WORKING STYLE ─── */}
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                                COMMUNITY WORKING STYLE
+                            </div>
+                            {(() => {
+                                const parsed = parseArchetype(profile?.archetype);
+                                const primary = parsed ? ARCHETYPES[parsed.primary] : null;
+                                const secondary = parsed ? ARCHETYPES[parsed.secondary] : null;
+
+                                if (parsed && primary) {
+                                    return (
+                                        <div className="bg-white dark:bg-nature-900 rounded-2xl p-5 shadow-sm border border-nature-200 dark:border-nature-800 space-y-3">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="text-[15px] font-bold text-nature-950 dark:text-white truncate">
+                                                            {primary.name}
+                                                        </span>
+                                                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                                            {parsed.mode === 'deep' ? '27 Qs' : '9 Qs'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 truncate">
+                                                        {primary.tagline}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                                {primary.description}
+                                            </p>
+
+                                            {secondary && (
+                                                <div className="inline-block px-3 py-1 rounded-full bg-oat-100 dark:bg-nature-800 text-xs font-semibold text-nature-800 dark:text-nature-300 border border-nature-200 dark:border-nature-700">
+                                                    Secondary Rhythm: {secondary.emoji} {secondary.name}
+                                                </div>
+                                            )}
+
+                                            <div className="border-t border-nature-100 dark:border-nature-800 pt-3">
+                                                <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2">
+                                                    🌟 Your Community Superpowers
+                                                </div>
+                                                <ul className="space-y-1.5 m-0 p-0 list-none">
+                                                    {primary.superpowers.map((p, i) => (
+                                                        <li key={i} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
+                                                            <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
+                                                            <span>{p}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+
+                                            <div className="flex flex-wrap sm:flex-nowrap gap-2 pt-2">
+                                                {parsed.mode === 'quick' && (
+                                                    <button
+                                                        type="button"
+                                                        aria-label="Take the longer 27 question quiz for a more accurate result"
+                                                        onClick={() => {
+                                                            setQuizInitialMode('deep');
+                                                            setShowQuizModal(true);
+                                                        }}
+                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                                    >
+                                                        🧭 More accurate
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    aria-label="Retake community working style quiz"
+                                                    onClick={() => {
+                                                        setQuizInitialMode('quick');
+                                                        setShowQuizModal(true);
+                                                    }}
+                                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                                        parsed.mode === 'quick' ? 'flex-1' : 'w-full'
+                                                    }`}
+                                                >
+                                                    🔄 Retake
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-5 shadow-sm border border-nature-200 dark:border-nature-800">
+                                        <div className="flex items-start gap-3.5 mb-4">
+                                            <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-2xl shrink-0">
+                                                🌱
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-[15px] font-bold text-nature-950 dark:text-white mb-1">
+                                                    Discover Your Archetype
+                                                </div>
+                                                <p className="text-xs text-nature-600 dark:text-nature-400 leading-normal m-0">
+                                                    Take the 60-second quiz to uncover your collaborative superpowers and see relational synergy with neighbours.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            aria-label="Take 60-second community working style quiz"
+                                            onClick={() => {
+                                                setQuizInitialMode('quick');
+                                                setShowQuizModal(true);
+                                            }}
+                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
+                                        >
+                                            ⚡ Take 60s Quiz
+                                        </button>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
                         {/* ─── ACCOUNT & IDENTITY ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
@@ -1283,11 +1431,21 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                     <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden transition-colors">
                         <ProfilePage
                             identity={identity}
-                            onBack={() => setMode('menu')}
+                            onBack={() => {
+                                setMode('menu');
+                                getMemberProfile(identity.publicKey).then(setProfile).catch(() => {});
+                            }}
                             onIdentityUpdated={onIdentityUpdated}
                         />
                     </div>
                 )}
+
+                <ArchetypeQuizModal
+                    visible={showQuizModal}
+                    initialMode={quizInitialMode}
+                    onClose={() => setShowQuizModal(false)}
+                    onComplete={handleQuizComplete}
+                />
             </div>
         </div>
     );

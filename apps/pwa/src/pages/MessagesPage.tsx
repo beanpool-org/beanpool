@@ -17,6 +17,7 @@ import { encodePlaintext, decodePlaintext, encryptDM, decryptDM, isEncryptedNonc
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
+import { consumeChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
 
@@ -210,6 +211,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             markConversationReadApi(identity.publicKey, activeConv.id).then(() => {
                 setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, unreadCount: 0 } : c));
             }).catch(() => {});
+            // Check for prefilled draft from sessionStorage (e.g. Archetype synergy chat nudge)
+            const prefill = consumeChatPrefill(activeConv.id, activeConv.participants);
+            if (prefill) {
+                setDraft(prefill);
+                setTimeout(() => draftRef.current?.focus(), 100);
+            }
             // Poll for new messages every 3 seconds (backstop)
             pollRef.current = window.setInterval(() => loadMessages(activeConv.id), 3000);
             // Fast path: the WebSocket doorbell refreshes this conversation
@@ -281,15 +288,30 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         } catch { /* offline */ }
     }
 
-    // Auto-open conversation when navigating from Market "Message" button
+    // Auto-open conversation when navigating from Market "Message" button or profile chat
     useEffect(() => {
         if (!openConversationId) return;
         loadConversations().then(() => {
             // Find the conversation and open it
-            getConversations(identity.publicKey).then(result => {
-                const conv = result.conversations.find((c: Conversation) => c.id === openConversationId);
+            getConversations(identity.publicKey).then(async result => {
+                let conv = result.conversations.find((c: Conversation) => c.id === openConversationId);
+                if (!conv) {
+                    conv = result.conversations.find((c: Conversation) => c.type === 'dm' && c.participants.includes(openConversationId));
+                }
+                if (!conv && openConversationId.length >= 32) {
+                    try {
+                        const created = await createConversationApi('dm', [identity.publicKey, openConversationId], identity.publicKey);
+                        conv = created.conversation;
+                        await loadConversations();
+                    } catch { /* offline or failed */ }
+                }
                 if (conv) {
                     setActiveConv(conv);
+                    const prefill = consumeChatPrefill(conv.id, conv.participants);
+                    if (prefill) {
+                        setDraft(prefill);
+                        setTimeout(() => draftRef.current?.focus(), 100);
+                    }
                 }
                 onConversationOpened?.();
             });

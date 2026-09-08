@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi,
-    sendMessageApi, getMessageAttachmentApi, getMembers,
+    sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi, getMembers,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction,
 } from '../lib/api';
@@ -17,6 +17,9 @@ import { encodePlaintext, decodePlaintext, encryptDM, decryptDM, isEncryptedNonc
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
+
+const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
+const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -151,6 +154,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<number | null>(null);
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
+    const [editingMessage, setEditingMessage] = useState<ApiMessage | null>(null);
+    const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
     const draftRef = useRef<HTMLTextAreaElement>(null);
 
     // Auto-grow the composer with the draft (up to ~4 lines), collapsing back
@@ -163,6 +168,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         // otherwise the content sits 2px short and shows a scrollbar.
         el.style.height = Math.min(el.scrollHeight + 2, 100) + 'px';
     }, [draft]);
+
+    useEffect(() => {
+        const handleGlobalClick = () => setActiveEmojiPickerId(null);
+        window.addEventListener('click', handleGlobalClick);
+        return () => window.removeEventListener('click', handleGlobalClick);
+    }, []);
 
     useEffect(() => {
         loadConversations();
@@ -179,9 +190,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => {
         if (activeConv) {
             setReplyToMessage(null);
+            setEditingMessage(null);
+            setActiveEmojiPickerId(null);
             loadMessages(activeConv.id);
-            // Mark conversation as read when opened
-            markConversationReadApi(identity.publicKey, activeConv.id).catch(() => {});
+            // Mark conversation as read when opened and clear unread count immediately
+            markConversationReadApi(identity.publicKey, activeConv.id).then(() => {
+                setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, unreadCount: 0 } : c));
+            }).catch(() => {});
             // Poll for new messages every 3 seconds (backstop)
             pollRef.current = window.setInterval(() => loadMessages(activeConv.id), 3000);
             // Fast path: the WebSocket doorbell refreshes this conversation
@@ -237,6 +252,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setConversations(result.conversations);
             const txs = await getMyMarketplaceTransactions(identity.publicKey);
             setUserTransactions(txs);
+            if (activeConv) {
+                const fresh = result.conversations.find(c => c.id === activeConv.id);
+                if (fresh) {
+                    setActiveConv(prev => prev ? { ...prev, ...fresh } : fresh);
+                }
+            }
         } catch { /* offline */ }
     }
 
@@ -259,7 +280,70 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         try {
             const result = await getConversationMessages(convId);
             setMessages(result.messages);
+            if (result.conversation) {
+                const peerCursor = (result.conversation as any).readCursors?.find(
+                    (rc: any) => rc.publicKey !== identity.publicKey
+                );
+                setActiveConv(prev => {
+                    if (!prev || prev.id !== convId) return prev;
+                    return {
+                        ...prev,
+                        ...result.conversation,
+                        peerLastReadAt: peerCursor?.lastReadAt ?? (result.conversation as any).peerLastReadAt ?? prev.peerLastReadAt,
+                    };
+                });
+            }
         } catch { /* offline */ }
+    }
+
+    function handleStartEdit(msg: ApiMessage) {
+        setEditingMessage(msg);
+        setReplyToMessage(null);
+        setActiveEmojiPickerId(null);
+        const plainText = decryptMessage(msg);
+        setDraft(plainText);
+        draftRef.current?.focus();
+    }
+
+    function handleCancelEdit() {
+        setEditingMessage(null);
+        setDraft('');
+    }
+
+    async function handleToggleReaction(messageId: string, emoji: string) {
+        if (!activeConv) return;
+        // Optimistic update
+        setMessages(prev => prev.map(m => {
+            if (m.id !== messageId) return m;
+            let meta: any = {};
+            if (m.metadata) {
+                try { meta = JSON.parse(m.metadata); } catch { meta = {}; }
+            }
+            if (!meta.reactions) meta.reactions = [];
+            const idx = meta.reactions.findIndex((r: any) => r.author === identity.publicKey);
+            if (idx > -1) {
+                if (meta.reactions[idx].emoji === emoji) {
+                    meta.reactions.splice(idx, 1);
+                } else {
+                    meta.reactions[idx].emoji = emoji;
+                }
+            } else {
+                meta.reactions.push({ emoji, author: identity.publicKey });
+            }
+            return { ...m, metadata: JSON.stringify(meta) };
+        }));
+        setActiveEmojiPickerId(null);
+
+        try {
+            const res = await toggleMessageReactionApi(messageId, identity.publicKey, emoji);
+            if (res && res.metadata) {
+                setMessages(prev => prev.map(m => m.id === messageId ? { ...m, metadata: res.metadata } : m));
+            }
+        } catch (err: any) {
+            console.error('Failed to react:', err);
+            alert(err.message || 'Failed to react to message');
+            await loadMessages(activeConv.id);
+        }
     }
 
     async function loadMembers() {
@@ -314,21 +398,43 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     async function handleSend() {
         if (!draft.trim() || !activeConv) return;
         setSending(true);
+
+        const wasEditing = editingMessage;
         try {
             const ctx = dmCtxFor(activeConv);
             const { ciphertext, nonce } = ctx ? encryptDM(draft.trim(), ctx) : encodePlaintext(draft.trim());
-            let metadata: string | undefined = undefined;
-            if (replyToMessage) {
-                metadata = JSON.stringify({ replyToId: replyToMessage.id });
-            }
-            // 1. Store locally (Server will handle Libp2p federation relay automatically)
-            await sendMessageApi(activeConv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata);
 
-            setDraft('');
-            setReplyToMessage(null);
-            await loadMessages(activeConv.id);
+            if (wasEditing) {
+                const nowIso = new Date().toISOString();
+                setMessages(prev => prev.map(m => m.id === wasEditing.id ? {
+                    ...m,
+                    ciphertext,
+                    nonce,
+                    editedAt: nowIso,
+                } : m));
+                setEditingMessage(null);
+                setDraft('');
+
+                await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
+                await loadMessages(activeConv.id);
+            } else {
+                let metadata: string | undefined = undefined;
+                if (replyToMessage) {
+                    metadata = JSON.stringify({ replyToId: replyToMessage.id });
+                }
+                // 1. Store locally (Server will handle Libp2p federation relay automatically)
+                await sendMessageApi(activeConv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata);
+
+                setDraft('');
+                setReplyToMessage(null);
+                await loadMessages(activeConv.id);
+            }
         } catch (err: any) {
-            alert(err.message || 'Failed to send message');
+            alert(err.message || (wasEditing ? 'Failed to edit message' : 'Failed to send message'));
+            if (wasEditing) {
+                setEditingMessage(null);
+                await loadMessages(activeConv.id);
+            }
         } finally {
             setSending(false);
         }
@@ -753,19 +859,85 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const isMe = msg.authorPubkey === identity.publicKey;
                         const readByPeer = isMe && !!activeConv?.peerLastReadAt &&
                             new Date(msg.timestamp).getTime() <= new Date(activeConv.peerLastReadAt).getTime();
+                        const isEdited = !!(msg.editedAt || msg.updatedAt);
+                        const canEdit = isMe && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
+                            (Date.now() - new Date(msg.timestamp).getTime() <= MESSAGE_EDIT_WINDOW_MS);
+
+                        let metaObj: any = null;
+                        try {
+                            if (msg.metadata) metaObj = JSON.parse(msg.metadata);
+                        } catch {}
+
+                        const reactions: { emoji: string; author: string }[] = metaObj?.reactions || [];
+                        const reactionCounts = reactions.reduce((acc: Record<string, number>, r: any) => {
+                            acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                            return acc;
+                        }, {});
+                        const uniqueEmojis = Object.keys(reactionCounts);
+                        const totalReactionsCount = reactions.length;
+                        const myReaction = reactions.find((r: any) => r.author === identity.publicKey);
+                        const showEmojiPicker = activeEmojiPickerId === msg.id;
+
                         return (
                             <div
                                 key={msg.id}
                                 id={`msg-${msg.id}`}
                                 style={{
                                     alignSelf: isMe ? 'flex-end' : 'flex-start',
-                                    maxWidth: '80%',
+                                    maxWidth: '85%',
+                                    position: 'relative',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: isMe ? 'flex-end' : 'flex-start',
                                 }}
                             >
                                 {!isMe && activeConv.type === 'group' && (
                                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
                                         {membersByPublicKey.get(msg.authorPubkey)?.callsign
                                             || msg.authorPubkey.substring(0, 8)}
+                                    </div>
+                                )}
+                                {showEmojiPicker && (
+                                    <div
+                                        onClick={(e) => e.stopPropagation()}
+                                        style={{
+                                            position: 'absolute',
+                                            bottom: '100%',
+                                            [isMe ? 'right' : 'left']: 0,
+                                            marginBottom: '4px',
+                                            background: 'var(--bg-card)',
+                                            border: '1px solid var(--border-primary)',
+                                            borderRadius: '24px',
+                                            padding: '4px 8px',
+                                            display: 'flex',
+                                            gap: '4px',
+                                            boxShadow: 'var(--shadow-card)',
+                                            zIndex: 30,
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        {ALLOWED_REACTIONS.map((emoji) => (
+                                            <button
+                                                key={emoji}
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleToggleReaction(msg.id, emoji);
+                                                }}
+                                                style={{
+                                                    background: myReaction?.emoji === emoji ? 'var(--bg-hover)' : 'transparent',
+                                                    border: myReaction?.emoji === emoji ? '1px solid var(--accent)' : '1px solid transparent',
+                                                    borderRadius: '16px',
+                                                    padding: '2px 6px',
+                                                    fontSize: '1.2rem',
+                                                    cursor: 'pointer',
+                                                    lineHeight: 1,
+                                                }}
+                                                title={`React with ${emoji}`}
+                                            >
+                                                {emoji}
+                                            </button>
+                                        ))}
                                     </div>
                                 )}
                                 <div style={{
@@ -780,52 +952,44 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     border: isMe ? 'none' : '1px solid var(--border-primary)',
                                     wordBreak: 'break-word',
                                 }}>
-                                    {(() => {
-                                        let metaObj: any = null;
-                                        try {
-                                            if (msg.metadata) metaObj = JSON.parse(msg.metadata);
-                                        } catch {}
-                                        
-                                        if (metaObj && metaObj.replyToId) {
-                                            const parentMsg = messagesById.get(metaObj.replyToId);
-                                            const parentText = parentMsg ? (parentMsg.type === 'image' ? '🔒 Photo' : decryptMessage(parentMsg)) : 'Message not found';
-                                            const parentAuthor = parentMsg 
-                                                ? (membersByPublicKey.get(parentMsg.authorPubkey)?.callsign
-                                                   || (parentMsg.authorPubkey === identity.publicKey ? 'You' : parentMsg.authorPubkey.substring(0, 8))) 
-                                                : 'Someone';
-                                            return (
-                                                <div 
-                                                    style={{
-                                                        background: isMe ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
-                                                        borderLeft: `3px solid ${isMe ? '#fff' : 'var(--accent)'}`,
-                                                        padding: '4px 8px',
-                                                        borderRadius: '4px',
-                                                        marginBottom: '6px',
-                                                        fontSize: '0.8rem',
-                                                        opacity: 0.85,
-                                                        cursor: 'pointer',
-                                                    }} 
-                                                    onClick={() => {
-                                                        const el = document.getElementById(`msg-${metaObj.replyToId}`);
-                                                        if (el) {
-                                                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                            el.style.transition = 'background-color 0.5s';
-                                                            const origBg = el.style.backgroundColor;
-                                                            el.style.backgroundColor = 'var(--bg-hover)';
-                                                            setTimeout(() => { el.style.backgroundColor = origBg; }, 1500);
-                                                        }
-                                                    }}
-                                                >
-                                                    <div style={{ fontWeight: 700, fontSize: '0.75rem', color: isMe ? '#fff' : 'var(--accent)', marginBottom: '2px' }}>
-                                                        {parentAuthor}
-                                                    </div>
-                                                    <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '280px' }}>
-                                                        {parentText}
-                                                    </div>
+                                    {metaObj && metaObj.replyToId && (() => {
+                                        const parentMsg = messagesById.get(metaObj.replyToId);
+                                        const parentText = parentMsg ? (parentMsg.type === 'image' ? '🔒 Photo' : decryptMessage(parentMsg)) : 'Message not found';
+                                        const parentAuthor = parentMsg 
+                                            ? (membersByPublicKey.get(parentMsg.authorPubkey)?.callsign
+                                               || (parentMsg.authorPubkey === identity.publicKey ? 'You' : parentMsg.authorPubkey.substring(0, 8))) 
+                                            : 'Someone';
+                                        return (
+                                            <div 
+                                                style={{
+                                                    background: isMe ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
+                                                    borderLeft: `3px solid ${isMe ? '#fff' : 'var(--accent)'}`,
+                                                    padding: '4px 8px',
+                                                    borderRadius: '4px',
+                                                    marginBottom: '6px',
+                                                    fontSize: '0.8rem',
+                                                    opacity: 0.85,
+                                                    cursor: 'pointer',
+                                                }} 
+                                                onClick={() => {
+                                                    const el = document.getElementById(`msg-${metaObj.replyToId}`);
+                                                    if (el) {
+                                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                        el.style.transition = 'background-color 0.5s';
+                                                        const origBg = el.style.backgroundColor;
+                                                        el.style.backgroundColor = 'var(--bg-hover)';
+                                                        setTimeout(() => { el.style.backgroundColor = origBg; }, 1500);
+                                                    }
+                                                }}
+                                            >
+                                                <div style={{ fontWeight: 700, fontSize: '0.75rem', color: isMe ? '#fff' : 'var(--accent)', marginBottom: '2px' }}>
+                                                    {parentAuthor}
                                                 </div>
-                                            );
-                                        }
-                                        return null;
+                                                <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '280px' }}>
+                                                    {parentText}
+                                                </div>
+                                            </div>
+                                        );
                                     })()}
                                     <div style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
                                         {msg.type === 'image' ? (() => {
@@ -863,11 +1027,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         marginLeft: '8px',
                                         marginTop: '4px',
                                         display: 'inline-flex',
+                                        flexWrap: 'wrap',
                                         alignItems: 'center',
-                                        gap: '2px',
+                                        justifyContent: 'flex-end',
+                                        gap: '4px',
                                         userSelect: 'none',
                                         verticalAlign: 'bottom',
                                     }}>
+                                        {isEdited ? 'edited · ' : ''}
                                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         {isMe && (
                                             <span style={{ marginLeft: '2px', color: readByPeer ? '#38bdf8' : 'rgba(255, 255, 255, 0.5)' }}>
@@ -875,9 +1042,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             </span>
                                         )}
                                         <span
-                                            onClick={(e) => { e.stopPropagation(); setReplyToMessage(msg); }}
+                                            onClick={(e) => { e.stopPropagation(); setReplyToMessage(msg); setEditingMessage(null); }}
                                             style={{
-                                                marginLeft: '6px',
+                                                marginLeft: '4px',
                                                 cursor: 'pointer',
                                                 color: isMe ? '#a5f3fc' : 'var(--accent)',
                                                 fontWeight: 600
@@ -885,23 +1052,109 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         >
                                             Reply
                                         </span>
+                                        <span
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setActiveEmojiPickerId(activeEmojiPickerId === msg.id ? null : msg.id);
+                                            }}
+                                            style={{
+                                                cursor: 'pointer',
+                                                color: isMe ? '#a5f3fc' : 'var(--accent)',
+                                                fontWeight: 600
+                                            }}
+                                            title="React"
+                                        >
+                                            React
+                                        </span>
+                                        {canEdit && (
+                                            <span
+                                                onClick={(e) => { e.stopPropagation(); handleStartEdit(msg); }}
+                                                style={{
+                                                    cursor: 'pointer',
+                                                    color: isMe ? '#a5f3fc' : 'var(--accent)',
+                                                    fontWeight: 600
+                                                }}
+                                            >
+                                                Edit
+                                            </span>
+                                        )}
                                     </span>
                                 </div>
+                                {totalReactionsCount > 0 && (
+                                    <div
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveEmojiPickerId(activeEmojiPickerId === msg.id ? null : msg.id);
+                                        }}
+                                        style={{
+                                            marginTop: '3px',
+                                            marginBottom: '2px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '3px',
+                                            background: 'var(--bg-card)',
+                                            border: `1px solid ${myReaction ? 'var(--accent)' : 'var(--border-primary)'}`,
+                                            borderRadius: '12px',
+                                            padding: '2px 6px',
+                                            fontSize: '0.75rem',
+                                            lineHeight: 1,
+                                            cursor: 'pointer',
+                                            boxShadow: 'var(--shadow-card)',
+                                            color: 'var(--text-primary)',
+                                            userSelect: 'none',
+                                        }}
+                                        title={reactions.map((r: any) => `${r.author === identity.publicKey ? 'You' : (membersByPublicKey.get(r.author)?.callsign || r.author.slice(0, 8))}: ${r.emoji}`).join('\n')}
+                                    >
+                                        <span>{uniqueEmojis.join(' ')}</span>
+                                        {totalReactionsCount > 1 && (
+                                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                                                {totalReactionsCount}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Reply Preview */}
-                {replyToMessage && (
+                {/* Edit Preview */}
+                {editingMessage && (
                     <div style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         padding: '0.5rem 1rem', background: 'var(--bg-secondary)',
                         borderTop: '1px solid var(--border-primary)',
                         fontSize: '0.85rem', color: 'var(--text-secondary)'
                     }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)', paddingLeft: '8px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)', paddingLeft: '8px', minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--accent)' }}>
+                                Editing message
+                            </div>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '300px' }}>
+                                {decryptMessage(editingMessage)}
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            aria-label="Cancel edit"
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '4px' }}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
+
+                {/* Reply Preview */}
+                {replyToMessage && !editingMessage && (
+                    <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '0.5rem 1rem', background: 'var(--bg-secondary)',
+                        borderTop: '1px solid var(--border-primary)',
+                        fontSize: '0.85rem', color: 'var(--text-secondary)'
+                    }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)', paddingLeft: '8px', minWidth: 0 }}>
                             <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--accent)' }}>
                                 Replying to {replyToMessage.authorPubkey === identity.publicKey ? 'You' : (membersByPublicKey.get(replyToMessage.authorPubkey)?.callsign || 'Someone')}
                             </div>
@@ -910,6 +1163,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             </div>
                         </div>
                         <button
+                            type="button"
                             onClick={() => setReplyToMessage(null)}
                             aria-label="Cancel reply"
                             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '4px' }}
@@ -957,7 +1211,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 handleSend();
                             }
                         }}
-                        placeholder="Message..."
+                        placeholder={editingMessage ? "Edit message..." : "Message..."}
                         disabled={sending}
                         rows={1}
                         style={{
@@ -972,8 +1226,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         }}
                     />
                     <button
+                        type="button"
                         onClick={handleSend}
                         disabled={sending || !draft.trim()}
+                        title={editingMessage ? "Save edit" : "Send message"}
                         style={{
                             height: '40px',
                             width: '40px',
@@ -991,7 +1247,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             padding: 0,
                         }}
                     >
-                        {sending ? '…' : '↑'}
+                        {sending ? '…' : (editingMessage ? '✓' : '↑')}
                     </button>
                 </div>
             </div>

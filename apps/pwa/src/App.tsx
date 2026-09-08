@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
-import { connectToAnchor, onSystemAnnouncement } from './lib/sync';
+import { connectToAnchor, onSystemAnnouncement, onSyncActivity } from './lib/sync';
 import { checkMembership, getConversations, getMarketplacePosts, getMyMarketplaceTransactions, getCommunityHealth } from './lib/api';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
@@ -213,7 +213,12 @@ export function App() {
         };
         pollUnread();
         const interval = setInterval(pollUnread, 10000);
-        return () => clearInterval(interval);
+        // Fast path: update unread counts immediately on WebSocket activity
+        const unsubscribe = onSyncActivity(() => pollUnread());
+        return () => {
+            clearInterval(interval);
+            unsubscribe();
+        };
     }, [identity]);
 
     if (loading) {

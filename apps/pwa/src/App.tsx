@@ -22,6 +22,7 @@ const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.Map
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
+import { PulsePage } from './pages/PulsePage';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { ProfileSetup } from './components/ProfileSetup';
@@ -72,7 +73,7 @@ function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenP
     );
 }
 
-type Tab = 'map' | 'marketplace' | 'messages' | 'people' | 'ledger' | 'projects';
+type Tab = 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
 
 // What the header reads out of GET /api/community/health. `online` is ours, not the
 // node's: it records whether that call answered at all.
@@ -238,6 +239,7 @@ export function App() {
 
     const TABS: { id: Tab; label: string; emoji: string }[] = [
         { id: 'marketplace', label: 'Market', emoji: '🤝' },
+        { id: 'pulse', label: 'Pulse', emoji: '📡' },
         { id: 'map', label: 'Map', emoji: '🗺️' },
         { id: 'projects', label: 'Commons', emoji: '🌱' },
         { id: 'messages', label: 'Chat', emoji: '💬' },
@@ -377,7 +379,7 @@ export function App() {
                                 style={{ marginTop: '8px' }}
                                 onClick={toggleCommunityStatus}
                             >
-                                {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label}
+                                {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label === 'Pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label}
                             </span>
                         ) : (
                             <div 
@@ -475,6 +477,7 @@ export function App() {
                         <>
                             {activeTab === 'map' && <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}><MapPage identity={identity} openNewPost={openNewPost} onOpenNewPostHandled={() => setOpenNewPost(false)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} /></Suspense>}
                             {activeTab === 'marketplace' && <MarketplacePage identity={identity} marketClickCount={marketClickCount} openPostId={openMarketPostId} onPostOpened={() => setOpenMarketPostId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab === 'pulse' && <PulsePage identity={identity} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
                             {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} />}
@@ -528,7 +531,7 @@ export function App() {
                     padding: '0.2rem 4px',
                 }}>
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
-                    <div className="relative z-10 w-full flex gap-1">
+                    <div className="relative z-10 w-full flex gap-0.5 sm:gap-1">
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab.id && !showSettings;
                         return (
@@ -547,6 +550,7 @@ export function App() {
                             }}
                             style={{
                                 flex: 1,
+                                minWidth: 0,
                                 padding: 0,
                                 background: 'transparent',
                                 border: 'none',
@@ -559,8 +563,9 @@ export function App() {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 margin: '0 auto',
+                                width: '100%',
                                 gap: '0.1rem',
-                                padding: '0.15rem 0.5rem',
+                                padding: '0.15rem 2px',
                                 borderRadius: '10px',
                                 background: 'rgba(0,0,0,0.45)',
                                 border: '1px solid rgba(255,255,255,0.05)',
@@ -617,7 +622,7 @@ export function App() {
                                         </span>
                                     )}
                                 </span>
-                                <span className={isActive ? 'text-rainbow text-dark-aura' : 'text-dark-aura'} style={{ fontSize: '0.65rem', fontWeight: isActive ? 800 : 600 }}>
+                                <span className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: '0.6rem', lineHeight: 1.1 }}>
                                     {tab.label}
                                 </span>
                             </div>

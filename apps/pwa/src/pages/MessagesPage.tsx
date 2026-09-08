@@ -17,6 +17,7 @@ import { encodePlaintext, decodePlaintext, encryptDM, decryptDM, isEncryptedNonc
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
+import { consumeChatPrefill } from '../lib/archetypes';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -183,10 +184,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // Mark conversation as read when opened
             markConversationReadApi(identity.publicKey, activeConv.id).catch(() => {});
             // Check for prefilled draft from sessionStorage (e.g. Archetype synergy chat nudge)
-            const prefill = sessionStorage.getItem('bp_chat_prefill');
+            const prefill = consumeChatPrefill(activeConv.id, activeConv.participants);
             if (prefill) {
                 setDraft(prefill);
-                sessionStorage.removeItem('bp_chat_prefill');
                 setTimeout(() => draftRef.current?.focus(), 100);
             }
             // Poll for new messages every 3 seconds (backstop)
@@ -266,6 +266,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 }
                 if (conv) {
                     setActiveConv(conv);
+                    const prefill = consumeChatPrefill(conv.id, conv.participants);
+                    if (prefill) {
+                        setDraft(prefill);
+                        setTimeout(() => draftRef.current?.focus(), 100);
+                    }
                 }
                 onConversationOpened?.();
             });

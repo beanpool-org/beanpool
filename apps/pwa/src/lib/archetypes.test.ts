@@ -9,6 +9,12 @@ import {
     type ArchetypeKey,
     type QuizResult,
 } from '@beanpool/core';
+import {
+    buildSynergyCollabMessage,
+    buildSynergyNudgeMessage,
+    setChatPrefill,
+    consumeChatPrefill,
+} from './archetypes';
 
 describe('Archetype Quiz Parity & Logic', () => {
     it('has all 9 canonical archetypes defined with full metadata', () => {
@@ -102,11 +108,38 @@ describe('Archetype Quiz Parity & Logic', () => {
         expect(res.mode).toBe('deep');
     });
 
-    it('handles chat prefill via sessionStorage as used by PublicProfilePage nudge', () => {
-        const nudgeText = "Hey! I saw on your profile that we have Strong Synergy (Catalyst + Weaver). Let's collaborate!";
-        sessionStorage.setItem('bp_chat_prefill', nudgeText);
-        expect(sessionStorage.getItem('bp_chat_prefill')).toBe(nudgeText);
-        sessionStorage.removeItem('bp_chat_prefill');
+    it('builds synergy collaboration outreach message with headline and archetypes', () => {
+        const msg = buildSynergyCollabMessage('Alice', 'Strong Synergy', 'Catalyst', 'Weaver');
+        expect(msg).toBe("Hey Alice! I saw on your profile that we have Strong Synergy (Catalyst + Weaver). Let's collaborate! 🤝");
+
+        const msgFallback = buildSynergyCollabMessage(undefined, 'High Resonance', 'Sage', 'Guardian');
+        expect(msgFallback).toBe("Hey there! I saw on your profile that we have High Resonance (Sage + Guardian). Let's collaborate! 🤝");
+    });
+
+    it('builds synergy quiz nudge message matching native verbatim', () => {
+        const msg = buildSynergyNudgeMessage('Bob');
+        expect(msg).toBe('Hey Bob! Take the 60-second Archetype quiz on your profile so we can unlock our Collaboration Chemistry! ⚡');
+
+        const msgFallback = buildSynergyNudgeMessage(undefined);
+        expect(msgFallback).toBe('Hey there! Take the 60-second Archetype quiz on your profile so we can unlock our Collaboration Chemistry! ⚡');
+    });
+
+    it('stores and consumes recipient-scoped chat prefill preventing cross-chat leaks', () => {
+        const alicePubkey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+        const bobPubkey = 'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210';
+        const message = buildSynergyCollabMessage('Alice', 'Strong Synergy', 'Catalyst', 'Weaver');
+
+        // Store prefill targeted specifically to Alice
+        setChatPrefill(message, alicePubkey);
+
+        // Attempting to consume in Bob's chat must NOT return Alice's prefill
+        const bobDraft = consumeChatPrefill('conv-bob', [bobPubkey]);
+        expect(bobDraft).toBeNull();
+        expect(sessionStorage.getItem('bp_chat_prefill')).not.toBeNull();
+
+        // Consuming in Alice's chat must succeed and clear storage
+        const aliceDraft = consumeChatPrefill('conv-alice', [alicePubkey]);
+        expect(aliceDraft).toBe(message);
         expect(sessionStorage.getItem('bp_chat_prefill')).toBeNull();
     });
 });

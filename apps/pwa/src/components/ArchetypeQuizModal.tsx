@@ -64,6 +64,8 @@ export function ArchetypeQuizModal({
     const totalQuestions = questions.length;
     const progress = totalQuestions > 0 ? (currentIndex + 1) / totalQuestions : 0;
 
+    const [saveError, setSaveError] = useState<string | null>(null);
+
     const persistResult = useCallback(async (res: QuizResult) => {
         if (hasSavedRef.current) return;
         hasSavedRef.current = true;
@@ -72,6 +74,7 @@ export function ArchetypeQuizModal({
         } catch (e) {
             hasSavedRef.current = false; // let the explicit Save button retry
             console.warn('[ArchetypeQuiz] Save failed:', e);
+            throw e;
         }
     }, [onComplete]);
 
@@ -87,7 +90,7 @@ export function ArchetypeQuizModal({
             const finalResult = scoreQuiz(nextAnswers, mode);
             setResult(finalResult);
             setStep('result');
-            void persistResult(finalResult);
+            persistResult(finalResult).catch(() => {});
         }
     };
 
@@ -100,16 +103,21 @@ export function ArchetypeQuizModal({
     };
 
     const handleClose = () => {
-        if (result) void persistResult(result);
+        if (result && !hasSavedRef.current) {
+            persistResult(result).catch(() => {});
+        }
         onClose();
     };
 
     const handleSave = async () => {
         if (!result) return;
         setSaving(true);
+        setSaveError(null);
         try {
             await persistResult(result);
             onClose();
+        } catch (e: any) {
+            setSaveError(e?.message || 'Failed to save to profile. Please try again.');
         } finally {
             setSaving(false);
         }
@@ -129,20 +137,20 @@ export function ArchetypeQuizModal({
         >
             <div className="w-full max-w-lg min-h-screen sm:min-h-0 sm:max-h-[90vh] bg-oat-50 dark:bg-nature-950 sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-nature-200 dark:border-nature-800 transition-colors">
                 {/* ─── Header ─── */}
-                <div className="flex items-center justify-between px-4 py-3.5 bg-white dark:bg-nature-900 border-b border-nature-200 dark:border-nature-800 shrink-0">
+                <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-nature-900 border-b border-nature-200 dark:border-nature-800 shrink-0">
                     {step === 'quiz' ? (
                         <button
                             type="button"
                             aria-label="Go back to previous question"
                             onClick={handleBackQuestion}
-                            className="w-9 h-9 flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-700 dark:text-nature-300 transition-colors cursor-pointer border-none"
+                            className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-700 dark:text-nature-300 transition-colors cursor-pointer border-none"
                         >
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
                             </svg>
                         </button>
                     ) : (
-                        <div className="w-9 h-9" />
+                        <div className="w-11 h-11 min-w-[44px] min-h-[44px]" />
                     )}
 
                     <h3 className="text-base sm:text-lg font-bold text-nature-950 dark:text-white m-0 text-center flex-1 px-2 truncate">
@@ -157,7 +165,7 @@ export function ArchetypeQuizModal({
                         type="button"
                         aria-label="Close quiz modal"
                         onClick={handleClose}
-                        className="w-9 h-9 flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-500 hover:text-nature-900 dark:text-nature-400 dark:hover:text-white transition-colors cursor-pointer border-none text-lg font-bold"
+                        className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-500 hover:text-nature-900 dark:text-nature-400 dark:hover:text-white transition-colors cursor-pointer border-none text-lg font-bold"
                     >
                         ✕
                     </button>
@@ -197,8 +205,8 @@ export function ArchetypeQuizModal({
                                         ⚡
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between gap-2 mb-1">
-                                            <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                                            <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors min-w-0">
                                                 Quick Spark
                                             </span>
                                             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
@@ -230,8 +238,8 @@ export function ArchetypeQuizModal({
                                         🧭
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between gap-2 mb-1">
-                                            <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                                            <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors min-w-0">
                                                 Deep Resonance
                                             </span>
                                             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
@@ -388,6 +396,12 @@ export function ArchetypeQuizModal({
                                     })}
                                 </div>
                             </div>
+
+                            {saveError && (
+                                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300 leading-normal">
+                                    ⚠️ {saveError}
+                                </div>
+                            )}
 
                             {/* Action Buttons */}
                             <div className="pt-2 flex flex-col gap-2.5">

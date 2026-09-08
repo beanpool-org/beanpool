@@ -9,6 +9,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -61,6 +62,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
         } catch (e) {
             console.warn('[Archetype] Save failed:', e);
+            throw e;
         }
     };
 
@@ -87,6 +89,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             // Viewer's own profile (when viewing someone else) — drives Collaboration Chemistry synergy card.
             isSelf ? Promise.resolve(null) : getMemberProfile(identity.publicKey, identity.publicKey).catch(() => null),
         ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerBal, viewerProf]) => {
+            if (cancelled) return;
             if (prof) setProfile(prof);
             if (isSelf) {
                 setViewerProfile(prof);
@@ -240,6 +243,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
                 {/* ─── Collaboration Chemistry ─── */}
                 {(() => {
+                    if (loading || !profile) return null;
                     const viewerArchetype = parseArchetype(viewerProfile?.archetype);
                     const targetArchetype = parseArchetype(profile?.archetype);
                     const synergy = (!isSelf && viewerArchetype && targetArchetype)
@@ -279,6 +283,21 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         💡 <strong className="font-bold">Collaboration tip:</strong> {synergy.collaborationTip}
                                     </div>
                                 )}
+
+                                <button
+                                    type="button"
+                                    aria-label={`Collaborate with ${profile?.callsign || 'member'}`}
+                                    onClick={() => {
+                                        const viewerName = viewerArchetype ? (ARCHETYPES[viewerArchetype.primary]?.name || viewerArchetype.primary) : '';
+                                        const targetName = targetArchetype ? (ARCHETYPES[targetArchetype.primary]?.name || targetArchetype.primary) : '';
+                                        const message = buildSynergyCollabMessage(profile?.callsign, synergy.headline, viewerName, targetName);
+                                        setChatPrefill(message, pubkey);
+                                        onMessage(pubkey);
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                >
+                                    💬 Collaborate with {profile?.callsign || 'Member'}
+                                </button>
                             </div>
                         );
                     }
@@ -326,7 +345,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     type="button"
                                     aria-label={`Nudge ${profile?.callsign || 'member'} to take Archetype quiz`}
                                     onClick={() => {
-                                        sessionStorage.setItem('bp_chat_prefill', `Hey ${profile?.callsign || 'there'}! Take the 60-second Archetype quiz on your profile so we can unlock our Collaboration Chemistry! ⚡`);
+                                        const message = buildSynergyNudgeMessage(profile?.callsign);
+                                        setChatPrefill(message, pubkey);
                                         onMessage(pubkey);
                                     }}
                                     className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
@@ -428,6 +448,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
                 {/* Working style (self) */}
                 {isSelf && (() => {
+                    if (loading || !profile) return null;
                     const mine = parseArchetype(profile?.archetype) || parseArchetype(viewerProfile?.archetype);
                     const primary = mine ? ARCHETYPES[mine.primary] : null;
                     const secondary = mine ? ARCHETYPES[mine.secondary] : null;

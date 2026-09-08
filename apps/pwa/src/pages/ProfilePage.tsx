@@ -100,6 +100,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
             await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
         } catch (e) {
             console.warn('[Archetype] Save failed:', e);
+            throw e;
         }
     };
 
@@ -324,7 +325,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                 💡 <strong className="font-bold">How you work best:</strong> {primary.collaborationStyle}
                             </div>
 
-                            <div className="flex gap-2 pt-2">
+                            <div className="flex flex-wrap sm:flex-nowrap gap-2 pt-2">
                                 {mine.mode === 'quick' && (
                                     <button
                                         type="button"
@@ -333,7 +334,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                             setQuizInitialMode('deep');
                                             setShowQuizModal(true);
                                         }}
-                                        className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
                                     >
                                         🧭 More accurate
                                     </button>
@@ -345,7 +346,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
-                                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
                                         mine.mode === 'quick' ? 'flex-1' : 'w-full'
                                     }`}
                                 >

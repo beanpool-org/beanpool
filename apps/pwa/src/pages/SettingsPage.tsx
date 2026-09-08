@@ -319,10 +319,22 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
             updatedAt: quizResult.updatedAt,
         });
         try {
-            await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
-            setProfile(prev => prev ? { ...prev, archetype: JSON.stringify(quizResult) } : null);
+            const res = await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
+            if (res?.profile) {
+                setProfile(res.profile);
+            } else {
+                setProfile(prev => prev ? { ...prev, archetype: JSON.stringify(quizResult) } : {
+                    publicKey: identity.publicKey,
+                    callsign: identity.callsign,
+                    avatar: null,
+                    bio: '',
+                    contact: null,
+                    archetype: JSON.stringify(quizResult),
+                });
+            }
         } catch (e) {
             console.warn('[Archetype] Save failed:', e);
+            throw e;
         }
     };
     const [showPrivateKey, setShowPrivateKey] = useState(false);
@@ -521,18 +533,18 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                                 </ul>
                                             </div>
 
-                                            <div className="flex gap-2 pt-2">
+                                            <div className="flex flex-wrap sm:flex-nowrap gap-2 pt-2">
                                                 {parsed.mode === 'quick' && (
                                                     <button
                                                         type="button"
-                                                        aria-label="Deepen working style quiz with 27 questions"
+                                                        aria-label="Take the longer 27 question quiz for a more accurate result"
                                                         onClick={() => {
                                                             setQuizInitialMode('deep');
                                                             setShowQuizModal(true);
                                                         }}
-                                                        className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
+                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
                                                     >
-                                                        🧭 Deepen (27 Qs)
+                                                        🧭 More accurate
                                                     </button>
                                                 )}
                                                 <button
@@ -542,11 +554,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                                         setQuizInitialMode('quick');
                                                         setShowQuizModal(true);
                                                     }}
-                                                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm ${
+                                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
                                                         parsed.mode === 'quick' ? 'flex-1' : 'w-full'
                                                     }`}
                                                 >
-                                                    🔄 Retake Quiz
+                                                    🔄 Retake
                                                 </button>
                                             </div>
                                         </div>
@@ -1337,7 +1349,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                     <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden transition-colors">
                         <ProfilePage
                             identity={identity}
-                            onBack={() => setMode('menu')}
+                            onBack={() => {
+                                setMode('menu');
+                                getMemberProfile(identity.publicKey).then(setProfile).catch(() => {});
+                            }}
                             onIdentityUpdated={onIdentityUpdated}
                         />
                     </div>

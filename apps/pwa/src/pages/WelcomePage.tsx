@@ -10,7 +10,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
-import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership, recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl } from '../lib/api';
+import {
+    redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership,
+    recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl,
+    startFriendRecoverySessionApi, pollFriendRecoveryApi, completeFriendRecoveryApi, lookupRecoveryCallsign
+} from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
@@ -197,10 +201,26 @@ export function WelcomePage({ onComplete }: Props) {
     const [error, setError] = useState<string | null>(null);
 
     const [showRecovery, setShowRecovery] = useState(false);
-    const [recoveryMode, setRecoveryMode] = useState<'words' | 'social'>('words');
+    const [recoveryMode, setRecoveryMode] = useState<'words' | 'social' | 'friends'>('words');
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
 
-    // Social Recovery state
+    // Two-Layer Trusted Friend Recovery state
+    const [friendStep, setFriendStep] = useState<'lookup' | 'select' | 'waiting' | 'reconstructing'>('lookup');
+    const [friendCallsign, setFriendCallsign] = useState('');
+    const [friendLookupResults, setFriendLookupResults] = useState<any[]>([]);
+    const [friendSelectedProfile, setFriendSelectedProfile] = useState<any>(null);
+    const [friendCollectionId, setFriendCollectionId] = useState<string | null>(null);
+    const [friendEphIdentity, setFriendEphIdentity] = useState<{ publicKey: string; privateKey: string } | null>(null);
+    const [friendProgress, setFriendProgress] = useState<{
+        collected: number;
+        threshold: number;
+        enough: boolean;
+        hubAvailable: boolean;
+    }>({ collected: 0, threshold: 3, enough: false, hubAvailable: false });
+    const isFriendPollingRef = useRef(false);
+    const isFriendReconstructingRef = useRef(false);
+
+    // Social Recovery state (legacy guardians)
     const [socialStep, setSocialStep] = useState<'lookup' | 'select' | 'guess' | 'waiting'>('lookup');
     const [socialCallsign, setSocialCallsign] = useState('');
     const [socialLookupResults, setSocialLookupResults] = useState<any[]>([]);
@@ -343,6 +363,96 @@ export function WelcomePage({ onComplete }: Props) {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
+    // Two-layer friend recovery status poller
+    useEffect(() => {
+        let interval: any;
+        if (recoveryMode === 'friends' && friendStep === 'waiting' && friendCollectionId && friendEphIdentity) {
+            const poll = async () => {
+                if (isFriendPollingRef.current || isFriendReconstructingRef.current) return;
+                isFriendPollingRef.current = true;
+                try {
+                    const p = await pollFriendRecoveryApi(friendCollectionId, friendEphIdentity);
+                    setFriendProgress(p);
+                    if (p.enough) {
+                        isFriendReconstructingRef.current = true;
+                        setFriendStep('reconstructing');
+                        try {
+                            const restored = await completeFriendRecoveryApi(
+                                friendCollectionId,
+                                friendEphIdentity,
+                                friendSelectedProfile?.callsign,
+                                friendSelectedProfile?.publicKey,
+                            );
+                            onComplete(restored);
+                        } catch (recErr: any) {
+                            isFriendReconstructingRef.current = false;
+                            setFriendStep('waiting');
+                            setError(recErr.message || 'Failed to reconstruct account from shares.');
+                        }
+                    }
+                } catch (err: any) {
+                    console.warn('[FriendRecovery Poll] Error:', err.message);
+                } finally {
+                    isFriendPollingRef.current = false;
+                }
+            };
+
+            interval = setInterval(poll, 3000);
+            poll();
+        }
+        return () => clearInterval(interval);
+    }, [recoveryMode, friendStep, friendCollectionId, friendEphIdentity, friendSelectedProfile, onComplete]);
+
+    async function handleFriendLookup() {
+        if (!friendCallsign.trim()) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const results = await lookupRecoveryCallsign(friendCallsign.trim());
+            if (!results || results.length === 0) {
+                setError('No recovery-eligible accounts found with that callsign.');
+            } else {
+                setFriendLookupResults(results);
+                setFriendStep('select');
+            }
+        } catch (e: any) {
+            setError(e.message || 'Lookup failed. Check connection.');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleFriendSelect(profile: any) {
+        setFriendSelectedProfile(profile);
+        setLoading(true);
+        setError(null);
+        try {
+            const session = await startFriendRecoverySessionApi(profile.callsign);
+            setFriendCollectionId(session.collectionId);
+            setFriendEphIdentity(session.ephIdentity);
+            setFriendProgress({
+                collected: 0,
+                threshold: session.threshold,
+                enough: false,
+                hubAvailable: false,
+            });
+            setFriendStep('waiting');
+        } catch (e: any) {
+            setError(e.message || 'Failed to start recovery session.');
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function handleFriendCancel() {
+        if (window.confirm('Cancel Recovery? This will stop waiting for friend approvals on this device.')) {
+            isFriendReconstructingRef.current = false;
+            setFriendCollectionId(null);
+            setFriendEphIdentity(null);
+            setFriendStep('lookup');
+            setShowRecovery(false);
+        }
+    }
 
     // Social recovery status poller
     React.useEffect(() => {
@@ -1208,7 +1318,145 @@ export function WelcomePage({ onComplete }: Props) {
                             </button>
                         </>
                     ) : showRecovery ? (
-                        recoveryMode === 'social' ? (
+                        recoveryMode === 'friends' ? (
+                            /* ===== TWO-LAYER TRUSTED FRIEND RECOVERY FLOW ===== */
+                            <>
+                                {friendStep === 'lookup' && (
+                                    <>
+                                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem', textAlign: 'left' }}>
+                                            🛡️ Recover with Trusted Friends
+                                        </h3>
+                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5, textAlign: 'left' }}>
+                                            Enter your old callsign. We'll find your account so your trusted friend keepers can approve releasing your recovery pieces to this device.
+                                        </p>
+                                        <label htmlFor="friendCallsignInput" style={{ display: 'block', textAlign: 'left', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                                            Your Old Callsign
+                                        </label>
+                                        <input
+                                            id="friendCallsignInput"
+                                            type="text"
+                                            value={friendCallsign}
+                                            onChange={(e) => setFriendCallsign(e.target.value)}
+                                            placeholder="e.g. Marty"
+                                            style={inputStyle}
+                                            autoCapitalize="none"
+                                        />
+                                        {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'left' }}>{error}</p>}
+                                        <button
+                                            onClick={handleFriendLookup}
+                                            disabled={loading || !friendCallsign.trim()}
+                                            style={{
+                                                width: '100%', padding: '0.85rem', borderRadius: '10px', border: 'none',
+                                                background: loading || !friendCallsign.trim() ? '#555' : '#10b981',
+                                                color: '#fff', fontSize: '1rem', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
+                                            }}
+                                        >
+                                            {loading ? 'Finding Account...' : 'Find Account'}
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowRecovery(false); setError(null); }}
+                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', marginTop: '1rem' }}
+                                        >
+                                            ← Back
+                                        </button>
+                                    </>
+                                )}
+
+                                {friendStep === 'select' && (
+                                    <>
+                                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem', textAlign: 'left' }}>
+                                            Who are you?
+                                        </h3>
+                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', textAlign: 'left' }}>
+                                            Select your profile from the results below:
+                                        </p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                                            {friendLookupResults.map((p) => (
+                                                <button
+                                                    key={p.publicKey}
+                                                    onClick={() => handleFriendSelect(p)}
+                                                    style={{
+                                                        display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem',
+                                                        borderRadius: '12px', border: '1px solid var(--border-primary, #333)',
+                                                        background: 'var(--bg-secondary, #1e293b)', color: 'var(--text-primary)',
+                                                        cursor: 'pointer', textAlign: 'left', width: '100%',
+                                                    }}
+                                                >
+                                                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#10b98122', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#10b981' }}>
+                                                        {p.callsign?.charAt(0).toUpperCase() || '?'}
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{p.callsign}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Joined {new Date(p.joinedAt).toLocaleDateString()}</div>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button
+                                            onClick={() => setFriendStep('lookup')}
+                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer' }}
+                                        >
+                                            ← Back
+                                        </button>
+                                    </>
+                                )}
+
+                                {friendStep === 'waiting' && (
+                                    <>
+                                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem', textAlign: 'center' }}>
+                                            ⏳ Waiting for Friend Approvals
+                                        </h3>
+                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5, textAlign: 'center' }}>
+                                            Call any 2 of your trusted friends by phone and give them your Recovery Session Code to approve under <strong>Settings → Recovery Requests</strong>.
+                                        </p>
+
+                                        {friendCollectionId && (
+                                            <div style={{ background: 'var(--bg-secondary, #1e293b)', padding: '0.85rem', borderRadius: '12px', textAlign: 'center', marginBottom: '1rem', border: '1px solid var(--border-primary, #333)' }}>
+                                                <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                                                    Your Recovery Session Code
+                                                </div>
+                                                <div style={{ fontSize: '0.85rem', fontWeight: 700, fontFamily: 'monospace', color: '#10b981', userSelect: 'all', wordBreak: 'break-all' }}>
+                                                    {friendCollectionId}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div style={{ background: 'var(--bg-secondary, #1e293b)', padding: '1.25rem', borderRadius: '14px', textAlign: 'center', marginBottom: '1rem', border: '1px solid var(--border-primary, #333)' }}>
+                                            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                                                Friend Approvals Collected
+                                            </div>
+                                            <div style={{ fontSize: '2.25rem', fontWeight: 800, color: '#10b981' }}>
+                                                {friendProgress.collected} / 2
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                                                {friendProgress.hubAvailable ? '✅ Community Hub: Piece ready' : '⏳ Community Hub: Checking...'}
+                                            </div>
+                                        </div>
+
+                                        {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'center' }}>{error}</p>}
+
+                                        <button
+                                            onClick={handleFriendCancel}
+                                            style={{ background: 'none', border: '1px solid #ef444466', color: '#ef4444', padding: '0.6rem 1rem', borderRadius: '8px', cursor: 'pointer', width: '100%', fontSize: '0.85rem', fontWeight: 600 }}
+                                        >
+                                            Cancel Recovery
+                                        </button>
+                                    </>
+                                )}
+
+                                {friendStep === 'reconstructing' && (
+                                    <div style={{ padding: '2rem 1rem', textAlign: 'center' }}>
+                                        <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                            Reconstructing Account...
+                                        </h3>
+                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                            All recovery pieces collected! Restoring your secret key...
+                                        </p>
+                                    </div>
+                                )}
+                            </>
+                        ) : recoveryMode === 'social' ? (
                             /* ===== SOCIAL RECOVERY FLOW ===== */
                             <>
                                 {socialStep === 'lookup' && (
@@ -1876,6 +2124,14 @@ export function WelcomePage({ onComplete }: Props) {
                                         <span className="text-[10px] font-extrabold bg-emerald-600 text-white px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
                                             FASTEST
                                         </span>
+                                    </button>
+
+                                    <button
+                                        onClick={() => { setShowRecovery(true); setRecoveryMode('friends'); setError(null); }}
+                                        disabled={loading}
+                                        className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50/90 hover:bg-emerald-100/90 active:scale-[0.98] dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-900 dark:text-emerald-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                                    >
+                                        <span aria-hidden="true">🛡️</span> Recover with Trusted Friends
                                     </button>
 
                                     <button

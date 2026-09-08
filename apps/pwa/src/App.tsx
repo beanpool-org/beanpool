@@ -25,6 +25,7 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { ProfileSetup } from './components/ProfileSetup';
+import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 
 function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
     return (
@@ -473,6 +474,11 @@ export function App() {
                     {/* Tab content — always mounted when not in settings */}
                     {!showSettings && (
                         <>
+                            {activeTab !== 'map' && (
+                                <div className="max-w-xl mx-auto px-4 pt-2">
+                                    <RecoveryAlertBanner identity={identity} />
+                                </div>
+                            )}
                             {activeTab === 'map' && <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}><MapPage identity={identity} openNewPost={openNewPost} onOpenNewPostHandled={() => setOpenNewPost(false)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} /></Suspense>}
                             {activeTab === 'marketplace' && <MarketplacePage identity={identity} marketClickCount={marketClickCount} openPostId={openMarketPostId} onPostOpened={() => setOpenMarketPostId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}

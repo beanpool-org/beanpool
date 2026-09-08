@@ -41,6 +41,7 @@ import {
     sealShareToSso,
     splitTwoLayer,
     splitHubAndWhole,
+    toEd25519Seed,
     type SealedShare,
 } from '@beanpool/core';
 import { anchorUrl, signedPost, signedDelete } from './node-post';
@@ -215,7 +216,7 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
     // It was derived from the mnemonic at identity creation time.
     let seed: Uint8Array;
     try {
-        seed = hexToBytes(identity.privateKey);
+        seed = toEd25519Seed(hexToBytes(identity.privateKey));
         if (seed.length !== 32) {
             return nothing(`private key is ${seed.length} bytes, expected 32`);
         }
@@ -367,7 +368,7 @@ export async function enrolFriendKeepers(input: FriendEnrolmentInput): Promise<K
 
     let seed: Uint8Array;
     try {
-        seed = hexToBytes(identity.privateKey);
+        seed = toEd25519Seed(hexToBytes(identity.privateKey));
         if (seed.length !== 32) {
             return nothing(`private key is ${seed.length} bytes, expected 32`);
         }

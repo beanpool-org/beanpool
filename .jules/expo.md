@@ -62,3 +62,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `push-notifications.ts` used `let Notifications: any = null;` for dynamic loading of expo-notifications.
 **Learning:** Replaced `any` with `typeof import('expo-notifications') | null` to ensure type safety on dynamic module methods.
 **Pattern:** Use `typeof import('module-name') | null` for dynamically required modules in Expo services.
+
+## 2026-09-12 - [Fix route parameter type in people.tsx]
+**Issue:** `people.tsx` typed `useLocalSearchParams<{ view: string }>()` as a non-optional string parameter.
+**Learning:** When entering the People screen without route params, `view` is `undefined` at runtime. Updating to `{ view?: string }` ensures accurate parameter typing.
+**Pattern:** Always type search parameters as optional (`param?: string`) unless guaranteed by route definition.

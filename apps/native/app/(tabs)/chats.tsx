@@ -20,6 +20,15 @@ export default function ChatsScreen() {
     // and PeopleScreen reads that param off whichever route it is mounted on.
     const talkParams = useLocalSearchParams<{ view?: string }>();
     const [talkView, setTalkView] = useState<'messages' | 'people'>(talkParams.view ? 'people' : 'messages');
+
+    React.useEffect(() => {
+        if (talkParams.view === 'people') {
+            setTalkView('people');
+        } else if (talkParams.view === 'messages') {
+            setTalkView('messages');
+        }
+    }, [talkParams.view]);
+
     const [conversations, setConversations] = useState<any[]>([]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');

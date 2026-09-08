@@ -29,7 +29,7 @@ import {
     enrolKeepers, enrolFriendKeepers, enrolSsoKeeper, disconnectSsoKeeper,
 } from '../keeper-enrolment';
 import { signedPost, signedDelete, anchorUrl } from '../node-post';
-import { readHubShare, recordShareForHub } from '@beanpool/core';
+import { readHubShare, recordShareForHub, toEd25519Pkcs8 } from '@beanpool/core';
 
 const HUB_FRAGMENT_PATH = '/api/recovery/shares/hub-fragment';
 
@@ -313,6 +313,76 @@ describe('keeper-enrolment.ts', () => {
             // The deposit must not have happened at all.
             const paths = (signedPost as any).mock.calls.map((c: any[]) => c[1]);
             expect(paths).not.toContain('/api/recovery/shares/sso');
+        });
+
+        it('enrols with a 48-byte PKCS8 key (PWA-origin) and produces the same result as the equivalent 32-byte seed', async () => {
+            const storedHub = new Uint8Array(32).map((_, i) => (i * 11 + 5) & 0xff);
+            mockNode({ hubFragment: storedHub });
+
+            // 1. Enrol with 32-byte seed identity
+            const rawResult = await enrolSsoKeeper({
+                identity: IDENTITY,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
+            });
+            const rawHub = depositedHub();
+            const rawCall = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
+            const rawPayload = rawCall[2];
+
+            // 2. Enrol with 48-byte PKCS8 identity
+            vi.clearAllMocks();
+            mockNode({ hubFragment: storedHub });
+
+            const pkcs8Bytes = toEd25519Pkcs8(Buffer.from(IDENTITY.privateKey, 'hex'));
+            expect(pkcs8Bytes.length).toBe(48);
+            const pwaIdentity = {
+                ...IDENTITY,
+                privateKey: Buffer.from(pkcs8Bytes).toString('hex'),
+            };
+            expect(pwaIdentity.privateKey.length).toBe(96); // 48 hex bytes
+
+            const pkcs8Result = await enrolSsoKeeper({
+                identity: pwaIdentity,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
+            });
+
+            expect(pkcs8Result.error).toBeUndefined();
+            expect(pkcs8Result.enrolled).toEqual(rawResult.enrolled);
+            expect(pkcs8Result.generation).toEqual(rawResult.generation);
+            expect(pkcs8Result.available).toEqual(rawResult.available);
+
+            const pkcs8Hub = depositedHub();
+            expect(Array.from(pkcs8Hub)).toEqual(Array.from(rawHub));
+
+            const pkcs8Call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
+            const pkcs8Payload = pkcs8Call[2];
+            expect(pkcs8Payload.provider).toBe(rawPayload.provider);
+            expect(pkcs8Payload.idToken).toBe(rawPayload.idToken);
+            expect(pkcs8Payload.nonce).toBe(rawPayload.nonce);
+            expect(pkcs8Payload.shares[0]).toEqual(rawPayload.shares[0]);
+            expect(pkcs8Payload.shares[1].holderType).toBe(rawPayload.shares[1].holderType);
+            expect(pkcs8Payload.shares[1].shareIndex).toBe(rawPayload.shares[1].shareIndex);
+        });
+
+        it('rejects an invalid private key with a clear error', async () => {
+            const invalidIdentity = {
+                ...IDENTITY,
+                privateKey: '12345678', // 4 bytes
+            };
+            const result = await enrolSsoKeeper({
+                identity: invalidIdentity,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
+            });
+            expect(result.enrolled).toEqual([]);
+            expect(result.error).toContain('could not read the private key');
         });
     });
 

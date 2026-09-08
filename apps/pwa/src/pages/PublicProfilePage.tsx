@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
 import {
-    getMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
+    getMemberProfile, updateMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
     submitRating, vouchMemberApi, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
     type PublicCreatorChannel
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ChannelChips } from '../components/ChannelChips';
+import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
+import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
+import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
+import { ReportModal } from '../components/ReportModal';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -20,6 +25,9 @@ interface Props {
 
 export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab }: Props) {
     const [profile, setProfile] = useState<MemberProfile | null>(null);
+    const [viewerProfile, setViewerProfile] = useState<MemberProfile | null>(null);
+    const [showQuizModal, setShowQuizModal] = useState(false);
+    const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
     const [ratings, setRatings] = useState<Rating[]>([]);
     const [stats, setStats] = useState<any>(null);
     const [activePosts, setActivePosts] = useState<MarketplacePost[]>([]);
@@ -39,6 +47,65 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [channels, setChannels] = useState<PublicCreatorChannel[]>([]);
 
     const isSelf = pubkey === identity.publicKey;
+    const [isBlocked, setIsBlocked] = useState(() => isUserBlocked(pubkey));
+    const [isBlocking, setIsBlocking] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+
+    useEffect(() => {
+        setIsBlocked(isUserBlocked(pubkey));
+        const unsub = onBlocklistUpdated(() => {
+            setIsBlocked(isUserBlocked(pubkey));
+        });
+        return unsub;
+    }, [pubkey]);
+
+    const handleBlock = async () => {
+        if (isBlocking) return;
+        const targetName = profile?.callsign || 'this user';
+        const confirmed = window.confirm(
+            `Block ${targetName}?\n\nThis will instantly hide all posts, offers, and messages from ${targetName}, and notify moderation.`
+        );
+        if (!confirmed) return;
+
+        try {
+            setIsBlocking(true);
+            await blockUser(pubkey, identity.publicKey, 'Abusive user reported via Trust Profile');
+            setIsBlocked(true);
+            alert(`${targetName} has been blocked and removed from your feed.`);
+        } catch (e: any) {
+            alert(e?.message || 'Failed to block user. Please try again.');
+        } finally {
+            setIsBlocking(false);
+        }
+    };
+
+    const handleUnblock = () => {
+        const targetName = profile?.callsign || 'this user';
+        if (!window.confirm(`Unblock ${targetName}?`)) return;
+        unblockUser(pubkey);
+        setIsBlocked(false);
+        alert(`${targetName} has been unblocked.`);
+    };
+
+    const handleQuizComplete = async (quizResult: QuizResult) => {
+        const publicArchetype = JSON.stringify({
+            primary: quizResult.primary,
+            secondary: quizResult.secondary,
+            mode: quizResult.mode,
+            updatedAt: quizResult.updatedAt,
+        });
+        const jsonStr = JSON.stringify(quizResult);
+        setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
+        if (isSelf) {
+            setProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
+        }
+        try {
+            await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
+        } catch (e) {
+            console.warn('[Archetype] Save failed:', e);
+            throw e;
+        }
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -60,8 +127,16 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             isSelf ? getFriends(pubkey).catch(() => []) : Promise.resolve([]),
             // Viewer's own balance (when viewing someone else) — drives the Elder vouch button.
             isSelf ? Promise.resolve(null) : getBalance(identity.publicKey).catch(() => null),
-        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerBal]) => {
+            // Viewer's own profile (when viewing someone else) — drives Collaboration Chemistry synergy card.
+            isSelf ? Promise.resolve(null) : getMemberProfile(identity.publicKey, identity.publicKey).catch(() => null),
+        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerBal, viewerProf]) => {
+            if (cancelled) return;
             if (prof) setProfile(prof);
+            if (isSelf) {
+                setViewerProfile(prof);
+            } else if (viewerProf) {
+                setViewerProfile(viewerProf);
+            }
             if (viewerBal) setViewerBalance(viewerBal as BalanceInfo);
             if (rat) {
                 setStats({ average: rat.average, count: rat.count, asProvider: rat.asProvider, asReceiver: rat.asReceiver });
@@ -129,7 +204,31 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         ✏️ Edit
                     </button>
                 ) : (
-                    <div className="w-[60px]"></div>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => setShowReportModal(true)}
+                            title="Report member"
+                            aria-label={`Report user ${profile?.callsign || ''}`}
+                            className="px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors flex items-center gap-1"
+                        >
+                            <span>🚩</span> <span className="hidden sm:inline">Report</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={isBlocked ? handleUnblock : handleBlock}
+                            disabled={isBlocking}
+                            aria-label={`${isBlocked ? 'Unblock' : 'Block'} user ${profile?.callsign || ''}`}
+                            className={`px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center gap-1 ${
+                                isBlocked
+                                    ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                    : 'border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
+                            }`}
+                        >
+                            <span>{isBlocked ? '🛡️' : '🚫'}</span>
+                            <span>{isBlocking ? 'Blocking…' : isBlocked ? 'Unblock' : 'Block'}</span>
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -175,15 +274,21 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     <ChannelChips channels={channels} />
 
                     {!isSelf && (
-                        <button 
-                            onClick={() => onMessage(pubkey)}
-                            className="mt-6 bg-emerald-600 hover:bg-emerald-500 text-white border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
-                        >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                            </svg>
-                            Send Message
-                        </button>
+                        isBlocked ? (
+                            <div className="mt-6 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-bold flex flex-wrap items-center gap-2 break-words">
+                                <span>🚫</span> <span className="min-w-0 flex-1 break-words">You have blocked this member. Messaging is disabled.</span>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => onMessage(pubkey)}
+                                className="mt-6 bg-emerald-600 hover:bg-emerald-500 text-white border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                                Send Message
+                            </button>
+                        )
                     )}
 
                     {canVouch && (
@@ -206,6 +311,152 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         </div>
                     )}
                 </div>
+
+                {/* ─── Collaboration Chemistry ─── */}
+                {(() => {
+                    if (loading || !profile) return null;
+                    const viewerArchetype = parseArchetype(viewerProfile?.archetype);
+                    const targetArchetype = parseArchetype(profile?.archetype);
+                    const synergy = (!isSelf && viewerArchetype && targetArchetype)
+                        ? calculateSynergy(viewerArchetype.primary, targetArchetype.primary)
+                        : null;
+
+                    if (synergy) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-5 shadow-sm space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-3xl select-none" aria-hidden="true">{synergy.emoji}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-base font-extrabold text-nature-950 dark:text-white truncate">
+                                            {synergy.title}
+                                        </div>
+                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                                            {synergy.headline}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-300 leading-relaxed m-0">
+                                    {synergy.summary}
+                                </p>
+
+                                <div className="space-y-1.5 pt-1">
+                                    {synergy.strengths.map((str: string, idx: number) => (
+                                        <div key={idx} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓</span>
+                                            <span>{str}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {synergy.collaborationTip && (
+                                    <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-300 leading-normal">
+                                        💡 <strong className="font-bold">Collaboration tip:</strong> {synergy.collaborationTip}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="button"
+                                    aria-label={`Collaborate with ${profile?.callsign || 'member'}`}
+                                    onClick={() => {
+                                        const viewerName = viewerArchetype ? (ARCHETYPES[viewerArchetype.primary]?.name || viewerArchetype.primary) : '';
+                                        const targetName = targetArchetype ? (ARCHETYPES[targetArchetype.primary]?.name || targetArchetype.primary) : '';
+                                        const message = buildSynergyCollabMessage(profile?.callsign, synergy.headline, viewerName, targetName);
+                                        setChatPrefill(message, pubkey);
+                                        onMessage(pubkey);
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                >
+                                    💬 Collaborate with {profile?.callsign || 'Member'}
+                                </button>
+                            </div>
+                        );
+                    }
+
+                    if (!isSelf && !viewerArchetype && targetArchetype) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-5 shadow-sm space-y-2.5">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl" aria-hidden="true">✨</span>
+                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white">
+                                        Collaboration Chemistry
+                                    </div>
+                                </div>
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                    Take the 60-second quiz to discover your working style alignment and project synergy with {profile?.callsign || 'this member'}.
+                                </p>
+                                <button
+                                    type="button"
+                                    aria-label="Take 60 second quiz to discover collaboration synergy"
+                                    onClick={() => {
+                                        setQuizInitialMode('quick');
+                                        setShowQuizModal(true);
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                >
+                                    ⚡ Take 60s Quiz
+                                </button>
+                            </div>
+                        );
+                    }
+
+                    if (!isSelf && viewerArchetype && !targetArchetype) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-5 shadow-sm space-y-2.5">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl" aria-hidden="true">✨</span>
+                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white">
+                                        Collaboration Chemistry
+                                    </div>
+                                </div>
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                    {profile?.callsign || 'This member'} hasn't taken their Archetype quiz yet. Send them a friendly nudge in chat to discover your working style alignment!
+                                </p>
+                                <button
+                                    type="button"
+                                    aria-label={`Nudge ${profile?.callsign || 'member'} to take Archetype quiz`}
+                                    onClick={() => {
+                                        const message = buildSynergyNudgeMessage(profile?.callsign);
+                                        setChatPrefill(message, pubkey);
+                                        onMessage(pubkey);
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                >
+                                    💬 Nudge {profile?.callsign || 'Member'} in Chat
+                                </button>
+                            </div>
+                        );
+                    }
+
+                    if (!isSelf && !viewerArchetype && !targetArchetype) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-5 shadow-sm space-y-2.5">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl" aria-hidden="true">✨</span>
+                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white">
+                                        Collaboration Chemistry
+                                    </div>
+                                </div>
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                    Take the 60-second quiz to discover your working style alignment and project synergy with {profile?.callsign || 'this member'}.
+                                </p>
+                                <button
+                                    type="button"
+                                    aria-label="Take 60 second quiz to discover collaboration synergy"
+                                    onClick={() => {
+                                        setQuizInitialMode('quick');
+                                        setShowQuizModal(true);
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                >
+                                    ⚡ Take 60s Quiz
+                                </button>
+                            </div>
+                        );
+                    }
+
+                    return null;
+                })()}
 
                 {/* Trust summary card (self only) — links to Ledger */}
                 {isSelf && balanceInfo && (
@@ -265,6 +516,109 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         </button>
                     </div>
                 )}
+
+                {/* Working style (self) */}
+                {isSelf && (() => {
+                    if (loading || !profile) return null;
+                    const mine = parseArchetype(profile?.archetype) || parseArchetype(viewerProfile?.archetype);
+                    const primary = mine ? ARCHETYPES[mine.primary] : null;
+                    const secondary = mine ? ARCHETYPES[mine.secondary] : null;
+
+                    if (mine && primary) {
+                        return (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-3 p-5 shadow-sm space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-base font-extrabold text-nature-950 dark:text-white truncate">
+                                            {primary.name}
+                                        </div>
+                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                                            {primary.tagline}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-300 leading-relaxed m-0">
+                                    {primary.description}
+                                </p>
+
+                                {secondary && (
+                                    <div className="text-xs font-semibold text-nature-700 dark:text-nature-300">
+                                        Secondary rhythm: {secondary.emoji} {secondary.name}
+                                    </div>
+                                )}
+
+                                <div className="space-y-1.5 pt-1">
+                                    {primary.superpowers.map((sp: string, idx: number) => (
+                                        <div key={idx} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓</span>
+                                            <span>{sp}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-300 leading-normal">
+                                    💡 <strong className="font-bold">How you work best:</strong> {primary.collaborationStyle}
+                                </div>
+
+                                <div className="flex gap-2 pt-2">
+                                    {mine.mode === 'quick' && (
+                                        <button
+                                            type="button"
+                                            aria-label="Take the longer 27 question quiz for a more accurate result"
+                                            onClick={() => {
+                                                setQuizInitialMode('deep');
+                                                setShowQuizModal(true);
+                                            }}
+                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                        >
+                                            🧭 More accurate
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        aria-label="Retake community working style quiz"
+                                        onClick={() => {
+                                            setQuizInitialMode('quick');
+                                            setShowQuizModal(true);
+                                        }}
+                                        className={`py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                            mine.mode === 'quick' ? 'flex-1' : 'w-full'
+                                        }`}
+                                    >
+                                        🔄 Retake
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-3 p-5 shadow-sm space-y-2.5">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xl" aria-hidden="true">✨</span>
+                                <div className="text-[15px] font-bold text-nature-950 dark:text-white">
+                                    Your Working Style
+                                </div>
+                            </div>
+                            <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                Take the 60-second quiz to uncover your collaborative superpowers. Neighbours can then see how the two of you work together.
+                            </p>
+                            <button
+                                type="button"
+                                aria-label="Take 60 second community working style quiz"
+                                onClick={() => {
+                                    setQuizInitialMode('quick');
+                                    setShowQuizModal(true);
+                                }}
+                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                            >
+                                ⚡ Take 60s Quiz
+                            </button>
+                        </div>
+                    );
+                })()}
 
                 {loading ? (
                     <div className="flex justify-center p-12">
@@ -488,6 +842,36 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         </div>
                     </>
                 )}
+
+                {!isSelf && (
+                    <div className="mx-4 mt-8 mb-6 flex flex-col items-center gap-2">
+                        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
+                            <button
+                                type="button"
+                                onClick={() => setShowReportModal(true)}
+                                className="flex-1 py-3 px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 font-bold text-sm cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                            >
+                                <span>🚩</span> Report Member
+                            </button>
+                            <button
+                                type="button"
+                                onClick={isBlocked ? handleUnblock : handleBlock}
+                                disabled={isBlocking}
+                                className={`flex-1 py-3 px-4 rounded-xl border font-bold text-sm cursor-pointer transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-60 ${
+                                    isBlocked
+                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                        : 'border-red-300 dark:border-red-900/60 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
+                                }`}
+                            >
+                                <span>{isBlocked ? '🛡️' : '🚫'}</span>
+                                <span>{isBlocking ? 'Blocking…' : isBlocked ? 'Unblock Member' : `Block ${profile?.callsign || 'Member'}`}</span>
+                            </button>
+                        </div>
+                        <p className="text-center text-xs text-nature-500 dark:text-nature-400 max-w-xs mt-1 leading-relaxed">
+                            Blocking will instantly hide their content from your feed and notify moderation.
+                        </p>
+                    </div>
+                )}
             </div>
 
             {/* Edit Review Modal */}
@@ -565,6 +949,24 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         </div>
                     </div>
                 </div>
+            )}
+
+            <ArchetypeQuizModal
+                visible={showQuizModal}
+                initialMode={quizInitialMode}
+                onClose={() => setShowQuizModal(false)}
+                onComplete={handleQuizComplete}
+            />
+
+            {/* Report Modal */}
+            {showReportModal && (
+                <ReportModal
+                    isOpen={showReportModal}
+                    onClose={() => setShowReportModal(false)}
+                    reporterPubkey={identity.publicKey}
+                    targetPubkey={pubkey}
+                    targetName={profile?.callsign || 'Member'}
+                />
             )}
         </div>
     );

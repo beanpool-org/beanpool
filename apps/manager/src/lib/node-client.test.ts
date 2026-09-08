@@ -244,3 +244,47 @@ describe('registrar claim helpers send admin password header', () => {
         expect(JSON.parse((init as any).body)).toEqual({ password: 'secret123' });
     });
 });
+
+describe('2FA session token transmission in node client admin actions', () => {
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    const lastCall = () => fetchMock.mock.calls[0];
+    const headersOf = (init: any) => (init?.headers ?? {}) as Record<string, string>;
+
+    beforeEach(() => {
+        fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({ success: true, rows: [], snapshots: [] }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+    });
+
+    it('freezeNodeUser, updateNodeUserTier, updateNodeUserVoucher, updateNodeUserOperator, and generateNodeInvite send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+        const { freezeNodeUser, updateNodeUserTier, updateNodeUserVoucher, updateNodeUserOperator, generateNodeInvite } = await import('./node-client');
+
+        await freezeNodeUser('https://node.example.com', 'pub123', true, 'secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        fetchMock.mockClear();
+
+        await updateNodeUserTier('https://node.example.com', 'pub123', 'Resident', 'secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        fetchMock.mockClear();
+
+        await updateNodeUserVoucher('https://node.example.com', 'pub123', true, 'secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        fetchMock.mockClear();
+
+        await updateNodeUserOperator('https://node.example.com', 'pub123', true, 'secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        fetchMock.mockClear();
+
+        await generateNodeInvite('https://node.example.com', 'secret123', 'standard', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+    });
+});

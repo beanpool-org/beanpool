@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
 import {
-    getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
+    getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getPendingRecoveryRequests,
     approveRecoveryRequest, rejectRecoveryRequest, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, purgeAccountApi,
@@ -19,6 +19,9 @@ import { type Theme } from '../lib/useTheme';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { IncomingRecoveryApprovalModal } from '../components/IncomingRecoveryApprovalModal';
+import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
+import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -26,7 +29,7 @@ interface Props {
     onBack: () => void;
     theme: Theme;
     onToggleTheme: () => void;
-    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications' | 'protection';
+    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications' | 'protection' | 'blocked-users';
     onReRunSetup?: () => void;
     /** Version reported by the connected node, when its health check has answered. */
     nodeVersion?: string;
@@ -74,7 +77,7 @@ function ToggleSwitch({
 }
 
 export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode, onReRunSetup, nodeVersion }: Props) {
-    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications' | 'protection'>(initialMode || 'menu');
+    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications' | 'protection' | 'blocked-users'>(initialMode || 'menu');
 
     useEffect(() => {
         if (initialMode) {
@@ -91,16 +94,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         const next = !useModernMarkers;
         setUseModernMarkers(next);
         localStorage.setItem('beanpool_modern_markers', String(next));
-    };
-
-    const [privacyTier, setPrivacyTier] = useState<'3' | '0'>(() => {
-        return (localStorage.getItem('beanpool-privacy-tier') as '3' | '0') || '0';
-    });
-
-    const handleTogglePrivacy = () => {
-        const next = privacyTier === '3' ? '0' : '3';
-        setPrivacyTier(next);
-        localStorage.setItem('beanpool-privacy-tier', next);
     };
 
     // Track whether the member has ever viewed their 12 words in Settings.
@@ -178,6 +171,40 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         }
     };
 
+    // Blocked Members
+    const [blockedUsersList, setBlockedUsersList] = useState<{ pubkey: string; callsign?: string }[]>([]);
+    const [loadingBlockedList, setLoadingBlockedList] = useState(false);
+
+    const loadBlockedList = async () => {
+        setLoadingBlockedList(true);
+        try {
+            const pubkeys = getBlockedUsers();
+            const items = await Promise.all(pubkeys.map(async (pk) => {
+                let callsign = pk.length > 16 ? `${pk.slice(0, 8)}...${pk.slice(-6)}` : pk;
+                try {
+                    const profile = await getMemberProfile(pk);
+                    if (profile?.callsign) callsign = profile.callsign;
+                } catch {}
+                return { pubkey: pk, callsign };
+            }));
+            setBlockedUsersList(items);
+        } catch (e) {
+            console.warn('[Settings] Failed to load blocked members list:', e);
+        } finally {
+            setLoadingBlockedList(false);
+        }
+    };
+
+    useEffect(() => {
+        if (mode === 'blocked-users') {
+            loadBlockedList();
+            const unsub = onBlocklistUpdated(() => {
+                loadBlockedList();
+            });
+            return unsub;
+        }
+    }, [mode]);
+
     // Recovery Requests (Keepers & Guardians)
     const [recoveryReqs, setRecoveryReqs] = useState<any[]>([]);
     const [pendingKeeperActions, setPendingKeeperActions] = useState<PendingKeeperAction[]>([]);
@@ -234,7 +261,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
     // Database Diagnostics
     const [diagLoading, setDiagLoading] = useState(false);
-    const [nodeStats, setNodeStatsData] = useState<any>(null);
     const [storageEstimate, setStorageEstimate] = useState<string>('Detecting...');
     const [dbStats, setDbStats] = useState<any>(null);
 
@@ -242,7 +268,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         setDiagLoading(true);
         try {
             const stats = await getNodeStats();
-            setNodeStatsData(stats);
 
             if (navigator.storage && navigator.storage.estimate) {
                 const est = await navigator.storage.estimate();
@@ -266,8 +291,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
             setDbStats({
                 integrity: 'ok',
-                members: memberCount || (stats?.members ?? 0),
-                posts: postCount || (stats?.posts ?? 0),
+                members: stats ? stats.members : memberCount,
+                posts: stats ? stats.posts : postCount,
                 transactions: stats?.transactions ?? 0,
                 messages: 0
             });
@@ -330,6 +355,35 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
     const [success, setSuccess] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [profile, setProfile] = useState<MemberProfile | null>(null);
+    const [showQuizModal, setShowQuizModal] = useState(false);
+    const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
+
+    const handleQuizComplete = async (quizResult: QuizResult) => {
+        const publicArchetype = JSON.stringify({
+            primary: quizResult.primary,
+            secondary: quizResult.secondary,
+            mode: quizResult.mode,
+            updatedAt: quizResult.updatedAt,
+        });
+        try {
+            const res = await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
+            if (res?.profile) {
+                setProfile(res.profile);
+            } else {
+                setProfile(prev => prev ? { ...prev, archetype: JSON.stringify(quizResult) } : {
+                    publicKey: identity.publicKey,
+                    callsign: identity.callsign,
+                    avatar: null,
+                    bio: '',
+                    contact: null,
+                    archetype: JSON.stringify(quizResult),
+                });
+            }
+        } catch (e) {
+            console.warn('[Archetype] Save failed:', e);
+            throw e;
+        }
+    };
     const [showPrivateKey, setShowPrivateKey] = useState(false);
     const [deletionMode, setDeletionMode] = useState<'none' | 'options' | 'confirm_local' | 'confirm_purge' | 'purged'>('none');
     const [purgeError, setPurgeError] = useState<string | null>(null);
@@ -472,6 +526,123 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
                 {mode === 'menu' && (
                     <div className="space-y-6">
+                        {/* ─── COMMUNITY WORKING STYLE ─── */}
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                                COMMUNITY WORKING STYLE
+                            </div>
+                            {(() => {
+                                const parsed = parseArchetype(profile?.archetype);
+                                const primary = parsed ? ARCHETYPES[parsed.primary] : null;
+                                const secondary = parsed ? ARCHETYPES[parsed.secondary] : null;
+
+                                if (parsed && primary) {
+                                    return (
+                                        <div className="bg-white dark:bg-nature-900 rounded-2xl p-5 shadow-sm border border-nature-200 dark:border-nature-800 space-y-3">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="text-[15px] font-bold text-nature-950 dark:text-white truncate">
+                                                            {primary.name}
+                                                        </span>
+                                                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                                            {parsed.mode === 'deep' ? '27 Qs' : '9 Qs'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 truncate">
+                                                        {primary.tagline}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                                {primary.description}
+                                            </p>
+
+                                            {secondary && (
+                                                <div className="inline-block px-3 py-1 rounded-full bg-oat-100 dark:bg-nature-800 text-xs font-semibold text-nature-800 dark:text-nature-300 border border-nature-200 dark:border-nature-700">
+                                                    Secondary Rhythm: {secondary.emoji} {secondary.name}
+                                                </div>
+                                            )}
+
+                                            <div className="border-t border-nature-100 dark:border-nature-800 pt-3">
+                                                <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2">
+                                                    🌟 Your Community Superpowers
+                                                </div>
+                                                <ul className="space-y-1.5 m-0 p-0 list-none">
+                                                    {primary.superpowers.map((p, i) => (
+                                                        <li key={i} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
+                                                            <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">•</span>
+                                                            <span>{p}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+
+                                            <div className="flex flex-wrap sm:flex-nowrap gap-2 pt-2">
+                                                {parsed.mode === 'quick' && (
+                                                    <button
+                                                        type="button"
+                                                        aria-label="Take the longer 27 question quiz for a more accurate result"
+                                                        onClick={() => {
+                                                            setQuizInitialMode('deep');
+                                                            setShowQuizModal(true);
+                                                        }}
+                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                                    >
+                                                        🧭 More accurate
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    aria-label="Retake community working style quiz"
+                                                    onClick={() => {
+                                                        setQuizInitialMode('quick');
+                                                        setShowQuizModal(true);
+                                                    }}
+                                                    className={`min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-800 hover:bg-nature-100 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                                        parsed.mode === 'quick' ? 'flex-1' : 'w-full'
+                                                    }`}
+                                                >
+                                                    🔄 Retake
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-5 shadow-sm border border-nature-200 dark:border-nature-800">
+                                        <div className="flex items-start gap-3.5 mb-4">
+                                            <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-2xl shrink-0">
+                                                🌱
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-[15px] font-bold text-nature-950 dark:text-white mb-1">
+                                                    Discover Your Archetype
+                                                </div>
+                                                <p className="text-xs text-nature-600 dark:text-nature-400 leading-normal m-0">
+                                                    Take the 60-second quiz to uncover your collaborative superpowers and see relational synergy with neighbours.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            aria-label="Take 60-second community working style quiz"
+                                            onClick={() => {
+                                                setQuizInitialMode('quick');
+                                                setShowQuizModal(true);
+                                            }}
+                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
+                                        >
+                                            ⚡ Take 60s Quiz
+                                        </button>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
                         {/* ─── ACCOUNT & IDENTITY ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
@@ -581,29 +752,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <span className="text-xl">🔔</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Notification Preferences</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Control alerts by category</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Phone app push notification settings</div>
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
-
-                                {/* Location Privacy */}
-                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xl">📍</span>
-                                        <div>
-                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">
-                                                {privacyTier === '3' ? 'Live Location Sharing' : 'Ghost Mode (Location Hidden)'}
-                                            </div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">Real-time vs hidden presence</div>
-                                        </div>
-                                    </div>
-                                    <ToggleSwitch
-                                        checked={privacyTier === '3'}
-                                        onChange={handleTogglePrivacy}
-                                        label="Live Location Sharing"
-                                        activeBgClass="bg-red-500 border-red-600"
-                                    />
-                                </div>
 
                                 {/* Modern Map Pins */}
                                 <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
@@ -650,6 +802,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 LEGAL & PRIVACY
                             </div>
                             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
+                                <button
+                                    type="button"
+                                    onClick={() => { setMode('blocked-users'); loadBlockedList(); }}
+                                    className="w-full p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left"
+                                >
+                                    <span className="flex items-center gap-3">🚫 Manage Blocked Members</span>
+                                    <span className="text-nature-400">›</span>
+                                </button>
                                 <a href="https://beanpool.org/privacy.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">🛡️ Privacy Policy</span>
                                     <span className="text-nature-400">›</span>
@@ -1145,7 +1305,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">👥</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.members ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Cached Members</div>
+                                        <div className="text-[11px] text-nature-500 font-semibold">Community Members</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">🛒</div>
@@ -1205,9 +1365,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                 {mode === 'notifications' && (
                     <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
                         <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🔔 Notification Preferences</h3>
-                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
-                            Control which activity triggers browser notifications and alerts.
-                        </p>
+                        <div className="p-3.5 mb-5 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                            <div className="font-bold flex items-center gap-1.5 mb-1 text-amber-800 dark:text-amber-300">
+                                <span>📱</span> Phone App Only
+                            </div>
+                            These preferences govern push notifications delivered to the mobile app for this account. Web browsers do not receive push notifications.
+                        </div>
 
                         {notifLoading ? (
                             <div className="py-8 text-center text-sm text-nature-400 animate-pulse">Loading preferences...</div>
@@ -1216,7 +1379,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div>
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">Chat Messages</div>
-                                        <div className="text-xs text-nature-500">Alerts when someone messages you</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">Push alerts on your phone when someone messages you</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifChat}
@@ -1228,7 +1391,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div>
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">Marketplace Activity</div>
-                                        <div className="text-xs text-nature-500">Alerts on new offers & needs in your area</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">Push alerts on your phone for new offers & needs in your area</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifMarketplace}
@@ -1240,7 +1403,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div>
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">Escrow & Deals</div>
-                                        <div className="text-xs text-nature-500">Alerts on trade updates & credit transfers</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">Push alerts on your phone for trade updates & credit transfers</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifEscrow}
@@ -1248,6 +1411,73 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                         label="Escrow & Deals Notifications"
                                     />
                                 </div>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => setMode('menu')}
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                        >
+                            ← Back to Settings
+                        </button>
+                    </div>
+                )}
+
+                {/* ─── MODE: BLOCKED MEMBERS ─── */}
+                {mode === 'blocked-users' && (
+                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🚫 Blocked Members</h3>
+                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
+                            Members you have blocked cannot message you, and their posts and profiles are hidden from your feed.
+                        </p>
+
+                        {loadingBlockedList ? (
+                            <div className="py-8 text-center text-sm text-nature-400 animate-pulse">Loading blocked members...</div>
+                        ) : blockedUsersList.length === 0 ? (
+                            <div className="text-center py-10 text-nature-500 dark:text-nature-400">
+                                <p className="text-3xl mb-2">🕊️</p>
+                                <p className="text-sm font-semibold text-nature-800 dark:text-white">No blocked members</p>
+                                <p className="text-xs mt-1 text-nature-500 dark:text-nature-400">You haven't blocked anyone yet.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4 mb-6">
+                                <div className="divide-y divide-nature-100 dark:divide-nature-800 rounded-xl border border-nature-200 dark:border-nature-800 overflow-hidden">
+                                    {blockedUsersList.map(item => (
+                                        <div key={item.pubkey} className="p-3.5 flex items-center justify-between gap-3 hover:bg-oat-50/50 dark:hover:bg-nature-800/30 transition-colors">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
+                                                    {item.callsign}
+                                                </div>
+                                                <div className="text-[11px] text-nature-400 dark:text-nature-500 font-mono truncate">
+                                                    {item.pubkey.slice(0, 16)}...{item.pubkey.slice(-8)}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    unblockUser(item.pubkey);
+                                                    setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
+                                                }}
+                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0"
+                                            >
+                                                Unblock
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (window.confirm('Are you sure you want to unblock all members?')) {
+                                            clearBlocklist();
+                                            setBlockedUsersList([]);
+                                        }
+                                    }}
+                                    className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer"
+                                >
+                                    Unblock All
+                                </button>
                             </div>
                         )}
 
@@ -1356,7 +1586,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                     <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden transition-colors">
                         <ProfilePage
                             identity={identity}
-                            onBack={() => setMode('menu')}
+                            onBack={() => {
+                                setMode('menu');
+                                getMemberProfile(identity.publicKey).then(setProfile).catch(() => {});
+                            }}
                             onIdentityUpdated={onIdentityUpdated}
                         />
                     </div>
@@ -1377,6 +1610,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                         }}
                     />
                 )}
+
+                <ArchetypeQuizModal
+                    visible={showQuizModal}
+                    initialMode={quizInitialMode}
+                    onClose={() => setShowQuizModal(false)}
+                    onComplete={handleQuizComplete}
+                />
             </div>
         </div>
     );

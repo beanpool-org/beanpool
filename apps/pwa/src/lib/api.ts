@@ -17,10 +17,12 @@ import {
     sealShareToMember,
     TWO_LAYER_THRESHOLD,
     type PublicCreatorChannel,
+    type ChannelPlatform,
+    type ChannelCategory,
 } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
 
-export type { PublicCreatorChannel };
+export type { PublicCreatorChannel, ChannelPlatform, ChannelCategory };
 
 export function getNodeApiUrl(): string {
     const custom = (typeof localStorage !== 'undefined' ? localStorage.getItem('bp_node_url') : null) || ((import.meta as any).env?.VITE_BEANPOOL_NODE_URL as string);
@@ -156,7 +158,7 @@ export async function request<T>(method: string, path: string, body?: any): Prom
     const res = await fetch(`${baseUrl}${path}`, opts);
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || `Request failed: ${res.status}`);
+        throw new Error(err.message || err.error || `Request failed: ${res.status}`);
     }
     return res.json();
 }
@@ -332,6 +334,7 @@ export interface MemberProfile {
     joinedAt?: string;
     elderVouchedBy?: string | null;
     elderVouchedByCallsign?: string | null;
+    archetype?: string | null;
 }
 
 export async function updateMemberProfile(publicKey: string, update: {
@@ -339,6 +342,7 @@ export async function updateMemberProfile(publicKey: string, update: {
     bio?: string;
     contact?: { value: string; visibility: 'hidden' | 'trade_partners' | 'community' | 'friends' } | null;
     callsign?: string;
+    archetype?: string | null;
 }): Promise<{ success: boolean; profile: MemberProfile }> {
     return request('POST', '/api/profile/update', { publicKey, ...update });
 }
@@ -380,6 +384,197 @@ export async function getPublicChannels(publicKey: string): Promise<{ channels: 
     return request('GET', `/api/members/${encodeURIComponent(publicKey)}/channels`);
 }
 
+// ===================== PULSE & CHANNELS =====================
+
+export interface MemberCreatorChannel {
+    id: string;
+    platform: ChannelPlatform;
+    url: string | null;
+    handle: string | null;
+    category: ChannelCategory;
+    isPrimaryVideo: boolean;
+    supportsAutolist: boolean;
+    oauthVerifiedAt: string | null;
+    syndicateToNode: boolean;
+    postCountSeen?: number | null;
+}
+
+export interface PulseFeedItem {
+    id: string;
+    ownerPubkey: string;
+    callsign: string;
+    avatarUrl: string | null;
+    platform: ChannelPlatform | string;
+    category: ChannelCategory | string;
+    url: string | null;
+    title: string | null;
+    thumbnailUrl: string | null;
+    publishedAt: string | null;
+    source: string;
+    isVerified: boolean;
+}
+
+export interface PulseFeedResponse {
+    items: PulseFeedItem[];
+    nextCursor: string | null;
+}
+
+export interface ResolvedPulsePreview {
+    channelId: string;
+    platform: ChannelPlatform;
+    externalId: string | null;
+    url: string;
+    title: string;
+    thumbnailUrl: string | null;
+    publishedAt: string | null;
+    category: ChannelCategory;
+    alreadyImported: boolean;
+    existingItemId?: string | null;
+}
+
+export interface PostCountNudge {
+    channelId: string;
+    platform: ChannelPlatform;
+    handle: string | null;
+    url?: string | null;
+    currentCount: number;
+    postCountSeen: number;
+    newPostsCount: number;
+}
+
+/**
+ * Fetch pulse feed items.
+ * GET /api/pulse/feed
+ */
+export async function getPulseFeed(options?: {
+    cursor?: string | null;
+    category?: string | null;
+    limit?: number;
+}): Promise<PulseFeedResponse> {
+    const params = new URLSearchParams();
+    if (options?.cursor) params.set('cursor', options.cursor);
+    if (options?.category && options.category !== 'all') params.set('category', options.category);
+    if (options?.limit) params.set('limit', String(options.limit));
+    const qs = params.toString();
+    return request('GET', `/api/pulse/feed${qs ? `?${qs}` : ''}`);
+}
+
+/**
+ * The caller's own channels, including ones switched off for the feed.
+ * Signed POST /api/channels/mine
+ */
+export async function getMemberChannels(): Promise<{ channels: MemberCreatorChannel[] }> {
+    return request('POST', '/api/channels/mine', {});
+}
+
+/**
+ * Add a new creator channel.
+ * Signed POST /api/member/channels
+ */
+export async function addMemberChannel(data: {
+    platform: string;
+    url?: string;
+    handle?: string;
+    category: string;
+    syndicateToNode?: boolean;
+    isPrimaryVideo?: boolean;
+}): Promise<{ success: boolean; channel: MemberCreatorChannel; otherVideoChannels: MemberCreatorChannel[] }> {
+    return request('POST', '/api/member/channels', data);
+}
+
+/**
+ * Update an existing creator channel.
+ * Signed POST /api/member/channels/:id
+ */
+export async function updateMemberChannel(
+    id: string,
+    data: {
+        category?: string;
+        syndicateToNode?: boolean;
+        isPrimaryVideo?: boolean;
+        autopublish?: boolean;
+    }
+): Promise<{ success: boolean; channel: MemberCreatorChannel }> {
+    return request('POST', `/api/member/channels/${encodeURIComponent(id)}`, data);
+}
+
+/**
+ * Remove a creator channel.
+ * Signed POST /api/member/channels/:id/delete
+ */
+export async function deleteMemberChannel(id: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/member/channels/${encodeURIComponent(id)}/delete`, {});
+}
+
+/**
+ * Preview a post URL for manual intake.
+ * Signed POST /api/member/pulse/preview
+ */
+export async function previewPulsePost(
+    url: string,
+    channelId?: string
+): Promise<{ success: boolean; preview: ResolvedPulsePreview }> {
+    return request('POST', '/api/member/pulse/preview', {
+        url,
+        channelId: channelId || undefined,
+    });
+}
+
+/**
+ * Submit a post manually to The Pulse.
+ * Signed POST /api/member/pulse/submit
+ */
+export async function submitPulsePost(data: {
+    url: string;
+    channelId: string;
+    title?: string;
+    thumbnailUrl?: string;
+    category?: string;
+    externalId?: string;
+}): Promise<{ success: boolean; item: PulseFeedItem; deduplicated: boolean }> {
+    return request('POST', '/api/member/pulse/submit', data);
+}
+
+/**
+ * Fetch post count nudges for member's channels.
+ * Signed POST /api/member/pulse/nudges
+ */
+export async function getPulseNudges(): Promise<{ nudges: PostCountNudge[] }> {
+    return request('POST', '/api/member/pulse/nudges', {});
+}
+
+/**
+ * Dismiss a post count nudge by advancing watermark.
+ * Signed POST /api/member/pulse/channels/:id/dismiss-nudge
+ */
+export async function dismissPulseNudge(
+    channelId: string,
+    seenCount?: number
+): Promise<{ success: boolean; channelId: string; postCountSeen: number }> {
+    return request('POST', `/api/member/pulse/channels/${encodeURIComponent(channelId)}/dismiss-nudge`, {
+        seenCount,
+    });
+}
+
+/**
+ * Mute / un-mute a pulse feed item owned by the member.
+ * Signed POST /api/member/pulse/items/:id/mute
+ */
+export async function mutePulseItem(
+    itemId: string,
+    muted: boolean
+): Promise<{ success: boolean; item?: PulseFeedItem }> {
+    return request('POST', `/api/member/pulse/items/${encodeURIComponent(itemId)}/mute`, { muted });
+}
+
+/**
+ * Delete a pulse feed item owned by the member.
+ * Signed POST /api/member/pulse/items/:id/delete
+ */
+export async function deletePulseItem(itemId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/member/pulse/items/${encodeURIComponent(itemId)}/delete`, {});
+}
+
 // ===================== MESSAGING =====================
 
 export interface Conversation {
@@ -399,6 +594,7 @@ export interface Conversation {
     peerCallsign?: string;
     peerAvatar?: string | null;
     peerLastReadAt?: string | null;
+    readCursors?: { publicKey: string; lastReadAt: string | null }[];
 }
 
 export enum SystemMessageType {
@@ -429,6 +625,8 @@ export interface ApiMessage {
     systemType?: SystemMessageType;
     metadata?: string;
     timestamp: string;
+    editedAt?: string | null;
+    updatedAt?: string | null;
 }
 
 export interface MessageAttachment {
@@ -457,6 +655,23 @@ export async function sendMessageApi(
     metadata?: string,
 ): Promise<{ success: boolean; message: ApiMessage }> {
     return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata });
+}
+
+export async function editMessageApi(
+    messageId: string,
+    authorPubkey: string,
+    ciphertext: string,
+    nonce: string,
+): Promise<{ success: boolean; message: ApiMessage }> {
+    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce });
+}
+
+export async function toggleMessageReactionApi(
+    messageId: string,
+    authorPubkey: string,
+    emoji: string,
+): Promise<{ success: boolean; metadata: string }> {
+    return request('POST', '/api/messages/react', { messageId, authorPubkey, emoji });
 }
 
 export async function getConversations(publicKey: string): Promise<{ conversations: Conversation[]; totalUnread: number }> {
@@ -1645,7 +1860,15 @@ export async function updateNotificationPreferences(pubkey: string, preferences:
 
 export async function getNodeStats(): Promise<{ members: number; posts: number; transactions: number } | null> {
     try {
-        return await request<{ members: number; posts: number; transactions: number }>('GET', '/api/stats');
+        const health = await request<{
+            tree?: { totalMembers?: number };
+            activity?: { totalPosts?: number; totalTransactions?: number };
+        }>('GET', '/api/community/health');
+        return {
+            members: health?.tree?.totalMembers ?? 0,
+            posts: health?.activity?.totalPosts ?? 0,
+            transactions: health?.activity?.totalTransactions ?? 0,
+        };
     } catch {
         return null;
     }

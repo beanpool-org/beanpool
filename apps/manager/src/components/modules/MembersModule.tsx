@@ -203,8 +203,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             await onPruneUser(pubkey);
             onRefresh();
             setSelectedMember(null);
-        } catch (e: any) {
-            alert(`Failed to prune member: ${e.message || e}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Failed to prune member: ${msg}`);
         }
     };
 
@@ -218,8 +219,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             await onUpdateTier(pubkey, selectedTierValue);
             setTierEditMember(null);
             onRefresh();
-        } catch (e: any) {
-            alert(e?.message || 'Failed to update member tier');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(msg || 'Failed to update member tier');
         } finally {
             setIsUpdatingTier(false);
         }
@@ -311,8 +313,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             try {
                 await onToggleVoucher(pubkey, nextState);
                 onRefresh();
-            } catch (e: any) {
-                alert(e?.message || 'Failed to update voucher status on server');
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                alert(msg || 'Failed to update voucher status on server');
             }
         }
     };
@@ -335,8 +338,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             try {
                 await onToggleOperator(pubkey, nextState);
                 onRefresh();
-            } catch (e: any) {
-                alert(e?.message || 'Failed to update operator role on server');
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                alert(msg || 'Failed to update operator role on server');
             }
         }
     };
@@ -354,8 +358,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             setShowCreateTreasuryModal(false);
             setNewTreasuryName('');
             reloadTreasuries();
-        } catch (e: any) {
-            alert(e?.message || 'Failed to create treasury');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(msg || 'Failed to create treasury');
         } finally {
             setCreatingTreasury(false);
         }
@@ -376,8 +381,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             setOfferTitle('');
             setOfferDescription('');
             reloadTreasuries();
-        } catch (e: any) {
-            alert(e?.message || 'Failed to seed offer');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(msg || 'Failed to seed offer');
         } finally {
             setSeedingOffer(false);
         }

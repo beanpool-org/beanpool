@@ -9,7 +9,7 @@
  *  - User location marker (pulsing purple dot)
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -23,6 +23,7 @@ import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
+import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 
 // Simple deterministic hash for consistent pin placement
 function simpleHash(str: string): number {
@@ -77,6 +78,22 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
     const pinDropMarkerRef = useRef<L.Marker | null>(null);
     const [nodeRadius, setNodeRadius] = useState<{lat: number, lng: number, radiusKm: number} | null>(null);
     const [previewPost, setPreviewPost] = useState<MarketplacePost | null>(null);
+    const [blocklistVersion, setBlocklistVersion] = useState(0);
+
+    useEffect(() => {
+        return onBlocklistUpdated(() => {
+            setBlocklistVersion(v => v + 1);
+        });
+    }, []);
+
+    const blockedSet = useMemo(() => new Set(getBlockedUsers()), [blocklistVersion]);
+
+    useEffect(() => {
+        if (previewPost && blockedSet.has(previewPost.authorPublicKey)) {
+            setPreviewPost(null);
+        }
+    }, [previewPost, blockedSet]);
+
     const [useModernMarkers, setUseModernMarkers] = useState(() => {
         return localStorage.getItem('beanpool_modern_markers') !== 'false';
     });
@@ -464,7 +481,9 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         if (!markersRef.current || !mapRef.current) return;
         markersRef.current.clearLayers();
 
-        posts.filter(post => !post.status || post.status === 'active').forEach((post) => {
+        posts
+            .filter(post => (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey))
+            .forEach((post) => {
             const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
             const emoji = cat?.emoji || '📌';
             const typeColor = POST_TYPE_COLORS[post.type] || '#888';
@@ -552,7 +571,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
             });
             marker.addTo(markersRef.current!);
         });
-    }, [posts, useModernMarkers]);
+    }, [posts, useModernMarkers, blockedSet]);
 
     return (
         <>

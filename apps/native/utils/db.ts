@@ -1842,6 +1842,14 @@ export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }
 
+// NOTE: POST /api/crowdfund/projects/vote does not exist on the server (returns 404).
+// Crowdfund projects accept pledges via POST /api/crowdfund/projects/:id/pledge,
+// while quadratic voting is only implemented on the server for Commons governance proposals
+// via POST /api/commons/vote (apps/server/src/routes/commons.ts).
+// Do not redirect crowdfund project IDs to /api/commons/vote because Commons proposals and
+// Crowdfund projects live in separate tables and the server rejects non-existent commons proposals with 400.
+// Whoever adds Commons project voting to native mobile later should use POST /api/commons/vote with payload:
+// { voterPubkey: identity.publicKey, projectId, voteCount: votes } for Commons proposals.
 export async function voteForProjectApi(projectId: string, votes: number) {
     const identity = await loadIdentity();
     if (!identity) throw new Error("No identity block found");

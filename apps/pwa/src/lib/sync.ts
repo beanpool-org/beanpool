@@ -18,9 +18,14 @@ export interface SyncState {
 type SyncCallback = (state: SyncState) => void;
 
 const STORAGE_KEY = 'beanpool-sync-state';
-const RECONNECT_INTERVAL = 5000;
 
 let ws: WebSocket | null = null;
+let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+let pingIntervalId: ReturnType<typeof setInterval> | null = null;
+let reconnectDelay = 1000;
+let isConnecting = false;
+let currentUrl: string | null = null;
+
 let listeners: SyncCallback[] = [];
 let announcementListeners: ((a: any) => void)[] = [];
 let activityListeners: (() => void)[] = [];
@@ -43,21 +48,48 @@ function notify(): void {
 }
 
 function establishConnection(wsUrl: string, originalUrl: string): void {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        isConnecting = false;
+        return;
+    }
+
+    let socket: WebSocket;
     try {
-        ws = new WebSocket(wsUrl);
+        socket = new WebSocket(wsUrl);
+        ws = socket;
     } catch {
+        isConnecting = false;
         currentState = { ...currentState, connected: false };
         notify();
         scheduleReconnect(originalUrl);
         return;
     }
 
-    ws.onopen = () => {
+    socket.onopen = () => {
+        if (ws !== socket) return;
+        reconnectDelay = 1000;
+        if (reconnectTimeoutId) {
+            clearTimeout(reconnectTimeoutId);
+            reconnectTimeoutId = null;
+        }
         currentState = { ...currentState, connected: true };
         notify();
+
+        // Start 30s heartbeat keep-alive to prevent reverse proxy/Cloudflare idle timeout drops
+        if (pingIntervalId) clearInterval(pingIntervalId);
+        pingIntervalId = setInterval(() => {
+            if (ws === socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({ type: 'ping' }));
+                } catch (err) {
+                    console.warn('[WS Sync] Failed to send heartbeat', err);
+                }
+            }
+        }, 30000);
     };
 
-    ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
+        if (ws !== socket) return;
         try {
             const data = JSON.parse(event.data);
             
@@ -84,14 +116,22 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
         } catch { /* ignore malformed messages */ }
     };
 
-    ws.onclose = () => {
-        currentState = { ...currentState, connected: false };
-        notify();
-        scheduleReconnect(originalUrl);
+    socket.onclose = () => {
+        if (ws === socket) {
+            ws = null;
+            if (pingIntervalId) {
+                clearInterval(pingIntervalId);
+                pingIntervalId = null;
+            }
+            currentState = { ...currentState, connected: false };
+            notify();
+            scheduleReconnect(originalUrl);
+        }
     };
 
-    ws.onerror = () => {
-        ws?.close();
+    socket.onerror = () => {
+        if (ws !== socket) return;
+        socket.close();
     };
 }
 
@@ -99,7 +139,12 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
  * Connect to the BeanPool node's WebSocket state feed.
  */
 export function connectToAnchor(url?: string): void {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    if (isConnecting) return;
+    isConnecting = true;
+
     const baseWsUrl = url ?? getNodeWsUrl('/ws');
+    currentUrl = baseWsUrl;
 
     loadIdentity()
         .then(async (ident) => {
@@ -118,11 +163,44 @@ export function connectToAnchor(url?: string): void {
         })
         .catch(() => {
             establishConnection(baseWsUrl, baseWsUrl);
+        })
+        .finally(() => {
+            isConnecting = false;
         });
 }
 
 function scheduleReconnect(url: string): void {
-    setTimeout(() => connectToAnchor(url), RECONNECT_INTERVAL);
+    if (reconnectTimeoutId) return;
+
+    const jitter = Math.random() * 1000;
+    const delay = reconnectDelay + jitter;
+
+    reconnectTimeoutId = setTimeout(() => {
+        reconnectTimeoutId = null;
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+        connectToAnchor(url);
+    }, delay);
+}
+
+// Page visibility listener — reconnects immediately when tab returns to foreground
+if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            const isDead = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+            if (isDead) {
+                if (ws) {
+                    try { ws.close(); } catch {}
+                    ws = null;
+                }
+                if (reconnectTimeoutId) {
+                    clearTimeout(reconnectTimeoutId);
+                    reconnectTimeoutId = null;
+                }
+                reconnectDelay = 1000;
+                connectToAnchor(currentUrl ?? undefined);
+            }
+        }
+    });
 }
 
 /**

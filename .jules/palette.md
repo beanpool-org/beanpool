@@ -107,3 +107,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-03 - ToggleSwitch ARIA Switch Semantics & Focus Ring Styling
 **Learning:** `ToggleSwitch` in `SettingsPage.tsx` rendered custom interactive buttons without `role="switch"` or `aria-checked`, lacked descriptive `aria-label` text, and suppressed outline styling with `outline-none` without providing focus-visible ring indicators.
 **Action:** Added `role="switch"`, `aria-checked={checked}`, `aria-label={label}`, and `focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2` styling to `ToggleSwitch`, and updated all usages in `SettingsPage.tsx` with explicit descriptive `label` props.
+
+## 2026-09-04 - PeoplePage ARIA Tab Semantics & Action Button Accessibility
+**Learning:** `PeoplePage.tsx` rendered sub-navigation buttons without ARIA tablist semantics (`role="tablist"`, `role="tab"`, `aria-selected`), lacked explicit `type="button"` attributes, missed visual focus ring indicators (`focus-visible:ring-2`), and used icon-only buttons (like `💬`) or action buttons without descriptive screen-reader `aria-label` context.
+**Action:** Added `role="tablist"` and `aria-label="People navigation"` to the sub-nav wrapper, `type="button"`, `role="tab"`, and `aria-selected` to tab buttons, explicit `type="button"`, `aria-label`, and `focus-visible:ring-2` focus rings to avatar profile triggers and action buttons (Message 💬, Remove friend, + Add friend).

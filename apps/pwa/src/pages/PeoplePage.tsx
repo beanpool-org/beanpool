@@ -156,12 +156,15 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
             {/* Sub-nav pills */}
-            <div className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800">
+            <div className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800" role="tablist" aria-label="People navigation">
                 {(['friends', 'community', 'invites', 'guardians'] as SubView[]).map(v => (
                     <button
                         key={v}
+                        type="button"
+                        role="tab"
+                        aria-selected={view === v}
                         onClick={() => setView(v)}
-                        className={`flex-1 py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                        className={`flex-1 py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                             view === v 
                                 ? 'bg-white dark:bg-nature-800 text-rainbow shadow-sm border border-nature-200/50 dark:border-nature-700/50 scale-95 drop-shadow-sm' 
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-700 dark:hover:text-oat-50 hover:bg-oat-200 dark:hover:bg-nature-800'
@@ -192,7 +195,9 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                 <div key={f.publicKey} className="p-3 px-4 flex items-center justify-between transition-colors hover:bg-oat-50/50 dark:hover:bg-nature-800/30">
                                     <div className="flex items-center gap-3">
                                         <button 
-                                            className="bg-transparent border-none p-0 cursor-pointer text-left hover:opacity-80 transition-opacity" 
+                                            type="button"
+                                            aria-label={`View ${f.callsign}'s profile`}
+                                            className="bg-transparent border-none p-0 cursor-pointer text-left hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
                                             onClick={() => onOpenProfile && onOpenProfile(f.publicKey)}
                                         >
                                             <Avatar 
@@ -204,7 +209,8 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                         </button>
                                         <div>
                                             <button 
-                                                className="font-bold text-[14px] text-nature-900 dark:text-white flex items-center gap-1.5 bg-transparent border-none p-0 cursor-pointer hover:underline text-left"
+                                                type="button"
+                                                className="font-bold text-[14px] text-nature-900 dark:text-white flex items-center gap-1.5 bg-transparent border-none p-0 cursor-pointer hover:underline text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
                                                 onClick={() => onOpenProfile && onOpenProfile(f.publicKey)}
                                             >
                                                 {f.callsign}
@@ -218,16 +224,20 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                     <div className="flex items-center gap-2">
                                         {onNavigate && (
                                             <button
+                                                type="button"
                                                 onClick={() => handleMessage(f.publicKey)}
-                                                className="bg-emerald-600 border-none text-white rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
-                                                title="Message"
+                                                className="bg-emerald-600 border-none text-white rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                title={`Message ${f.callsign}`}
+                                                aria-label={`Message ${f.callsign}`}
                                             >
                                                 💬
                                             </button>
                                         )}
                                         <button
+                                            type="button"
                                             onClick={() => handleRemoveFriend(f.publicKey)}
-                                            className="bg-transparent border-none text-red-500 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors"
+                                            aria-label={`Remove ${f.callsign} from friends`}
+                                            className="bg-transparent border-none text-red-500 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                         >
                                             Remove
                                         </button>
@@ -270,14 +280,17 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                     <div key={m.publicKey} className="p-3 px-4 flex items-center justify-between transition-colors hover:bg-oat-50/50 dark:hover:bg-nature-800/30">
                                         <div className="flex items-center gap-3">
                                             <button 
-                                                className="bg-transparent border-none p-0 cursor-pointer text-left hover:opacity-80 transition-opacity"
+                                                type="button"
+                                                aria-label={`View ${m.callsign}'s profile`}
+                                                className="bg-transparent border-none p-0 cursor-pointer text-left hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
                                                 onClick={() => onOpenProfile && onOpenProfile(m.publicKey)}
                                             >
                                                 <Avatar callsign={m.callsign} avatarUrl={m.avatarUrl} size={36} />
                                             </button>
                                             <div>
                                                 <button 
-                                                    className="font-bold text-[14px] text-nature-900 dark:text-white flex items-center gap-1.5 bg-transparent border-none p-0 cursor-pointer hover:underline text-left"
+                                                    type="button"
+                                                    className="font-bold text-[14px] text-nature-900 dark:text-white flex items-center gap-1.5 bg-transparent border-none p-0 cursor-pointer hover:underline text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
                                                     onClick={() => onOpenProfile && onOpenProfile(m.publicKey)}
                                                 >
                                                     {m.callsign}
@@ -293,8 +306,10 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             </span>
                                         ) : (
                                             <button
+                                                type="button"
                                                 onClick={() => handleAddFriend(m.publicKey)}
-                                                className="bg-emerald-600 border-none text-white rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all hover:shadow-md"
+                                                aria-label={`Add ${m.callsign} as friend`}
+                                                className="bg-emerald-600 border-none text-white rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                             >
                                                 + Add
                                             </button>

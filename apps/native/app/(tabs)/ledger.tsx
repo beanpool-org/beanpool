@@ -26,16 +26,15 @@ import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 // ── Trust model constants (mirrors beanpool-core/protocol.ts) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
 //   earned = floor(CREDIT_MAX_EARNED × V / (V + TRUST_CURVE_K))
-// There is NO baked-in floor: floor = -(20 welcome voucher + earned + granted), so it slides
+// There is NO baked-in floor: floor = -(earned + granted), so it slides
 // continuously from 0 down to -2000. Tiers are recognition milestones (they don't set the floor).
-// (The 20 voucher is already folded into the tier thresholds below, so the client needs no constant.)
 const CREDIT_MAX_EARNED = 1920;      // asymptote of the earned-trust curve
 const TRUST_CURVE_K = 5000;          // curve constant (higher = stricter)
 const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP;   // diversity: value with any ONE partner counts at most this much (canonical 500 from @beanpool/core)
 const CIRC_TICKS = [200, 500, 1000]; // circulation rate change points
 
 // Tier credit thresholds (earned+granted). They map to the floor breakpoints
-// -200/-600/-1400 the server uses in getTier(), given floor = -(20 voucher + earned + granted).
+// -200/-600/-1400 the server uses in getTier(), given floor = -(earned + granted).
 function getTierIndex(credit: number) {
     if (credit >= 1380) return 3;
     if (credit >= 580)  return 2;

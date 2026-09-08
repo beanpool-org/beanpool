@@ -291,6 +291,11 @@ export default function ProjectsScreen() {
         const stepperCost = stepperVotes * stepperVotes;
         const isOverBudget = stepperCost > balanceState.earnedCredit;
         const isExpanded = expandedVote === item.id;
+        // Voting is only supported for Commons governance proposals (POST /api/commons/vote).
+        // Crowdfunding projects accept pledges (POST /api/crowdfund/projects/:id/pledge);
+        // the server has no POST /api/crowdfund/projects/vote endpoint.
+        // Suppress voting controls on crowdfund projects so members cannot trigger non-existent routes.
+        const isCommonsProject = item.type === 'commons';
 
         return (
             <Pressable
@@ -369,8 +374,8 @@ export default function ProjectsScreen() {
                             </Text>
                         </Pressable>
                         
-                        {/* Vote Button Trigger */}
-                        {!isFunded && !hasVoted && (
+                        {/* Vote Button Trigger - only available for Commons governance projects */}
+                        {isCommonsProject && !isFunded && !hasVoted && (
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: isExpanded }}
@@ -384,7 +389,7 @@ export default function ProjectsScreen() {
                                 <Text style={[styles.voteTriggerText, isExpanded && { color: colors.text.inverse }]}>Vote with Credits</Text>
                             </Pressable>
                         )}
-                        {hasVoted && (
+                        {isCommonsProject && hasVoted && (
                             <View style={styles.votedMiniBadge}>
                                 <MaterialCommunityIcons name="check-circle" size={12} color={colors.brand.primary} />
                                 <Text style={styles.votedMiniText}>Voted</Text>
@@ -392,8 +397,8 @@ export default function ProjectsScreen() {
                         )}
                     </View>
 
-                    {/* Expandable Voting Area */}
-                    {isExpanded && !isFunded && !hasVoted && (
+                    {/* Expandable Voting Area - only available for Commons governance projects */}
+                    {isCommonsProject && isExpanded && !isFunded && !hasVoted && (
                         <View style={styles.votingArea}>
                             <View style={styles.stepperContainer}>
                                 <View style={styles.stepperControls}>

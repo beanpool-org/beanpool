@@ -36,6 +36,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 
 import { matchesExpandedSearch } from '../lib/search';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
+import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -267,6 +268,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Global requests waiting for the current user's approval
     const [globalRequests, setGlobalRequests] = useState<MarketplaceTransaction[]>([]);
     const [myTransactions, setMyTransactions] = useState<MarketplaceTransaction[]>([]);
+    const [blocklistVersion, setBlocklistVersion] = useState(0);
+
+    useEffect(() => {
+        return onBlocklistUpdated(() => {
+            setBlocklistVersion(v => v + 1);
+        });
+    }, []);
 
     const myMarketPosts = posts.filter(p => 
         identity && 
@@ -1906,16 +1914,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 }
 
                 // Blocked user filtering
-                try {
-                    const blockedJson = localStorage.getItem('bp_blocked_users');
-                    if (blockedJson) {
-                        const blocked: string[] = JSON.parse(blockedJson);
-                        if (blocked.length > 0) {
-                            const blockedSet = new Set(blocked);
-                            filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
-                        }
-                    }
-                } catch { /* ignore malformed blocklist */ }
+                const blocked = getBlockedUsers();
+                if (blocked.length > 0) {
+                    const blockedSet = new Set(blocked);
+                    filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
+                }
 
                 // Radius filter
                 if (radiusSettings) {

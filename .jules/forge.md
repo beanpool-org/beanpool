@@ -64,3 +64,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `apps/server/src/services/tls.ts` lacked a try/catch and `res.ok` check around its `fetch` for Cloudflare TXT record creation.
 **Learning:** External fetch calls in services (especially API providers) can crash the server if they throw uncaught exceptions or return unexpected formats (like HTML instead of JSON for a 500 error).
 **Pattern:** Look for `await fetch` in service files that lack `try/catch` and missing `if (!res.ok)` before reading `await res.json()`.
+
+## 2026-08-28 - [Unhandled promise rejection in connector retry loop]
+**Issue:** `startRetryLoop` in `apps/server/src/connector-manager.ts` ran an async callback inside `setInterval` without a `try/catch` block.
+**Learning:** Unhandled exceptions inside async `setInterval` callbacks produce unhandled promise rejections that can destabilize or crash Node.js process state.
+**Pattern:** Ensure all async callbacks passed to `setInterval` or `setTimeout` are enclosed in a top-level `try/catch` block.

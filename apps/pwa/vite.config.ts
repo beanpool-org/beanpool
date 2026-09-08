@@ -4,15 +4,24 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 import fs from 'node:fs';
 
-let resolvedVersion = process.env.APP_VERSION;
-if (!resolvedVersion) {
+// The version the bundle displays when the node's /api/community/health is unreachable.
+// Order matters: the CI build arg wins, then the workspace root package.json (the single
+// source of truth the release bump moves), then this app's own package.json. No hardcoded
+// literal here — one would silently bake a stale version into every later release.
+function resolvePkgVersion(pkgPath: string): string | undefined {
     try {
-        const rootPkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'));
-        resolvedVersion = rootPkg.version;
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        return typeof pkg.version === 'string' ? pkg.version : undefined;
     } catch {
-        resolvedVersion = '1.2.15';
+        return undefined;
     }
 }
+
+const resolvedVersion =
+    process.env.APP_VERSION ||
+    resolvePkgVersion(path.resolve(__dirname, '../../package.json')) ||
+    resolvePkgVersion(path.resolve(__dirname, 'package.json')) ||
+    '0.0.0';
 
 export default defineConfig({
     define: {

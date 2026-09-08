@@ -86,3 +86,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-09-02 - Add accessibilityLabel to trust filter items in TrustPickerSheet
 **Learning:** Selection buttons with emoji and text labels read raw emoji characters or omit filter labels on screen readers unless an explicit `accessibilityLabel` is assigned.
 **Action:** Always provide explicit `accessibilityLabel={f.label}` on selection items containing emoji icons.
+
+## 2026-09-03 - Add accessibilityLabel to camera and gallery source buttons in AvatarPickerSheet
+**Learning:** Source selection buttons containing emoji icons and text labels read unannounced or disjointed emoji characters to screen readers unless provided with an explicit `accessibilityLabel`.
+**Action:** Always provide explicit descriptive `accessibilityLabel` attributes on image source selection buttons.

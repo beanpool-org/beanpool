@@ -235,7 +235,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
     // Database Diagnostics
     const [diagLoading, setDiagLoading] = useState(false);
-    const [nodeStats, setNodeStatsData] = useState<any>(null);
     const [storageEstimate, setStorageEstimate] = useState<string>('Detecting...');
     const [dbStats, setDbStats] = useState<any>(null);
 
@@ -243,7 +242,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         setDiagLoading(true);
         try {
             const stats = await getNodeStats();
-            setNodeStatsData(stats);
 
             if (navigator.storage && navigator.storage.estimate) {
                 const est = await navigator.storage.estimate();
@@ -267,8 +265,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
             setDbStats({
                 integrity: 'ok',
-                members: memberCount || (stats?.members ?? 0),
-                posts: postCount || (stats?.posts ?? 0),
+                members: stats ? stats.members : memberCount,
+                posts: stats ? stats.posts : postCount,
                 transactions: stats?.transactions ?? 0,
                 messages: 0
             });
@@ -1004,7 +1002,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">👥</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.members ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Cached Members</div>
+                                        <div className="text-[11px] text-nature-500 font-semibold">Community Members</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">🛒</div>

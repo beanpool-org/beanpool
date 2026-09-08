@@ -194,7 +194,7 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.warningBox}>
                         <MaterialCommunityIcons name="alert" size={24} color={colors.feedback.warning.solid} style={styles.warningIcon} />
                         <Text style={styles.warningText}>
-                            Members who stay at their maximum floor balance for <Text style={styles.boldWhiteText}>over 3 months</Text> without active trading may face <Text style={styles.boldWhiteText}>account suspension</Text>.
+                            When you reach your credit floor, <Text style={styles.boldWhiteText}>further spending is paused</Text> until you earn credits back by trading on the Marketplace.
                         </Text>
                     </View>
                 </View>

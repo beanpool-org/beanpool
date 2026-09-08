@@ -21,20 +21,20 @@ import { TrustBadge, TrustLevel } from '../../components/TrustBadge';
 import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
+import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 
 // ── Trust model constants (mirrors beanpool-core/protocol.ts) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
 //   earned = floor(CREDIT_MAX_EARNED × V / (V + TRUST_CURVE_K))
-// There is NO baked-in floor: floor = -(20 welcome voucher + earned + granted), so it slides
+// There is NO baked-in floor: floor = -(earned + granted), so it slides
 // continuously from 0 down to -2000. Tiers are recognition milestones (they don't set the floor).
-// (The 20 voucher is already folded into the tier thresholds below, so the client needs no constant.)
 const CREDIT_MAX_EARNED = 1920;      // asymptote of the earned-trust curve
 const TRUST_CURVE_K = 5000;          // curve constant (higher = stricter)
-const PER_COUNTERPARTY_CAP = 5000;   // diversity: value with any ONE partner counts at most this much
+const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP;   // diversity: value with any ONE partner counts at most this much (canonical 500 from @beanpool/core)
 const CIRC_TICKS = [200, 500, 1000]; // circulation rate change points
 
 // Tier credit thresholds (earned+granted). They map to the floor breakpoints
-// -200/-600/-1400 the server uses in getTier(), given floor = -(20 voucher + earned + granted).
+// -200/-600/-1400 the server uses in getTier(), given floor = -(earned + granted).
 function getTierIndex(credit: number) {
     if (credit >= 1380) return 3;
     if (credit >= 580)  return 2;
@@ -58,7 +58,7 @@ export default function LedgerScreen() {
     const TIERS = useMemo(() => [
         { name: 'Newcomer', emoji: '🌱', color: colors.trust.newcomer.fg, bg: colors.trust.newcomer.bg, border: colors.trust.newcomer.border, min: 0,    floor: 0,
           blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
-          perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits when your balance is positive'] },
+          perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
         { name: 'Resident', emoji: '🏠', color: colors.trust.resident.fg, bg: colors.trust.resident.bg, border: colors.trust.resident.border, min: 180,  floor: -200,
           blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
           perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
@@ -77,7 +77,7 @@ export default function LedgerScreen() {
     }, []);
     const [txns, setTxns] = useState<any[]>([]);
     const [balanceState, setBalanceState] = useState<any>({
-        balance: 0, floor: -100,
+        balance: 0, floor: 0,
         tier: { name: 'Ghost', emoji: '👻', canGift: false, canInvite: false },
         earnedCredit: 0, commons: 0, trustStats: null,
     });
@@ -377,11 +377,19 @@ export default function LedgerScreen() {
     // Open the Send flow from anywhere (Levels hero or Wallet). Surfaces the form in the Wallet tab.
     const openSend = async () => {
         if (!canSend) {
-            Alert.alert(
-                'No balance to send',
-                'You can send credits whenever your balance is positive — earn some by completing a trade on the Marketplace.',
-                [{ text: 'OK' }]
-            );
+            if (earned <= 0) {
+                Alert.alert(
+                    'First trade required',
+                    'Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.',
+                    [{ text: 'OK' }]
+                );
+            } else {
+                Alert.alert(
+                    'Positive balance required',
+                    'You can only send beans you currently hold — direct sends require a positive balance.',
+                    [{ text: 'OK' }]
+                );
+            }
             return;
         }
         const url = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -403,7 +411,7 @@ export default function LedgerScreen() {
     const qualifiedValue = balanceState.qualifiedValue || 0;
     const avgRating = balanceState.avgRating || 0;
     const reviewCount = balanceState.reviewCount || 0;
-    const canSend = balanceState.balance > 0;           // gate: positive balance only (tiers are merit badges, not gates)
+    const canSend = balanceState.balance > 0 && earned > 0; // gate: positive balance AND at least 1 completed trade (earnedCredit > 0)
     const ts = balanceState.trustStats;
     const uniquePartners = ts?.uniquePartners || 0;
 
@@ -484,7 +492,7 @@ export default function LedgerScreen() {
                         onPress={openSend}
                     >
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : 'Send (needs +ve balance)'}</Text>
+                        <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
                     </Pressable>
                     <View style={[styles.perkPill, { borderColor: palette.green200, backgroundColor: palette.green50 }]}>
                         <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
@@ -562,7 +570,7 @@ export default function LedgerScreen() {
                 {!selReached && selNeeded > 0 && (
                     <Text style={styles.detailNote}>Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</Text>
                 )}
-                <Text style={styles.detailNote}>Levels are merit badges — they don't gate any action. Anyone can invite. Anyone with a positive balance can send. Higher levels mean a deeper credit line and community recognition.</Text>
+                <Text style={styles.detailNote}>Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.</Text>
             </View>
 
             {/* How to reach the next tier — leads with the highest-leverage lever */}
@@ -758,7 +766,9 @@ export default function LedgerScreen() {
                             color={!canSend ? colors.text.secondary : colors.text.inverse}
                         />
                         <Text style={[styles.sendBtnText, !canSend && { color: colors.text.secondary }]}>
-                            {!canSend ? 'Send Credits (needs positive balance)' : showSend ? 'Cancel' : 'Send Credits'}
+                            {!canSend
+                                ? (earned <= 0 ? 'Send Credits (needs 1 completed trade)' : 'Send Credits (needs positive balance)')
+                                : showSend ? 'Cancel' : 'Send Credits'}
                         </Text>
                     </View>
                 </Pressable>

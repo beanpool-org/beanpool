@@ -87,13 +87,15 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                 <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                     {/* Compact Price */}
-                    <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
-                        {post.credits !== undefined ? post.credits : '?'}
-                        <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt="B" />
-                        <span className="text-[9px] text-nature-500 font-normal">
-                            {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                    {!isPulse && (
+                        <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
+                            {post.credits !== undefined ? post.credits : '?'}
+                            <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt="B" />
+                            <span className="text-[9px] text-nature-500 font-normal">
+                                {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                            </span>
                         </span>
-                    </span>
+                    )}
 
                     {/* Daily Pulse or Needs/Offers pill */}
                     {isPulse ? (
@@ -134,12 +136,14 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 <div className="flex-1 flex flex-col justify-center min-w-0">
                     <div className="flex justify-between items-center mb-1">
                         <div className="flex gap-2 items-center">
-                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
-                                : 'bg-orange-105 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400'
-                            }`}>
-                                {post.type}
-                            </span>
+                            {!isPulse && (
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                    post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                    : 'bg-orange-105 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400'
+                                }`}>
+                                    {post.type}
+                                </span>
+                            )}
                             {pulsePill}
                             {youPill}
                             {pausedPill}
@@ -172,15 +176,17 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         </div>
                         
                         {/* Compact Price Header */}
-                        <div className="flex items-center">
-                            <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                {post.credits !== undefined ? post.credits : '?'}
-                                <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt="B" />
-                                <span className="text-[10px] text-nature-500 ml-0.5">
-                                    {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                        {!isPulse && (
+                            <div className="flex items-center">
+                                <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+                                    {post.credits !== undefined ? post.credits : '?'}
+                                    <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt="B" />
+                                    <span className="text-[10px] text-nature-500 ml-0.5">
+                                        {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                    </span>
                                 </span>
-                            </span>
-                        </div>
+                            </div>
+                        )}
                     </div>
 
                     <h3 className="font-bold text-md text-nature-950 dark:text-white truncate mb-1">
@@ -264,15 +270,17 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </div>
 
                     {/* Price Overlay */}
-                    <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
-                        <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                            <span>{post.credits !== undefined ? post.credits : '?'}</span>
-                            <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
-                                <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
-                                {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                    {!isPulse && (
+                        <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
+                            <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+                                <span>{post.credits !== undefined ? post.credits : '?'}</span>
+                                <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
+                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
+                                    {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                </span>
                             </span>
-                        </span>
-                    </div>
+                        </div>
+                    )}
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
@@ -304,15 +312,17 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         )}
                     </div>
 
-                    <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
-                        <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                            <span>{post.credits !== undefined ? post.credits : '?'}</span>
-                            <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
-                                <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
-                                {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                    {!isPulse && (
+                        <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
+                            <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+                                <span>{post.credits !== undefined ? post.credits : '?'}</span>
+                                <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
+                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
+                                    {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                </span>
                             </span>
-                        </span>
-                    </div>
+                        </div>
+                    )}
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
@@ -330,12 +340,15 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
             {/* Action Button */}
             <div
-                className={`w-full rounded-full font-bold tracking-widest text-center transition-colors shadow-sm py-2 text-[10px] mt-auto ${post.type === 'offer'
+                className={`w-full rounded-full font-bold tracking-widest text-center transition-colors shadow-sm py-2 text-[10px] mt-auto ${
+                    isPulse
+                        ? 'bg-amber-500 text-white cursor-default'
+                        : post.type === 'offer'
                         ? 'bg-terra-500 text-white hover:bg-terra-600'
                         : 'bg-nature-700 text-white dark:bg-nature-800 hover:bg-nature-800'
-                    }`}
+                }`}
             >
-                VIEW
+                {isPulse ? 'DAILY PULSE' : 'VIEW'}
             </div>
         </div>
     );

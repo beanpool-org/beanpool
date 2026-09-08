@@ -841,10 +841,9 @@ export default function PostDetailModal() {
                 {/* Type + Category Badge */}
                 <View style={styles.typeBadgeRow}>
                     <View style={styles.catBadge}>
-                        <Text style={styles.catEmoji}>{emoji}</Text>
-                        <Text style={[styles.catLabel, { color: isOffer ? colors.brand.primary : palette.orange600 }]} numberOfLines={1}>
-                            {isOffer ? '● ' : '● '}{post.type.toUpperCase()} · {categoryLabel(post.category).toUpperCase()}
-                            {post.repeatable ? ' · RECURRING' : ''}
+                        <Text style={styles.catEmoji}>{isPulsePost ? '🗞️' : emoji}</Text>
+                        <Text style={[styles.catLabel, { color: isPulsePost ? palette.amber500 : (isOffer ? colors.brand.primary : palette.orange600) }]} numberOfLines={1}>
+                            {isPulsePost ? '● DAILY PULSE' : `${isOffer ? '● ' : '● '}${post.type.toUpperCase()} · ${categoryLabel(post.category).toUpperCase()}${post.repeatable ? ' · RECURRING' : ''}`}
                         </Text>
                     </View>
                     <Text style={styles.timeAgo} numberOfLines={1}>{getTimeAgo(post.created_at)}</Text>
@@ -873,15 +872,17 @@ export default function PostDetailModal() {
                 )}
 
                 {/* Price Card */}
-                <View style={styles.priceCard}>
-                    <Text style={styles.priceLabel}>{priceLabel}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                        <CurrencyDisplay amount={post.credits} style={styles.priceValue} asView={true} />
-                        <Text style={[styles.priceCurrency, { marginLeft: 2 }]}>{
-                            { fixed: '', hourly: ' / Hr', daily: ' / Dy', weekly: ' / Wk', monthly: ' / Mo' }[post.price_type as string] || ''
-                        }</Text>
+                {!isPulsePost && (
+                    <View style={styles.priceCard}>
+                        <Text style={styles.priceLabel}>{priceLabel}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                            <CurrencyDisplay amount={post.credits} style={styles.priceValue} asView={true} />
+                            <Text style={[styles.priceCurrency, { marginLeft: 2 }]}>{
+                                { fixed: '', hourly: ' / Hr', daily: ' / Dy', weekly: ' / Wk', monthly: ' / Mo' }[post.price_type as string] || ''
+                            }</Text>
+                        </View>
                     </View>
-                </View>
+                )}
 
                 {/* Author / Counterparty Card */}
                 {isOwnPost && targetPeerPubkey ? (

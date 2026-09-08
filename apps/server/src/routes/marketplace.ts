@@ -15,6 +15,7 @@ import {
 import { db } from '../db/db.js';
 import { getPeerOrigins } from '../connector-manager.js';
 import { respondSettlementAware } from '../federation-settlement.js';
+import { getActiveMemberListingCount, deactivatePulseMarketplacePost } from '../daily-pulse.js';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -87,6 +88,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
     })();
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
+    // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
+    if (getActiveMemberListingCount() >= 2) {
+        deactivatePulseMarketplacePost();
+    }
+
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
     ctx.body = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined, sync, beansOnly });
 });
@@ -119,6 +125,12 @@ router.post('/api/marketplace/posts', async (ctx) => {
             ctx.body = { error: 'Failed — author must be a registered member' };
             return;
         }
+
+        // If member listings now reach 2 or more, deactivate the Daily Pulse post immediately
+        if (getActiveMemberListingCount() >= 2) {
+            deactivatePulseMarketplacePost();
+        }
+
         ctx.body = { success: true, post };
     } catch (e: any) {
         ctx.status = 400;

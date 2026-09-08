@@ -773,7 +773,7 @@ export default function MarketScreen() {
     // Use server search results when available, otherwise filter locally
     const basePosts = searchResults !== null ? searchResults : posts;
 
-    const filteredPosts = basePosts.filter(p => {
+    let filteredPosts = basePosts.filter(p => {
         if (p.status !== 'active') return false;
         if (blockedUsers.includes(p.author_pubkey)) return false;
         if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
@@ -814,6 +814,15 @@ export default function MarketScreen() {
         }
         return true;
     });
+
+    // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
+    const realMemberListingsCount = posts.filter(p => {
+        const isPulse = (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
+        return !isPulse && p.status === 'active';
+    }).length;
+    if (realMemberListingsCount >= 2) {
+        filteredPosts = filteredPosts.filter(p => !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode));
+    }
 
     // Pin Daily Pulse to the top of the feed (local only)
     filteredPosts.sort((a, b) => {
@@ -1224,8 +1233,8 @@ export default function MarketScreen() {
                         elderCard && styles.elderCard,
                         isPulse && styles.pulseCard,
                     ]}
-                    onPress={() => router.push(`/post/${item.id}`)}
-                    accessibilityRole="button"
+                    onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
+                    accessibilityRole={isPulse ? undefined : "button"}
                 >
                     <View style={styles.gridImageWrapper}>
                         {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
@@ -1237,13 +1246,15 @@ export default function MarketScreen() {
                                 </Text>
                             </View>
                         )}
-                        <View style={styles.gridPriceBadge}>
-                            <CurrencyDisplay
-                                amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                style={styles.gridPriceText}
-                                asView={true}
-                            />
-                        </View>
+                        {!isPulse && (
+                            <View style={styles.gridPriceBadge}>
+                                <CurrencyDisplay
+                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
+                                    style={styles.gridPriceText}
+                                    asView={true}
+                                />
+                            </View>
+                        )}
                         {isPulse && (
                             <View style={[styles.gridPriceBadge, { left: 8, right: undefined, backgroundColor: palette.amber500 }]}>
                                 <Text style={[styles.gridPriceText, { color: '#ffffff', fontWeight: '900' }]}>🗞️ PULSE</Text>
@@ -1259,9 +1270,11 @@ export default function MarketScreen() {
                                 <Text style={styles.gridPriceText}>👤 YOU</Text>
                             </View>
                         )}
-                        <View style={[styles.gridTypeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
-                            <Text style={[styles.badgeText, { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
-                        </View>
+                        {!isPulse && (
+                            <View style={[styles.gridTypeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
+                                <Text style={[styles.badgeText, { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
+                            </View>
+                        )}
                     </View>
                     <View style={styles.gridTextContent}>
                         <Text style={styles.gridCardTitle} numberOfLines={1}>
@@ -1276,7 +1289,10 @@ export default function MarketScreen() {
         // Compact View
         if (viewMode === 'compact') {
             return (
-                <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${item.id}`)}>
+                <Pressable
+                    accessibilityRole={isPulse ? undefined : "button"}
+                    onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
+                >
                     <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
                         <Text style={styles.compactEmoji}>
                             {catEmoji}
@@ -1290,11 +1306,13 @@ export default function MarketScreen() {
                             </Text>
                         </View>
                         <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
-                            <CurrencyDisplay
-                                amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                style={styles.compactPrice}
-                                asView={true}
-                            />
+                            {!isPulse && (
+                                <CurrencyDisplay
+                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
+                                    style={styles.compactPrice}
+                                    asView={true}
+                                />
+                            )}
                             <View style={[
                                 styles.compactBadge, 
                                 isPulse ? {
@@ -1321,7 +1339,10 @@ export default function MarketScreen() {
 
         // List View
         return (
-            <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${item.id}`)}>
+            <Pressable
+                accessibilityRole={isPulse ? undefined : "button"}
+                onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
+            >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
                         <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
@@ -1335,9 +1356,11 @@ export default function MarketScreen() {
                     <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-                                <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
-                                    <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
-                                </View>
+                                {!isPulse && (
+                                    <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
+                                        <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
+                                    </View>
+                                )}
                                 {isPulse && (
                                     <View style={{
                                         backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
@@ -1374,11 +1397,13 @@ export default function MarketScreen() {
                                     </View>
                                 )}
                             </View>
-                            <CurrencyDisplay
-                                amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                style={[styles.price, { fontSize: 16 }]}
-                                asView={true}
-                            />
+                            {!isPulse && (
+                                <CurrencyDisplay
+                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
+                                    style={[styles.price, { fontSize: 16 }]}
+                                    asView={true}
+                                />
+                            )}
                         </View>
 
                         <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text.body, marginBottom: 4 }} numberOfLines={1}>

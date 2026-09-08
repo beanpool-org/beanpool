@@ -146,8 +146,8 @@ export function buildAdminHeaders(adminPassword?: string, tfaSessionToken?: stri
 }
 
 /** Check if a response body indicates TOTP is required. */
-export function isTotpRequired(responseBody: any): boolean {
-    return responseBody?.totpRequired === true;
+export function isTotpRequired(responseBody: unknown): boolean {
+    return typeof responseBody === 'object' && responseBody !== null && (responseBody as Record<string, unknown>).totpRequired === true;
 }
 
 /**
@@ -569,7 +569,7 @@ export async function seedTreasuryOffer(
     treasuryPubkey: string,
     offer: { title: string; category: string; credits: number; description?: string; priceType?: string; repeatable?: boolean },
     adminPassword?: string
-): Promise<{ success: boolean; post: any }> {
+): Promise<{ success: boolean; post: Record<string, unknown> }> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (adminPassword) {
         headers['X-Admin-Password'] = adminPassword;

@@ -71,3 +71,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-08-25 - Replace any types in ThreatReviewModal
 **Learning:** `ThreatReviewModal.tsx` relied on `any` types for `threat`, `profiles`, `members`, and callback props, weakening type safety in security review dialogs.
 **Action:** Define strict interfaces (`ThreatItem`, `MemberItem`) for modal props and lookup maps to enhance DX and autocompletion.
+
+## 2026-08-25 - Replace any types in ai-client, node-client and EditNodeModal
+**Learning:** `lib/ai-client.ts`, `lib/node-client.ts`, and `EditNodeModal.tsx` relied on `any` types for parameters, response payloads, and catch error variables, weakening type safety across manager API clients and modals.
+**Action:** Replace `any` types with strict `unknown` types and typed interfaces to enhance autocompletion and prevent runtime type mismatches.

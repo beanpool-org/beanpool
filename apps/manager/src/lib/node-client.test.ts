@@ -152,7 +152,7 @@ describe('harvester helpers send the manager credential', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
     const lastCall = () => fetchMock.mock.calls[0];
-    const headersOf = (init: any) => (init?.headers ?? {}) as Record<string, string>;
+    const headersOf = (init?: RequestInit) => (init?.headers ?? {}) as Record<string, string>;
 
     beforeEach(() => {
         fetchMock = vi.fn().mockResolvedValue({

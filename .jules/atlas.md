@@ -91,3 +91,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `ThreatReviewModal` component in `apps/manager/src/components/modules/ThreatReviewModal.tsx` was untested.
 **Learning:** Testing `ThreatReviewModal` required wrapping async timer-based action dismissals and clipboard interactions in `act()` to handle React state updates cleanly.
 **Action:** Continue expanding test coverage for modal and module components in `apps/manager/src/components/modules/`.
+
+## 2026-08-30 - [manager tests] TelemetryModule component unit tests
+**Gap:** `TelemetryModule` component in `apps/manager/src/components/modules/TelemetryModule.tsx` was untested.
+**Learning:** Testing `TelemetryModule` required mocking `NodeProfile` objects and `DiagnosticsResponse` state objects (including `callsign`) to verify calculations for total users, database storage size in MB, active WebSocket/P2P streams, view mode toggles, and callback triggers.
+**Action:** Identify remaining untested module components in `apps/manager/src/components/modules/` for unit test coverage.

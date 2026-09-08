@@ -147,7 +147,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     }
 
     const balance = balanceInfo?.balance ?? 0;
-    const floor = balanceInfo?.floor ?? -80;              // earned credit LIMIT (how deep you could go)
+    const floor = balanceInfo?.floor ?? 0;              // earned credit LIMIT (how deep you could go)
     const usableFloor = balanceInfo?.usableFloor ?? floor; // v3: how deep you may go NOW (gated by live offers)
     const liveOffers = balanceInfo?.liveOffers ?? 0;       // v3: currently-live Offer count
     const frozen = balanceInfo?.frozen ?? false;           // v3: debt below usable floor → spending paused
@@ -306,8 +306,8 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-nature-100 dark:border-nature-800" style={{ borderColor: tier.border }}>
                             <button
                                 onClick={() => { if (canSend) { setActiveTab('financials'); setShowSend(true); } }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600 hover:bg-emerald-100' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 text-nature-400 cursor-default'}`}
-                                style={{ background: 'none', font: 'inherit' }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600 hover:bg-emerald-100' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 dark:border-nature-800 text-nature-400 cursor-default'}`}
+                                style={{ font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
                                 <span>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
@@ -490,14 +490,14 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
                                     {earned <= 0
                                         ? '🔒 Direct sends unlock after your first completed trade on the Marketplace, and require a positive balance.'
-                                        : '🔒 You can only send beans you currently hold — your balance is 0.'}
+                                        : '🔒 You can only send beans you currently hold — direct sends require a positive balance.'}
                                 </p>
                             </div>
                         )}
                         <button
                             onClick={() => canSend && setShowSend(!showSend)}
                             disabled={!canSend}
-                            className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer transition-all shadow-md ${
+                            className={`w-full p-4 rounded-xl text-sm sm:text-[15px] break-words font-bold border-none cursor-pointer transition-all shadow-md ${
                                 !canSend ? 'bg-nature-100 dark:bg-nature-800 text-nature-450 cursor-not-allowed opacity-60' :
                                 showSend ? 'bg-nature-800 text-white hover:bg-nature-900' : 'bg-[#d97757] text-white hover:bg-[#c26749]'
                             }`}

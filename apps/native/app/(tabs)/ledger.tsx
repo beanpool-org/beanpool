@@ -78,7 +78,7 @@ export default function LedgerScreen() {
     }, []);
     const [txns, setTxns] = useState<any[]>([]);
     const [balanceState, setBalanceState] = useState<any>({
-        balance: 0, floor: -100,
+        balance: 0, floor: 0,
         tier: { name: 'Ghost', emoji: '👻', canGift: false, canInvite: false },
         earnedCredit: 0, commons: 0, trustStats: null,
     });
@@ -386,8 +386,8 @@ export default function LedgerScreen() {
                 );
             } else {
                 Alert.alert(
-                    'No balance to send',
-                    'You can only send beans you currently hold — your balance is 0.',
+                    'Positive balance required',
+                    'You can only send beans you currently hold — direct sends require a positive balance.',
                     [{ text: 'OK' }]
                 );
             }

@@ -139,10 +139,9 @@ group-conversation code path has no caller that passes `'group'`.
 **Qualified.** Pairing is genuinely one-directional (PWA displays the QR, native scans it), but migration is
 not impossible — the seed phrase covers every direction. On key storage, the unencrypted IndexedDB persistence
 and the total absence of a passcode or biometric gate on the web are confirmed, though one cited detail about
-`localforage` was wrong. The guardian "2 of 3 majority" copy does contradict `RECOVERY_THRESHOLD = 3`, with a
-caveat on the modal's own existence claim.
+`localforage` was wrong. The earlier claim that the guardian "2 of 3 majority" copy was wrong was itself mistaken: guardian/friend recovery is 2-of-N via `TWO_LAYER_THRESHOLD = 2` (`packages/beanpool-core/src/two-layer-split.ts:63`), combining 2 friend approvals with the node's hub share. `RECOVERY_THRESHOLD = 3` (`recovery-split.ts`) strictly governs the sovereign 12-word phrase splitting path and must not be conflated with social recovery. The original modal copy ("2 out of 3") was correct all along.
 
-The floor, guardian-threshold and suspension items overlap the existing app-copy-vs-code audit, so they are
+The floor and suspension items overlap the existing app-copy-vs-code audit, so they are
 known and still unfixed.
 
 ## Suggested order

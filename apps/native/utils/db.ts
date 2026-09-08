@@ -1846,10 +1846,10 @@ export async function voteForProjectApi(projectId: string, votes: number) {
     const identity = await loadIdentity();
     if (!identity) throw new Error("No identity block found");
 
-    const res = await _signedRequest(`/api/commons/vote`, {
-        voterPubkey: identity.publicKey,
+    const res = await _signedRequest(`/api/crowdfund/projects/vote`, {
         projectId,
-        voteCount: votes
+        pubkey: identity.publicKey,
+        votes
     });
 
     // In a local-first system, we might want to optimistically update the local DB

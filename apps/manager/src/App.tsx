@@ -810,17 +810,17 @@ export function App() {
                             }}
                             onUpdateTier={async (pubkey, tier) => {
                                 if (activeNode) {
-                                    await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword);
+                                    await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                                 }
                             }}
                             onToggleVoucher={async (pubkey, canVouch) => {
                                 if (activeNode) {
-                                    await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword);
+                                    await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                                 }
                             }}
                             onToggleOperator={async (pubkey, granted) => {
                                 if (activeNode) {
-                                    await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword);
+                                    await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                                 }
                             }}
                         />

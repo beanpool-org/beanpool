@@ -101,8 +101,21 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
     ];
     const FEE_TICKS = [80, 90, 98]; // 500 / 1000 / 2000 boundaries
 
+    const valuemin = floor;
+    const valuemax = feeFreeMax;
+    const valuenow = Math.min(valuemax, Math.max(valuemin, balance));
+
     return (
-        <div className={`select-none ${className}`} style={{ paddingTop: 28, position: 'relative' }}>
+        <div
+            role="meter"
+            aria-label="Credit balance gauge"
+            aria-valuenow={valuenow}
+            aria-valuemin={valuemin}
+            aria-valuemax={valuemax}
+            aria-valuetext={`${fmt(balance)} Beans`}
+            className={`select-none ${className}`}
+            style={{ paddingTop: 28, position: 'relative' }}
+        >
 
             {/* Lane 2 — gradient track */}
             <div style={{
@@ -197,7 +210,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
             {/* Offer ladder caption — what your live Offers unlock, and how many reach your full line */}
             {showLadder && hasLocked && (
                 <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: '#64748b', fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <span>🎣</span>
+                    <span aria-hidden="true">🎣</span>
                     {uFloor < 0 ? (
                         <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM }}>{liveOffers + 1} offer{liveOffers + 1 === 1 ? '' : 's'}</b>{"\u00A0"}→{"\u00A0"}−{nextUnlock}</> : ''}</span>
                     ) : (
@@ -226,7 +239,7 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
                     <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>your limit</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: BEAN_DEEP }}>⚖️ 0</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: BEAN_DEEP }}><span aria-hidden="true">⚖️ </span>0</div>
                     <div style={{ fontSize: 9, color: BEAN_DEEP, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>sweet spot</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>

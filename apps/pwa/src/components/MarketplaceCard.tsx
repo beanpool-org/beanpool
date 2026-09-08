@@ -342,7 +342,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             <div
                 className={`w-full rounded-full font-bold tracking-widest text-center transition-colors shadow-sm py-2 text-[10px] mt-auto ${
                     isPulse
-                        ? 'bg-amber-500 text-white cursor-default'
+                        ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 cursor-default'
                         : post.type === 'offer'
                         ? 'bg-terra-500 text-white hover:bg-terra-600'
                         : 'bg-nature-700 text-white dark:bg-nature-800 hover:bg-nature-800'

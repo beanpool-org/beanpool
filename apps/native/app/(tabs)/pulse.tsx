@@ -50,12 +50,20 @@ export default function PulseScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [hasLocalLane, setHasLocalLane] = useState(false);
 
     // Client-side split is a prototype shortcut — see isOfficialSource(). Production
     // should pass the lane to the API so pagination stays correct per lane.
     const localItems = items.filter(isOfficialSource);
     const neighbourItems = items.filter(i => !isOfficialSource(i));
-    const localLaneAvailable = localItems.length > 0;
+
+    useEffect(() => {
+        if (lane !== 'learn') {
+            setHasLocalLane(localItems.length > 0);
+        }
+    }, [lane, localItems.length]);
+
+    const localLaneAvailable = lane === 'learn' ? hasLocalLane : localItems.length > 0;
     const activeLane = lane === 'learn'
         ? 'learn'
         : (lane === 'local' && localLaneAvailable)
@@ -105,8 +113,10 @@ export default function PulseScreen() {
                 setError(e?.message || 'Could not load community feed.');
             }
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (activeCategoryRef.current === category && activeLaneRef.current === currentLane) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
     }, [lane, selectedCategory]);
 
@@ -314,7 +324,11 @@ export default function PulseScreen() {
                                 accessibilityState={{ selected: active }}
                                 accessibilityLabel={l.count > 0 ? `${l.label} feed, ${l.count} items` : `${l.label} feed`}
                             >
-                                <Text style={[styles.laneTabText, active && styles.laneTabTextActive]}>
+                                <Text
+                                    style={[styles.laneTabText, active && styles.laneTabTextActive]}
+                                    numberOfLines={1}
+                                    ellipsizeMode="tail"
+                                >
                                     {l.icon}  {l.label}
                                 </Text>
                                 {l.count > 0 ? (
@@ -519,6 +533,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             justifyContent: 'center',
             gap: 6,
             paddingVertical: 9,
+            minHeight: 44,
             borderRadius: 9,
         },
         laneTabActive: {

@@ -1233,6 +1233,7 @@ export default function MarketScreen() {
                         elderCard && styles.elderCard,
                         isPulse && styles.pulseCard,
                     ]}
+                    disabled={isPulse}
                     onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
                     accessibilityRole={isPulse ? undefined : "button"}
                 >
@@ -1256,8 +1257,17 @@ export default function MarketScreen() {
                             </View>
                         )}
                         {isPulse && (
-                            <View style={[styles.gridPriceBadge, { left: 8, right: undefined, backgroundColor: palette.amber500 }]}>
-                                <Text style={[styles.gridPriceText, { color: '#ffffff', fontWeight: '900' }]}>🗞️ PULSE</Text>
+                            <View style={[
+                                styles.gridPriceBadge,
+                                {
+                                    left: 8,
+                                    right: undefined,
+                                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
+                                    borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b',
+                                    borderWidth: 1,
+                                }
+                            ]}>
+                                <Text style={[styles.gridPriceText, { color: theme === 'dark' ? colors.feedback.warning.fg : '#92400e', fontWeight: '900' }]}>🗞️ PULSE</Text>
                             </View>
                         )}
                         {!!item.repeatable && !isPulse && (
@@ -1290,6 +1300,7 @@ export default function MarketScreen() {
         if (viewMode === 'compact') {
             return (
                 <Pressable
+                    disabled={isPulse}
                     accessibilityRole={isPulse ? undefined : "button"}
                     onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
                 >
@@ -1340,6 +1351,7 @@ export default function MarketScreen() {
         // List View
         return (
             <Pressable
+                disabled={isPulse}
                 accessibilityRole={isPulse ? undefined : "button"}
                 onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
             >

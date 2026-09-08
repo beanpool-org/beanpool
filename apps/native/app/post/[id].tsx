@@ -842,7 +842,7 @@ export default function PostDetailModal() {
                 <View style={styles.typeBadgeRow}>
                     <View style={styles.catBadge}>
                         <Text style={styles.catEmoji}>{isPulsePost ? '🗞️' : emoji}</Text>
-                        <Text style={[styles.catLabel, { color: isPulsePost ? palette.amber500 : (isOffer ? colors.brand.primary : palette.orange600) }]} numberOfLines={1}>
+                        <Text style={[styles.catLabel, { color: isPulsePost ? (theme === 'dark' ? colors.feedback.warning.fg : '#92400e') : (isOffer ? colors.brand.primary : palette.orange600) }]} numberOfLines={1}>
                             {isPulsePost ? '● DAILY PULSE' : `${isOffer ? '● ' : '● '}${post.type.toUpperCase()} · ${categoryLabel(post.category).toUpperCase()}${post.repeatable ? ' · RECURRING' : ''}`}
                         </Text>
                     </View>

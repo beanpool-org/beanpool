@@ -33,6 +33,39 @@ function getStmtGetActivePulse() {
     return _stmtGetActivePulse;
 }
 
+let _stmtActiveMemberCount: any = null;
+let _stmtActiveCountAll: any = null;
+
+function getStmtActiveMemberCount() {
+    if (!_stmtActiveMemberCount) {
+        _stmtActiveMemberCount = db.prepare(
+            "SELECT COUNT(*) as c FROM posts WHERE author_pubkey != ? AND active = 1 AND status = 'active'"
+        );
+    }
+    return _stmtActiveMemberCount;
+}
+
+function getStmtActiveCountAll() {
+    if (!_stmtActiveCountAll) {
+        _stmtActiveCountAll = db.prepare(
+            "SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status = 'active'"
+        );
+    }
+    return _stmtActiveCountAll;
+}
+
+/**
+ * Pure read-only lookup of the Daily Pulse Treasury public key.
+ * Does NOT generate keys or insert members into the database.
+ */
+export function getPulseTreasuryPubkey(): string | null {
+    const existing = getStmtFindPulseMember().get(PULSE_CALLSIGN) as { public_key: string; is_treasury: number } | undefined;
+    if (existing?.public_key && existing.is_treasury === 1) {
+        return existing.public_key;
+    }
+    return null;
+}
+
 /**
  * Ensures the system Treasury identity for "Daily Pulse" exists.
  * If a regular member already registered "Daily Pulse", it safely renames that member
@@ -78,21 +111,29 @@ export function ensureDailyPulseChannel(pulsePubkey: string): string {
 
 /**
  * Counts active real member listings in the marketplace.
+ * Read-only: does not trigger treasury creation or key generation.
  * The Daily Pulse's own post is explicitly excluded so it does not count towards the threshold.
  */
 export function getActiveMemberListingCount(): number {
-    const pulsePubkey = ensurePulseTreasury();
-    const row = db.prepare(
-        "SELECT COUNT(*) as c FROM posts WHERE author_pubkey != ? AND active = 1 AND status = 'active'"
-    ).get(pulsePubkey) as { c: number } | undefined;
+    const pulsePubkey = getPulseTreasuryPubkey();
+    if (!pulsePubkey) {
+        const row = getStmtActiveCountAll().get() as { c: number } | undefined;
+        return row?.c || 0;
+    }
+    const row = getStmtActiveMemberCount().get(pulsePubkey) as { c: number } | undefined;
     return row?.c || 0;
 }
 
 /**
  * Deactivates any active Daily Pulse marketplace post in SQL.
+ * Guarded: only executes UPDATE if an active pulse post actually exists,
+ * preventing write locks and updated_at churn during redundant calls.
  */
 export function deactivatePulseMarketplacePost(): void {
-    const pulsePubkey = ensurePulseTreasury();
+    const pulsePubkey = getPulseTreasuryPubkey();
+    if (!pulsePubkey) return;
+    const active = getStmtGetActivePulse().get(pulsePubkey);
+    if (!active) return;
     db.prepare(
         "UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey = ? AND active = 1 AND status = 'active'"
     ).run(pulsePubkey);
@@ -172,12 +213,12 @@ export function rotateDailyPulse(now: Date = new Date()): { post: any; entry: Da
             "UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey = ? AND id != ? AND active = 1 AND status = 'active'"
         ).run(pulsePubkey, pulseId);
 
-        // 4. Check if today's pulse post already exists in the database for the Daily Pulse treasury
-        const existingToday = db.prepare("SELECT * FROM posts WHERE id = ? AND author_pubkey = ?").get(pulseId, pulsePubkey) as any;
+        // 4. Check if today's pulse post already exists in the database
+        const existingToday = db.prepare("SELECT * FROM posts WHERE id = ?").get(pulseId) as any;
         if (existingToday) {
             db.prepare(
-                "UPDATE posts SET active = 1, status = 'active', title = ?, description = ?, category = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ?"
-            ).run(entry.headline, entry.body, entry.category || 'general', pulseId, pulsePubkey);
+                "UPDATE posts SET active = 1, status = 'active', author_pubkey = ?, title = ?, description = ?, category = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+            ).run(pulsePubkey, entry.headline, entry.body, entry.category || 'general', pulseId);
             const activePosts = getPosts({ id: pulseId });
             const post = activePosts[0] || existingToday;
             console.log(`[DailyPulse] Retained existing Daily Pulse for ${localDateStr}: "${entry.headline}" (ID: ${post.id})`);
@@ -214,15 +255,58 @@ export function rotateDailyPulse(now: Date = new Date()): { post: any; entry: Da
 /**
  * Returns the currently active Daily Pulse post, if any.
  * Suppressed if active real member listings >= 2.
+ * Pure read-only query — never mutates database state.
  */
 export function getActivePulsePost(): { id: string; title: string } | null {
     if (getActiveMemberListingCount() >= 2) {
-        deactivatePulseMarketplacePost();
         return null;
     }
-    const pulsePubkey = ensurePulseTreasury();
+    const pulsePubkey = getPulseTreasuryPubkey();
+    if (!pulsePubkey) return null;
     const row = getStmtGetActivePulse().get(pulsePubkey) as { id: string; title: string } | undefined;
     return row?.id ? row : null;
+}
+
+/**
+ * Ensures today's Daily Pulse marketplace post is active if member listings < 2.
+ * If already active, does nothing (no writes).
+ * If soft-deleted / cancelled, reactivates it.
+ * If not created yet, runs rotateDailyPulse().
+ */
+export function ensurePulseMarketplacePost(now: Date = new Date()): void {
+    if (getActiveMemberListingCount() >= 2) return;
+
+    const localEpochMs = now.getTime() - (now.getTimezoneOffset() * 60 * 1000);
+    const localDateStr = new Date(localEpochMs).toISOString().split('T')[0];
+    const pulseId = `pulse_${localDateStr}`;
+
+    const existing = db.prepare("SELECT id, active, status FROM posts WHERE id = ?").get(pulseId) as { id: string; active: number; status: string } | undefined;
+    if (existing) {
+        if (existing.active !== 1 || existing.status !== 'active') {
+            const pulsePubkey = ensurePulseTreasury();
+            const entry = getTodaysPulseEntry(now);
+            db.prepare(
+                "UPDATE posts SET active = 1, status = 'active', author_pubkey = ?, title = ?, description = ?, category = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
+            ).run(pulsePubkey, entry.headline, entry.body, entry.category || 'general', pulseId);
+        }
+    } else {
+        rotateDailyPulse(now);
+    }
+}
+
+/**
+ * Synchronizes the marketplace gate based on active member listing count:
+ * - When listings >= 2: deactivates any active Daily Pulse marketplace post.
+ * - When listings < 2: ensures today's Daily Pulse marketplace post is restored/active.
+ * Safe to call on write paths (create, delete, pause, resume) and scheduled rotation.
+ */
+export function syncPulseMarketplaceGate(now: Date = new Date()): void {
+    const memberListings = getActiveMemberListingCount();
+    if (memberListings >= 2) {
+        deactivatePulseMarketplacePost();
+    } else {
+        ensurePulseMarketplacePost(now);
+    }
 }
 
 /**

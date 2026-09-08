@@ -15,7 +15,7 @@ import {
 import { db } from '../db/db.js';
 import { getPeerOrigins } from '../connector-manager.js';
 import { respondSettlementAware } from '../federation-settlement.js';
-import { getActiveMemberListingCount, deactivatePulseMarketplacePost } from '../daily-pulse.js';
+import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -88,11 +88,6 @@ router.get('/api/marketplace/posts', async (ctx) => {
     })();
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
-    // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
-    if (getActiveMemberListingCount() >= 2) {
-        deactivatePulseMarketplacePost();
-    }
-
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
     ctx.body = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined, sync, beansOnly });
 });
@@ -126,10 +121,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
             return;
         }
 
-        // If member listings now reach 2 or more, deactivate the Daily Pulse post immediately
-        if (getActiveMemberListingCount() >= 2) {
-            deactivatePulseMarketplacePost();
-        }
+        // Synchronize Daily Pulse marketplace gate (< 2 threshold)
+        syncPulseMarketplaceGate();
 
         ctx.body = { success: true, post };
     } catch (e: any) {
@@ -147,6 +140,9 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             return;
         }
         const removed = removePost(id, (ctx.state.actor as string) || authorPublicKey);
+        if (removed) {
+            syncPulseMarketplaceGate();
+        }
         ctx.body = { success: removed };
     } catch (e: any) {
         ctx.status = 400;
@@ -187,6 +183,9 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         }
         const parsedHours = hours != null ? Number(hours) : undefined;
         const tx = acceptPost(postId, (ctx.state.actor as string) || buyerPublicKey, parsedHours);
+        if (tx) {
+            syncPulseMarketplaceGate();
+        }
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         // #102: the escrow engine refuses a visitor's draw — surface it as 503 + code, not a 400.
@@ -281,6 +280,7 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
             ctx.body = { error: 'Cannot complete — transaction not found or not authorized' };
             return;
         }
+        syncPulseMarketplaceGate();
         ctx.body = { success: true, transaction: tx, alreadyCompleted: !!(tx as any).alreadyCompleted };
     } catch (e: any) {
         ctx.status = 400;
@@ -302,6 +302,7 @@ router.post('/api/marketplace/transactions/cancel', async (ctx) => {
             ctx.body = { error: 'Cannot cancel — transaction not found or not authorized' };
             return;
         }
+        syncPulseMarketplaceGate();
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         respondSettlementAware(ctx, err, 'Failed to cancel transaction');
@@ -317,6 +318,9 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
             return;
         }
         const success = pausePost(postId, (ctx.state.actor as string) || authorPublicKey);
+        if (success) {
+            syncPulseMarketplaceGate();
+        }
         ctx.body = { success };
     } catch (e: any) {
         ctx.status = 400;
@@ -333,6 +337,9 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
             return;
         }
         const success = resumePost(postId, (ctx.state.actor as string) || authorPublicKey);
+        if (success) {
+            syncPulseMarketplaceGate();
+        }
         ctx.body = { success };
     } catch (e: any) {
         ctx.status = 400;

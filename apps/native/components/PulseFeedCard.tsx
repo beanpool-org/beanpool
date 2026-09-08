@@ -158,6 +158,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
 
             {/* Facade Poster / Thumbnail with Open Link Handler */}
             <Pressable
+                disabled={!item.url}
                 onPress={item.url ? handleOpenPost : undefined}
                 style={({ pressed }) => [
                     styles.contentPressable,

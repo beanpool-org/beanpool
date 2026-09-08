@@ -665,18 +665,27 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                         <Pressable
                                             style={[styles.reportOptionBtn, reportType === 'too_high' && styles.reportOptionBtnActive]}
                                             onPress={() => setReportType('too_high')}
+                                            accessibilityRole="button"
+                                            accessibilityState={{ selected: reportType === 'too_high' }}
+                                            accessibilityLabel="Too High"
                                         >
                                             <Text style={styles.reportOptionText}>📈 Too High</Text>
                                         </Pressable>
                                         <Pressable
                                             style={[styles.reportOptionBtn, reportType === 'too_low' && styles.reportOptionBtnActive]}
                                             onPress={() => setReportType('too_low')}
+                                            accessibilityRole="button"
+                                            accessibilityState={{ selected: reportType === 'too_low' }}
+                                            accessibilityLabel="Too Low"
                                         >
                                             <Text style={styles.reportOptionText}>📉 Too Low</Text>
                                         </Pressable>
                                         <Pressable
                                             style={[styles.reportOptionBtn, reportType === 'other' && styles.reportOptionBtnActive]}
                                             onPress={() => setReportType('other')}
+                                            accessibilityRole="button"
+                                            accessibilityState={{ selected: reportType === 'other' }}
+                                            accessibilityLabel="Other reason"
                                         >
                                             <Text style={styles.reportOptionText}>💬 Other</Text>
                                         </Pressable>
@@ -696,6 +705,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                         style={styles.sheetSubmitBtn}
                                         onPress={handleSubmitReport}
                                         disabled={reportSubmitting}
+                                        accessibilityRole="button"
+                                        accessibilityState={{ disabled: reportSubmitting }}
+                                        accessibilityLabel="Submit Feedback"
                                     >
                                         {reportSubmitting ? (
                                             <ActivityIndicator color="#ffffff" />
@@ -708,6 +720,8 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                         style={styles.sheetCancelBtn}
                                         onPress={() => setReportingItem(null)}
                                         disabled={reportSubmitting}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Cancel"
                                     >
                                         <Text style={styles.sheetCancelText}>Cancel</Text>
                                     </Pressable>

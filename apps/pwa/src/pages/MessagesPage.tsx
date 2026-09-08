@@ -17,6 +17,8 @@ import { encodePlaintext, decodePlaintext, encryptDM, decryptDM, isEncryptedNonc
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
+import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
+import { ReportModal } from '../components/ReportModal';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -156,6 +158,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
     const [editingMessage, setEditingMessage] = useState<ApiMessage | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
+    const [reportTarget, setReportTarget] = useState<{ pubkey: string; name: string } | null>(null);
+    const [blocklistVersion, setBlocklistVersion] = useState(0);
     const draftRef = useRef<HTMLTextAreaElement>(null);
     const activeConvIdRef = useRef<string | null>(null);
 
@@ -182,9 +186,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const unsubscribe = onSyncActivity(() => {
             loadConversations();
         });
+        const unsubBlocklist = onBlocklistUpdated(() => {
+            setBlocklistVersion(v => v + 1);
+            loadConversations();
+            loadMembers();
+        });
         return () => {
             if (pollRef.current) clearInterval(pollRef.current);
             unsubscribe();
+            unsubBlocklist();
         };
     }, []);
 
@@ -252,7 +262,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     async function loadConversations() {
         try {
             const result = await getConversations(identity.publicKey);
-            setConversations(result.conversations);
+            const blocked = new Set(getBlockedUsers());
+            const filtered = (result.conversations || []).filter((c: Conversation) => {
+                if (c.type === 'dm') {
+                    const peer = (c.participants || []).find(p => p !== identity.publicKey);
+                    if (peer && blocked.has(peer)) return false;
+                }
+                return true;
+            });
+            setConversations(filtered);
             const txs = await getMyMarketplaceTransactions(identity.publicKey);
             setUserTransactions(txs);
             setActiveConv(prev => {
@@ -374,7 +392,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     async function loadMembers() {
         try {
             const result = await getMembers();
-            setMembers(result.filter((m: Member) => m.publicKey !== identity.publicKey));
+            const blocked = new Set(getBlockedUsers());
+            setMembers(result.filter((m: Member) => m.publicKey !== identity.publicKey && !blocked.has(m.publicKey)));
         } catch { /* offline */ }
     }
 
@@ -676,36 +695,83 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // Chat view
     if (activeConv) {
+        const peerPubkey = activeConv.type === 'dm'
+            ? (activeConv.participants?.find(p => p !== identity.publicKey) || '')
+            : '';
+        const isPeerBlocked = peerPubkey ? isUserBlocked(peerPubkey) : false;
+
         return (
             <div className="h-full max-w-4xl mx-auto w-full flex flex-col">
                 {/* Chat header */}
                 <div style={{
-                    display: 'flex', alignItems: 'center', gap: '0.75rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-primary)',
                 }}>
-                    <button
-                        onClick={() => {
-                            setActiveConv(null);
-                            setEditingMessage(null);
-                            setReplyToMessage(null);
-                            setDraft('');
-                            loadConversations();
-                        }}
-                        style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
-                    >
-                        ←
-                    </button>
-                    {renderAvatar(activeConv.peerAvatar, getConversationTitle(activeConv), 32)}
-                    <div>
-                        <div style={{ fontWeight: 600, fontSize: '1rem' }}>
-                            {getConversationTitle(activeConv)}
-                        </div>
-                        {activeConv.type === 'group' && (
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                {activeConv.participants.length} members
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <button
+                            onClick={() => {
+                                setActiveConv(null);
+                                setEditingMessage(null);
+                                setReplyToMessage(null);
+                                setDraft('');
+                                loadConversations();
+                            }}
+                            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                            ←
+                        </button>
+                        {renderAvatar(activeConv.peerAvatar, getConversationTitle(activeConv), 32)}
+                        <div>
+                            <div style={{ fontWeight: 600, fontSize: '1rem' }}>
+                                {getConversationTitle(activeConv)}
                             </div>
-                        )}
+                            {activeConv.type === 'group' && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    {activeConv.participants.length} members
+                                </div>
+                            )}
+                        </div>
                     </div>
+
+                    {activeConv.type === 'dm' && peerPubkey && (
+                        <div className="flex items-center gap-1.5 ml-auto">
+                            <button
+                                type="button"
+                                onClick={() => setReportTarget({ pubkey: peerPubkey, name: getConversationTitle(activeConv) })}
+                                title="Report user"
+                                aria-label="Report user"
+                                className="px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors flex items-center gap-1"
+                            >
+                                <span>🚩</span> <span className="hidden sm:inline">Report</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    if (isPeerBlocked) {
+                                        if (window.confirm(`Unblock ${getConversationTitle(activeConv)}?`)) {
+                                            unblockUser(peerPubkey);
+                                            await loadConversations();
+                                        }
+                                    } else {
+                                        const name = getConversationTitle(activeConv);
+                                        if (window.confirm(`Block ${name}?\n\nThis will hide their messages and posts, and notify moderation.`)) {
+                                            await blockUser(peerPubkey, identity.publicKey, 'Abusive user reported via Chat');
+                                            await loadConversations();
+                                        }
+                                    }
+                                }}
+                                aria-label={isPeerBlocked ? 'Unblock user' : 'Block user'}
+                                className={`px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center gap-1 ${
+                                    isPeerBlocked
+                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                        : 'border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
+                                }`}
+                            >
+                                <span>{isPeerBlocked ? '🛡️' : '🚫'}</span>
+                                <span>{isPeerBlocked ? 'Unblock' : 'Block'}</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Sticky Marketplace Header */}
@@ -1264,83 +1330,114 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     </div>
                 )}
 
-                {/* Send bar */}
-                <div style={{
-                    display: 'flex', gap: '0.5rem',
-                    padding: '0.5rem 1rem',
-                    alignItems: 'flex-end',
-                    borderTop: '1px solid var(--border-primary)',
-                    background: 'var(--bg-secondary)',
-                }}>
-                    {activeConv.type === 'dm' && (
-                        <label title="Send photo" style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: '40px', height: '40px', borderRadius: '50%',
-                            fontSize: '1.2rem',
-                            cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.5 : 1,
-                            flexShrink: 0,
-                            background: 'transparent',
-                        }}>
-                            📎
-                            <input
-                                type="file"
-                                accept="image/*"
-                                disabled={sending}
-                                style={{ display: 'none' }}
-                                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSendImage(f); e.target.value = ''; }}
-                            />
-                        </label>
-                    )}
-                    <textarea
-                        ref={draftRef}
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                            // Enter sends; Shift+Enter inserts a newline.
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSend();
-                            }
-                        }}
-                        placeholder={editingMessage ? "Edit message..." : "Message..."}
-                        disabled={sending}
-                        rows={1}
-                        style={{
-                            ...inputStyle,
-                            height: '40px',
-                            maxHeight: '100px',
-                            resize: 'none',
-                            overflowY: 'auto',
-                            lineHeight: 1.4,
-                            paddingTop: '0.55rem',
-                            paddingBottom: '0.55rem',
-                        }}
-                    />
-                    <button
-                        type="button"
-                        onClick={handleSend}
-                        disabled={sending || !draft.trim()}
-                        title={editingMessage ? "Save edit" : "Send message"}
-                        style={{
-                            height: '40px',
-                            width: '40px',
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            border: 'none',
-                            background: draft.trim() ? 'var(--accent)' : 'var(--bg-hover)',
-                            color: draft.trim() ? '#fff' : 'var(--text-muted)',
-                            fontSize: '1.2rem',
-                            cursor: draft.trim() ? 'pointer' : 'default',
-                            fontFamily: 'inherit',
-                            flexShrink: 0,
-                            padding: 0,
-                        }}
+                {/* Send bar / Blocked Notice */}
+                {isPeerBlocked ? (
+                    <div
+                        role="alert"
+                        className="p-3.5 m-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs sm:text-sm font-bold flex flex-wrap items-center justify-between gap-2 sm:gap-3"
                     >
-                        {sending ? '…' : (editingMessage ? '✓' : '↑')}
-                    </button>
-                </div>
+                        <span className="min-w-0 flex-1 break-words">🚫 You have blocked this user. Messaging is disabled.</span>
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (window.confirm(`Unblock ${getConversationTitle(activeConv)}?`)) {
+                                    unblockUser(peerPubkey);
+                                    await loadConversations();
+                                }
+                            }}
+                            className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 shrink-0"
+                        >
+                            Unblock
+                        </button>
+                    </div>
+                ) : (
+                    <div style={{
+                        display: 'flex', gap: '0.5rem',
+                        padding: '0.5rem 1rem',
+                        alignItems: 'flex-end',
+                        borderTop: '1px solid var(--border-primary)',
+                        background: 'var(--bg-secondary)',
+                    }}>
+                        {activeConv.type === 'dm' && (
+                            <label title="Send photo" style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: '40px', height: '40px', borderRadius: '50%',
+                                fontSize: '1.2rem',
+                                cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.5 : 1,
+                                flexShrink: 0,
+                                background: 'transparent',
+                            }}>
+                                📎
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    disabled={sending}
+                                    style={{ display: 'none' }}
+                                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSendImage(f); e.target.value = ''; }}
+                                />
+                            </label>
+                        )}
+                        <textarea
+                            ref={draftRef}
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                                // Enter sends; Shift+Enter inserts a newline.
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSend();
+                                }
+                            }}
+                            placeholder={editingMessage ? "Edit message..." : "Message..."}
+                            disabled={sending}
+                            rows={1}
+                            style={{
+                                ...inputStyle,
+                                height: '40px',
+                                maxHeight: '100px',
+                                resize: 'none',
+                                overflowY: 'auto',
+                                lineHeight: 1.4,
+                                paddingTop: '0.55rem',
+                                paddingBottom: '0.55rem',
+                            }}
+                        />
+                        <button
+                            type="button"
+                            onClick={handleSend}
+                            disabled={sending || !draft.trim()}
+                            title={editingMessage ? "Save edit" : "Send message"}
+                            style={{
+                                height: '40px',
+                                width: '40px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: 'none',
+                                background: draft.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+                                color: draft.trim() ? '#fff' : 'var(--text-muted)',
+                                fontSize: '1.2rem',
+                                cursor: draft.trim() ? 'pointer' : 'default',
+                                fontFamily: 'inherit',
+                                flexShrink: 0,
+                                padding: 0,
+                            }}
+                        >
+                            {sending ? '…' : (editingMessage ? '✓' : '↑')}
+                        </button>
+                    </div>
+                )}
+
+                {reportTarget && (
+                    <ReportModal
+                        isOpen={!!reportTarget}
+                        onClose={() => setReportTarget(null)}
+                        reporterPubkey={identity.publicKey}
+                        targetPubkey={reportTarget.pubkey}
+                        targetName={reportTarget.name}
+                    />
+                )}
             </div>
         );
     }

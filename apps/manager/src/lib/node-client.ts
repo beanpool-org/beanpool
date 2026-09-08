@@ -313,14 +313,11 @@ export async function fetchOnboardingFunnel(
     nodeUrl: string,
     adminPassword?: string,
     days = 30,
+    tfaToken?: string,
 ): Promise<OnboardingFunnelResponse> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/onboarding-funnel', { days: String(days) });
     const res = await fetch(endpoint, {
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
     });
     if (!res.ok) {
@@ -400,16 +397,13 @@ export async function freezeNodeUser(
     nodeUrl: string,
     pubkey: string,
     freeze: boolean,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean; frozen: boolean }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ freeze, password: adminPassword }),
     });
     if (!res.ok) {
@@ -421,16 +415,13 @@ export async function freezeNodeUser(
 export async function pruneNodeUser(
     nodeUrl: string,
     pubkey: string,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {
@@ -442,16 +433,13 @@ export async function pruneNodeUser(
 export async function generateNodeInvite(
     nodeUrl: string,
     adminPassword?: string,
-    type: 'standard' | 'trusted' | 'ambassador' | 'elder' = 'standard'
+    type: 'standard' | 'trusted' | 'ambassador' | 'elder' = 'standard',
+    tfaToken?: string
 ): Promise<{ success: boolean; code: string; type: string }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/admin/seed-invite');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword, type }),
     });
     if (!res.ok) {
@@ -464,16 +452,13 @@ export async function updateNodeUserTier(
     nodeUrl: string,
     pubkey: string,
     tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder',
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean; tier: string }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/tier`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ tier, password: adminPassword }),
     });
     if (!res.ok) {
@@ -486,16 +471,13 @@ export async function updateNodeUserVoucher(
     nodeUrl: string,
     pubkey: string,
     canVouch: boolean,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean; granted: boolean }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/voucher`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ grant: canVouch, password: adminPassword }),
     });
     if (!res.ok) {
@@ -508,16 +490,13 @@ export async function updateNodeUserOperator(
     nodeUrl: string,
     pubkey: string,
     granted: boolean,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/operator`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ granted, password: adminPassword }),
     });
     if (!res.ok) {
@@ -546,16 +525,13 @@ export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury
 export async function createNodeTreasury(
     nodeUrl: string,
     data: { name: string; avatar: string; creditLine?: number },
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean; publicKey: string }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/treasury');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...data, password: adminPassword }),
     });
     if (!res.ok) {
@@ -568,16 +544,13 @@ export async function seedTreasuryOffer(
     nodeUrl: string,
     treasuryPubkey: string,
     offer: { title: string; category: string; credits: number; description?: string; priceType?: string; repeatable?: boolean },
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean; post: Record<string, unknown> }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/offer`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...offer, password: adminPassword }),
     });
     if (!res.ok) {
@@ -679,13 +652,11 @@ export interface SnapshotItem {
     createdAt: string;
 }
 
-export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string): Promise<SnapshotItem[]> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotItem[]> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/list');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) return [];
@@ -693,13 +664,11 @@ export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string
     return data.snapshots || [];
 }
 
-export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string): Promise<SnapshotItem> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotItem> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/create');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {
@@ -709,13 +678,11 @@ export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string
     return data.snapshot;
 }
 
-export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPassword?: string): Promise<void> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPassword?: string, tfaToken?: string): Promise<void> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/delete');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ name, password: adminPassword }),
     });
     if (!res.ok) {
@@ -727,14 +694,13 @@ export async function updateNodeReplicationCadence(
     nodeUrl: string,
     pullSeconds: number,
     reconcileMinutes: number,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<void> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/backup-config');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ pullSeconds, reconcileMinutes, password: adminPassword }),
     });
     if (!res.ok) {
@@ -742,13 +708,11 @@ export async function updateNodeReplicationCadence(
     }
 }
 
-export async function forceNodeResync(nodeUrl: string, adminPassword?: string): Promise<void> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function forceNodeResync(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<void> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-resync');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {

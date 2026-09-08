@@ -800,24 +800,12 @@ export function App() {
                             onRefresh={() => loadNodeData()}
                             onFreezeUser={async (pubkey, freeze) => {
                                 if (activeNode) {
-                                    const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                    const url = resolveNodeApiUrl(activeNode.url, `/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`);
-                                    await fetch(url, {
-                                        method: 'POST',
-                                        headers,
-                                        body: JSON.stringify({ freeze, password: activeNode.adminPassword }),
-                                    });
+                                    await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                                 }
                             }}
                             onPruneUser={async (pubkey) => {
                                 if (activeNode) {
-                                    const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                    const url = resolveNodeApiUrl(activeNode.url, `/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`);
-                                    await fetch(url, {
-                                        method: 'POST',
-                                        headers,
-                                        body: JSON.stringify({ password: activeNode.adminPassword }),
-                                    });
+                                    await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                                 }
                             }}
                             onUpdateTier={async (pubkey, tier) => {

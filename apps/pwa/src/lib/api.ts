@@ -520,6 +520,7 @@ export interface Conversation {
     peerCallsign?: string;
     peerAvatar?: string | null;
     peerLastReadAt?: string | null;
+    readCursors?: { publicKey: string; lastReadAt: string | null }[];
 }
 
 export enum SystemMessageType {
@@ -550,6 +551,8 @@ export interface ApiMessage {
     systemType?: SystemMessageType;
     metadata?: string;
     timestamp: string;
+    editedAt?: string | null;
+    updatedAt?: string | null;
 }
 
 export interface MessageAttachment {
@@ -578,6 +581,23 @@ export async function sendMessageApi(
     metadata?: string,
 ): Promise<{ success: boolean; message: ApiMessage }> {
     return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata });
+}
+
+export async function editMessageApi(
+    messageId: string,
+    authorPubkey: string,
+    ciphertext: string,
+    nonce: string,
+): Promise<{ success: boolean; message: ApiMessage }> {
+    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce });
+}
+
+export async function toggleMessageReactionApi(
+    messageId: string,
+    authorPubkey: string,
+    emoji: string,
+): Promise<{ success: boolean; metadata: string }> {
+    return request('POST', '/api/messages/react', { messageId, authorPubkey, emoji });
 }
 
 export async function getConversations(publicKey: string): Promise<{ conversations: Conversation[]; totalUnread: number }> {

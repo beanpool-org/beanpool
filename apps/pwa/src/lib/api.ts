@@ -1104,7 +1104,15 @@ export async function updateNotificationPreferences(pubkey: string, preferences:
 
 export async function getNodeStats(): Promise<{ members: number; posts: number; transactions: number } | null> {
     try {
-        return await request<{ members: number; posts: number; transactions: number }>('GET', '/api/stats');
+        const health = await request<{
+            tree?: { totalMembers?: number };
+            activity?: { totalPosts?: number; totalTransactions?: number };
+        }>('GET', '/api/community/health');
+        return {
+            members: health?.tree?.totalMembers ?? 0,
+            posts: health?.activity?.totalPosts ?? 0,
+            transactions: health?.activity?.totalTransactions ?? 0,
+        };
     } catch {
         return null;
     }

@@ -154,7 +154,7 @@ export function GuardianInfoModal({ isOpen, onClose }: Props) {
                             <ListItem prefix="1.">You lose access to your device</ListItem>
                             <ListItem prefix="2.">You install the app on a new device</ListItem>
                             <ListItem prefix="3.">You contact your Guardians offline</ListItem>
-                            <ListItem prefix="4.">If a <Text style={styles.boldWhiteText}>majority</Text> (e.g., <Text style={styles.boldWhiteText}>2 out of 3</Text>, or <Text style={styles.boldWhiteText}>3 out of 5</Text>) of your Guardians approve your recovery request, your account is restored!</ListItem>
+                            <ListItem prefix="4.">When at least <Text style={styles.boldWhiteText}>3 Guardians</Text> (e.g., <Text style={styles.boldWhiteText}>3 out of 3</Text>, or <Text style={styles.boldWhiteText}>3 out of 5</Text>) approve your recovery request, your account is restored!</ListItem>
                         </View>
                     </View>
 

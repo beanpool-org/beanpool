@@ -6,7 +6,7 @@
 // so the node and the fleet manager compute an identical floor instead of the
 // manager keeping a hand-copied, drift-prone reimplementation.
 import type Database from 'better-sqlite3';
-import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
+import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
 
 type Db = Database.Database;
@@ -17,8 +17,8 @@ type Db = Database.Database;
 // Tuning (owner decision 2026-07-05): Lowered cap from 5000 to 500. One solid trade
 // banks a partner; repeat trades add nothing. Legitimate users need more distinct
 // counterparties to build deep credit.
-// CANONICAL tuning knob — single source of truth for volume caps (do not duplicate in manager or server).
-export const PER_COUNTERPARTY_VOLUME_CAP = 500;
+// CANONICAL tuning knob — single source of truth for volume caps (defined in @beanpool/core).
+export { PER_COUNTERPARTY_VOLUME_CAP };
 
 export interface WashAnalysis {
     flaggedPairs: Set<string>;

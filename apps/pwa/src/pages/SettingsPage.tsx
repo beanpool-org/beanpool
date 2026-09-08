@@ -242,8 +242,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
             setDbStats({
                 integrity: 'ok',
-                members: memberCount || (stats?.members ?? 0),
-                posts: postCount || (stats?.posts ?? 0),
+                members: stats ? stats.members : memberCount,
+                posts: stats ? stats.posts : postCount,
                 transactions: stats?.transactions ?? 0,
                 messages: 0
             });

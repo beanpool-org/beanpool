@@ -253,24 +253,26 @@ async function requestLetsEncryptCert(): Promise<boolean> {
         fs.writeFileSync(LE_KEY_PATH, serverKeyPem);
 
         console.log(`✅ Let's Encrypt cert obtained for ${CF_RECORD_NAME}`);
-        clearTimeout(timer);
         return true;
     })();
 
-    // Race the cert request against the timeout
-    const result = await Promise.race([
-        certPromise,
-        new Promise<false>((resolve) => {
-            const check = setInterval(() => {
-                if (timedOut) {
-                    clearInterval(check);
-                    resolve(false);
-                }
-            }, 500);
-        }),
-    ]);
-    clearTimeout(timer);
-    return result;
+    let checkInterval: ReturnType<typeof setInterval> | null = null;
+    try {
+        // Race the cert request against the timeout
+        return await Promise.race([
+            certPromise,
+            new Promise<false>((resolve) => {
+                checkInterval = setInterval(() => {
+                    if (timedOut) {
+                        resolve(false);
+                    }
+                }, 500);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+        if (checkInterval) clearInterval(checkInterval);
+    }
 }
 
 // --- Cloudflare DNS API ---

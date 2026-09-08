@@ -198,11 +198,12 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
         const releases = listReleases(collection.id);
+        const progress = collectionProgress(collection.id);
         ctx.status = 200;
         ctx.body = {
             collected: releases.length,
-            threshold: 2,
-            enough: releases.length >= 2,
+            threshold: progress?.threshold ?? 2,
+            enough: progress?.enough ?? (releases.length >= 2),
             fragments: releases.map(r => ({
                 holderType: r.holderType,
                 shareIndex: r.shareIndex,
@@ -407,7 +408,6 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     }
 
     router.post('/api/recovery/approve-keeper/pending', pendingKeeperHandler);
-    router.post('/api/recovery/collect/pending-keeper', pendingKeeperHandler);
 
     /** R1's cheap stop — reachable by the OWNER, who is the one without the attacker's session id. */
     router.post('/api/recovery/collect/cancel', async (ctx) => {

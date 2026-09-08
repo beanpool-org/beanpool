@@ -186,12 +186,10 @@ async function main(): Promise<void> {
     assert(afterCompleteStatus.status === 200 && afterCompleteStatus.body.pending.length === 0,
         'collection with status=complete stops being reported');
 
-    // ── 9. Alias endpoint /api/recovery/collect/pending-keeper ────────────────
-    console.log('\n── 9. Alias Endpoint ────────────────────────────────────');
-    const col6 = openCollection(owner.pubkey, ephemeral());
-    const aliasRes = await call('/api/recovery/collect/pending-keeper', newBuddy.pubkey);
-    assert(aliasRes.status === 200 && aliasRes.body.pending.length === 1,
-        'alias route /api/recovery/collect/pending-keeper returns identical result');
+    // ── 9. Single Canonical Route Registration ────────────────────────────────
+    console.log('\n── 9. Canonical Route Registration ──────────────────────');
+    const aliasMounted = (router as any).stack.some((l: any) => l.path === '/api/recovery/collect/pending-keeper');
+    assert(!aliasMounted, 'redundant alias route /api/recovery/collect/pending-keeper is not mounted (single canonical path)');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

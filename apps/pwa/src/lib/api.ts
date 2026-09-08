@@ -1500,18 +1500,22 @@ export async function startFriendRecoverySessionApi(callsign: string): Promise<{
     };
 }
 
+export interface FriendRecoveryProgress {
+    collected: number;
+    friendApprovals: number;
+    threshold: number;
+    friendThreshold: number;
+    enough: boolean;
+    hubAvailable: boolean;
+}
+
 /**
  * Recovering device: Polls collection status and triggers Hub release.
  */
 export async function pollFriendRecoveryApi(
     collectionId: string,
     ephIdentity: { publicKey: string; privateKey: string },
-): Promise<{
-    collected: number;
-    threshold: number;
-    enough: boolean;
-    hubAvailable: boolean;
-}> {
+): Promise<FriendRecoveryProgress> {
     // Attempt instant hub release under D7
     await signedRequestWithKey(
         'POST',
@@ -1534,11 +1538,14 @@ export async function pollFriendRecoveryApi(
         ephIdentity.publicKey,
     );
 
-    const releasedTypes = st.releasedTypes || [];
+    const releasedTypes = Array.isArray(st.releasedTypes) ? st.releasedTypes : [];
+    const friendApprovals = releasedTypes.filter((t: string) => t === 'member').length;
 
     return {
-        collected: st.collected || 0,
-        threshold: st.threshold || 3,
+        collected: typeof st.collected === 'number' ? st.collected : 0,
+        friendApprovals,
+        threshold: typeof st.threshold === 'number' ? st.threshold : (TWO_LAYER_THRESHOLD + 1),
+        friendThreshold: TWO_LAYER_THRESHOLD,
         enough: !!st.enough,
         hubAvailable: releasedTypes.includes('hub'),
     };

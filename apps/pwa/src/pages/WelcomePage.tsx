@@ -13,11 +13,12 @@ import { validateMnemonic } from '../lib/mnemonic';
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership,
     recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl,
-    startFriendRecoverySessionApi, pollFriendRecoveryApi, completeFriendRecoveryApi, lookupRecoveryCallsign
+    startFriendRecoverySessionApi, pollFriendRecoveryApi, completeFriendRecoveryApi, lookupRecoveryCallsign,
+    type FriendRecoveryProgress,
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
+import { createPairingSession, decryptPairingPayload, TWO_LAYER_THRESHOLD } from '@beanpool/core';
 
 const QRCodeSVGComponent: React.FC<any> = QRCodeSVG as any;
 
@@ -211,12 +212,14 @@ export function WelcomePage({ onComplete }: Props) {
     const [friendSelectedProfile, setFriendSelectedProfile] = useState<any>(null);
     const [friendCollectionId, setFriendCollectionId] = useState<string | null>(null);
     const [friendEphIdentity, setFriendEphIdentity] = useState<{ publicKey: string; privateKey: string } | null>(null);
-    const [friendProgress, setFriendProgress] = useState<{
-        collected: number;
-        threshold: number;
-        enough: boolean;
-        hubAvailable: boolean;
-    }>({ collected: 0, threshold: 3, enough: false, hubAvailable: false });
+    const [friendProgress, setFriendProgress] = useState<FriendRecoveryProgress>({
+        collected: 0,
+        friendApprovals: 0,
+        threshold: TWO_LAYER_THRESHOLD + 1,
+        friendThreshold: TWO_LAYER_THRESHOLD,
+        enough: false,
+        hubAvailable: false,
+    });
     const isFriendPollingRef = useRef(false);
     const isFriendReconstructingRef = useRef(false);
 
@@ -365,9 +368,10 @@ export function WelcomePage({ onComplete }: Props) {
     const cameraInputRef = useRef<HTMLInputElement>(null);
     // Two-layer friend recovery status poller
     useEffect(() => {
-        let interval: any;
+        let interval: any = null;
         if (recoveryMode === 'friends' && friendStep === 'waiting' && friendCollectionId && friendEphIdentity) {
             const poll = async () => {
+                if (document.hidden) return;
                 if (isFriendPollingRef.current || isFriendReconstructingRef.current) return;
                 isFriendPollingRef.current = true;
                 try {
@@ -397,10 +401,44 @@ export function WelcomePage({ onComplete }: Props) {
                 }
             };
 
-            interval = setInterval(poll, 3000);
-            poll();
+            const startPolling = () => {
+                if (!interval) {
+                    interval = setInterval(poll, 3000);
+                    poll();
+                }
+            };
+
+            const stopPolling = () => {
+                if (interval) {
+                    clearInterval(interval);
+                    interval = null;
+                }
+            };
+
+            const handleVisibilityChange = () => {
+                if (document.hidden) {
+                    stopPolling();
+                } else {
+                    startPolling();
+                }
+            };
+
+            if (!document.hidden) {
+                startPolling();
+            }
+
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            return () => {
+                stopPolling();
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+            };
         }
-        return () => clearInterval(interval);
+        return () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
     }, [recoveryMode, friendStep, friendCollectionId, friendEphIdentity, friendSelectedProfile, onComplete]);
 
     async function handleFriendLookup() {
@@ -432,7 +470,9 @@ export function WelcomePage({ onComplete }: Props) {
             setFriendEphIdentity(session.ephIdentity);
             setFriendProgress({
                 collected: 0,
+                friendApprovals: 0,
                 threshold: session.threshold,
+                friendThreshold: TWO_LAYER_THRESHOLD,
                 enough: false,
                 hubAvailable: false,
             });
@@ -1407,7 +1447,7 @@ export function WelcomePage({ onComplete }: Props) {
                                             ⏳ Waiting for Friend Approvals
                                         </h3>
                                         <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5, textAlign: 'center' }}>
-                                            Call any 2 of your trusted friends by phone and give them your Recovery Session Code to approve under <strong>Settings → Recovery Requests</strong>.
+                                            Call any {TWO_LAYER_THRESHOLD} of your trusted friends by phone and give them your Recovery Session Code to approve under <strong>Settings → Recovery Requests</strong>.
                                         </p>
 
                                         {friendCollectionId && (
@@ -1421,17 +1461,53 @@ export function WelcomePage({ onComplete }: Props) {
                                             </div>
                                         )}
 
-                                        <div style={{ background: 'var(--bg-secondary, #1e293b)', padding: '1.25rem', borderRadius: '14px', textAlign: 'center', marginBottom: '1rem', border: '1px solid var(--border-primary, #333)' }}>
-                                            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
-                                                Friend Approvals Collected
-                                            </div>
-                                            <div style={{ fontSize: '2.25rem', fontWeight: 800, color: '#10b981' }}>
-                                                {friendProgress.collected} / 2
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                                                {friendProgress.hubAvailable ? '✅ Community Hub: Piece ready' : '⏳ Community Hub: Checking...'}
-                                            </div>
-                                        </div>
+                                        {(() => {
+                                            const friendsRequired = friendProgress.friendThreshold || TWO_LAYER_THRESHOLD;
+                                            const friendsCollected = friendProgress.friendApprovals;
+                                            const remainingFriends = Math.max(0, friendsRequired - friendsCollected);
+                                            const isReady = friendProgress.enough;
+
+                                            const statusText = isReady
+                                                ? '✅ Ready to rebuild account'
+                                                : friendsCollected === 0
+                                                ? `Not yet started — waiting on ${friendsRequired} friends to approve`
+                                                : `Waiting on ${remainingFriends} more friend approval${remainingFriends === 1 ? '' : 's'}`;
+
+                                            const statusColor = isReady
+                                                ? '#10b981'
+                                                : friendsCollected === 0
+                                                ? 'var(--text-primary, #ffffff)'
+                                                : '#f59e0b';
+
+                                            return (
+                                                <div
+                                                    role="status"
+                                                    aria-live="polite"
+                                                    aria-label={`Friend approvals: ${friendsCollected} of ${friendsRequired}. ${statusText}. Community hub piece: ${friendProgress.hubAvailable ? 'ready' : 'waiting'}. Total pieces collected: ${friendProgress.collected} of ${friendProgress.threshold}.`}
+                                                    style={{ background: 'var(--bg-secondary, #1e293b)', padding: '1.25rem', borderRadius: '14px', textAlign: 'center', marginBottom: '1rem', border: '1px solid var(--border-primary, #333)' }}
+                                                >
+                                                    <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                                                        Friend Approvals
+                                                    </div>
+                                                    <div style={{ fontSize: '2.25rem', fontWeight: 800, color: statusColor }}>
+                                                        {friendsCollected} / {friendsRequired}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: isReady ? '#10b981' : 'var(--text-secondary, #94a3b8)', marginTop: '0.35rem' }}>
+                                                        {statusText}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.65rem', borderTop: '1px solid var(--border-primary, #333)', paddingTop: '0.5rem' }}>
+                                                        {friendProgress.hubAvailable
+                                                            ? '✅ Community Hub: Piece ready'
+                                                            : friendsCollected === 0
+                                                            ? '⏳ Community Hub: Unlocks after 1st friend approval'
+                                                            : '⏳ Community Hub: Unlocking...'}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                                        Pieces Collected: {friendProgress.collected} / {friendProgress.threshold} (server verified)
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
 
                                         {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'center' }}>{error}</p>}
 

@@ -9,6 +9,8 @@ import { useState, useEffect, useRef } from 'react';
 import { updateMemberProfile, getMemberProfile, type MemberProfile } from '../lib/api';
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
+import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -22,6 +24,9 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
     const [bio, setBio] = useState('');
     const [contactValue, setContactValue] = useState('');
     const [contactVisibility, setContactVisibility] = useState<'hidden' | 'trade_partners' | 'community' | 'friends'>('hidden');
+    const [archetype, setArchetype] = useState<string | null>(null);
+    const [showQuizModal, setShowQuizModal] = useState(false);
+    const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -41,6 +46,9 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 if (profile.contact) {
                     setContactValue(profile.contact.value);
                     setContactVisibility(profile.contact.visibility);
+                }
+                if (profile.archetype) {
+                    setArchetype(profile.archetype);
                 }
             }
         } catch { /* first time */ }
@@ -62,6 +70,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     ? { value: contactValue.trim(), visibility: contactVisibility }
                     : null,
                 callsign: callsign.trim() || undefined,
+                archetype: archetype || undefined,
             });
             // Update callsign if changed
             if (callsign.trim() && callsign.trim() !== identity.callsign) {
@@ -78,6 +87,21 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
             setSaving(false);
         }
     }
+
+    const handleQuizComplete = async (quizResult: QuizResult) => {
+        const publicArchetype = JSON.stringify({
+            primary: quizResult.primary,
+            secondary: quizResult.secondary,
+            mode: quizResult.mode,
+            updatedAt: quizResult.updatedAt,
+        });
+        setArchetype(publicArchetype);
+        try {
+            await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
+        } catch (e) {
+            console.warn('[Archetype] Save failed:', e);
+        }
+    };
 
     function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
@@ -256,6 +280,108 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 )}
             </div>
 
+            {/* Working style (self) */}
+            {(() => {
+                const mine = parseArchetype(archetype);
+                const primary = mine ? ARCHETYPES[mine.primary] : null;
+                const secondary = mine ? ARCHETYPES[mine.secondary] : null;
+
+                if (mine && primary) {
+                    return (
+                        <div className="bg-oat-50/50 dark:bg-nature-950/40 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 mb-8 shadow-sm space-y-3">
+                            <div className="flex items-center gap-3">
+                                <span className="text-3xl select-none" aria-hidden="true">{primary.emoji}</span>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-[15px] font-bold text-nature-950 dark:text-white truncate">
+                                        {primary.name}
+                                    </div>
+                                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 truncate">
+                                        {primary.tagline}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
+                                {primary.description}
+                            </p>
+
+                            {secondary && (
+                                <div className="text-xs font-semibold text-nature-700 dark:text-nature-300">
+                                    Secondary rhythm: {secondary.emoji} {secondary.name}
+                                </div>
+                            )}
+
+                            <div className="space-y-1.5 pt-1">
+                                {primary.superpowers.map((sp, idx) => (
+                                    <div key={idx} className="flex items-start gap-2 text-xs text-nature-700 dark:text-nature-300">
+                                        <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✓</span>
+                                        <span>{sp}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-300 leading-normal">
+                                💡 <strong className="font-bold">How you work best:</strong> {primary.collaborationStyle}
+                            </div>
+
+                            <div className="flex gap-2 pt-2">
+                                {mine.mode === 'quick' && (
+                                    <button
+                                        type="button"
+                                        aria-label="Take the longer 27 question quiz for a more accurate result"
+                                        onClick={() => {
+                                            setQuizInitialMode('deep');
+                                            setShowQuizModal(true);
+                                        }}
+                                        className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                    >
+                                        🧭 More accurate
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    aria-label="Retake community working style quiz"
+                                    onClick={() => {
+                                        setQuizInitialMode('quick');
+                                        setShowQuizModal(true);
+                                    }}
+                                    className={`py-2.5 px-3 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-800 dark:text-nature-200 cursor-pointer transition-colors shadow-sm truncate ${
+                                        mine.mode === 'quick' ? 'flex-1' : 'w-full'
+                                    }`}
+                                >
+                                    🔄 Retake
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="bg-oat-50/50 dark:bg-nature-950/40 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 mb-8 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl" aria-hidden="true">✨</span>
+                            <div className="text-[15px] font-bold text-nature-950 dark:text-white">
+                                Your Working Style
+                            </div>
+                        </div>
+                        <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed mb-4 m-0">
+                            Take the 60-second quiz to uncover your collaborative superpowers. Neighbours can then see how the two of you work together.
+                        </p>
+                        <button
+                            type="button"
+                            aria-label="Take 60 second community working style quiz"
+                            onClick={() => {
+                                setQuizInitialMode('quick');
+                                setShowQuizModal(true);
+                            }}
+                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
+                        >
+                            ⚡ Take 60s Quiz
+                        </button>
+                    </div>
+                );
+            })()}
+
             {/* Save Button */}
             <button
                 onClick={handleSave}
@@ -270,6 +396,13 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
             >
                 {saved ? '✓ Profile Saved Successfully!' : saving ? 'Saving...' : 'Save Profile Changes'}
             </button>
+
+            <ArchetypeQuizModal
+                visible={showQuizModal}
+                initialMode={quizInitialMode}
+                onClose={() => setShowQuizModal(false)}
+                onComplete={handleQuizComplete}
+            />
         </div>
     );
 }

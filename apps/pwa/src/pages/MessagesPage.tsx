@@ -182,6 +182,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             loadMessages(activeConv.id);
             // Mark conversation as read when opened
             markConversationReadApi(identity.publicKey, activeConv.id).catch(() => {});
+            // Check for prefilled draft from sessionStorage (e.g. Archetype synergy chat nudge)
+            const prefill = sessionStorage.getItem('bp_chat_prefill');
+            if (prefill) {
+                setDraft(prefill);
+                sessionStorage.removeItem('bp_chat_prefill');
+                setTimeout(() => draftRef.current?.focus(), 100);
+            }
             // Poll for new messages every 3 seconds (backstop)
             pollRef.current = window.setInterval(() => loadMessages(activeConv.id), 3000);
             // Fast path: the WebSocket doorbell refreshes this conversation
@@ -240,13 +247,23 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         } catch { /* offline */ }
     }
 
-    // Auto-open conversation when navigating from Market "Message" button
+    // Auto-open conversation when navigating from Market "Message" button or profile chat
     useEffect(() => {
         if (!openConversationId) return;
         loadConversations().then(() => {
             // Find the conversation and open it
-            getConversations(identity.publicKey).then(result => {
-                const conv = result.conversations.find((c: Conversation) => c.id === openConversationId);
+            getConversations(identity.publicKey).then(async result => {
+                let conv = result.conversations.find((c: Conversation) => c.id === openConversationId);
+                if (!conv) {
+                    conv = result.conversations.find((c: Conversation) => c.type === 'dm' && c.participants.includes(openConversationId));
+                }
+                if (!conv && openConversationId.length >= 32) {
+                    try {
+                        const created = await createConversationApi('dm', [identity.publicKey, openConversationId], identity.publicKey);
+                        conv = created.conversation;
+                        await loadConversations();
+                    } catch { /* offline or failed */ }
+                }
                 if (conv) {
                     setActiveConv(conv);
                 }

@@ -15,7 +15,7 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
 import { type Theme } from '../lib/useTheme';
-import { getBlockedUsers, unblockUser, clearBlocklist } from '../lib/blocklist';
+import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -88,16 +88,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         const next = !useModernMarkers;
         setUseModernMarkers(next);
         localStorage.setItem('beanpool_modern_markers', String(next));
-    };
-
-    const [privacyTier, setPrivacyTier] = useState<'3' | '0'>(() => {
-        return (localStorage.getItem('beanpool-privacy-tier') as '3' | '0') || '0';
-    });
-
-    const handleTogglePrivacy = () => {
-        const next = privacyTier === '3' ? '0' : '3';
-        setPrivacyTier(next);
-        localStorage.setItem('beanpool-privacy-tier', next);
     };
 
     // Track whether the member has ever viewed their 12 words in Settings.
@@ -198,6 +188,16 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
             setLoadingBlockedList(false);
         }
     };
+
+    useEffect(() => {
+        if (mode === 'blocked-users') {
+            loadBlockedList();
+            const unsub = onBlocklistUpdated(() => {
+                loadBlockedList();
+            });
+            return unsub;
+        }
+    }, [mode]);
 
     // Recovery Requests (Guardian)
     const [recoveryReqs, setRecoveryReqs] = useState<any[]>([]);
@@ -574,25 +574,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
-
-                                {/* Location Privacy */}
-                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xl">📍</span>
-                                        <div>
-                                            <div className="text-[15px] font-bold text-nature-900 dark:text-white">
-                                                {privacyTier === '3' ? 'Live Location Sharing' : 'Ghost Mode (Location Hidden)'}
-                                            </div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">Real-time vs hidden presence</div>
-                                        </div>
-                                    </div>
-                                    <ToggleSwitch
-                                        checked={privacyTier === '3'}
-                                        onChange={handleTogglePrivacy}
-                                        label="Live Location Sharing"
-                                        activeBgClass="bg-red-500 border-red-600"
-                                    />
-                                </div>
 
                                 {/* Modern Map Pins */}
                                 <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
@@ -1172,8 +1153,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={async () => {
-                                                    await unblockUser(item.pubkey);
+                                                onClick={() => {
+                                                    unblockUser(item.pubkey);
                                                     setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
                                                 }}
                                                 className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0"
@@ -1186,9 +1167,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
                                 <button
                                     type="button"
-                                    onClick={async () => {
+                                    onClick={() => {
                                         if (window.confirm('Are you sure you want to unblock all members?')) {
-                                            await clearBlocklist();
+                                            clearBlocklist();
                                             setBlockedUsersList([]);
                                         }
                                     }}

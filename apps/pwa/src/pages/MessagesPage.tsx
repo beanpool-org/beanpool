@@ -989,9 +989,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 {isPeerBlocked ? (
                     <div
                         role="alert"
-                        className="p-3.5 m-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs sm:text-sm font-bold flex items-center justify-between gap-3"
+                        className="p-3.5 m-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs sm:text-sm font-bold flex flex-wrap items-center justify-between gap-2 sm:gap-3"
                     >
-                        <span>🚫 You have blocked this user. Messaging is disabled.</span>
+                        <span className="min-w-0 flex-1 break-words">🚫 You have blocked this user. Messaging is disabled.</span>
                         <button
                             type="button"
                             onClick={async () => {
@@ -1000,7 +1000,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     await loadConversations();
                                 }
                             }}
-                            className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50"
+                            className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 shrink-0"
                         >
                             Unblock
                         </button>
@@ -1276,15 +1276,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             );
                         })}
                 </div>
-            )}
-            {reportTarget && (
-                <ReportModal
-                    isOpen={!!reportTarget}
-                    onClose={() => setReportTarget(null)}
-                    reporterPubkey={identity.publicKey}
-                    targetPubkey={reportTarget.pubkey}
-                    targetName={reportTarget.name}
-                />
             )}
         </div>
     );

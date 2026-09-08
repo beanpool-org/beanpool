@@ -241,8 +241,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
                     {!isSelf && (
                         isBlocked ? (
-                            <div className="mt-6 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-bold flex items-center gap-2">
-                                <span>🚫</span> You have blocked this member. Messaging is disabled.
+                            <div className="mt-6 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-bold flex flex-wrap items-center gap-2 break-words">
+                                <span>🚫</span> <span className="min-w-0 flex-1 break-words">You have blocked this member. Messaging is disabled.</span>
                             </div>
                         ) : (
                             <button 
@@ -669,13 +669,15 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             )}
 
             {/* Report Modal */}
-            <ReportModal
-                isOpen={showReportModal}
-                onClose={() => setShowReportModal(false)}
-                reporterPubkey={identity.publicKey}
-                targetPubkey={pubkey}
-                targetName={profile?.callsign || 'Member'}
-            />
+            {showReportModal && (
+                <ReportModal
+                    isOpen={showReportModal}
+                    onClose={() => setShowReportModal(false)}
+                    reporterPubkey={identity.publicKey}
+                    targetPubkey={pubkey}
+                    targetName={profile?.callsign || 'Member'}
+                />
+            )}
         </div>
     );
 }

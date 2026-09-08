@@ -24,6 +24,13 @@ describe('app-version', () => {
             expect(normaliseVersion('beta-1.0')).toBeNull();
             expect(normaliseVersion('1.2.3.4')).toBeNull();
         });
+
+        it('rejects pre-release suffixes and build tags matching native', () => {
+            expect(normaliseVersion('1.2.3-1')).toBeNull();
+            expect(normaliseVersion('1.2.31-beta')).toBeNull();
+            expect(normaliseVersion('1.0.0-rc1')).toBeNull();
+            expect(normaliseVersion('1.2.31 (253)')).toBeNull();
+        });
     });
 
     describe('isVersionOlder', () => {
@@ -49,9 +56,11 @@ describe('app-version', () => {
             expect(isVersionOlder('2', '1.9.9')).toBe(false);
         });
 
-        it('returns false for unparseable versions as a safe fallback', () => {
+        it('returns false for unparseable versions as a safe fallback (fails open)', () => {
             expect(isVersionOlder('invalid', '1.2.0')).toBe(false);
             expect(isVersionOlder('1.2.0', 'invalid')).toBe(false);
+            expect(isVersionOlder('1.2.0', '1.2.1-beta')).toBe(false);
+            expect(isVersionOlder('1.2.0-rc1', '1.2.0')).toBe(false);
         });
     });
 });

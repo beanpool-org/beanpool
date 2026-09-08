@@ -158,8 +158,15 @@ export function App() {
             .catch(() => { if (mounted) setCommunityHealth(prev => ({ ...prev, online: false })); });
 
         retryPendingReports().catch(() => {});
+        const handleOnline = () => {
+            retryPendingReports().catch(() => {});
+        };
+        window.addEventListener('online', handleOnline);
 
-        return () => { mounted = false; };
+        return () => {
+            mounted = false;
+            window.removeEventListener('online', handleOnline);
+        };
     }, []);
 
     // Connect to BeanPool Node once identity is loaded

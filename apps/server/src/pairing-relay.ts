@@ -131,6 +131,10 @@ export function pollPairingSession(sessionId: string): {
     desktopPubHex?: string;
     payload?: PairingPayload;
 } {
+    if (!sessionId || typeof sessionId !== 'string' || !/^[0-9a-fA-F]{16,64}$/.test(sessionId)) {
+        return { status: 'expired' };
+    }
+
     const session = sessions.get(sessionId);
     if (!session) {
         return { status: 'expired' };

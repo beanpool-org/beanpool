@@ -48,9 +48,9 @@ export function createPairingRoutes(deps: RouteDeps): Router {
      */
     router.get('/api/pair/poll', async (ctx) => {
         const sessionId = ctx.query.session as string;
-        if (!sessionId) {
+        if (!sessionId || typeof sessionId !== 'string' || !/^[0-9a-fA-F]{16,64}$/.test(sessionId)) {
             ctx.status = 400;
-            ctx.body = { error: 'Missing session query parameter' };
+            ctx.body = { error: 'Invalid or missing session query parameter' };
             return;
         }
 

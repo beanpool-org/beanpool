@@ -12,7 +12,6 @@ import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/ident
 import { connectToAnchor, onSystemAnnouncement } from './lib/sync';
 import { checkMembership, getConversations, getMarketplacePosts, getMyMarketplaceTransactions, getCommunityHealth } from './lib/api';
 import { useTheme } from './lib/useTheme';
-import pkg from '../package.json';
 import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
 import { MarketplacePage } from './pages/MarketplacePage';
@@ -95,6 +94,7 @@ export function App() {
     const [showProfileSetup, setShowProfileSetup] = useState(false);
     const [showCommunityStatus, setShowCommunityStatus] = useState(false);
     const [communityHealth, setCommunityHealth] = useState<any | null>(null);
+    const displayVersion = communityHealth?.version || __APP_VERSION__;
 
     const toggleCommunityStatus = () => {
         if (communityHealth) {
@@ -121,11 +121,15 @@ export function App() {
         if (tab === 'marketplace' && contextId) setOpenMarketPostId(contextId);
     }
 
-    // Load existing identity on mount
+    // Load existing identity and initial community health on mount
     useEffect(() => {
         loadIdentity()
             .then(setIdentity)
             .finally(() => setLoading(false));
+
+        getCommunityHealth()
+            .then(h => setCommunityHealth({ ...h, online: true }))
+            .catch(() => setCommunityHealth((prev: any) => prev || { online: false }));
     }, []);
 
     // Connect to BeanPool Node once identity is loaded
@@ -234,7 +238,7 @@ export function App() {
                         <img src="/bean.png" alt="BeanPool Icon" className="w-9 h-9 object-contain drop-shadow-sm" />
                         <div className="flex flex-col">
                             <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
-                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 tracking-wider">v{pkg.version}</span>
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 tracking-wider">v{displayVersion}</span>
                         </div>
                     </div>
                 </div>
@@ -356,7 +360,7 @@ export function App() {
                             >
                                 <img src="/bean.png" alt="BeanPool Icon" style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
                                 <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">BeanPool</span>
-                                <span className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider">v{pkg.version}</span>
+                                <span className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider">v{displayVersion}</span>
                             </div>
                         )}
 
@@ -421,6 +425,7 @@ export function App() {
                                 onToggleTheme={toggleTheme}
                                 initialMode={settingsInitialMode}
                                 onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}
+                                nodeVersion={displayVersion}
                             />
                         </div>
                     )}

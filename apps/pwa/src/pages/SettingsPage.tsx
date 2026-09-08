@@ -15,7 +15,6 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
 import { type Theme } from '../lib/useTheme';
-import pkg from '../../package.json';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -25,6 +24,7 @@ interface Props {
     onToggleTheme: () => void;
     initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications';
     onReRunSetup?: () => void;
+    nodeVersion?: string;
 }
 
 function ToggleSwitch({
@@ -68,7 +68,7 @@ function ToggleSwitch({
     );
 }
 
-export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode, onReRunSetup }: Props) {
+export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode, onReRunSetup, nodeVersion }: Props) {
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications'>(initialMode || 'menu');
 
     useEffect(() => {
@@ -439,7 +439,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
                     <div className="flex justify-between items-center text-xs text-nature-500 dark:text-nature-400 pt-2 border-t border-nature-100 dark:border-nature-800">
                         <span>Node: <code className="font-mono text-nature-700 dark:text-nature-300">{window.location.host}</code></span>
-                        <span>v{pkg.version} (PWA)</span>
+                        <span>v{nodeVersion || __APP_VERSION__}</span>
                     </div>
                 </div>
 

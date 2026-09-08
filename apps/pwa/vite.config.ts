@@ -2,8 +2,22 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
+import fs from 'node:fs';
+
+let resolvedVersion = process.env.APP_VERSION;
+if (!resolvedVersion) {
+    try {
+        const rootPkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'));
+        resolvedVersion = rootPkg.version;
+    } catch {
+        resolvedVersion = '1.2.15';
+    }
+}
 
 export default defineConfig({
+    define: {
+        __APP_VERSION__: JSON.stringify(resolvedVersion),
+    },
     plugins: [
         react(),
         VitePWA({

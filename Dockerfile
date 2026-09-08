@@ -6,6 +6,10 @@
 # the better-sqlite3 rebuild break; see the runtime stage).
 FROM node:22-alpine3.21 AS builder
 
+# Accept version from CI build args (from git tag) so frontend build inherits it
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
+
 WORKDIR /app
 
 # Enable pnpm

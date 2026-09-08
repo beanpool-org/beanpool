@@ -329,7 +329,6 @@ export interface Conversation {
     peerCallsign?: string;
     peerAvatar?: string | null;
     peerLastReadAt?: string | null;
-    myLastReadAt?: string | null;
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
 }
 

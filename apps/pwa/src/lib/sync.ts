@@ -186,7 +186,12 @@ function scheduleReconnect(url: string): void {
 if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            if (!ws || ws.readyState === WebSocket.CLOSED) {
+            const isDead = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+            if (isDead) {
+                if (ws) {
+                    try { ws.close(); } catch {}
+                    ws = null;
+                }
                 if (reconnectTimeoutId) {
                     clearTimeout(reconnectTimeoutId);
                     reconnectTimeoutId = null;

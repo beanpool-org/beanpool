@@ -9,7 +9,8 @@ vi.mock('./identity', () => ({
     signPayload: vi.fn(async (_identity, payload) => 'mock-sig-' + (payload?.id || 'default')),
 }));
 
-import { formatRelativeTime, isOfficialSource } from './pulse';
+import { formatRelativeTime, isOfficialSource, resolvePulseThumbnailUrl } from './pulse';
+import { setNodeApiUrl } from './api';
 import {
     getPulseFeed,
     getMemberChannels,
@@ -407,3 +408,36 @@ describe('Pulse API Client Integration', () => {
         );
     });
 });
+
+describe('resolvePulseThumbnailUrl', () => {
+    beforeEach(() => {
+        setNodeApiUrl(null);
+    });
+
+    it('returns null for falsy or blank itemId', () => {
+        expect(resolvePulseThumbnailUrl(null)).toBeNull();
+        expect(resolvePulseThumbnailUrl(undefined)).toBeNull();
+        expect(resolvePulseThumbnailUrl('')).toBeNull();
+        expect(resolvePulseThumbnailUrl('   ')).toBeNull();
+    });
+
+    it('returns same-origin proxy path by default', () => {
+        expect(resolvePulseThumbnailUrl('item_abc123')).toBe(
+            '/api/pulse/items/item_abc123/thumbnail'
+        );
+    });
+
+    it('encodes special characters in itemId', () => {
+        expect(resolvePulseThumbnailUrl('item/123?foo=bar')).toBe(
+            '/api/pulse/items/item%2F123%3Ffoo%3Dbar/thumbnail'
+        );
+    });
+
+    it('prepends custom node API URL when configured (detached PWA)', () => {
+        setNodeApiUrl('https://node.example.org:8443');
+        expect(resolvePulseThumbnailUrl('item_xyz')).toBe(
+            'https://node.example.org:8443/api/pulse/items/item_xyz/thumbnail'
+        );
+    });
+});
+

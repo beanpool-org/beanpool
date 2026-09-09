@@ -1,8 +1,19 @@
+import { getNodeApiUrl } from './api';
+
 /**
- * Pulse Feed Utilities for PWA.
+ * Resolve the proxy endpoint for a Pulse feed item thumbnail.
  *
- * Provides time formatting and lane classification matching Native reference.
+ * Directs the browser to the node's same-origin endpoint:
+ *   GET /api/pulse/items/:id/thumbnail
+ *
+ * This satisfies CSP (img-src 'self'), avoids leaking member IPs to Meta and Google,
+ * and survives CDN signed URL expiry.
  */
+export function resolvePulseThumbnailUrl(itemId: string | null | undefined): string | null {
+    if (!itemId || !itemId.trim()) return null;
+    const base = getNodeApiUrl();
+    return `${base}/api/pulse/items/${encodeURIComponent(itemId.trim())}/thumbnail`;
+}
 
 /**
  * Format an ISO publishedAt timestamp into a human-readable relative string.

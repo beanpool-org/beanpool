@@ -17,7 +17,7 @@ import {
     VIDEO_PLATFORMS,
 } from '@beanpool/core';
 import { type PulseFeedItem } from '../lib/api';
-import { formatRelativeTime, isOfficialSource } from '../lib/pulse';
+import { formatRelativeTime, isOfficialSource, resolvePulseThumbnailUrl } from '../lib/pulse';
 import { resolveAvatarUrl } from '../lib/avatar';
 
 interface Props {
@@ -33,6 +33,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
     const [showMuteConfirm, setShowMuteConfirm] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+    useEffect(() => {
+        setImageFailed(false);
+    }, [item.id, item.thumbnailUrl]);
+
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
     const platMeta = platformMeta(item.platform);
     const catMeta = categoryMeta(item.category);
@@ -40,6 +44,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
     const timeAgo = formatRelativeTime(item.publishedAt);
     const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : 'Neighbour');
     const avatarResolved = resolveAvatarUrl(item.avatarUrl);
+    const proxiedThumbnailUrl = item.thumbnailUrl ? resolvePulseThumbnailUrl(item.id) : null;
 
     const handleOpenPost = () => {
         if (!item.url) return;
@@ -191,9 +196,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                 aria-label={`Open post on ${platMeta.label}`}
             >
                 <div className="w-full aspect-video relative bg-nature-100 dark:bg-nature-800 overflow-hidden flex items-center justify-center">
-                    {item.thumbnailUrl && !imageFailed ? (
+                    {proxiedThumbnailUrl && !imageFailed ? (
                         <img
-                            src={item.thumbnailUrl}
+                            src={proxiedThumbnailUrl}
                             alt=""
                             onError={() => setImageFailed(true)}
                             className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"

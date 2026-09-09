@@ -271,6 +271,8 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     // route additionally requires the verified signer to BE that guardian.
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
+    /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
+    /^\/api\/pulse\/thumbnail\/[^/]+$/,                     // <img> Pulse feed item thumbnail proxy binary alias
 ];
 
 function isPublicRead(path: string): boolean {

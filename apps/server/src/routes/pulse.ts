@@ -9,7 +9,12 @@
 
 import Router from '@koa/router';
 import { getPulseFeed, setPulseItemMute, PulseError } from '../engine/pulse-resolver.js';
+import { getPulseThumbnailService, PulseThumbnailService } from '../engine/pulse-thumbnail.js';
 import type { RouteDeps } from './types.js';
+
+export interface PulseRouteDeps extends RouteDeps {
+    thumbnailService?: PulseThumbnailService;
+}
 
 function asBool(value: unknown, field: string): boolean {
     if (typeof value !== 'boolean') {
@@ -27,8 +32,9 @@ function pulseErrorStatus(code: string): number {
     }
 }
 
-export function createPulseRoutes(_deps: RouteDeps): Router {
+export function createPulseRoutes(deps: RouteDeps | PulseRouteDeps): Router {
     const router = new Router();
+    const thumbnailService = (deps as PulseRouteDeps)?.thumbnailService ?? getPulseThumbnailService();
 
     /**
      * Public activity feed for The Pulse.
@@ -52,6 +58,47 @@ export function createPulseRoutes(_deps: RouteDeps): Router {
 
         ctx.body = result;
     });
+
+    /**
+     * Public thumbnail proxy for Pulse feed items.
+     *
+     * Serves image bytes from the node origin to satisfy CSP (img-src 'self'),
+     * prevent member IP leakage to external CDNs, and survive CDN link expiry.
+     */
+    async function handleThumbnail(ctx: any) {
+        const id = ctx.params?.id;
+        if (!id || typeof id !== 'string') {
+            ctx.status = 400;
+            ctx.body = { error: 'invalid_id', message: 'Item ID is required' };
+            return;
+        }
+
+        const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+        const result = await thumbnailService.getThumbnail(id, { ifNoneMatch });
+
+        if (result.status === 304) {
+            ctx.status = 304;
+            return;
+        }
+
+        if (result.status !== 200 || !result.buffer) {
+            ctx.status = result.status;
+            ctx.body = { error: result.error || 'Failed to load thumbnail' };
+            return;
+        }
+
+        ctx.status = 200;
+        ctx.type = result.contentType!;
+        ctx.set('Content-Type', result.contentType!);
+        if (result.etag) {
+            ctx.set('ETag', result.etag);
+        }
+        ctx.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
+        ctx.body = result.buffer;
+    }
+
+    router.get('/api/pulse/items/:id/thumbnail', handleThumbnail);
+    router.get('/api/pulse/thumbnail/:id', handleThumbnail);
 
     /**
      * Mute / un-mute a pulse feed item.

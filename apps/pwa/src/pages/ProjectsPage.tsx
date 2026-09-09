@@ -6,6 +6,7 @@ import {
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { ImageLightbox } from '../components/ImageLightbox';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -15,6 +16,12 @@ export function ProjectsPage({ identity }: Props) {
     const [projects, setProjects] = useState<CrowdfundProject[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [lightboxState, setLightboxState] = useState<{
+        isOpen: boolean;
+        photos: string[];
+        initialIndex: number;
+        title?: string;
+    } | null>(null);
     
     // UI States
     const [selectedProject, setSelectedProject] = useState<CrowdfundProject | null>(null);
@@ -698,8 +705,22 @@ export function ProjectsPage({ identity }: Props) {
                                     <div className="w-full flex overflow-x-auto snap-x snap-mandatory">
                                         {photosArr.map((photo, i) => (
                                             <div key={i} className="w-full shrink-0 snap-center h-64 bg-black relative">
-                                                <img src={photo} className="w-full h-full object-cover" alt={`Project ${i}`} />
-                                                <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-white text-[10px] font-bold">
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setLightboxState({
+                                                            isOpen: true,
+                                                            photos: photosArr,
+                                                            initialIndex: i,
+                                                            title: selectedProject.title,
+                                                        })
+                                                    }
+                                                    aria-label={`View enlarged photo ${i + 1} of ${photosArr.length}: ${selectedProject.title}`}
+                                                    className="w-full h-full block cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                >
+                                                    <img src={photo} className="w-full h-full object-cover" alt={`Project ${i}`} />
+                                                </button>
+                                                <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-white text-[10px] font-bold pointer-events-none">
                                                     {i + 1} / {photosArr.length}
                                                 </div>
                                             </div>
@@ -809,6 +830,15 @@ export function ProjectsPage({ identity }: Props) {
                         </div>
                     )}
                 </div>
+            )}
+            {lightboxState?.isOpen && (
+                <ImageLightbox
+                    isOpen={lightboxState.isOpen}
+                    photos={lightboxState.photos}
+                    initialIndex={lightboxState.initialIndex}
+                    title={lightboxState.title}
+                    onClose={() => setLightboxState(null)}
+                />
             )}
         </div>
     );

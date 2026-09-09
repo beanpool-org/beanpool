@@ -14,6 +14,7 @@ import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
+import { ImageLightbox } from '../components/ImageLightbox';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
@@ -178,6 +179,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Detail view
     const [selectedPost, setSelectedPost] = useState<MarketplacePost | null>(null);
+    const [lightboxState, setLightboxState] = useState<{
+        isOpen: boolean;
+        photos: string[];
+        initialIndex: number;
+        title?: string;
+    } | null>(null);
 
     // Clear the last commission's message when a DIFFERENT listing is opened (review finding — a real bug).
     // `commissionResult` is page-level state, so commissioning listing A and then opening listing B showed A's
@@ -602,12 +609,26 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         {selectedPost.photos && selectedPost.photos.length > 0 && (
                             <div className="flex gap-2 overflow-x-auto mb-5 pb-2 snap-x">
                                 {selectedPost.photos.map((photo, i) => (
-                                    <img
+                                    <button
                                         key={i}
-                                        src={photo}
-                                        alt={`photo ${i+1}`}
-                                        className="h-40 w-auto rounded-xl object-cover border border-nature-200 shrink-0 snap-start shadow-sm"
-                                    />
+                                        type="button"
+                                        onClick={() =>
+                                            setLightboxState({
+                                                isOpen: true,
+                                                photos: selectedPost.photos!,
+                                                initialIndex: i,
+                                                title: selectedPost.title,
+                                            })
+                                        }
+                                        aria-label={`View enlarged photo ${i + 1} of ${selectedPost.photos!.length}: ${selectedPost.title}`}
+                                        className="h-40 w-auto rounded-xl overflow-hidden border border-nature-200 shrink-0 snap-start shadow-sm cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 transition-transform active:scale-[0.98]"
+                                    >
+                                        <img
+                                            src={photo}
+                                            alt={`photo ${i + 1}`}
+                                            className="h-40 w-auto object-cover"
+                                        />
+                                    </button>
                                 ))}
                             </div>
                         )}
@@ -1676,6 +1697,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         {error}
                     </div>
                 )}
+
+                {lightboxState?.isOpen && (
+                    <ImageLightbox
+                        isOpen={lightboxState.isOpen}
+                        photos={lightboxState.photos}
+                        initialIndex={lightboxState.initialIndex}
+                        title={lightboxState.title}
+                        onClose={() => setLightboxState(null)}
+                    />
+                )}
             </div>
         );
     }
@@ -2094,6 +2125,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    onPhotoClick={(photos, idx) => {
+                                                        setLightboxState({
+                                                            isOpen: true,
+                                                            photos,
+                                                            initialIndex: idx,
+                                                            title: post.title,
+                                                        });
+                                                    }}
                                                 />
                                             </div>
                                             );
@@ -2155,9 +2194,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     // the SERVER pulled and cached (#143 step 4). Same badge either way:
                                                     // a member wants the community it came from, not the mechanism.
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
-                                                        viewMode={viewMode}
-                                                        isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
-                                                    />
+                                                    viewMode={viewMode}
+                                                    isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    onPhotoClick={(photos, idx) => {
+                                                        setLightboxState({
+                                                            isOpen: true,
+                                                            photos,
+                                                            initialIndex: idx,
+                                                            title: post.title,
+                                                        });
+                                                    }}
+                                                />
                                                 </div>
                                                 );
                                             })}
@@ -2335,6 +2382,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </button>
                     </div>
                 </div>
+            )}
+
+            {lightboxState?.isOpen && (
+                <ImageLightbox
+                    isOpen={lightboxState.isOpen}
+                    photos={lightboxState.photos}
+                    initialIndex={lightboxState.initialIndex}
+                    title={lightboxState.title}
+                    onClose={() => setLightboxState(null)}
+                />
             )}
         </div>
     );

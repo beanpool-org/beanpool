@@ -9,7 +9,9 @@
  * History sub-filter: All | Received | Given
  */
 
+import { useState, useEffect } from 'react';
 import type { MarketplacePost } from '../lib/api';
+import { ImageLightbox } from './ImageLightbox';
 
 interface MarketplaceTransaction {
     id: string;
@@ -27,8 +29,6 @@ interface MarketplaceTransaction {
     ratedBySeller?: boolean;
 }
 
-import { useState, useEffect } from 'react';
-
 interface Props {
     visible: boolean;
     identity: { publicKey: string } | null;
@@ -43,6 +43,12 @@ interface Props {
 export function MyDealsModal({ visible, identity, onClose, posts, transactions, initialTab = 'pending', onNavigateToPost, onPromptReview }: Props) {
     const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>(initialTab);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
+    const [lightboxState, setLightboxState] = useState<{
+        isOpen: boolean;
+        photos: string[];
+        initialIndex: number;
+        title?: string;
+    } | null>(null);
 
     useEffect(() => {
         if (initialTab) setDealsTab(initialTab);
@@ -304,7 +310,22 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                     >
                                         <div className="flex gap-4">
                                             {coverImage ? (
-                                                <img src={coverImage} alt="Cover" className="w-14 h-14 rounded-xl object-cover border border-nature-100 dark:border-nature-800 shrink-0" />
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setLightboxState({
+                                                            isOpen: true,
+                                                            photos: item.photos || [coverImage],
+                                                            initialIndex: 0,
+                                                            title: item.title,
+                                                        });
+                                                    }}
+                                                    aria-label={`View enlarged photo: ${item.title}`}
+                                                    className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                >
+                                                    <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
+                                                </button>
                                             ) : (
                                                 <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                                                     <span className="text-xl opacity-50">📦</span>
@@ -340,6 +361,15 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                     )}
                 </div>
             </div>
+            {lightboxState?.isOpen && (
+                <ImageLightbox
+                    isOpen={lightboxState.isOpen}
+                    photos={lightboxState.photos}
+                    initialIndex={lightboxState.initialIndex}
+                    title={lightboxState.title}
+                    onClose={() => setLightboxState(null)}
+                />
+            )}
         </div>
     );
 }

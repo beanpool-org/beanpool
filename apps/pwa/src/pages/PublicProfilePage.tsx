@@ -12,6 +12,7 @@ import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult } from '@
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
+import { ImageLightbox } from '../components/ImageLightbox';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -28,6 +29,13 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [viewerProfile, setViewerProfile] = useState<MemberProfile | null>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
     const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
+    const [lightboxState, setLightboxState] = useState<{
+        isOpen: boolean;
+        photos: string[];
+        initialIndex: number;
+        title?: string;
+        subtitle?: string;
+    } | null>(null);
     const [ratings, setRatings] = useState<Rating[]>([]);
     const [stats, setStats] = useState<any>(null);
     const [activePosts, setActivePosts] = useState<MarketplacePost[]>([]);
@@ -237,7 +245,22 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 <div className="flex flex-col items-center p-8 border-b border-nature-200 dark:border-nature-800">
                     <div className="w-24 h-24 rounded-full mb-4 border-4 border-nature-200 dark:border-nature-800 overflow-hidden bg-oat-100 dark:bg-nature-900 flex items-center justify-center shadow-lg">
                         {avatarResolved ? (
-                            <img src={avatarResolved} alt="avatar" className="w-full h-full object-cover" />
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setLightboxState({
+                                        isOpen: true,
+                                        photos: [avatarResolved],
+                                        initialIndex: 0,
+                                        title: profile?.callsign || 'Member',
+                                        subtitle: 'Profile Photo',
+                                    })
+                                }
+                                aria-label={`View enlarged photo: ${profile?.callsign || 'Member'}`}
+                                className="w-full h-full block cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 rounded-full overflow-hidden"
+                            >
+                                <img src={avatarResolved} alt="avatar" className="w-full h-full object-cover" />
+                            </button>
                         ) : (
                             <span className="text-4xl font-bold text-nature-400 dark:text-nature-500">{initial}</span>
                         )}
@@ -966,6 +989,17 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     reporterPubkey={identity.publicKey}
                     targetPubkey={pubkey}
                     targetName={profile?.callsign || 'Member'}
+                />
+            )}
+
+            {lightboxState?.isOpen && (
+                <ImageLightbox
+                    isOpen={lightboxState.isOpen}
+                    photos={lightboxState.photos}
+                    initialIndex={lightboxState.initialIndex}
+                    title={lightboxState.title}
+                    subtitle={lightboxState.subtitle}
+                    onClose={() => setLightboxState(null)}
                 />
             )}
         </div>

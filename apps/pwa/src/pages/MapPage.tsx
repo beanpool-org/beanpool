@@ -24,6 +24,7 @@ import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
+import { ImageLightbox } from '../components/ImageLightbox';
 
 // Simple deterministic hash for consistent pin placement
 function simpleHash(str: string): number {
@@ -78,6 +79,12 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
     const pinDropMarkerRef = useRef<L.Marker | null>(null);
     const [nodeRadius, setNodeRadius] = useState<{lat: number, lng: number, radiusKm: number} | null>(null);
     const [previewPost, setPreviewPost] = useState<MarketplacePost | null>(null);
+    const [lightboxState, setLightboxState] = useState<{
+        isOpen: boolean;
+        photos: string[];
+        initialIndex: number;
+        title?: string;
+    } | null>(null);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
 
     useEffect(() => {
@@ -704,7 +711,21 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                         ✕
                     </button>
                     {previewPost.photos && previewPost.photos.length > 0 ? (
-                        <img src={previewPost.photos[0]} alt="thumb" className="w-[90px] h-[90px] rounded-2xl object-cover bg-gray-100 dark:bg-nature-800" />
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setLightboxState({
+                                    isOpen: true,
+                                    photos: previewPost.photos!,
+                                    initialIndex: 0,
+                                    title: previewPost.title,
+                                })
+                            }
+                            aria-label={`View enlarged photo: ${previewPost.title}`}
+                            className="w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
+                        >
+                            <img src={previewPost.photos[0]} alt="thumb" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
+                        </button>
                     ) : (
                         <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">
                             <span className="text-4xl">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>
@@ -1064,6 +1085,15 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
             isOpen={showCommonsInfo} 
             onClose={() => setShowCommonsInfo(false)} 
         />
+        {lightboxState?.isOpen && (
+            <ImageLightbox
+                isOpen={lightboxState.isOpen}
+                photos={lightboxState.photos}
+                initialIndex={lightboxState.initialIndex}
+                title={lightboxState.title}
+                onClose={() => setLightboxState(null)}
+            />
+        )}
     </>
     );
 }

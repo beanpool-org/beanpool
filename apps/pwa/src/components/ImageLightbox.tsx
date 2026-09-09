@@ -192,6 +192,11 @@ export function ImageLightbox({
             : resolvedUrl
         : null;
 
+    // currentIndex belongs in the key: a post can carry the same URL twice, and without it
+    // React reuses the element, the browser fires no load event for an identical src, and the
+    // spinner that the currentIndex effect just re-armed never clears.
+    const imageKey = `${currentIndex}-${displayUrl}-${retryKey}`;
+
     const altText = title
         ? `${title} - Photo ${currentIndex + 1} of ${count}`
         : `Photo ${currentIndex + 1} of ${count}`;
@@ -306,11 +311,7 @@ export function ImageLightbox({
                 {/* Enlarged Image */}
                 {displayUrl && (
                     <img
-                        {/* currentIndex is part of the key deliberately: a post can carry the
-                            same URL twice, and without it React reuses the element, the browser
-                            fires no new load event for an identical src, and the spinner that
-                            currentIndex just re-armed never clears. */}
-                        key={`${currentIndex}-${displayUrl}-${retryKey}`}
+                        key={imageKey}
                         src={displayUrl}
                         alt={altText}
                         onLoad={() => setImageStatus('loaded')}

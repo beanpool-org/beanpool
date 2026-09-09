@@ -38,6 +38,7 @@ Atlas's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native
 ## ✅ Resolved — do NOT re-file
 ### 2026-09-09 — TelemetryModule component unit tests LANDED in #676.
 Added 6 unit tests covering metric calculations, UI interactions, and tab switching in `apps/manager/src/components/modules/TelemetryModule.test.tsx`. (Manager test block was lifted by commit `464c600` / PR #419 wiring `"test": "vitest run"` into `apps/manager/package.json`). Do not re-file.
+Before filing component unit test PRs in `apps/manager`, ensure tests assert both computation logic and UI DOM updates, and verify test runner passes via `pnpm --filter manager test`.
 
 ### 2026-08-25 — Manager tests are BLOCKED. Stop adding them until this is fixed.
 `apps/manager/package.json` has **no `"test"` script**, so `turbo run test` skips the package

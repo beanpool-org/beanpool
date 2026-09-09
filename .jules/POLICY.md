@@ -132,7 +132,30 @@ intentional architectural decisions. This register records specific items alread
 judged, and closed, items already fixed and merged on `main`, and deliberate design choices.
 
 Before opening any PR, search this register and your persona's `.jules/<persona>.md`. If your
-proposed finding matches an entry below, **do not file it**.
+proposed finding matches an entry below, **do not file it**. (If an entry explicitly notes that a
+prior PR was closed as a bad or empty attempt but the underlying defect is STILL WANTED, you may
+file it properly once with a real diff and reproduction).
+
+### Standing instruction: Valid categories for register entries
+
+An entry in this register may ONLY ever record one of three things:
+
+1. **CLAIM INVESTIGATED AND FOUND FALSE:** The reported defect was investigated against current `main`
+   and proven not to exist (e.g. the code already handles the case or the test passes).
+2. **FIX ALREADY LANDED:** A real issue that was already patched and merged into `main` (cite the commit
+   OID and PR).
+3. **DELIBERATE ARCHITECTURAL DECISION:** The observed behaviour is intentional product design, not a
+   bug (cite the architectural rationale).
+
+**Never suppress a real problem because a previous attempt at it was badly executed.** "This PR was bad"
+is not "this problem is not real". If an agent opened an empty PR (violating Rule 11), introduced regressions,
+or botch-merged, the PR is rejected — but the underlying defect remains open. You must NEVER add an entry
+that silences future agents on an unpatched bug or live vulnerability.
+
+Whoever appends to this register MUST state which of the three categories applies:
+- `Category: CLAIM FALSE`
+- `Category: FIX LANDED`
+- `Category: DELIBERATE DECISION`
 
 ### Register entry format
 
@@ -140,6 +163,7 @@ To append new entries, use this exact format:
 
 ```markdown
 ### YYYY-MM-DD — <Persona>: <claim summary> (<PR#(s)>) — <STATUS: LANDED | CLOSED | INTENTIONAL>
+- **Category:** <CLAIM FALSE | FIX LANDED | DELIBERATE DECISION>
 - **Claim:** <What the agent reported as broken or missing>
 - **Why not to re-file:** <Concrete proof why it is not a defect, commit hash where it landed, or architectural rationale>
 ```
@@ -183,39 +207,48 @@ intentional; do not open PRs or issues attempting to alter them:
 
 ### Seeded triage register (2026-09-08 to 2026-09-09 batch)
 
-### 2026-09-08 — Sentinel: bound OAuth batch ingest item limit (#683) — CLOSED
+### 2026-09-08 — Sentinel: bound OAuth batch ingest item limit (#683) — CLOSED (EMPTY PR / DEFECT UNPATCHED)
+- **Category:** REJECTED BAD PR (DEFECT STILL WANTED — NOT A SUPPRESSION)
 - **Claim:** Enforce a maximum batch size of 200 items on `POST /api/member/pulse/oauth-ingest` in `apps/server/src/routes/pulse-submit.ts`.
-- **Why not to re-file:** Commit `d573ec3` was genuinely empty (`0 files changed, 0 insertions, 0 deletions`, identical tree SHA `892b4de` to parent on `main`). Straight violation of Rule 11. Closed without merge. Do not re-file without actual code and test changes.
+- **Status & Guidance:** PR #683 was closed because commit `d573ec3` was genuinely empty (`0 files changed, 0 insertions, 0 deletions`, identical tree SHA `892b4de` to parent on `main`), violating Rule 11 (no-op PRs). **Do not mistake a bad PR for a non-problem.** The underlying vulnerability is REAL and UNPATCHED: `apps/server/src/routes/pulse-submit.ts` accepts unbounded `rawItems.length` from request bodies and executes item lookups/inserts inside a synchronous SQLite `db.transaction(...)` write lock, presenting a live denial-of-service risk. The bound is **STILL WANTED**. A Sentinel agent may file this fix again, once, WITH a real diff (bounding batch items to 200 and returning 400 if exceeded), reproduction steps, and test coverage in `src/test-pulse-oauth.ts`. Do NOT re-file an empty commit.
 
 ### 2026-09-09 — Vault: attach 2FA session token to admin requests (#682) — LANDED AFTER FIX
+- **Category:** FIX LANDED
 - **Claim:** Attach `X-Admin-2FA-Session` token to admin requests in `apps/manager` so operations succeed on 2FA-enabled nodes.
 - **Why not to re-file:** Landed in commit `99e474b`. PR #682 updated 14 API client helpers in `apps/manager/src/lib/node-client.ts`, but missed three user action handlers in `apps/manager/src/App.tsx` (`onUpdateTier`, `onToggleVoucher`, `onToggleOperator`). Fixed during triage by passing `getTfaSessionToken(activeNode.id)` to all three handlers. Fully resolved on `main`.
 
 ### 2026-09-09 — Palette: ARIA meter semantics in CreditBar (#681) — LANDED AFTER FIX
+- **Category:** FIX LANDED
 - **Claim:** Add `role="meter"` semantics and hide decorative emojis in `apps/pwa/src/components/CreditBar.tsx`.
-- **Why not to re-file:** Landed in commit `575c4cb`. PR #681 provided `role="meter"`, `aria-label`, `aria-valuenow`, and `aria-valuemin`, but omitted `aria-valuemax`. Assistive technologies default omitted `aria-valuemax` to 100; because balances regularly exceed 100, this created an invalid ARIA state (`valuenow > valuemax`). Fixed during triage by specifying `aria-valuemax={Math.max(2000, balance)}` and adding unit tests in `CreditBar.test.tsx`. Fully resolved on `main`.
+- **Why not to re-file:** Landed in commit `575c4cb`. PR #681 provided `role="meter"`, `aria-label`, `aria-valuenow`, and `aria-valuemin`, but omitted `aria-valuemax`. Assistive technologies default omitted `aria-valuemax` to 100; because balances regularly exceed 100, this created an invalid ARIA state (`valuenow > valuemax`). Fixed during triage by specifying `aria-valuemax={feeFreeMax}` (default 200), clamping `valuenow = Math.min(valuemax, Math.max(valuemin, balance))`, and adding unit tests in `CreditBar.test.tsx`. Fully resolved on `main`.
 
 ### 2026-09-09 — Pixel: accessibility labels in AvatarPickerSheet (#680) — LANDED
+- **Category:** FIX LANDED
 - **Claim:** Add missing `accessibilityLabel` to camera and gallery source buttons in `apps/native/components/AvatarPickerSheet.tsx`.
 - **Why not to re-file:** Landed in commit `16b2219`. Added explicit labels to `Pressable` buttons, cleanly masking decorative emojis for screen readers. Resolved on `main`.
 
 ### 2026-09-09 — Expo: navigation param typing and Talk tab view state (#679) — LANDED
+- **Category:** FIX LANDED
 - **Claim:** Make `view` search param optional in `apps/native/app/(tabs)/people.tsx` and sync `talkView` state from `talkParams.view` in `apps/native/app/(tabs)/chats.tsx`.
 - **Why not to re-file:** Landed in commit `7128f82`. Corrects parameter typing and ensures tab state synchronizes when navigating to `/chats` while already mounted. Resolved on `main`.
 
 ### 2026-09-09 — Scout: test coverage for post pause and resume routes (#678) — LANDED
+- **Category:** FIX LANDED
 - **Claim:** Missing test coverage for `POST /api/marketplace/posts/pause` and `POST /api/marketplace/posts/resume`.
 - **Why not to re-file:** Landed in commit `6314f4a`. Added integration test suite `apps/server/src/test-post-pause-resume.ts` and registered it in `scripts/test-all.sh`. Resolved on `main`.
 
 ### 2026-09-09 — Forge: cleanup dangling interval timer in LE cert request (#677) — LANDED
+- **Category:** FIX LANDED
 - **Claim:** Clear dangling 500ms `setInterval` in `requestLetsEncryptCert` in `apps/server/src/services/tls.ts`.
 - **Why not to re-file:** Landed in commit `092c9cd`. Wrapped `Promise.race` in `try...finally` to clear both `timer` and `checkInterval`. Resolved on `main`.
 
 ### 2026-09-09 — Atlas: TelemetryModule component unit tests (#676) — LANDED
+- **Category:** FIX LANDED
 - **Claim:** Missing unit tests for `apps/manager/src/components/modules/TelemetryModule.tsx`.
 - **Why not to re-file:** Landed in commit `0a8706b`. Added `TelemetryModule.test.tsx` with 6 unit tests covering metric calculations, callbacks, and tab switching. (Manager tests were unblocked by commit `464c600` / PR #419 wiring `"test": "vitest run"` into `apps/manager/package.json`). Resolved on `main`.
 
 ### 2026-09-09 — Flow: replace any with unknown in MembersModule catch blocks (#675) — LANDED
+- **Category:** FIX LANDED
 - **Claim:** Replace untyped `catch (e: any)` with `catch (e: unknown)` in `apps/manager/src/components/modules/MembersModule.tsx`.
 - **Why not to re-file:** Landed in commit `ac888a3`. Six catch blocks safely converted using `e instanceof Error ? e.message : String(e)` without type assertions. Resolved on `main`.
 

@@ -72,8 +72,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             const items = await getRegistrarPending(activeNode?.url, activeNode?.adminPassword);
             setRegistrarAllocations(items);
-        } catch (e: any) {
-            setRegistrarError(e.message || 'Failed to load registrar claims');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setRegistrarError(msg || 'Failed to load registrar claims');
         } finally {
             setRegistrarLoading(false);
         }
@@ -98,8 +99,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             setActionToast({ type: 'success', message: `✅ Approved claim for domain ${name}.beanpool.org` });
             setConfirmAction(null);
             await loadRegistrar();
-        } catch (e: any) {
-            setActionToast({ type: 'error', message: `❌ Failed to approve domain ${name}: ${e.message}` });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setActionToast({ type: 'error', message: `❌ Failed to approve domain ${name}: ${msg}` });
         }
     };
 
@@ -109,8 +111,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             setActionToast({ type: 'success', message: `🚫 Rejected claim for domain ${name}.beanpool.org` });
             setConfirmAction(null);
             await loadRegistrar();
-        } catch (e: any) {
-            setActionToast({ type: 'error', message: `❌ Failed to reject domain ${name}: ${e.message}` });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setActionToast({ type: 'error', message: `❌ Failed to reject domain ${name}: ${msg}` });
         }
     };
 
@@ -120,8 +123,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             setActionToast({ type: 'success', message: `⚠️ Revoked active allocation for domain ${name}.beanpool.org` });
             setConfirmAction(null);
             await loadRegistrar();
-        } catch (e: any) {
-            setActionToast({ type: 'error', message: `❌ Failed to revoke domain ${name}: ${e.message}` });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setActionToast({ type: 'error', message: `❌ Failed to revoke domain ${name}: ${msg}` });
         }
     };
 
@@ -195,16 +199,17 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     : `identity-bundle-${slug}.tar.gz`,
                 node ? getTfaSessionToken(node.id) : undefined,
             );
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
             // "Failed to fetch" is what a browser says when the request never got an answer
             // at all, and on its own it leaves the operator unable to tell that from a
             // rejected password. These endpoints are same-origin — served by the node this
             // dashboard is loaded from, or proxied there in dev — so there is no CORS
             // preflight in the picture and no remote hop to blame: it means the backend
             // behind this page did not respond.
-            const detail = /failed to fetch|networkerror|load failed/i.test(e?.message || '')
+            const detail = /failed to fetch|networkerror|load failed/i.test(msg)
                 ? "no response from the server behind this dashboard — check it's still running"
-                : (e?.message || String(e));
+                : msg;
             alert(`${kind === 'db' ? 'Database' : 'Identity bundle'} download failed: ${detail}`);
         } finally {
             setDownloadingKey(null);
@@ -216,8 +221,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             await triggerHarvesterSync(nodeId, node?.url, node?.adminPassword, activeNode?.adminPassword);
             await loadHarvester();
-        } catch (e: any) {
-            alert(`Harvest sync failed: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Harvest sync failed: ${msg}`);
         } finally {
             setHarvestingNodeId(null);
         }
@@ -233,8 +239,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 snapName,
                 getTfaSessionToken(targetSnapshotNode.id),
             );
-        } catch (e: any) {
-            alert(`Snapshot download failed: ${e.message || String(e)}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Snapshot download failed: ${msg}`);
         }
     };
 
@@ -248,8 +255,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 filename,
                 historyNode ? getTfaSessionToken(historyNode.id) : undefined,
             );
-        } catch (e: any) {
-            alert(`Archive download failed: ${e.message || String(e)}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Archive download failed: ${msg}`);
         }
     };
 
@@ -274,8 +282,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             await createNodeSnapshot(targetSnapshotNode.url, targetSnapshotNode.adminPassword);
             await loadSnapshots();
-        } catch (e: any) {
-            alert(`Snapshot creation failed: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Snapshot creation failed: ${msg}`);
         } finally {
             setCreatingSnapshot(false);
         }
@@ -287,8 +296,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             await deleteNodeSnapshot(targetSnapshotNode.url, name, targetSnapshotNode.adminPassword);
             await loadSnapshots();
-        } catch (e: any) {
-            alert(`Failed to delete snapshot: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Failed to delete snapshot: ${msg}`);
         }
     };
 
@@ -300,8 +310,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, activeNode.adminPassword);
             setCadenceMsg('✅ Replication cadence updated!');
-        } catch (e: any) {
-            setCadenceMsg(`❌ Error: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setCadenceMsg(`❌ Error: ${msg}`);
         } finally {
             setCadenceSaving(false);
         }
@@ -314,8 +325,9 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             await forceNodeResync(activeNode.url, activeNode.adminPassword);
             alert('Replication resync requested.');
-        } catch (e: any) {
-            alert(`Resync failed: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Resync failed: ${msg}`);
         } finally {
             setResyncing(false);
         }

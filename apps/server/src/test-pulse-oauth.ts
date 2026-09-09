@@ -340,6 +340,21 @@ async function main(): Promise<void> {
     assert(jsThumbIngest.status === 200, 'OAuth ingest returned 200');
     assert(jsThumbIngest.body.count === 0, 'Items with non-http(s) thumbnailUrl are refused (count = 0) (Fix 3)');
 
+    // 3g: Batch size exceeding 200 items is rejected with 400 batch_limit_exceeded
+    const oversizedBatch = Array.from({ length: 201 }, (_, i) => ({
+        url: `https://www.tiktok.com/@alice_pottery/video/${7200000000000000000 + i}`,
+        title: `Oversized batch item ${i}`,
+    }));
+    const oversizedIngest = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
+        actor: alice,
+        body: {
+            channelId: aliceTikTok.id,
+            items: oversizedBatch,
+        },
+    });
+    assert(oversizedIngest.status === 400, 'OAuth ingest exceeding 200 items rejected with 400');
+    assert(oversizedIngest.body.error === 'batch_limit_exceeded', 'Error code is batch_limit_exceeded');
+
     // 3f: Valid thumbnail up to 4096 characters is accepted (Fix 3)
     const longThumbUrl = 'https://p16-sign.tiktokcdn.com/' + 'a'.repeat(3000) + '.jpg';
     const longThumbIngest = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {

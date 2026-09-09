@@ -937,6 +937,12 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
         const rawItems = Array.isArray(body.items) ? body.items : [];
 
+        if (rawItems.length > 200) {
+            ctx.status = 400;
+            ctx.body = { error: 'batch_limit_exceeded', message: 'Batch size exceeds maximum limit of 200 items.' };
+            return;
+        }
+
         if (!channelId) {
             ctx.status = 400;
             ctx.body = { error: 'missing_field', message: 'channelId is required.' };

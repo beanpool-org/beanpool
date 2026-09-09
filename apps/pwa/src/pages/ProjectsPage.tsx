@@ -21,11 +21,28 @@ export function ProjectsPage({ identity }: Props) {
         photos: string[];
         initialIndex: number;
         title?: string;
+        triggerElement?: HTMLElement | null;
     } | null>(null);
     
     // UI States
     const [selectedProject, setSelectedProject] = useState<CrowdfundProject | null>(null);
     const [showNewProject, setShowNewProject] = useState(false);
+
+    // Keyboard accessibility: Escape closes project detail modal (defers to lightbox if open)
+    useEffect(() => {
+        if (!selectedProject) return;
+        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (lightboxState?.isOpen) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setSelectedProject(null);
+                setIsEditingProject(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedProject, lightboxState?.isOpen]);
     
     // New Project Form
     const [newTitle, setNewTitle] = useState('');
@@ -707,12 +724,13 @@ export function ProjectsPage({ identity }: Props) {
                                             <div key={i} className="w-full shrink-0 snap-center h-64 bg-black relative">
                                                 <button
                                                     type="button"
-                                                    onClick={() =>
+                                                    onClick={(e) =>
                                                         setLightboxState({
                                                             isOpen: true,
                                                             photos: photosArr,
                                                             initialIndex: i,
                                                             title: selectedProject.title,
+                                                            triggerElement: e.currentTarget,
                                                         })
                                                     }
                                                     aria-label={`View enlarged photo ${i + 1} of ${photosArr.length}: ${selectedProject.title}`}
@@ -837,6 +855,7 @@ export function ProjectsPage({ identity }: Props) {
                     photos={lightboxState.photos}
                     initialIndex={lightboxState.initialIndex}
                     title={lightboxState.title}
+                    triggerElement={lightboxState.triggerElement}
                     onClose={() => setLightboxState(null)}
                 />
             )}

@@ -35,6 +35,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         initialIndex: number;
         title?: string;
         subtitle?: string;
+        triggerElement?: HTMLElement | null;
     } | null>(null);
     const [ratings, setRatings] = useState<Rating[]>([]);
     const [stats, setStats] = useState<any>(null);
@@ -58,6 +59,20 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [isBlocked, setIsBlocked] = useState(() => isUserBlocked(pubkey));
     const [isBlocking, setIsBlocking] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
+
+    // Keyboard accessibility: Escape closes profile sheet (defers to lightbox/modals if open)
+    useEffect(() => {
+        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (lightboxState?.isOpen || showQuizModal || showReportModal) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onBack();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [lightboxState?.isOpen, showQuizModal, showReportModal, onBack]);
 
     useEffect(() => {
         setIsBlocked(isUserBlocked(pubkey));
@@ -247,13 +262,14 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         {avatarResolved ? (
                             <button
                                 type="button"
-                                onClick={() =>
+                                onClick={(e) =>
                                     setLightboxState({
                                         isOpen: true,
                                         photos: [avatarResolved],
                                         initialIndex: 0,
                                         title: profile?.callsign || 'Member',
                                         subtitle: 'Profile Photo',
+                                        triggerElement: e.currentTarget,
                                     })
                                 }
                                 aria-label={`View enlarged photo: ${profile?.callsign || 'Member'}`}
@@ -712,29 +728,83 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <>
                                     {activePosts.length === 0 ? (
                                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-8 text-center shadow-sm">
-                                            <div className="text-4xl opacity-50 mb-2">🛒</div>
+                        <div className="text-4xl opacity-50 mb-2">🛒</div>
                                             <div className="font-bold text-nature-500 dark:text-nature-400">No active listings.</div>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col gap-3">
                                             {activePosts.map((p, i) => {
                                                 let coverImage: string | null = null;
-                                                if (p.photos) {
-                                                    try { 
-                                                        const arr = Array.isArray(p.photos) ? p.photos : JSON.parse(p.photos); 
-                                                        if (arr.length > 0) coverImage = arr[0]; 
-                                                    } catch {}
-                                                }
+                                                let postPhotos: string[] = [];
+                                                 if (p.photos) {
+                                                     try { 
+                                                         const raw = p.photos as unknown;
+                                                         if (Array.isArray(raw)) {
+                                                             postPhotos = raw;
+                                                             if (raw.length > 0) coverImage = raw[0];
+                                                         } else if (typeof raw === 'string') {
+                                                             if (raw.startsWith('[')) {
+                                                                 const parsed = JSON.parse(raw);
+                                                                 if (Array.isArray(parsed) && parsed.length > 0) {
+                                                                     postPhotos = parsed;
+                                                                     coverImage = parsed[0];
+                                                                 }
+                                                             } else if (raw.trim() !== '') {
+                                                                 coverImage = raw;
+                                                                 postPhotos = [raw];
+                                                             }
+                                                         }
+                                                     } catch {}
+                                                 }
 
                                                 return (
-                                                    <button 
+                                                    <div 
                                                         key={p.id || i}
+                                                        role="button"
+                                                        tabIndex={0}
                                                         onClick={() => { onBack(); onNavigatePost(p.id); }}
-                                                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 text-left cursor-pointer hover:-translate-y-0.5 transition-transform shadow-sm"
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                onBack();
+                                                                onNavigatePost(p.id);
+                                                            }
+                                                        }}
+                                                        aria-label={`View post: ${p.title}`}
+                                                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 text-left cursor-pointer hover:-translate-y-0.5 transition-transform shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                                     >
                                                         <div className="flex gap-3">
                                                             {coverImage ? (
-                                                                <img src={coverImage} alt="cover" className="w-14 h-14 rounded-lg object-cover bg-nature-100 dark:bg-nature-800" />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setLightboxState({
+                                                                            isOpen: true,
+                                                                            photos: postPhotos.length > 0 ? postPhotos : [coverImage!],
+                                                                            initialIndex: 0,
+                                                                            title: p.title,
+                                                                            triggerElement: e.currentTarget,
+                                                                        });
+                                                                    }}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                                            e.stopPropagation();
+                                                                            e.preventDefault();
+                                                                            setLightboxState({
+                                                                                isOpen: true,
+                                                                                photos: postPhotos.length > 0 ? postPhotos : [coverImage!],
+                                                                                initialIndex: 0,
+                                                                                title: p.title,
+                                                                                triggerElement: e.currentTarget as HTMLElement,
+                                                                            });
+                                                                        }
+                                                                    }}
+                                                                    aria-label={`View enlarged photo: ${p.title}`}
+                                                                    className="w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                                                                >
+                                                                    <img src={coverImage} alt={p.title} className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
+                                                                </button>
                                                             ) : (
                                                                 <div className="w-14 h-14 rounded-lg bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-2xl opacity-50">
                                                                     📦
@@ -758,7 +828,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                 <div className="text-xs text-nature-400 font-medium mt-0.5">Active</div>
                                                             </div>
                                                         </div>
-                                                    </button>
+                                                    </div>
                                                 );
                                             })}
                                         </div>
@@ -999,6 +1069,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     initialIndex={lightboxState.initialIndex}
                     title={lightboxState.title}
                     subtitle={lightboxState.subtitle}
+                    triggerElement={lightboxState.triggerElement}
                     onClose={() => setLightboxState(null)}
                 />
             )}

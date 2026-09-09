@@ -184,7 +184,24 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         photos: string[];
         initialIndex: number;
         title?: string;
+        triggerElement?: HTMLElement | null;
     } | null>(null);
+
+    // Keyboard accessibility: Escape closes post detail view (defers to lightbox and child modals if open)
+    useEffect(() => {
+        if (!selectedPost) return;
+        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (lightboxState?.isOpen || showCategoryPicker || showPricingGuide || showDealsModal) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setSelectedPost(null);
+                setSelectedTxId(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedPost, lightboxState?.isOpen, showCategoryPicker, showPricingGuide, showDealsModal]);
 
     // Clear the last commission's message when a DIFFERENT listing is opened (review finding — a real bug).
     // `commissionResult` is page-level state, so commissioning listing A and then opening listing B showed A's
@@ -612,12 +629,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <button
                                         key={i}
                                         type="button"
-                                        onClick={() =>
+                                        onClick={(e) =>
                                             setLightboxState({
                                                 isOpen: true,
                                                 photos: selectedPost.photos!,
                                                 initialIndex: i,
                                                 title: selectedPost.title,
+                                                triggerElement: e.currentTarget,
                                             })
                                         }
                                         aria-label={`View enlarged photo ${i + 1} of ${selectedPost.photos!.length}: ${selectedPost.title}`}
@@ -1704,6 +1722,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         photos={lightboxState.photos}
                         initialIndex={lightboxState.initialIndex}
                         title={lightboxState.title}
+                        triggerElement={lightboxState.triggerElement}
                         onClose={() => setLightboxState(null)}
                     />
                 )}
@@ -2125,12 +2144,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
-                                                    onPhotoClick={(photos, idx) => {
+                                                    onPhotoClick={(photos, idx, e) => {
                                                         setLightboxState({
                                                             isOpen: true,
                                                             photos,
                                                             initialIndex: idx,
                                                             title: post.title,
+                                                            triggerElement: (e?.currentTarget as HTMLElement) || null,
                                                         });
                                                     }}
                                                 />
@@ -2196,12 +2216,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
-                                                    onPhotoClick={(photos, idx) => {
+                                                    onPhotoClick={(photos, idx, e) => {
                                                         setLightboxState({
                                                             isOpen: true,
                                                             photos,
                                                             initialIndex: idx,
                                                             title: post.title,
+                                                            triggerElement: (e?.currentTarget as HTMLElement) || null,
                                                         });
                                                     }}
                                                 />
@@ -2390,6 +2411,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     photos={lightboxState.photos}
                     initialIndex={lightboxState.initialIndex}
                     title={lightboxState.title}
+                    triggerElement={lightboxState.triggerElement}
                     onClose={() => setLightboxState(null)}
                 />
             )}

@@ -301,11 +301,18 @@ export function ensurePulseMarketplacePost(now: Date = new Date()): void {
  * Safe to call on write paths (create, delete, pause, resume) and scheduled rotation.
  */
 export function syncPulseMarketplaceGate(now: Date = new Date()): void {
-    const memberListings = getActiveMemberListingCount();
-    if (memberListings >= 2) {
-        deactivatePulseMarketplacePost();
-    } else {
-        ensurePulseMarketplacePost(now);
+    // Called from every mutating marketplace route, AFTER the member's own action has
+    // already committed. A placeholder that fails to appear or disappear is cosmetic; a
+    // member being told their post failed when it succeeded is not. So this never throws.
+    try {
+        const memberListings = getActiveMemberListingCount();
+        if (memberListings >= 2) {
+            deactivatePulseMarketplacePost();
+        } else {
+            ensurePulseMarketplacePost(now);
+        }
+    } catch (e) {
+        console.error('[DailyPulse] marketplace gate failed (member action unaffected):', e);
     }
 }
 

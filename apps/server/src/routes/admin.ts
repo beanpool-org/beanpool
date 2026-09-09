@@ -394,9 +394,12 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
 router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { status } = (ctx as any).requestBody || {};
-    if (status === 'active' || status === 'disabled') {
-        adminSetUserStatus(ctx.params.pubkey, status);
+    if (status !== 'active' && status !== 'disabled') {
+        ctx.status = 400;
+        ctx.body = { error: 'status must be "active" or "disabled"' };
+        return;
     }
+    adminSetUserStatus(ctx.params.pubkey, status);
     ctx.body = { success: true };
 });
 

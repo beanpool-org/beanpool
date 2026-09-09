@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import type React from 'react';
 import type { MarketplacePost } from '../lib/api';
 import { ImageLightbox } from './ImageLightbox';
 
@@ -49,6 +50,21 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
         initialIndex: number;
         title?: string;
     } | null>(null);
+
+    const openLightbox = (photos: string[], title?: string) =>
+        setLightboxState({ isOpen: true, photos, initialIndex: 0, title });
+
+    // Both deal cards are themselves keyboard-activatable and call preventDefault() on
+    // Enter/Space, which suppresses the synthetic click on any nested button. So a photo
+    // button has to handle the key itself AND stop the event reaching the card — otherwise
+    // a keyboard user asking to enlarge the photo gets navigated away to the post instead.
+    const photoKeyDown = (photos: string[], title?: string) => (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.stopPropagation();
+            e.preventDefault();
+            openLightbox(photos, title);
+        }
+    };
 
     useEffect(() => {
         if (initialTab) setDealsTab(initialTab);
@@ -223,7 +239,18 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                         >
                                             <div className="flex gap-3 mb-2">
                                                 {item.coverImage ? (
-                                                    <img src={item.coverImage} alt="Cover" className="w-14 h-14 rounded-xl object-cover border border-nature-100 dark:border-nature-800 shrink-0" />
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openLightbox([item.coverImage!], item.postTitle);
+                                                        }}
+                                                        onKeyDown={photoKeyDown([item.coverImage!], item.postTitle)}
+                                                        aria-label={`View enlarged photo: ${item.postTitle}`}
+                                                        className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                    >
+                                                        <img src={item.coverImage} alt="Cover" className="w-full h-full object-cover" />
+                                                    </button>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                                                         <span className="text-xl opacity-50">{isBuyer ? '🛒' : '🏷️'}</span>
@@ -314,13 +341,9 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                     type="button"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        setLightboxState({
-                                                            isOpen: true,
-                                                            photos: item.photos || [coverImage],
-                                                            initialIndex: 0,
-                                                            title: item.title,
-                                                        });
+                                                        openLightbox(item.photos || [coverImage], item.title);
                                                     }}
+                                                    onKeyDown={photoKeyDown(item.photos || [coverImage], item.title)}
                                                     aria-label={`View enlarged photo: ${item.title}`}
                                                     className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                 >

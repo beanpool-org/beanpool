@@ -42,7 +42,7 @@ export default function PulseScreen() {
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
 
-    const [lane, setLane] = useState<'neighbours' | 'local'>('neighbours');
+    const [lane, setLane] = useState<'neighbours' | 'local' | 'learn'>('neighbours');
     const [items, setItems] = useState<PulseFeedItem[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<ChannelCategory | 'all'>('all');
     const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -50,22 +50,42 @@ export default function PulseScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [hasLocalLane, setHasLocalLane] = useState(false);
 
     // Client-side split is a prototype shortcut — see isOfficialSource(). Production
     // should pass the lane to the API so pagination stays correct per lane.
     const localItems = items.filter(isOfficialSource);
     const neighbourItems = items.filter(i => !isOfficialSource(i));
-    const localLaneAvailable = localItems.length > 0;
-    const activeLane = (lane === 'local' && localLaneAvailable) ? 'local' : 'neighbours';
-    const visibleItems = activeLane === 'local' ? localItems : neighbourItems;
 
-    // Track active category for async callbacks
+    useEffect(() => {
+        if (lane !== 'learn') {
+            setHasLocalLane(localItems.length > 0);
+        }
+    }, [lane, localItems.length]);
+
+    const localLaneAvailable = lane === 'learn' ? hasLocalLane : localItems.length > 0;
+    const activeLane = lane === 'learn'
+        ? 'learn'
+        : (lane === 'local' && localLaneAvailable)
+        ? 'local'
+        : 'neighbours';
+    const visibleItems = activeLane === 'learn'
+        ? items
+        : activeLane === 'local'
+        ? localItems
+        : neighbourItems;
+
+    // Track active category and lane for async callbacks
     const activeCategoryRef = useRef(selectedCategory);
+    const activeLaneRef = useRef(lane);
     useEffect(() => {
         activeCategoryRef.current = selectedCategory;
     }, [selectedCategory]);
+    useEffect(() => {
+        activeLaneRef.current = lane;
+    }, [lane]);
 
-    const loadFeed = useCallback(async (isRefresh = false, category = selectedCategory) => {
+    const loadFeed = useCallback(async (isRefresh = false, currentLane = lane, category = selectedCategory) => {
         if (isRefresh) {
             setRefreshing(true);
         } else {
@@ -73,48 +93,58 @@ export default function PulseScreen() {
         }
         setError(null);
 
+        const fetchCat = currentLane === 'learn'
+            ? 'learn'
+            : (category === 'all' ? undefined : category);
+
         try {
             const res = await fetchPulseFeed({
-                category: category === 'all' ? undefined : category,
+                category: fetchCat,
                 limit: 20,
             });
 
-            // Prevent race condition if category switched mid-flight
-            if (activeCategoryRef.current !== category) return;
+            // Prevent race condition if category or lane switched mid-flight
+            if (activeCategoryRef.current !== category || activeLaneRef.current !== currentLane) return;
 
             setItems(res.items);
             setNextCursor(res.nextCursor);
         } catch (e: any) {
-            if (activeCategoryRef.current === category) {
+            if (activeCategoryRef.current === category && activeLaneRef.current === currentLane) {
                 setError(e?.message || 'Could not load community feed.');
             }
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (activeCategoryRef.current === category && activeLaneRef.current === currentLane) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
-    }, [selectedCategory]);
+    }, [lane, selectedCategory]);
 
     useEffect(() => {
-        loadFeed(false, selectedCategory);
-    }, [loadFeed, selectedCategory]);
+        loadFeed(false, lane, selectedCategory);
+    }, [loadFeed, lane, selectedCategory]);
 
     const handleRefresh = async () => {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-        await loadFeed(true, selectedCategory);
+        await loadFeed(true, lane, selectedCategory);
     };
 
     const handleLoadMore = async () => {
         if (loadingMore || !nextCursor || loading || refreshing) return;
         setLoadingMore(true);
 
+        const fetchCat = lane === 'learn'
+            ? 'learn'
+            : (selectedCategory === 'all' ? undefined : selectedCategory);
+
         try {
             const res = await fetchPulseFeed({
-                category: selectedCategory === 'all' ? undefined : selectedCategory,
+                category: fetchCat,
                 cursor: nextCursor,
                 limit: 20,
             });
 
-            if (activeCategoryRef.current !== selectedCategory) return;
+            if (activeCategoryRef.current !== selectedCategory || activeLaneRef.current !== lane) return;
 
             setItems(prev => {
                 const existingIds = new Set(prev.map(i => i.id));
@@ -165,6 +195,18 @@ export default function PulseScreen() {
 
     const renderEmptyState = () => {
         if (loading) return null;
+
+        if (activeLane === 'learn') {
+            return (
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyIcon}>📚</Text>
+                    <Text style={styles.emptyTitle}>No learning guides yet</Text>
+                    <Text style={styles.emptyBody}>
+                        Curated guides and reflections will appear here.
+                    </Text>
+                </View>
+            );
+        }
 
         if (selectedCategory !== 'all') {
             return (
@@ -254,32 +296,39 @@ export default function PulseScreen() {
                     would say "The Pulse" twice and cost a line of vertical space. */}
                 <View style={styles.titleRow}>
                     <Text style={styles.subtitle}>
-                        {activeLane === 'local'
+                        {activeLane === 'learn'
+                            ? 'How BeanPool works and daily reflections'
+                            : activeLane === 'local'
                             ? 'News and notices from around the shire'
                             : 'What your neighbours are creating and sharing'}
                     </Text>
                 </View>
 
-                {/* Lane switch — keeps member work from competing with a news firehose. Hidden
-                    until an official source actually exists, so members are not shown an empty
-                    tab that can never fill. */}
-                {localLaneAvailable && (
+                {/* Lane switch */}
                 <View style={styles.laneBar}>
                     {([
-                        { id: 'neighbours' as const, label: 'Neighbours', icon: '\u{1F465}', count: neighbourItems.length },
-                        { id: 'local' as const, label: 'Local', icon: '\u{1F4F0}', count: localItems.length },
+                        { id: 'neighbours' as const, label: 'Neighbours', icon: '\u{1F465}', count: activeLane === 'learn' ? 0 : neighbourItems.length },
+                        ...(localLaneAvailable ? [{ id: 'local' as const, label: 'Local', icon: '\u{1F4F0}', count: localItems.length }] : []),
+                        { id: 'learn' as const, label: 'Learn', icon: '📚', count: activeLane === 'learn' ? items.length : 0 },
                     ]).map(l => {
                         const active = activeLane === l.id;
                         return (
                             <Pressable
                                 key={l.id}
-                                onPress={() => setLane(l.id)}
+                                onPress={() => {
+                                    void Haptics.selectionAsync().catch(() => {});
+                                    setLane(l.id);
+                                }}
                                 style={[styles.laneTab, active && styles.laneTabActive]}
                                 accessibilityRole="radio"
                                 accessibilityState={{ selected: active }}
-                                accessibilityLabel={`${l.label} feed, ${l.count} items`}
+                                accessibilityLabel={l.count > 0 ? `${l.label} feed, ${l.count} items` : `${l.label} feed`}
                             >
-                                <Text style={[styles.laneTabText, active && styles.laneTabTextActive]}>
+                                <Text
+                                    style={[styles.laneTabText, active && styles.laneTabTextActive]}
+                                    numberOfLines={1}
+                                    ellipsizeMode="tail"
+                                >
                                     {l.icon}  {l.label}
                                 </Text>
                                 {l.count > 0 ? (
@@ -291,9 +340,9 @@ export default function PulseScreen() {
                         );
                     })}
                 </View>
-                )}
 
-                {/* Category Filter Bar */}
+                {/* Category Filter Bar — only shown for Neighbours and Local lanes */}
+                {activeLane !== 'learn' && (
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -348,6 +397,7 @@ export default function PulseScreen() {
                         );
                     })}
                 </ScrollView>
+                )}
             </View>
 
             {/* Error Message Box */}
@@ -355,7 +405,7 @@ export default function PulseScreen() {
                 <View style={styles.errorBox} accessibilityRole="alert">
                     <Text style={styles.errorText}>{error}</Text>
                     <Pressable
-                        onPress={() => loadFeed(false, selectedCategory)}
+                        onPress={() => loadFeed(false, lane, selectedCategory)}
                         style={styles.retryBtn}
                         accessibilityRole="button"
                         accessibilityLabel="Retry loading feed"
@@ -483,6 +533,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             justifyContent: 'center',
             gap: 6,
             paddingVertical: 9,
+            minHeight: 44,
             borderRadius: 9,
         },
         laneTabActive: {

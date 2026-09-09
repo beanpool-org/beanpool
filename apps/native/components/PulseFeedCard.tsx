@@ -158,14 +158,15 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
 
             {/* Facade Poster / Thumbnail with Open Link Handler */}
             <Pressable
-                onPress={handleOpenPost}
+                disabled={!item.url}
+                onPress={item.url ? handleOpenPost : undefined}
                 style={({ pressed }) => [
                     styles.contentPressable,
-                    pressed && styles.contentPressed,
+                    item.url && pressed && styles.contentPressed,
                 ]}
-                accessibilityRole="link"
+                accessibilityRole={item.url ? "link" : undefined}
                 accessibilityLabel={cardAccessibilityLabel}
-                accessibilityHint="Opens external post in browser or app"
+                accessibilityHint={item.url ? "Opens external post in browser or app" : undefined}
             >
                 {item.thumbnailUrl && !imageFailed ? (
                     <View style={styles.thumbnailWrap}>
@@ -184,16 +185,20 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                                 </View>
                             </View>
                         )}
-                        <View style={styles.externalBadge}>
-                            <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
-                        </View>
+                        {item.url ? (
+                            <View style={styles.externalBadge}>
+                                <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
+                            </View>
+                        ) : null}
                     </View>
                 ) : (
                     <View style={[styles.thumbnailWrap, styles.placeholderThumbnail]}>
-                        <Text style={styles.placeholderIcon}>{platMeta.icon}</Text>
-                        <View style={styles.externalBadge}>
-                            <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
-                        </View>
+                        <Text style={styles.placeholderIcon}>{item.callsign === 'Daily Pulse' ? '🌱' : platMeta.icon}</Text>
+                        {item.url ? (
+                            <View style={styles.externalBadge}>
+                                <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
+                            </View>
+                        ) : null}
                     </View>
                 )}
 
@@ -202,11 +207,19 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                     <Text style={styles.title} numberOfLines={3}>
                         {item.title || 'View post on ' + platMeta.label}
                     </Text>
-                    <View style={styles.footerLinkRow}>
-                        <Text style={styles.footerLinkText}>
-                            Open on {platMeta.label} <Text style={styles.arrowIcon}>↗</Text>
-                        </Text>
-                    </View>
+                    {item.url ? (
+                        <View style={styles.footerLinkRow}>
+                            <Text style={styles.footerLinkText}>
+                                Open on {platMeta.label} <Text style={styles.arrowIcon}>↗</Text>
+                            </Text>
+                        </View>
+                    ) : (
+                        <View style={styles.footerLinkRow}>
+                            <Text style={styles.footerLinkText}>
+                                🌱 Daily Reflection
+                            </Text>
+                        </View>
+                    )}
                 </View>
             </Pressable>
         </View>

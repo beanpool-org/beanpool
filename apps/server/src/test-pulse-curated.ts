@@ -28,6 +28,7 @@ import {
     PULSE_KEEP_PER_CHANNEL,
 } from './engine/pulse-resolver.js';
 import { addChannel } from './engine/creator-channels.js';
+import { rotateDailyPulse } from './daily-pulse.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -238,6 +239,28 @@ async function main(): Promise<void> {
     const craftFeed = getPulseFeed({ category: 'craft', limit: 30 });
     assert(craftFeed.items.every(i => i.category === 'craft'), 'Craft feed contains only craft items');
     assert(craftFeed.items.length === 23, 'Craft feed returns 20 kept Kayla items + 3 Marty items = 23');
+
+    // ── 6. Daily Pulse rotated into Pulse tab (Learn lane) ─────────────────────────
+    console.log('\n--- 6. Daily Pulse in Learn Lane ---');
+    const pulseDate = new Date('2026-08-20T05:00:00Z');
+    const { pulseItem, entry: pulseEntry } = rotateDailyPulse(pulseDate);
+    assert(!!pulseItem, 'rotateDailyPulse returns pulseItem');
+
+    const learnFeedWithPulse = getPulseFeed({ category: 'learn', limit: 10 });
+    assert(learnFeedWithPulse.items.length === 6, 'Feed for category: learn returns 6 items (5 videos + 1 Daily Pulse)');
+
+    const dailyPulseCard = learnFeedWithPulse.items.find(i => i.id === pulseItem.id);
+    assert(!!dailyPulseCard, 'Daily Pulse reflection card found in learn feed');
+    assert(dailyPulseCard?.callsign === 'Daily Pulse', 'Daily Pulse card has callsign "Daily Pulse"');
+    assert(dailyPulseCard?.category === 'learn', 'Daily Pulse card category is "learn"');
+    assert(dailyPulseCard?.platform === 'website', 'Daily Pulse card platform is "website"');
+    assert(dailyPulseCard?.source === 'curated', 'Daily Pulse card source is "curated"');
+    assert(dailyPulseCard?.title === pulseEntry.headline, 'Daily Pulse card title matches entry headline');
+
+    // Craft feed still does NOT include Daily Pulse
+    const craftFeedRecheck = getPulseFeed({ category: 'craft', limit: 30 });
+    assert(craftFeedRecheck.items.every(i => i.category === 'craft'), 'Craft feed still contains only craft items');
+    assert(craftFeedRecheck.items.length === 23, 'Craft feed still returns 23 items');
 
     // ── The tombstone re-insertion loop ──────────────────────────────────────────
     // The dedupe index is PARTIAL (WHERE external_id IS NOT NULL AND deleted_at IS NULL),

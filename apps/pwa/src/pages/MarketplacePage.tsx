@@ -572,12 +572,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         style={{ backgroundColor: `${typeColor}15`, borderBottomColor: `${typeColor}30` }}
                     >
                         <div className="flex items-center gap-2">
-                            <span className="text-2xl">{cat?.emoji ?? '🌐'}</span>
+                            <span className="text-2xl">{isPulsePost ? '🗞️' : (cat?.emoji ?? '🌐')}</span>
                             <span 
                                 className="text-xs font-black uppercase tracking-wider"
-                                style={{ color: typeColor }}
+                                style={{ color: isPulsePost ? '#d97706' : typeColor }}
                             >
-                                {selectedPost.type === 'offer' ? '🔵 Offer' : '🟠 Need'} <span className="text-nature-400 font-medium">·</span> {cat?.label ?? selectedPost.category}
+                                {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🔵 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
                             </span>
                         </div>
                         <span className="text-xs font-semibold text-nature-500">{ago}</span>
@@ -613,23 +613,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
 
                         {/* Credits */}
-                        <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 text-center border border-nature-100 dark:border-nature-800 shadow-inner block">
-                            <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">
-                                {selectedPost.type === 'offer' ? 'Asking Price' : 'Willing to Pay'}
-                            </span>
-                            <div className="text-3xl font-bold text-nature-900 dark:text-white font-mono tracking-tight" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                <span>{selectedPost.credits}</span>
-                                <span className="text-xl text-nature-400 font-sans font-medium flex items-center" style={{ flexShrink: 0 }}>
-                                    <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginLeft: '4px', marginRight: '2px', flexShrink: 0 }} alt="B" />
-                                    {{ fixed: '', hourly: '/Hr', daily: '/Dy', weekly: '/Wk', monthly: '/Mo' }[selectedPost.priceType] || ''}
+                        {!isPulsePost && (
+                            <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 text-center border border-nature-100 dark:border-nature-800 shadow-inner block">
+                                <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">
+                                    {selectedPost.type === 'offer' ? 'Asking Price' : 'Willing to Pay'}
                                 </span>
+                                <div className="text-3xl font-bold text-nature-900 dark:text-white font-mono tracking-tight" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+                                    <span>{selectedPost.credits}</span>
+                                    <span className="text-xl text-nature-400 font-sans font-medium flex items-center" style={{ flexShrink: 0 }}>
+                                        <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginLeft: '4px', marginRight: '2px', flexShrink: 0 }} alt="B" />
+                                        {{ fixed: '', hourly: '/Hr', daily: '/Dy', weekly: '/Wk', monthly: '/Mo' }[selectedPost.priceType] || ''}
+                                    </span>
+                                </div>
+                                {selectedPost.credits > 0 && (
+                                    <p className="text-nature-400 text-xs mt-1 font-mono">
+                                        ≈ {(selectedPost.credits / 40).toFixed(1)} hrs
+                                    </p>
+                                )}
                             </div>
-                            {selectedPost.credits > 0 && (
-                                <p className="text-nature-400 text-xs mt-1 font-mono">
-                                    ≈ {(selectedPost.credits / 40).toFixed(1)} hrs
-                                </p>
-                            )}
-                        </div>
+                        )}
                     </div>
                 </div>
 
@@ -1939,6 +1941,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => p.authorFoundingNeeded);
                 }
 
+                // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
+                const realMemberListingsCount = posts.filter(p => {
+                    const isPulse = ((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode;
+                    return !isPulse && p.status === 'active';
+                }).length;
+                if (realMemberListingsCount >= 2) {
+                    filtered = filtered.filter(p => !(((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode));
+                }
+
                 // Pin Daily Pulse post to the top of the feed (local only)
                 filtered.sort((a, b) => {
                     const isPulseA = ((a as any).author_callsign === 'Daily Pulse' || a.authorCallsign === 'Daily Pulse') && !(a as any).originNode && !(a as any)._remoteNode;
@@ -2060,15 +2071,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             if (viewMode === 'grid') {
                                 return (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
-                                        {filtered.map((post) => (
+                                        {filtered.map((post) => {
+                                            const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
+                                            return (
                                             <div
                                                 key={post.id}
-                                                onClick={() => setSelectedPost(post)}
-                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
-                                                role="button"
-                                                tabIndex={0}
-                                                aria-label={`Open listing: ${post.title}${remoteOriginLabel(post)}`}
-                                                className="h-full cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                                                onClick={isPulse ? undefined : () => setSelectedPost(post)}
+                                                onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
+                                                role={isPulse ? undefined : "button"}
+                                                tabIndex={isPulse ? undefined : 0}
+                                                aria-label={isPulse ? `Daily Pulse: ${post.title}` : `Open listing: ${post.title}${remoteOriginLabel(post)}`}
+                                                className={`h-full rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                             >
                                                 <MarketplaceCard
                                                     post={post as any}
@@ -2083,7 +2096,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                 />
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 );
                             }
@@ -2120,15 +2134,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
                                         </div>
                                         <div className="flex flex-col gap-1.5">
-                                            {items.map(post => (
+                                            {items.map(post => {
+                                                const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
+                                                return (
                                                 <div
                                                     key={post.id}
-                                                    onClick={() => setSelectedPost(post)}
-                                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
-                                                    role="button"
-                                                    tabIndex={0}
-                                                    aria-label={`Open listing: ${post.title}${remoteOriginLabel(post)}`}
-                                                    className="cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                                                    onClick={isPulse ? undefined : () => setSelectedPost(post)}
+                                                    onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
+                                                    role={isPulse ? undefined : "button"}
+                                                    tabIndex={isPulse ? undefined : 0}
+                                                    aria-label={isPulse ? `Daily Pulse: ${post.title}` : `Open listing: ${post.title}${remoteOriginLabel(post)}`}
+                                                    className={`rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                                 >
                                                     <MarketplaceCard
                                                         post={post as any}
@@ -2143,7 +2159,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                                     />
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 );

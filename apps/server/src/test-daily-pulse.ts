@@ -12,10 +12,11 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-daily-pulse.ts
  */
 
-import { initStateEngine, getPosts, requestPost, acceptPost } from './state-engine.js';
+import { initStateEngine, getPosts, requestPost, acceptPost, createPost } from './state-engine.js';
 import { db } from './db/db.js';
 import { getPulseEntry, getTodaysPulseEntry, getAllPulseEntries } from './daily-pulse-entries.js';
-import { ensurePulseTreasury, rotateDailyPulse, getActivePulsePost, PULSE_CALLSIGN } from './daily-pulse.js';
+import { ensurePulseTreasury, rotateDailyPulse, getActivePulsePost, getActiveMemberListingCount, syncPulseMarketplaceGate, getPulseTreasuryPubkey, PULSE_CALLSIGN, DAILY_PULSE_CHANNEL_ID } from './daily-pulse.js';
+import { createMarketplaceRoutes } from './routes/marketplace.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -54,6 +55,16 @@ async function main() {
     // 2. Initialize State Engine & Database
     initStateEngine();
 
+    // 2b. Verify Read-Only Queries Do Not Trigger Account Creation or Writes
+    assert(getPulseTreasuryPubkey() === null, 'getPulseTreasuryPubkey() is null before treasury exists');
+    const membersBeforeRead = db.prepare("SELECT COUNT(*) as c FROM members WHERE callsign = ?").get(PULSE_CALLSIGN) as any;
+    assert(membersBeforeRead?.c === 0, 'No Daily Pulse member exists initially');
+    const initialListingCount = getActiveMemberListingCount();
+    assert(initialListingCount === 0, 'getActiveMemberListingCount() returns 0 on empty database');
+    const membersAfterRead = db.prepare("SELECT COUNT(*) as c FROM members WHERE callsign = ?").get(PULSE_CALLSIGN) as any;
+    assert(membersAfterRead?.c === 0, 'getActiveMemberListingCount() is strictly read-only and did not insert member');
+    assert(getActivePulsePost() === null, 'getActivePulsePost() is null and strictly read-only');
+
     // 3. Test Treasury Provisioning
     const pulsePubkey = ensurePulseTreasury();
     assert(!!pulsePubkey && pulsePubkey.length > 10, `Treasury pubkey created/retrieved: ${pulsePubkey.slice(0, 12)}...`);
@@ -68,13 +79,21 @@ async function main() {
 
     // 4. Test Daily Pulse Rotation
     const dateDay1 = new Date('2026-08-16T05:00:00Z');
-    const { post: postDay1, entry: entryDay1 } = rotateDailyPulse(dateDay1);
+    const { post: postDay1, entry: entryDay1, pulseItem: pulseItemDay1 } = rotateDailyPulse(dateDay1);
     assert(postDay1.id === 'pulse_2026-08-16', `Pulse post ID is deterministic: "${postDay1.id}"`);
     assert(postDay1.credits === 0, `Pulse post is 0 Beans (got ${postDay1.credits})`);
     assert(postDay1.title === entryDay1.headline, `Pulse post title matches headline: "${postDay1.title}"`);
     assert(postDay1.description === entryDay1.body, 'Pulse post description matches body');
     assert(postDay1.authorPublicKey === pulsePubkey, 'Pulse post author is the Daily Pulse Treasury');
     assert(postDay1.reach === 'local', 'Pulse post reach is "local"');
+
+    // Verify Pulse item created in Learn lane
+    assert(pulseItemDay1.id === 'item_pulse_2026-08-16', `Pulse item ID is deterministic: "${pulseItemDay1.id}"`);
+    assert(pulseItemDay1.category === 'learn', 'Pulse item category is "learn"');
+    assert(pulseItemDay1.curated === 1, 'Pulse item has curated = 1');
+    assert(pulseItemDay1.source === 'curated', 'Pulse item source is "curated"');
+    assert(pulseItemDay1.title === entryDay1.headline, 'Pulse item title matches entry headline');
+    assert(pulseItemDay1.channel_id === DAILY_PULSE_CHANNEL_ID, `Pulse item belongs to channel "${DAILY_PULSE_CHANNEL_ID}"`);
 
     // Check active pulse in marketplace
     const activePostsDay1 = getPosts({ type: 'offer' });
@@ -84,13 +103,20 @@ async function main() {
 
     // 5. Test Rotation to Day 2 (Yesterday's post should be soft-deleted)
     const dateDay2 = new Date('2026-08-17T05:00:00Z');
-    const { post: postDay2, entry: entryDay2 } = rotateDailyPulse(dateDay2);
+    const { post: postDay2, entry: entryDay2, pulseItem: pulseItemDay2 } = rotateDailyPulse(dateDay2);
     assert(postDay2.id === 'pulse_2026-08-17', `Day 2 post ID (${postDay2.id}) matches deterministic format`);
     assert(postDay2.id !== postDay1.id, `Day 2 post ID is distinct from Day 1`);
+    assert(pulseItemDay2.id === 'item_pulse_2026-08-17', `Day 2 pulse item created: "${pulseItemDay2.id}"`);
 
-    // Verify Day 1 post was marked inactive
+    // Verify Day 1 post was marked inactive in marketplace
     const day1Row = db.prepare("SELECT active, status FROM posts WHERE id = ?").get(postDay1.id) as any;
     assert(day1Row?.active === 0 && day1Row?.status === 'cancelled', `Day 1 post is soft-deleted (active=${day1Row?.active}, status=${day1Row?.status})`);
+
+    // Verify Day 1 pulse item was soft-deleted per Contract B
+    const day1PulseItemRow = db.prepare("SELECT deleted_at, url, title, thumbnail_url FROM pulse_items WHERE id = ?").get(pulseItemDay1.id) as any;
+    assert(Boolean(day1PulseItemRow?.deleted_at), 'Day 1 pulse item is soft-deleted with deleted_at');
+    assert(day1PulseItemRow?.url === null, 'Day 1 pulse item url is scrubbed per Contract B');
+    assert(day1PulseItemRow?.title === null, 'Day 1 pulse item title is scrubbed per Contract B');
 
     // Verify only 1 active Pulse post exists
     const activePostsDay2 = getPosts({ type: 'offer' });
@@ -132,7 +158,49 @@ async function main() {
     const messages = db.prepare("SELECT COUNT(*) as c FROM messages WHERE author_pubkey = ?").get(pulsePubkey) as any;
     assert((messages?.c || 0) === 0, 'No outbound direct messages sent by Daily Pulse author');
 
-    // 9. Test Callsign Collision with Regular Member
+    // 9. Verify Marketplace Gating on Fewer Than 2 Real Member Listings (< 2)
+    assert(getActiveMemberListingCount() === 0, 'Active member listing count is 0 (Daily Pulse excluded)');
+
+    // 1 member listing created: Daily Pulse remains eligible
+    const memberPost1 = createPost('offer', 'food', 'Fresh Apples', 'Locally grown organic apples', 5, 'local', peerPubkey);
+    assert(getActiveMemberListingCount() === 1, 'Active member listing count is 1 after 1 member post');
+    const { post: postWith1Listing } = rotateDailyPulse(dateDay2);
+    assert(!!postWith1Listing, 'Daily Pulse post is created/retained when 1 member listing exists (< 2)');
+    assert(!!getActivePulsePost(), 'getActivePulsePost() returns post when 1 member listing exists');
+
+    // 2 member listings created: Daily Pulse is SUPPRESSED (>= 2)
+    const memberPost2 = createPost('offer', 'craft', 'Handmade Bowl', 'Turned oak bowl', 10, 'local', peerPubkey);
+    assert(getActiveMemberListingCount() === 2, 'Active member listing count is 2 after 2nd member post');
+    const { post: postWith2Listings, pulseItem: pulseItemWith2 } = rotateDailyPulse(dateDay2);
+    assert(postWith2Listings === null, 'Daily Pulse post is suppressed when 2 member listings exist (post is null)');
+    assert(!!pulseItemWith2, 'Pulse tab curated item STILL rotates into Learn lane even when marketplace post is suppressed');
+    assert(getActivePulsePost() === null, 'getActivePulsePost() returns null when 2 member listings exist');
+
+    // Verify previously active pulse post in DB was soft-deleted
+    const pulsePostInDb = db.prepare("SELECT active, status FROM posts WHERE id = ?").get(postDay2.id) as any;
+    assert(pulsePostInDb?.active === 0 && pulsePostInDb?.status === 'cancelled', 'Active pulse post was soft-deleted upon reaching 2 member listings');
+    const activeMarketplacePulse = getPosts({ type: 'offer' }).filter(p => p.authorPublicKey === pulsePubkey);
+    assert(activeMarketplacePulse.length === 0, 'Zero active Daily Pulse posts in marketplace when >= 2 member listings');
+
+    // 3 member listings: Still suppressed
+    const memberPost3 = createPost('offer', 'repair', 'Bicycle Tuneup', 'Brake and gear adjustments', 15, 'local', peerPubkey);
+    assert(getActiveMemberListingCount() === 3, 'Active member listing count is 3');
+    assert(getActivePulsePost() === null, 'getActivePulsePost() still null with 3 member listings');
+    const { post: postWith3Listings } = rotateDailyPulse(dateDay2);
+    assert(postWith3Listings === null, 'Daily Pulse post still suppressed with 3 member listings');
+
+    // Member listings drop back to 1 (< 2): syncPulseMarketplaceGate automatically restores Daily Pulse
+    db.prepare("UPDATE posts SET active = 0, status = 'cancelled' WHERE id IN (?, ?)").run(memberPost2!.id, memberPost3!.id);
+    assert(getActiveMemberListingCount() === 1, 'Active member listing count dropped back to 1');
+    syncPulseMarketplaceGate(dateDay2);
+    assert(!!getActivePulsePost(), 'getActivePulsePost() returns active pulse post when listings drop back to 1 via syncPulseMarketplaceGate');
+    const restoredPulseRow = db.prepare("SELECT active, status FROM posts WHERE id = ?").get(postDay2.id) as any;
+    assert(restoredPulseRow?.active === 1 && restoredPulseRow?.status === 'active', 'Daily Pulse post is reactivated (active=1, status=active) when listings drop below 2');
+
+    // Clean up member post 1 before callsign collision test
+    db.prepare("UPDATE posts SET active = 0, status = 'cancelled' WHERE id = ?").run(memberPost1!.id);
+
+    // 10. Test Callsign Collision with Regular Member
     // Remove treasury first to simulate a scenario where a regular member took 'Daily Pulse'
     db.prepare("DELETE FROM members WHERE public_key = ?").run(pulsePubkey);
     const collideePubkey = 'collidee_pubkey_1234567890123456';
@@ -143,6 +211,68 @@ async function main() {
     const collideeAfter = db.prepare("SELECT callsign, is_treasury FROM members WHERE public_key = ?").get(collideePubkey) as any;
     assert(collideeAfter.is_treasury === 0, 'Colliding member was not escalated to is_treasury=1');
     assert(collideeAfter.callsign.startsWith('Daily Pulse '), `Colliding member callsign safely renamed: "${collideeAfter.callsign}"`);
+
+    // 11. Verify Marketplace Routes Gating & Read-Only GET Endpoint
+    const router = createMarketplaceRoutes({
+        clampLimit: (n: any) => Math.min(Math.max(Number(n) || 20, 1), 100),
+        clampOffset: (n: any) => Math.max(Number(n) || 0, 0),
+        enforceReadAuth: false,
+    } as any);
+
+    const dispatchRoute = async (method: string, path: string, ctx: any) => {
+        const route = router.stack.find(r => r.methods.includes(method.toUpperCase()) && r.regexp.test(path));
+        if (!route) throw new Error(`Route not found: ${method} ${path}`);
+        await route.stack[0](ctx, async () => {});
+    };
+
+    // Ensure state clean for route tests
+    db.prepare("UPDATE posts SET active = 0, status = 'cancelled' WHERE author_pubkey != ?").run(newPulsePubkey);
+    syncPulseMarketplaceGate();
+    assert(!!getActivePulsePost(), 'Pulse post active when 0 member listings exist');
+
+    // Route: Create 1st member listing -> Pulse remains active (< 2)
+    const ctxCreate1: any = { requestBody: { type: 'offer', title: 'Route Listing 1', authorPublicKey: peerPubkey }, state: { actor: peerPubkey } };
+    await dispatchRoute('POST', '/api/marketplace/posts', ctxCreate1);
+    assert(ctxCreate1.body?.success === true, 'Route: 1st member post created');
+    assert(getActiveMemberListingCount() === 1, 'Listing count is 1');
+    assert(!!getActivePulsePost(), 'Route: Pulse active when 1 member listing exists (< 2)');
+
+    // Route: Create 2nd member listing -> Pulse suppressed (>= 2)
+    const ctxCreate2: any = { requestBody: { type: 'offer', title: 'Route Listing 2', authorPublicKey: peerPubkey }, state: { actor: peerPubkey } };
+    await dispatchRoute('POST', '/api/marketplace/posts', ctxCreate2);
+    assert(ctxCreate2.body?.success === true, 'Route: 2nd member post created');
+    assert(getActiveMemberListingCount() === 2, 'Listing count is 2');
+    assert(getActivePulsePost() === null, 'Route: Pulse suppressed when 2 member listings exist (>= 2)');
+
+    // Route: Pause 2nd listing -> drops to 1 -> Pulse restored!
+    const post2Id = ctxCreate2.body.post.id;
+    const ctxPause: any = { requestBody: { postId: post2Id, authorPublicKey: peerPubkey }, state: { actor: peerPubkey } };
+    await dispatchRoute('POST', '/api/marketplace/posts/pause', ctxPause);
+    assert(ctxPause.body?.success === true, 'Route: 2nd post paused');
+    assert(getActiveMemberListingCount() === 1, 'Listing count dropped to 1 after pause');
+    assert(!!getActivePulsePost(), 'Route: Pulse restored when listings drop back to 1 via pause');
+
+    // Route: Resume 2nd listing -> reaches 2 -> Pulse suppressed!
+    const ctxResume: any = { requestBody: { postId: post2Id, authorPublicKey: peerPubkey }, state: { actor: peerPubkey } };
+    await dispatchRoute('POST', '/api/marketplace/posts/resume', ctxResume);
+    assert(ctxResume.body?.success === true, 'Route: 2nd post resumed');
+    assert(getActiveMemberListingCount() === 2, 'Listing count is 2 after resume');
+    assert(getActivePulsePost() === null, 'Route: Pulse suppressed when listings reach 2 via resume');
+
+    // Route: Remove 2nd listing -> drops to 1 -> Pulse restored!
+    const ctxRemove: any = { requestBody: { id: post2Id, authorPublicKey: peerPubkey }, state: { actor: peerPubkey } };
+    await dispatchRoute('POST', '/api/marketplace/posts/remove', ctxRemove);
+    assert(ctxRemove.body?.success === true, 'Route: 2nd post removed');
+    assert(getActiveMemberListingCount() === 1, 'Listing count dropped to 1 after remove');
+    assert(!!getActivePulsePost(), 'Route: Pulse restored when listings drop back to 1 via remove');
+
+    // Route: GET /api/marketplace/posts must be 100% read-only and not mutate updated_at
+    const activePulseId = getActivePulsePost()!.id;
+    const pulseRowBeforeGet = db.prepare("SELECT updated_at FROM posts WHERE id = ?").get(activePulseId) as any;
+    const ctxGet: any = { query: {}, get: () => '', state: {} };
+    await dispatchRoute('GET', '/api/marketplace/posts', ctxGet);
+    const pulseRowAfterGet = db.prepare("SELECT updated_at FROM posts WHERE id = ?").get(activePulseId) as any;
+    assert(pulseRowBeforeGet.updated_at === pulseRowAfterGet.updated_at, 'GET /api/marketplace/posts is strictly read-only and never mutates updated_at');
 
     console.log(`\nDaily Pulse Test Summary: ${passed}/${run} assertions passed.`);
     if (passed < run) {

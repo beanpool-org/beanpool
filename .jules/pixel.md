@@ -48,6 +48,9 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-09 — AvatarPickerSheet accessibility labels LANDED in #680.
+Added explicit `accessibilityLabel` attributes to camera and gallery source buttons in `apps/native/components/AvatarPickerSheet.tsx`, cleanly masking decorative emojis for screen readers. Do not re-file.
+
 ### 2026-08-25 — `GlobalHeader.tsx` is a protected file. Do not edit it.
 #411 (a one-line `accessibilityLabel`) is held for human review rather than merged, purely because
 of where it lands. GlobalHeader, `logo.png`, `map.tsx` and `UnifiedMapPin` are fragile and have

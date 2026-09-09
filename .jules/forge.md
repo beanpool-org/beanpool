@@ -46,6 +46,9 @@ const { id } = req.body; // could be undefined, crashes downstream
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-09 — Dangling interval timer in LE cert request timeout LANDED in #677.
+In `apps/server/src/services/tls.ts`, wrapped `Promise.race` in `try...finally` to guarantee both `timer` and `checkInterval` are cleared upon resolution or rejection. Do not re-file.
+
 ### 2026-08-25 — Pairing routes "request body extraction" is a NO-OP. Closed twice.
 #403 and #409. The JSON body middleware in `apps/server/src/https-server.ts` assigns **both**
 `(ctx as any).requestBody` and `(ctx.request as any).body` to the same parsed object in every

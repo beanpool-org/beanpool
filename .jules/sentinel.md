@@ -18,6 +18,10 @@ stack-trace leak and CWE-598). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #109)
+### 2026-09-08 — OAuth batch ingest limit PR was genuinely EMPTY (0 files changed). Closed (#683).
+#683 claimed `[security] bound OAuth batch ingest item limit` in `apps/server/src/routes/pulse-submit.ts`, but commit `d573ec3` contained 0 files changed, 0 insertions, and 0 deletions (tree identical to parent on `main`). Straight violation of POLICY.md §11.
+Before opening any PR, run `git diff --stat origin/main` to confirm real, non-zero code or test changes exist. If 0 files changed or the commit is a no-op, exit immediately with zero changes and do not open a PR.
+
 ### 2026-08-25 — Harvester tar path-traversal hardening LANDED in #361. Raised three times.
 #378 and #400 were **byte-identical** to #361 and were closed. Check open PRs for the file before
 starting — see POLICY.md §3.

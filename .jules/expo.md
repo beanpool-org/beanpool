@@ -34,6 +34,9 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
 - Navigation types should be declared in a central params file
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-09 — Navigation param typing and Talk tab view state sync LANDED in #679.
+Typed optional `view?: string` in `apps/native/app/(tabs)/people.tsx` and added `useEffect` in `apps/native/app/(tabs)/chats.tsx` to keep `talkView` synchronized with navigation param updates. Do not re-file.
+
 ### 2026-08-25 — `useLocalSearchParams` typing LANDED in #397 (chat + post) and #383 (invite).
 #376 closed as subsumed by #397. Do not re-file.
 

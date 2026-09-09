@@ -35,6 +35,9 @@ Flow's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native`
 9. **Record outcomes below.**
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-09 — MembersModule catch block unknown typing LANDED in #675.
+Replaced `catch (e: any)` with `catch (e: unknown)` and `instanceof Error` type guards across all six catch blocks in `apps/manager/src/components/modules/MembersModule.tsx`. Do not re-file.
+
 ### 2026-08-25 — LogsModule `any` → `LogEntry` LANDED in #359. Raised three times.
 #382 and #398 closed. #382 kept `[key: string]: any`, which defeated its own stated purpose.
 

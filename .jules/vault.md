@@ -72,3 +72,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** Node name, node URL, invite code, full URL, and tier badge were interpolated into HTML string template without entity escaping before document.write in printable invite card generation.
 **Learning:** Writing raw string templates into document.write allows DOM-based XSS when dynamic values contain HTML tags or quotes.
 **Prevention:** Always sanitize dynamic strings using HTML entity escaping before interpolating into HTML template strings rendered via document.write.
+
+## 2026-09-10 - Missing 2FA Session Token in Admin File Downloads
+**Vulnerability:** `downloadAdminFile()` constructed custom headers without `X-Admin-2FA-Session`, causing file downloads (database backups, snapshots, identity bundles, history archives) to fail with 401 Unauthorized on 2FA-protected nodes.
+**Learning:** Helper functions creating custom request headers must use `buildAdminHeaders(adminPassword, tfaToken)` so TOTP 2FA authentication is consistently forwarded across all admin actions.
+**Prevention:** Always use `buildAdminHeaders` for admin API requests and update all callers across the codebase when updating helper signatures.

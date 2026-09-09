@@ -214,11 +214,9 @@ export async function downloadAdminFile(
     params: Record<string, string>,
     adminPassword: string | undefined,
     filename: string,
+    tfaToken?: string,
 ): Promise<void> {
-    const headers: Record<string, string> = {};
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
     const url = new URL(endpointPath, window.location.origin);
     for (const [k, v] of Object.entries(params)) {
         url.searchParams.set(k, v);

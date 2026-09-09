@@ -183,8 +183,11 @@ export function ImageLightbox({
 
     const rawUrl = validPhotos[currentIndex];
     const resolvedUrl = resolveImageUrl(rawUrl);
+    // Cache-bust a retry by query string — but never on a data: URI, where the payload IS
+    // the URL and appending to it corrupts the base64 rather than reloading anything.
+    const isDataUri = !!resolvedUrl && resolvedUrl.startsWith('data:');
     const displayUrl = resolvedUrl
-        ? retryKey > 0
+        ? retryKey > 0 && !isDataUri
             ? `${resolvedUrl}${resolvedUrl.includes('?') ? '&' : '?'}retry=${retryKey}`
             : resolvedUrl
         : null;
@@ -303,7 +306,11 @@ export function ImageLightbox({
                 {/* Enlarged Image */}
                 {displayUrl && (
                     <img
-                        key={`${displayUrl}-${retryKey}`}
+                        {/* currentIndex is part of the key deliberately: a post can carry the
+                            same URL twice, and without it React reuses the element, the browser
+                            fires no new load event for an identical src, and the spinner that
+                            currentIndex just re-armed never clears. */}
+                        key={`${currentIndex}-${displayUrl}-${retryKey}`}
                         src={displayUrl}
                         alt={altText}
                         onLoad={() => setImageStatus('loaded')}

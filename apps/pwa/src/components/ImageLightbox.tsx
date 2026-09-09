@@ -99,6 +99,7 @@ export function ImageLightbox({
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
+                e.stopPropagation();
                 onClose();
                 return;
             }
@@ -207,8 +208,11 @@ export function ImageLightbox({
             role="dialog"
             aria-modal="true"
             aria-label={title ? `Photo viewer: ${title}` : 'Photo viewer'}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 dark:bg-black/95 backdrop-blur-sm select-none p-3 sm:p-6 transition-opacity duration-200"
-            onClick={onClose}
+            className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/90 dark:bg-black/95 backdrop-blur-sm select-none p-3 sm:p-6 transition-opacity duration-200"
+            onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+            }}
         >
             {/* Header bar: Counter (if multiple) & Close button */}
             <div

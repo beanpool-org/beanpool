@@ -84,8 +84,24 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         photos: string[];
         initialIndex: number;
         title?: string;
+        triggerElement?: HTMLElement | null;
     } | null>(null);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
+
+    // Keyboard accessibility: Escape closes preview card (defers to lightbox if open)
+    useEffect(() => {
+        if (!previewPost) return;
+        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (lightboxState?.isOpen) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setPreviewPost(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [previewPost, lightboxState?.isOpen]);
 
     useEffect(() => {
         return onBlocklistUpdated(() => {
@@ -713,12 +729,13 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                     {previewPost.photos && previewPost.photos.length > 0 ? (
                         <button
                             type="button"
-                            onClick={() =>
+                            onClick={(e) =>
                                 setLightboxState({
                                     isOpen: true,
                                     photos: previewPost.photos!,
                                     initialIndex: 0,
                                     title: previewPost.title,
+                                    triggerElement: e.currentTarget,
                                 })
                             }
                             aria-label={`View enlarged photo: ${previewPost.title}`}
@@ -1091,6 +1108,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                 photos={lightboxState.photos}
                 initialIndex={lightboxState.initialIndex}
                 title={lightboxState.title}
+                triggerElement={lightboxState.triggerElement}
                 onClose={() => setLightboxState(null)}
             />
         )}

@@ -36,6 +36,10 @@ Vault's domain is `apps/manager/` ONLY. Do NOT touch `apps/server` (Sentinel's d
 - Environment variables accessed via `import.meta.env.VITE_*` are PUBLIC (bundled into the client)
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-09 — Missed-consumer pattern in 2FA session token forwarding (#682). Landed after fix.
+#682 updated 14 API client helpers in `node-client.ts` to accept `tfaToken?: string`, but only updated `onFreezeUser` and `onPruneUser` in `App.tsx`. Adjacent user action handlers in the same component block (`onUpdateTier`, `onToggleVoucher`, `onToggleOperator`) were left without tokens, causing 401 failures on 2FA-enabled nodes until fixed.
+Before filing a PR that alters or extends an API client helper signature, search for every call site across the manager app (`grep -rn "<helperName>" apps/manager`) and update all consumers in the same PR (POLICY.md §8). Never update one or two callers while leaving adjacent operations in the same component block broken.
+
 ### 2026-08-25 — Manager snapshot download auth: carried by #377. Do not re-file.
 #392 and #413 closed as duplicates. #377 is retained because it fixes **both** the snapshot
 download and the history-archive download; the other two covered only the first. The underlying

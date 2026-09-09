@@ -19,6 +19,10 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #112 / #113)
+### 2026-09-09 — Incomplete ARIA meter semantics in CreditBar (#681). Landed after fix.
+#681 added `role="meter"`, `aria-label`, `aria-valuenow`, and `aria-valuemin={floor}` to PWA `CreditBar.tsx`, but omitted `aria-valuemax`. Assistive technologies default omitted `aria-valuemax` to 100; because BeanPool balances regularly exceed 100, this produced an invalid ARIA state (`valuenow > valuemax`) and validator errors until `aria-valuemax={feeFreeMax}` (default 200) and clamped `aria-valuenow = Math.min(valuemax, Math.max(valuemin, balance))` were added.
+Before filing an accessibility PR, check every ARIA attribute the role requires, not just the role itself. For `role="meter"` and `role="progressbar"`, always supply valid `aria-valuemin`, `aria-valuemax`, and `aria-valuenow` that cover the full range of runtime values.
+
 ### 2026-08-25 — CategoryPickerModal a11y LANDED in #371. Raised four times.
 #366, #390, #399 closed as duplicates. #371 won because it was the only one with an Escape
 handler *and* an explicit close button *and* `type="button"`. One open nit worth a future PR:

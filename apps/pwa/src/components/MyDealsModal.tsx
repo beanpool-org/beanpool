@@ -9,8 +9,7 @@
  * History sub-filter: All | Received | Given
  */
 
-import { useState, useEffect } from 'react';
-import type React from 'react';
+import { useState, useEffect, type KeyboardEvent } from 'react';
 import type { MarketplacePost } from '../lib/api';
 import { ImageLightbox } from './ImageLightbox';
 
@@ -58,7 +57,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
     // Enter/Space, which suppresses the synthetic click on any nested button. So a photo
     // button has to handle the key itself AND stop the event reaching the card — otherwise
     // a keyboard user asking to enlarge the photo gets navigated away to the post instead.
-    const photoKeyDown = (photos: string[], title?: string) => (e: React.KeyboardEvent) => {
+    const photoKeyDown = (photos: string[], title?: string) => (e: KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.stopPropagation();
             e.preventDefault();

@@ -18,7 +18,7 @@ const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 const PRICE_TYPE_LABEL: Record<string, string> = { fixed: 'Total', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' };
 
 export default function TreasuryPostScreen() {
-    const params = useLocalSearchParams<{ treasury: string; mode?: string; name?: string }>();
+    const params = useLocalSearchParams<{ treasury?: string; mode?: string; name?: string }>();
     const isNeed = params.mode === 'need';
     const treasuryName = params.name || 'this treasury';
     const { theme, colors } = useTheme();

@@ -3,8 +3,24 @@
  *
  * Base URL is same-origin (the PWA is served by the node).
  */
-import { loadIdentity } from './identity';
-import { toEd25519Pkcs8, type PublicCreatorChannel, type ChannelPlatform, type ChannelCategory } from '@beanpool/core';
+import { loadIdentity, type BeanPoolIdentity } from './identity';
+import {
+    toEd25519Pkcs8,
+    toEd25519Seed,
+    openShareAsMember,
+    rewrapShareToDevice,
+    openRewrappedShare,
+    readHubShare,
+    combineBytes,
+    splitTwoLayer,
+    recordShareForHub,
+    sealShareToMember,
+    TWO_LAYER_THRESHOLD,
+    type PublicCreatorChannel,
+    type ChannelPlatform,
+    type ChannelCategory,
+} from '@beanpool/core';
+import { ed25519 } from '@noble/curves/ed25519.js';
 
 export type { PublicCreatorChannel, ChannelPlatform, ChannelCategory };
 
@@ -145,6 +161,62 @@ export async function request<T>(method: string, path: string, body?: any): Prom
         throw new Error(err.message || err.error || `Request failed: ${res.status}`);
     }
     return res.json();
+}
+
+/** Helper to sign and send requests with a custom / ephemeral keypair. */
+export async function signedRequestWithKey<T>(
+    method: string,
+    path: string,
+    body: any,
+    privateKeyHex: string,
+    publicKeyHex: string,
+): Promise<T> {
+    const opts: RequestInit = {
+        method,
+        cache: 'no-store',
+        headers: {
+            'Content-Type': 'application/json',
+        } as Record<string, string>,
+    };
+
+    const bodyString = body ? JSON.stringify(body) : '';
+    if (body) {
+        opts.body = bodyString;
+    }
+
+    const timestamp = String(Date.now());
+    const nonce = crypto.randomUUID();
+    const signPath = path.split('?')[0];
+    const canonical = `${method}\n${signPath}\n${timestamp}\n${nonce}\n${bodyString}`;
+    const signature = await signEd25519(privateKeyHex, canonical);
+    const h = opts.headers as Record<string, string>;
+    h['X-Public-Key'] = publicKeyHex;
+    h['X-Signature'] = signature;
+    h['X-Timestamp'] = timestamp;
+    h['X-Nonce'] = nonce;
+
+    const baseUrl = getNodeApiUrl();
+    const res = await fetch(`${baseUrl}${path}`, opts);
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || `Request failed: ${res.status}`);
+    }
+    return res.json();
+}
+
+function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+    if (a.length !== b.length) {
+        throw new Error(`XOR mismatch: lengths ${a.length} and ${b.length}`);
+    }
+    const out = new Uint8Array(a.length);
+    for (let i = 0; i < a.length; i++) {
+        out[i] = a[i] ^ b[i];
+    }
+    return out;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ===================== COMMUNITY =====================
@@ -1302,6 +1374,477 @@ export async function cancelRecoveryRequest(requestId: string): Promise<void> {
 export async function getRecoveryStatus(pubkey: string): Promise<any> {
     return request<any>('GET', `/api/recovery/status/${encodeURIComponent(pubkey)}`);
 }
+
+// ===================== TWO-LAYER KEEPER & FRIEND RECOVERY =====================
+
+export interface InboundApprovalContext {
+    collectionId: string;
+    callsign: string;
+    live: boolean;
+    reason?: string;
+    fragment: {
+        encryptedShare: string;
+        shareIv: string;
+        shareTag: string;
+        ephemeralPubkey: string;
+        shareIndex: number;
+    };
+    recipientEphemeralPubkey: string;
+}
+
+export interface PendingKeeperAction {
+    collectionId: string;
+    ownerPubkey: string;
+    callsign?: string;
+    expiresAt: string;
+}
+
+export interface RecoveryProtectionStatus {
+    generation: number;
+    keepers: { holderType: string; count: number }[];
+    enrolledSso: string[];
+    total: number;
+    threshold: number;
+    canAffordToLose: number;
+    canRemoveKeeper: boolean;
+    recoverable: boolean;
+    unattendedPieces: number;
+    humanKeepers: number;
+    dependsOnPeople: boolean;
+}
+
+export type ProtectionState = 'covered' | 'almost' | 'words-only';
+export type ProtectionTier = 'sso' | 'friends' | 'sovereign';
+
+export interface Protection {
+    state: ProtectionState;
+    tier: ProtectionTier;
+    holding: string[];
+    enrolledSso: string[];
+    stillNeeded: number;
+    spare: number;
+    showWords: boolean;
+}
+
+export const KEEPER_LABELS: Record<string, string> = {
+    hub: 'Your community hub',
+    member: 'A trusted friend',
+    sso: 'Your sign-in account',
+};
+
+export function deriveProtectionState(status: RecoveryProtectionStatus | null): Protection {
+    const enrolledSso = status?.enrolledSso ?? [];
+    const enrolled: ('hub' | 'member' | 'sso')[] = [];
+    if (Array.isArray(status?.keepers)) {
+        for (const k of status.keepers) {
+            for (let i = 0; i < (k.count || 0); i++) {
+                enrolled.push(k.holderType as 'hub' | 'member' | 'sso');
+            }
+        }
+    }
+
+    if (enrolled.length === 0) {
+        const available = status?.total ?? 0;
+        const threshold = TWO_LAYER_THRESHOLD;
+        const stillNeeded = Math.max(0, threshold - available);
+        return {
+            state: available > 0 && stillNeeded === 1 ? 'almost' : 'words-only',
+            tier: 'sovereign',
+            holding: [],
+            enrolledSso,
+            stillNeeded,
+            spare: 0,
+            showWords: true,
+        };
+    }
+
+    const tier: ProtectionTier = enrolled.includes('sso') ? 'sso' : 'friends';
+    const threshold = tier === 'sso' ? TWO_LAYER_THRESHOLD : TWO_LAYER_THRESHOLD + 1;
+
+    if (enrolled.length < threshold) {
+        const stillNeeded = threshold - enrolled.length;
+        return {
+            state: stillNeeded === 1 ? 'almost' : 'words-only',
+            tier,
+            holding: enrolled.map((k) => KEEPER_LABELS[k] ?? k),
+            enrolledSso,
+            stillNeeded,
+            spare: 0,
+            showWords: true,
+        };
+    }
+
+    const spare = Math.max(0, enrolled.length - threshold);
+    return {
+        state: 'covered',
+        tier,
+        holding: enrolled.map((k) => KEEPER_LABELS[k] ?? k),
+        enrolledSso,
+        stillNeeded: 0,
+        spare,
+        showWords: tier === 'sso' ? false : spare === 0,
+    };
+}
+
+export interface RecoverySessionInfo {
+    collectionId: string;
+    generation: number;
+    startedAt?: string;
+    expiresAt?: string;
+    status?: string;
+    progress?: any;
+}
+
+/**
+ * Keeper side: Fetches inbound recovery context for a collection.
+ */
+export async function getInboundApprovalContext(collectionId: string): Promise<InboundApprovalContext> {
+    return request<InboundApprovalContext>('POST', '/api/recovery/approve-keeper/context', {
+        collectionId,
+    });
+}
+
+/**
+ * Keeper side: Approves an inbound recovery request by unsealing the held fragment
+ * and re-wrapping it to the recovering device's ephemeral public key.
+ */
+export async function approveInboundRecovery(
+    context: InboundApprovalContext,
+    identity: BeanPoolIdentity,
+): Promise<{ success: boolean; released: string }> {
+    if (!context.live) {
+        throw new Error(`This recovery session is no longer active (${context.reason || 'expired'}).`);
+    }
+    if (!context.fragment) {
+        throw new Error('Recovery fragment data is missing for this account.');
+    }
+    if (!context.recipientEphemeralPubkey) {
+        throw new Error('Recipient ephemeral public key is missing from the recovery session.');
+    }
+
+    // 1. Unseal held fragment using keeper's identity private key (normalised via toEd25519Seed)
+    const heldShare = {
+        encryptedShare: context.fragment.encryptedShare,
+        shareIv: context.fragment.shareIv,
+        shareTag: context.fragment.shareTag,
+        ephemeralPubkey: context.fragment.ephemeralPubkey,
+        kdfParams: JSON.stringify({ alg: 'x25519-xc20p-v1' }),
+    };
+
+    const openedShare = openShareAsMember(heldShare, identity.privateKey);
+
+    // 2. Re-wrap to the recovering device's ephemeral public key
+    const rewrapped = rewrapShareToDevice(openedShare, context.recipientEphemeralPubkey);
+
+    // 3. Post re-wrapped share to the node
+    return request<{ success: boolean; released: string }>('POST', '/api/recovery/approve-keeper', {
+        collectionId: context.collectionId,
+        payload: rewrapped.encryptedShare,
+        payloadIv: rewrapped.shareIv,
+        payloadTag: rewrapped.shareTag,
+        ephemeralPubkey: rewrapped.ephemeralPubkey,
+    });
+}
+
+/**
+ * Fetches pending keeper actions where this member is needed to approve an open recovery session.
+ * Backed by the authenticated server route POST /api/recovery/approve-keeper/pending (with legacy fallback).
+ */
+export async function getPendingKeeperActions(): Promise<PendingKeeperAction[]> {
+    const identity = await loadIdentity();
+    if (!identity?.publicKey) return [];
+
+    const actions: PendingKeeperAction[] = [];
+
+    // 1. Two-Layer Keeper recovery collections pending for this member
+    try {
+        const res = await request<{ pending: PendingKeeperAction[] } | PendingKeeperAction[]>(
+            'POST',
+            '/api/recovery/approve-keeper/pending',
+            {}
+        );
+        const list = Array.isArray(res) ? res : res?.pending || [];
+        for (const item of list) {
+            if (item && item.collectionId) {
+                actions.push({
+                    collectionId: item.collectionId,
+                    ownerPubkey: item.ownerPubkey,
+                    callsign: item.callsign,
+                    expiresAt: item.expiresAt,
+                });
+            }
+        }
+    } catch (e: any) {
+        console.warn('[KeeperActions] Two-layer pending check failed:', e?.message || e);
+    }
+
+    // 2. Legacy guardian requests (if any exist)
+    try {
+        const legacy = await request<any[]>('GET', `/api/recovery/pending/${encodeURIComponent(identity.publicKey)}`);
+        for (const r of legacy || []) {
+            if (Array.isArray(r.keeperActionRequired)) {
+                for (const a of r.keeperActionRequired) {
+                    if (!actions.some(existing => existing.collectionId === a.collectionId)) {
+                        actions.push({
+                            collectionId: a.collectionId,
+                            ownerPubkey: a.ownerPubkey || r.oldPubkey,
+                            callsign: r.oldCallsign || r.callsign,
+                            expiresAt: a.expiresAt,
+                        });
+                    }
+                }
+            }
+        }
+    } catch {
+        // Ignore legacy failures
+    }
+
+    return actions;
+}
+
+/**
+ * Owner side: Checks active recovery sessions against the member's account.
+ */
+export async function getMyActiveRecoveryCollections(): Promise<RecoverySessionInfo[]> {
+    try {
+        const res = await request<{ collections: RecoverySessionInfo[] }>('POST', '/api/recovery/collect/mine', {});
+        return res?.collections || [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Owner side: Cancels an active recovery session.
+ */
+export async function cancelRecoveryCollection(collectionId: string): Promise<boolean> {
+    const res = await request<{ cancelled: boolean }>('POST', '/api/recovery/collect/cancel', {
+        collectionId,
+    });
+    return !!res?.cancelled;
+}
+
+/**
+ * Owner side: Reads current two-layer protection status.
+ */
+export async function getRecoveryProtectionStatus(): Promise<RecoveryProtectionStatus | null> {
+    try {
+        return await request<RecoveryProtectionStatus>('POST', '/api/recovery/shares/status', {});
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Owner side: Enrols friend keepers with a Two-Layer split.
+ */
+export async function enrolFriendKeepersApi(
+    first: BeanPoolIdentity | string[],
+    second: string[] | BeanPoolIdentity,
+): Promise<{ generation: number; shareCount: number; threshold: number }> {
+    const identity = ('privateKey' in first ? first : second) as BeanPoolIdentity;
+    const friendPublicKeys = (Array.isArray(first) ? first : second) as string[];
+
+    if (friendPublicKeys.length < 2) {
+        throw new Error('Need at least 2 friend keepers to protect your account.');
+    }
+
+    // Normalise private key to 32-byte Ed25519 seed (handles both 32-byte raw and 48-byte PKCS8)
+    const seed = toEd25519Seed(hexToBytes(identity.privateKey));
+    const split = await splitTwoLayer(seed, friendPublicKeys.length);
+
+    const shares = [
+        {
+            holderType: 'hub',
+            holderRef: 'node',
+            shareIndex: 1,
+            ...recordShareForHub(split.hubShare),
+        },
+        ...friendPublicKeys.map((pubkey, i) => ({
+            holderType: 'member',
+            holderRef: pubkey,
+            shareIndex: i + 2,
+            ...sealShareToMember(split.friendShares[i], pubkey),
+        })),
+    ];
+
+    return request('POST', '/api/recovery/shares', { shares });
+}
+
+/**
+ * Owner side: Removes all recovery keepers, returning to words-only.
+ */
+export async function deleteAllRecoveryShares(): Promise<void> {
+    await request('DELETE', '/api/recovery/shares', {
+        confirm: 'delete-my-recovery-keepers',
+    });
+}
+
+/**
+ * Recovering device: Starts a two-layer recovery session with an ephemeral keypair.
+ */
+export async function startFriendRecoverySessionApi(callsign: string): Promise<{
+    collectionId: string;
+    ephIdentity: { publicKey: string; privateKey: string };
+    threshold: number;
+}> {
+    const rawCallsign = callsign.trim().toLowerCase();
+    if (!rawCallsign) throw new Error('Enter your callsign to recover your account.');
+
+    const ephSeed = crypto.getRandomValues(new Uint8Array(32));
+    const ephPrivPkcs8 = toEd25519Pkcs8(ephSeed);
+    const ephPub = ed25519.getPublicKey(ephSeed);
+
+    const ephIdentity = {
+        publicKey: bytesToHex(ephPub),
+        privateKey: bytesToHex(ephPrivPkcs8),
+    };
+
+    const openRes = await signedRequestWithKey<{ collectionId: string; threshold?: number }>(
+        'POST',
+        '/api/recovery/collect',
+        { callsign: rawCallsign },
+        ephIdentity.privateKey,
+        ephIdentity.publicKey,
+    );
+
+    return {
+        collectionId: openRes.collectionId,
+        ephIdentity,
+        threshold: openRes.threshold ?? 3,
+    };
+}
+
+export interface FriendRecoveryProgress {
+    collected: number;
+    friendApprovals: number;
+    threshold: number;
+    friendThreshold: number;
+    enough: boolean;
+    hubAvailable: boolean;
+}
+
+/**
+ * Recovering device: Polls collection status and triggers Hub release.
+ */
+export async function pollFriendRecoveryApi(
+    collectionId: string,
+    ephIdentity: { publicKey: string; privateKey: string },
+): Promise<FriendRecoveryProgress> {
+    // Attempt instant hub release under D7
+    await signedRequestWithKey(
+        'POST',
+        '/api/recovery/collect/hub',
+        { collectionId },
+        ephIdentity.privateKey,
+        ephIdentity.publicKey,
+    ).catch(() => {});
+
+    const st = await signedRequestWithKey<{
+        collected?: number;
+        threshold?: number;
+        enough?: boolean;
+        releasedTypes?: string[];
+    }>(
+        'POST',
+        '/api/recovery/collect/status',
+        { collectionId },
+        ephIdentity.privateKey,
+        ephIdentity.publicKey,
+    );
+
+    const releasedTypes = Array.isArray(st.releasedTypes) ? st.releasedTypes : [];
+    const friendApprovals = releasedTypes.filter((t: string) => t === 'member').length;
+
+    return {
+        collected: typeof st.collected === 'number' ? st.collected : 0,
+        friendApprovals,
+        threshold: typeof st.threshold === 'number' ? st.threshold : (TWO_LAYER_THRESHOLD + 1),
+        friendThreshold: TWO_LAYER_THRESHOLD,
+        enough: !!st.enough,
+        hubAvailable: releasedTypes.includes('hub'),
+    };
+}
+
+/**
+ * Recovering device: Fetches released fragments, reconstructs original seed, and saves identity.
+ */
+export async function completeFriendRecoveryApi(
+    collectionId: string,
+    ephIdentity: { publicKey: string; privateKey: string },
+    expectedCallsign?: string,
+    expectedPublicKey?: string,
+): Promise<BeanPoolIdentity> {
+    const raw = await signedRequestWithKey<{ fragments?: any[]; enough?: boolean }>(
+        'POST',
+        '/api/recovery/collect/fragments',
+        { collectionId },
+        ephIdentity.privateKey,
+        ephIdentity.publicKey,
+    );
+
+    if (!raw.enough) {
+        throw new Error('Not enough recovery pieces released yet.');
+    }
+
+    const fragments = Array.isArray(raw.fragments) ? raw.fragments : [];
+    const hubFragment = fragments.find((f: any) => f.holderType === 'hub');
+    const memberFragments = fragments.filter((f: any) => f.holderType === 'member');
+
+    if (!hubFragment) {
+        throw new Error('Community hub recovery piece is missing.');
+    }
+    if (memberFragments.length < TWO_LAYER_THRESHOLD) {
+        throw new Error(`Need at least ${TWO_LAYER_THRESHOLD} friend pieces, received ${memberFragments.length}.`);
+    }
+
+    // 1. Read Hub share A
+    const hubShare = readHubShare({
+        encryptedShare: hubFragment.payload,
+        shareIv: hubFragment.payloadIv,
+        shareTag: hubFragment.payloadTag,
+        kdfParams: hubFragment.kdfParams || JSON.stringify({ alg: 'plaintext-v1' }),
+    });
+
+    // 2. Open rewrapped friend shares B_i with ephemeral private key
+    const openedFriendShares: Uint8Array[] = memberFragments.map((f: any) => {
+        return openRewrappedShare({
+            encryptedShare: f.payload,
+            shareIv: f.payloadIv,
+            shareTag: f.payloadTag,
+            ephemeralPubkey: f.ephemeralPubkey,
+        }, ephIdentity.privateKey);
+    });
+
+    // 3. Shamir combine to reconstruct B
+    const B = await combineBytes(openedFriendShares);
+
+    // 4. XOR combine: Seed = A ⊕ B
+    const restoredSeed = xorBytes(hubShare, B);
+
+    // 5. Derive original Ed25519 identity keypair
+    const pubkeyHex = bytesToHex(ed25519.getPublicKey(restoredSeed));
+
+    if (expectedPublicKey && pubkeyHex.toLowerCase() !== expectedPublicKey.toLowerCase()) {
+        throw new Error('Reconstructed account does not match expected identity.');
+    }
+
+    const callsign = expectedCallsign || 'restored-member';
+    const pkcs8Key = toEd25519Pkcs8(restoredSeed);
+
+    const restoredIdentity: BeanPoolIdentity = {
+        publicKey: pubkeyHex,
+        privateKey: bytesToHex(pkcs8Key),
+        callsign,
+        createdAt: new Date().toISOString(),
+    };
+
+    const { importIdentity } = await import('./identity');
+    await importIdentity(restoredIdentity);
+
+    return restoredIdentity;
+}
+
 
 // ===================== NOTIFICATION PREFERENCES =====================
 

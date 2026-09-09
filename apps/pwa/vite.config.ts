@@ -82,5 +82,9 @@ export default defineConfig({
         globals: true,
         environment: 'jsdom',
         setupFiles: './src/setupTests.ts',
+        alias: {
+            'react': path.resolve(__dirname, '../../node_modules/react'),
+            'react-dom': path.resolve(__dirname, '../../node_modules/react-dom'),
+        },
     }
 });

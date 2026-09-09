@@ -22,9 +22,10 @@ interface Props {
     viewMode?: 'grid' | 'list' | 'compact';
     onOpenProfile?: (pubkey: string) => void;
     isOwnPost?: boolean;
+    onPhotoClick?: (photos: string[], initialIndex: number, e: React.MouseEvent) => void;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
@@ -124,7 +125,28 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 {/* Left Thumbnail */}
                 <div className="w-16 h-16 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
                     {hasPhoto ? (
-                        <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                if (onPhotoClick) {
+                                    e.stopPropagation();
+                                    onPhotoClick(post.photos!, 0, e);
+                                }
+                            }}
+                            onKeyDown={(e) => {
+                                if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    onPhotoClick(post.photos!, 0, e as any);
+                                }
+                            }}
+                            aria-label={`View enlarged photo: ${post.title}`}
+                            className={`w-full h-full block rounded-xl overflow-hidden ${
+                                onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
+                            }`}
+                        >
+                            <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                        </button>
                     ) : (
                         <div className="w-full h-full bg-oat-50 dark:bg-nature-800 flex justify-center items-center">
                             <span className="text-2xl opacity-40">{emoji}</span>
@@ -248,7 +270,28 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             {/* Image Area */}
             {hasPhoto ? (
                 <div className={`relative w-full rounded-xl overflow-hidden shadow-sm h-[110px] mb-3`}>
-                    <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            if (onPhotoClick) {
+                                e.stopPropagation();
+                                onPhotoClick(post.photos!, 0, e);
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                onPhotoClick(post.photos!, 0, e as any);
+                            }
+                        }}
+                        aria-label={`View enlarged photo: ${post.title}`}
+                        className={`w-full h-full block rounded-xl overflow-hidden ${
+                            onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
+                        }`}
+                    >
+                        <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                    </button>
 
                     {/* Status Overlays */}
                     <div className={`absolute left-2 flex flex-col gap-1 items-start top-1.5`}>

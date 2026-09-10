@@ -589,9 +589,8 @@ export interface HarvesterStatusResponse {
 // The password travels in X-Admin-Password only, never a query parameter (see the note above
 // buildAdminHeaders): checkAdminAuth reads the header ahead of ?password= in its fallback chain,
 // and a credential in a URL ends up in access logs and browser history.
-export async function fetchHarvesterStatus(adminPassword?: string): Promise<HarvesterStatusResponse> {
-    const headers: Record<string, string> = {};
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function fetchHarvesterStatus(adminPassword?: string, tfaToken?: string): Promise<HarvesterStatusResponse> {
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
     const res = await fetch('/api/manager/backups/status', { headers });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -610,10 +609,10 @@ export async function triggerHarvesterSync(
     url?: string,
     adminPassword?: string,
     managerPassword?: string,
+    tfaToken?: string,
 ): Promise<any> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const managerAuth = managerPassword ?? adminPassword;
-    if (managerAuth) headers['X-Admin-Password'] = managerAuth;
+    const headers = buildAdminHeaders(managerAuth, tfaToken);
     const res = await fetch('/api/manager/backups/trigger', {
         method: 'POST',
         headers,
@@ -633,9 +632,8 @@ export interface HistoryFileItem {
     modifiedAt: string;
 }
 
-export async function fetchNodeHistory(nodeId: string, adminPassword?: string): Promise<HistoryFileItem[]> {
-    const headers: Record<string, string> = {};
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function fetchNodeHistory(nodeId: string, adminPassword?: string, tfaToken?: string): Promise<HistoryFileItem[]> {
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
     const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`, { headers });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -746,11 +744,11 @@ export interface RegistrarPendingResponse {
 
 export async function getRegistrarPending(
     nodeUrl?: string,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<RegistrarAllocation[]> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
     if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
         headers['x-admin-secret'] = adminPassword;
     }
     const endpoint = nodeUrl
@@ -772,7 +770,8 @@ export const getRegistralPending = getRegistrarPending;
 export async function approveRegistrarClaim(
     nodeUrlOrName: string,
     nameOrPassword?: string,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ status: string; name: string }> {
     let nodeUrl = nodeUrlOrName;
     let name = nameOrPassword;
@@ -784,9 +783,8 @@ export async function approveRegistrarClaim(
         pwd = undefined;
     }
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers = buildAdminHeaders(pwd, tfaToken);
     if (pwd) {
-        headers['X-Admin-Password'] = pwd;
         headers['x-admin-secret'] = pwd;
     }
     const endpoint = nodeUrl
@@ -807,7 +805,8 @@ export async function approveRegistrarClaim(
 export async function revokeRegistrarClaim(
     nodeUrlOrName: string,
     nameOrPassword?: string,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ status: string; name: string }> {
     let nodeUrl = nodeUrlOrName;
     let name = nameOrPassword;
@@ -819,9 +818,8 @@ export async function revokeRegistrarClaim(
         pwd = undefined;
     }
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers = buildAdminHeaders(pwd, tfaToken);
     if (pwd) {
-        headers['X-Admin-Password'] = pwd;
         headers['x-admin-secret'] = pwd;
     }
     const endpoint = nodeUrl

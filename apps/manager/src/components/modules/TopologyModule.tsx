@@ -70,7 +70,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setRegistrarLoading(true);
         setRegistrarError(null);
         try {
-            const items = await getRegistrarPending(activeNode?.url, activeNode?.adminPassword);
+            const items = await getRegistrarPending(
+                activeNode?.url,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setRegistrarAllocations(items);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -95,7 +99,12 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
     const handleApproveClaim = async (name: string) => {
         try {
-            await approveRegistrarClaim(activeNode?.url, name, activeNode?.adminPassword);
+            await approveRegistrarClaim(
+                activeNode?.url,
+                name,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setActionToast({ type: 'success', message: `✅ Approved claim for domain ${name}.beanpool.org` });
             setConfirmAction(null);
             await loadRegistrar();
@@ -107,7 +116,12 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
     const handleRejectClaim = async (name: string) => {
         try {
-            await revokeRegistrarClaim(activeNode?.url, name, activeNode?.adminPassword);
+            await revokeRegistrarClaim(
+                activeNode?.url,
+                name,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setActionToast({ type: 'success', message: `🚫 Rejected claim for domain ${name}.beanpool.org` });
             setConfirmAction(null);
             await loadRegistrar();
@@ -119,7 +133,12 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
     const handleRevokeAllocation = async (name: string) => {
         try {
-            await revokeRegistrarClaim(activeNode?.url, name, activeNode?.adminPassword);
+            await revokeRegistrarClaim(
+                activeNode?.url,
+                name,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setActionToast({ type: 'success', message: `⚠️ Revoked active allocation for domain ${name}.beanpool.org` });
             setConfirmAction(null);
             await loadRegistrar();
@@ -133,7 +152,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const loadHarvester = async () => {
         setHarvestLoading(true);
         try {
-            const data = await fetchHarvesterStatus(activeNode?.adminPassword);
+            const data = await fetchHarvesterStatus(
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setHarvesterState(data.harvestState || {});
         } catch (e) {
             console.warn('[HarvesterUI] Failed to fetch harvester status:', e);
@@ -219,7 +241,13 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const handleTriggerSync = async (nodeId: string, node?: NodeProfile) => {
         setHarvestingNodeId(nodeId);
         try {
-            await triggerHarvesterSync(nodeId, node?.url, node?.adminPassword, activeNode?.adminPassword);
+            await triggerHarvesterSync(
+                nodeId,
+                node?.url,
+                node?.adminPassword,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             await loadHarvester();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -266,7 +294,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setSelectedHistoryNode({ id: nodeId, name });
         setHistoryLoading(true);
         try {
-            const items = await fetchNodeHistory(nodeId, activeNode?.adminPassword);
+            const items = await fetchNodeHistory(
+                nodeId,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setHistoryList(items);
         } catch {
             setHistoryList([]);

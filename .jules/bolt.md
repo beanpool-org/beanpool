@@ -154,3 +154,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-23 - O(1) Conversation List Member and Transaction Lookups in PWA MessagesPage
 **Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, rendering conversation lists invoked `getConversationTitle` and `relatedTx` resolution for every conversation item, which repeatedly ran `members.find(...)` and `userTransactions.find(...)` array scans on every render cycle ($O(C \times M + C \times T)$ complexity).
 **Action:** Hoisted `membersByPublicKey` and `completedTransactionsByPostId` Maps using `useMemo` at component scope, converting conversation title and related transaction resolution into constant-time $O(1)$ retrievals ($O(C + M + T)$ overall).
+
+## 2026-09-24 - O(1) Edge Lookups for Cluster Internal Volume in Wash Analysis
+**Learning:** In `packages/beanpool-engine/src/trust.ts`, `runWashTradingAnalysis` previously calculated internal 30-day trade volume for connected component clusters by scanning all entries in `edgeVol30` for every component ($O(K \times E)$ complexity across $K$ components and $E$ edges).
+**Action:** Replaced the full $O(E)$ edge scan per component with $O(N^2)$ direct pair lookups (`edgeVol30.get(...)`) over members in `comp` (where $N \le 12$), reducing overall component volume calculation to constant-time pair retrievals.

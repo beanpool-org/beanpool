@@ -264,7 +264,15 @@ export default function ProjectDetailScreen() {
                                 onChangeText={setPledgeMemo}
                             />
                         </View>
-                        <Pressable style={styles.pledgeBtn} onPress={handlePledge} disabled={submitting} accessibilityRole="button">
+                        <Pressable
+                            style={styles.pledgeBtn}
+                            onPress={handlePledge}
+                            disabled={submitting}
+                            accessibilityRole="button"
+                            accessibilityLabel={submitting ? 'Submitting pledge' : 'Pledge Beans'}
+                            accessibilityHint="Pledges specified bean amount to this project"
+                            accessibilityState={{ disabled: submitting, busy: submitting }}
+                        >
                             {submitting ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (

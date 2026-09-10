@@ -22,8 +22,8 @@ import { signedRequest } from '../utils/db';
 interface RecoverySession {
     collectionId: string;
     requester: string;
-    createdAt: string;
-    status: string;
+    /** Wire field name from POST /api/recovery/collect/mine. There is no `createdAt`. */
+    startedAt: string;
 }
 
 export interface RecoveryAlertBannerProps {
@@ -39,9 +39,15 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
         try {
             const res = await signedRequest('/api/recovery/collect/mine', {});
             if (res?.collections && Array.isArray(res.collections)) {
-                const active = res.collections.filter(
-                    (c: any) => c.status === 'open'
-                );
+                // The route returns ONLY open collections — openCollectionsFor filters at
+                // query time — and sends no `status` field at all. Filtering on
+                // `c.status === 'open'` therefore matched nothing and this banner never
+                // rendered, on any node, ever. Take the rows as given.
+                const active: RecoverySession[] = res.collections.map((c: any) => ({
+                    collectionId: c.collectionId,
+                    requester: c.requester || '',
+                    startedAt: c.startedAt,
+                }));
                 setSessions(active);
             }
         } catch (e) {
@@ -117,8 +123,8 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                 If this is not you, stop it immediately.
             </Text>
             <Text style={styles.detail}>
-                {sessions.length} active session{sessions.length > 1 ? 's' : ''} •
-                Started {new Date(sessions[0].createdAt).toLocaleString()}
+                {sessions.length} active session{sessions.length > 1 ? 's' : ''}
+                {sessions[0].startedAt ? ` • Started ${new Date(sessions[0].startedAt).toLocaleString()}` : ''}
             </Text>
             <TouchableOpacity
                 style={styles.stopButton}

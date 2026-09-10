@@ -36,13 +36,16 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
             const mineRes = await getMyActiveRecoveryCollections().catch(() => [] as any[]);
 
             if (Array.isArray(mineRes)) {
+                // The route returns ONLY open collections — openCollectionsFor filters at
+                // query time — and sends no `status` field at all. The old
+                // `.filter(c => c.status === 'open')` therefore matched nothing and this
+                // banner never rendered, on any node, ever.
                 const active = mineRes
-                    .filter((c: any) => c.status === 'open')
                     .map((c: any) => ({
                         collectionId: c.collectionId,
                         requester: c.requester || '',
-                        createdAt: c.startedAt || c.createdAt || new Date().toISOString(),
-                        status: c.status || 'open',
+                        createdAt: c.startedAt || c.createdAt || '',
+                        status: 'open',
                     }));
                 setSessions(active);
             } else {
@@ -142,7 +145,8 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
                                 A device is trying to restore access to your account. If this is not you, stop it immediately.
                             </p>
                             <div className="text-[11px] text-red-600 dark:text-red-400 mt-1 font-medium">
-                                {sessions.length} active session{sessions.length > 1 ? 's' : ''} • Started {new Date(sessions[0].createdAt).toLocaleString()}
+                                {sessions.length} active session{sessions.length > 1 ? 's' : ''}
+                                {sessions[0].createdAt ? ` • Started ${new Date(sessions[0].createdAt).toLocaleString()}` : ''}
                             </div>
 
                             <div className="mt-3">

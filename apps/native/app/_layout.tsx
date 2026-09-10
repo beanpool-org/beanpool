@@ -502,7 +502,7 @@ function RootLayoutNav() {
                     'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
                     [
                         { text: 'Not now', style: 'cancel' },
-                        { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace('/(tabs)/settings'); } },
+                        { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
                     ],
                 );
             }

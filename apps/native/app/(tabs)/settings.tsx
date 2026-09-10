@@ -405,8 +405,8 @@ export default function SettingsScreen() {
         // and assuming they're covered everywhere.
         const community = protectionNodeLabel || await resolveCommunityLabel();
         const message = community
-            ? `On a new phone, this sign-in account will no longer be able to restore your 12 recovery words for ${community}. Your other communities are unaffected.`
-            : `This sign-in account will no longer be able to restore your 12 recovery words on a new phone.`;
+            ? `On a new phone, this sign-in account will no longer be able to restore your account for ${community}. Your other communities are unaffected.`
+            : `This sign-in account will no longer be able to restore your account on a new phone.`;
         Alert.alert(
             `Disconnect ${provName}?`,
             message,
@@ -495,6 +495,11 @@ export default function SettingsScreen() {
                 setMode('advanced');
             } else if (params.section === 'profile') {
                 setMode('profile');
+            } else if (params.section === 'protection') {
+                // _layout.tsx sends the member here when the node reports a recovery in
+                // progress. Without this branch the alert's "Review" button dropped them
+                // on the root menu with no sign of the attack.
+                setMode('protection');
             } else {
                 setMode('menu');
             }
@@ -1388,6 +1393,10 @@ export default function SettingsScreen() {
 
             {mode === 'menu' && (
                 <>
+                {/* Mirrors the PWA, which mounts this at the top of the root settings
+                    screen. An active recovery against this account must be visible
+                    without first navigating into a sub-screen. */}
+                <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
                 <Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/profile-setup')} accessibilityRole="button">

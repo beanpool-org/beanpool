@@ -19,7 +19,11 @@ export default function RecoverIdentityScreen() {
                         style={styles.optionBtn}
                         onPress={() => router.replace({ pathname: '/welcome', params: { mode: 'ssoRecover' } })}
                         accessibilityRole="button"
-                        accessibilityLabel="Recover with Social Sign-In"
+                        // Must match the visible label so speech control can address it
+                        // (WCAG 2.5.3). The description belongs in the hint, because
+                        // accessibilityLabel on the parent hides the child Text.
+                        accessibilityLabel="Recover with Sign-In"
+                        accessibilityHint="Restore using Google, Apple, or other linked accounts"
                     >
                         <Text style={styles.optionIcon}>🌐</Text>
                         <View style={{ flex: 1 }}>
@@ -34,6 +38,7 @@ export default function RecoverIdentityScreen() {
                         onPress={() => router.replace({ pathname: '/welcome', params: { mode: 'recover' } })}
                         accessibilityRole="button"
                         accessibilityLabel="Recover with 12 Words"
+                        accessibilityHint="Type your 12-word recovery phrase"
                     >
                         <Text style={styles.optionIcon}>🔑</Text>
                         <View style={{ flex: 1 }}>
@@ -93,7 +98,7 @@ const styles = StyleSheet.create({
     optionTitle: { fontSize: 16, fontWeight: '700', color: colors.text.heading, marginBottom: 2 },
     optionSub: { fontSize: 13, color: colors.text.secondary, lineHeight: 18 },
     chevron: { fontSize: 20, color: colors.text.muted, fontWeight: '300' },
-    backBtn: { marginTop: 12, alignItems: 'center', padding: 12 },
+    backBtn: { marginTop: 12, alignItems: 'center', justifyContent: 'center', padding: 12, minHeight: 44 },
     backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
 });
 

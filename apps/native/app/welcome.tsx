@@ -80,6 +80,10 @@ export default function WelcomeScreen() {
     useEffect(() => {
         if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string)) {
             setMode(params.mode as any);
+            // Consume the param. Leaving it set meant any later re-render re-applied it,
+            // so "← Back to Restore Options" out of SSO recovery snapped straight back
+            // into SSO recovery.
+            router.setParams({ mode: undefined });
         }
     }, [params?.mode]);
     const [callsign, setCallsign] = useState('');

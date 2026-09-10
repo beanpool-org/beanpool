@@ -66,7 +66,7 @@ export function KeeperProtectionPanel({
             <View style={styles.ssoGroup}>
                 <Text style={styles.ssoGroupTitle}>Sign-In Recovery Providers (1-of-N)</Text>
                 <Text style={styles.ssoGroupSubtitle}>
-                    Connect multiple accounts for redundant backup. Any single connected account plus your community hub can restore your 12 words.
+                    Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. It does not hand your 12 words back, and it only works while your hub is running — so keep the words written down.
                 </Text>
 
                 {allProviders.map((prov) => {
@@ -163,7 +163,7 @@ export function KeeperProtectionPanel({
                 ))}
                 <Text style={styles.footnote}>
                     {enrolledSso.length > 1
-                        ? `Protected by ${enrolledSso.length} sign-in accounts + your community hub. Any single account can recover your seed.`
+                        ? `Protected by ${enrolledSso.length} sign-in accounts + your community hub. Any single account, together with the hub, restores your account.`
                         : 'Neither of them can open your account alone — it takes both.'}
                 </Text>
 

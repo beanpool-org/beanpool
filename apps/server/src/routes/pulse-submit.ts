@@ -89,6 +89,23 @@ function pulseErrorStatus(code: string): number {
     }
 }
 
+/** Maximum items accepted in a single OAuth batch ingest request.
+ * TikTok Display API returns up to 20 videos per call; Instagram Graph API returns 25.
+ * 50 provides 2x headroom over actual client usage without permitting unbounded DoS batches. */
+export const MAX_OAUTH_INGEST_ITEMS = 50;
+
+/** Maximum total payload size for an OAuth batch ingest request body (512 KB). */
+export const MAX_OAUTH_INGEST_PAYLOAD_BYTES = 512 * 1024;
+
+/** Maximum character lengths per item field */
+export const MAX_ITEM_URL_LENGTH = 2048;
+export const MAX_ITEM_TITLE_LENGTH = 500;
+export const MAX_ITEM_THUMBNAIL_URL_LENGTH = 4096; // TikTok CDN signed URLs can reach ~3KB
+export const MAX_ITEM_EXTERNAL_ID_LENGTH = 512;
+export const MAX_ITEM_PUBLISHED_AT_LENGTH = 64;
+export const MAX_ITEM_CATEGORY_LENGTH = 50;
+
+
 function extractMetaProperty(html: string, prop: string): string | null {
     if (!html) return null;
     const escaped = prop.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
@@ -585,6 +602,12 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             return;
         }
 
+        if (rawUrl.length > MAX_ITEM_URL_LENGTH) {
+            ctx.status = 400;
+            ctx.body = { error: 'url_too_long', message: `URL exceeds maximum length of ${MAX_ITEM_URL_LENGTH} characters.` };
+            return;
+        }
+
         try {
             const { platform, externalId, canonicalUrl, accountHandle } = identifyPlatformAndExternalId(rawUrl);
             const channel = matchOwnedChannel(actor, platform, canonicalUrl, accountHandle, requestedChannelId);
@@ -646,14 +669,20 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         const body = (ctx as any).requestBody || {};
         const rawUrl = typeof body.url === 'string' ? body.url.trim() : '';
         const requestedChannelId = typeof body.channelId === 'string' ? body.channelId.trim() : undefined;
+        if (typeof body.title === 'string' && body.title.length > MAX_ITEM_TITLE_LENGTH) {
+            ctx.status = 400;
+            ctx.body = { error: 'title_too_long', message: `Title exceeds maximum length of ${MAX_ITEM_TITLE_LENGTH} characters.` };
+            return;
+        }
+
         const customTitle = typeof body.title === 'string' && body.title.trim()
-            ? cleanXmlText(body.title.trim()).slice(0, 500)
+            ? cleanXmlText(body.title.trim())
             : undefined;
 
         let customThumbnailUrl: string | undefined;
         if (typeof body.thumbnailUrl === 'string' && body.thumbnailUrl.trim()) {
             const trimmedThumb = body.thumbnailUrl.trim();
-            if (trimmedThumb.length <= 2048 && /^https?:\/\//i.test(trimmedThumb)) {
+            if (trimmedThumb.length <= MAX_ITEM_THUMBNAIL_URL_LENGTH && /^https?:\/\//i.test(trimmedThumb)) {
                 customThumbnailUrl = trimmedThumb;
             } else {
                 ctx.status = 400;
@@ -667,6 +696,12 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         if (!rawUrl) {
             ctx.status = 400;
             ctx.body = { error: 'invalid_url', message: 'URL is required.' };
+            return;
+        }
+
+        if (rawUrl.length > MAX_ITEM_URL_LENGTH) {
+            ctx.status = 400;
+            ctx.body = { error: 'url_too_long', message: `URL exceeds maximum length of ${MAX_ITEM_URL_LENGTH} characters.` };
             return;
         }
 
@@ -934,9 +969,21 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         }
 
         const body = (ctx as any).requestBody || {};
-        const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
-        const rawItems = Array.isArray(body.items) ? body.items : [];
 
+        // 1. Total payload size check (protects against multi-megabyte payloads)
+        const payloadBytes = (ctx as any).rawBody
+            ? Buffer.byteLength((ctx as any).rawBody)
+            : Buffer.byteLength(JSON.stringify(body));
+        if (payloadBytes > MAX_OAUTH_INGEST_PAYLOAD_BYTES) {
+            ctx.status = 413;
+            ctx.body = {
+                error: 'payload_too_large',
+                message: `OAuth ingest payload exceeds maximum allowed size of ${MAX_OAUTH_INGEST_PAYLOAD_BYTES} bytes (received ${payloadBytes} bytes).`,
+            };
+            return;
+        }
+
+        const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
         if (!channelId) {
             ctx.status = 400;
             ctx.body = { error: 'missing_field', message: 'channelId is required.' };
@@ -956,6 +1003,87 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             return;
         }
 
+        // 2. Items array validation & batch size capping
+        if (!Array.isArray(body.items)) {
+            ctx.status = 400;
+            ctx.body = { error: 'invalid_items', message: 'items must be an array.' };
+            return;
+        }
+
+        const rawItems = body.items;
+        if (rawItems.length > MAX_OAUTH_INGEST_ITEMS) {
+            ctx.status = 400;
+            ctx.body = {
+                error: 'too_many_items',
+                message: `Batch item count exceeds maximum limit of ${MAX_OAUTH_INGEST_ITEMS} (received ${rawItems.length}).`,
+            };
+            return;
+        }
+
+        // 3. Per-item validation upfront before acquiring SQLite transaction lock
+        for (let i = 0; i < rawItems.length; i++) {
+            const rawItem = rawItems[i];
+            if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) {
+                ctx.status = 400;
+                ctx.body = { error: 'invalid_item', message: `Item at index ${i} is not a valid object.` };
+                return;
+            }
+
+            if (typeof rawItem.url === 'string' && rawItem.url.length > MAX_ITEM_URL_LENGTH) {
+                ctx.status = 400;
+                ctx.body = {
+                    error: 'item_url_too_long',
+                    message: `Item at index ${i} URL exceeds maximum length of ${MAX_ITEM_URL_LENGTH} characters.`,
+                };
+                return;
+            }
+
+            if (typeof rawItem.title === 'string' && rawItem.title.length > MAX_ITEM_TITLE_LENGTH) {
+                ctx.status = 400;
+                ctx.body = {
+                    error: 'title_too_long',
+                    message: `Item at index ${i} title exceeds maximum length of ${MAX_ITEM_TITLE_LENGTH} characters.`,
+                };
+                return;
+            }
+
+            if (typeof rawItem.thumbnailUrl === 'string' && rawItem.thumbnailUrl.length > MAX_ITEM_THUMBNAIL_URL_LENGTH) {
+                ctx.status = 400;
+                ctx.body = {
+                    error: 'thumbnail_url_too_long',
+                    message: `Item at index ${i} thumbnail URL exceeds maximum length of ${MAX_ITEM_THUMBNAIL_URL_LENGTH} characters.`,
+                };
+                return;
+            }
+
+            if (typeof rawItem.externalId === 'string' && rawItem.externalId.length > MAX_ITEM_EXTERNAL_ID_LENGTH) {
+                ctx.status = 400;
+                ctx.body = {
+                    error: 'external_id_too_long',
+                    message: `Item at index ${i} externalId exceeds maximum length of ${MAX_ITEM_EXTERNAL_ID_LENGTH} characters.`,
+                };
+                return;
+            }
+
+            if (typeof rawItem.publishedAt === 'string' && rawItem.publishedAt.length > MAX_ITEM_PUBLISHED_AT_LENGTH) {
+                ctx.status = 400;
+                ctx.body = {
+                    error: 'published_at_too_long',
+                    message: `Item at index ${i} publishedAt exceeds maximum length of ${MAX_ITEM_PUBLISHED_AT_LENGTH} characters.`,
+                };
+                return;
+            }
+
+            if (typeof rawItem.category === 'string' && rawItem.category.length > MAX_ITEM_CATEGORY_LENGTH) {
+                ctx.status = 400;
+                ctx.body = {
+                    error: 'category_too_long',
+                    message: `Item at index ${i} category exceeds maximum length of ${MAX_ITEM_CATEGORY_LENGTH} characters.`,
+                };
+                return;
+            }
+        }
+
         const now = new Date().toISOString();
         const results: PulseFeedCard[] = [];
         let deduplicatedCount = 0;
@@ -963,7 +1091,6 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         try {
             db.transaction(() => {
                 for (const rawItem of rawItems) {
-                    if (!rawItem || typeof rawItem !== 'object') continue;
                     const itemUrl = typeof rawItem.url === 'string' ? rawItem.url.trim() : '';
                     if (!itemUrl || !/^https?:\/\//i.test(itemUrl)) continue;
 
@@ -981,13 +1108,13 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                     }
 
                     const title = typeof rawItem.title === 'string' && rawItem.title.trim()
-                        ? cleanXmlText(rawItem.title.trim()).slice(0, 500)
+                        ? cleanXmlText(rawItem.title.trim())
                         : (channel.platform === 'tiktok' ? 'TikTok Video' : 'Post');
 
                     let thumbnailUrl: string | null = null;
                     if (typeof rawItem.thumbnailUrl === 'string' && rawItem.thumbnailUrl.trim()) {
                         const trimmedThumb = rawItem.thumbnailUrl.trim();
-                        if (trimmedThumb.length <= 4096 && /^https?:\/\//i.test(trimmedThumb)) {
+                        if (trimmedThumb.length <= MAX_ITEM_THUMBNAIL_URL_LENGTH && /^https?:\/\//i.test(trimmedThumb)) {
                             thumbnailUrl = trimmedThumb;
                         } else {
                             // Refuse item if thumbnail URL is invalid/unsafe (e.g. non-http(s) scheme or too long)

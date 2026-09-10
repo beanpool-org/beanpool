@@ -29,9 +29,24 @@ router.post('/api/messages/conversation', async (ctx) => {
         ctx.body = { error: 'type, participants, and createdBy are required' };
         return;
     }
+    if (!Array.isArray(participants)) {
+        ctx.status = 400;
+        ctx.body = { error: 'participants must be an array' };
+        return;
+    }
     if (type === 'dm' && participants.length !== 2) {
         ctx.status = 400;
         ctx.body = { error: 'DM conversations must have exactly 2 participants' };
+        return;
+    }
+    if (type === 'group' && participants.length > 50) {
+        ctx.status = 400;
+        ctx.body = { error: 'Group conversations can have at most 50 participants' };
+        return;
+    }
+    if (!participants.every((p: unknown) => typeof p === 'string' && p.length > 0 && p.length <= 128)) {
+        ctx.status = 400;
+        ctx.body = { error: 'All participants must be valid public keys' };
         return;
     }
     // A2-15: the creator (bound to the verified signer by the spoof check) must
@@ -41,7 +56,7 @@ router.post('/api/messages/conversation', async (ctx) => {
     // this public route only — internal/system conversation creation
     // (ensureTransactionConversation, injectSystemMessage) calls
     // createConversation directly with a system actor and is unaffected.
-    if (!Array.isArray(participants) || !participants.includes(createdBy)) {
+    if (!participants.includes(createdBy)) {
         ctx.status = 403;
         ctx.body = { error: 'Creator must be a participant of the conversation' };
         return;

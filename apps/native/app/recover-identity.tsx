@@ -25,12 +25,12 @@ export default function RecoverIdentityScreen() {
                         accessibilityLabel="Recover with Sign-In"
                         accessibilityHint="Restore using Google, Apple, or other linked accounts"
                     >
-                        <Text style={styles.optionIcon}>🌐</Text>
+                        <Text style={styles.optionIcon} importantForAccessibility="no" accessibilityElementsHidden={true}>🌐</Text>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.optionTitle}>Recover with Sign-In</Text>
                             <Text style={styles.optionSub}>Restore using Google, Apple, or other linked accounts</Text>
                         </View>
-                        <Text style={styles.chevron}>›</Text>
+                        <Text style={styles.chevron} importantForAccessibility="no" accessibilityElementsHidden={true}>›</Text>
                     </Pressable>
 
                     <Pressable
@@ -40,12 +40,12 @@ export default function RecoverIdentityScreen() {
                         accessibilityLabel="Recover with 12 Words"
                         accessibilityHint="Type your 12-word recovery phrase"
                     >
-                        <Text style={styles.optionIcon}>🔑</Text>
+                        <Text style={styles.optionIcon} importantForAccessibility="no" accessibilityElementsHidden={true}>🔑</Text>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.optionTitle}>Recover with 12 Words</Text>
                             <Text style={styles.optionSub}>Type your 12-word recovery phrase</Text>
                         </View>
-                        <Text style={styles.chevron}>›</Text>
+                        <Text style={styles.chevron} importantForAccessibility="no" accessibilityElementsHidden={true}>›</Text>
                     </Pressable>
 
                     <Pressable

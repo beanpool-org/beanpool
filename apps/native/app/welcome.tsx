@@ -82,8 +82,10 @@ export default function WelcomeScreen() {
             setMode(params.mode as any);
             // Consume the param. Leaving it set meant any later re-render re-applied it,
             // so "← Back to Restore Options" out of SSO recovery snapped straight back
-            // into SSO recovery.
-            router.setParams({ mode: undefined });
+            // into SSO recovery. Cleared with '' rather than undefined, matching how the
+            // rest of the app retires a consumed param (index.tsx, map.tsx) — '' is
+            // falsy, so the guard above still short-circuits.
+            router.setParams({ mode: '' });
         }
     }, [params?.mode]);
     const [callsign, setCallsign] = useState('');

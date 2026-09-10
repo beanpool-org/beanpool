@@ -84,11 +84,10 @@ Invite-only membership with hierarchical accountability:
 - **Invite tree** — full hierarchy of who invited whom
 
 ### 👥 People & Friends
-Community connections and guardians:
+Community connections:
 - **Friends** — add/remove friends from the community browser, with avatar circles and 💬 message button
 - **Community** — browse all node members with **search filter**, avatar circles, and relative date formatting ("3d ago")
 - **Invites** — generate and share invite codes (moved from standalone tab)
-- **Guardians** — select up to 5 trusted friends as recovery guardians
 
 ### 🔑 12-Word Seed Phrase
 Deterministic identity from a BIP-39 mnemonic:
@@ -98,12 +97,16 @@ Deterministic identity from a BIP-39 mnemonic:
 - **Recovery mode** — enter 12 words + callsign to restore identity on any device
 - **WebCrypto SHA-256 + PKCS8** — no external crypto dependencies
 
-### 🛡️ Social Recovery (3-of-N)
-Cryptographically secure identity recovery without central admins:
-- **Guardian Selection** — Select 3 to 5 trusted friends as recovery guardians.
-- **Guardian Knowledge Check** — Initiators must know a guardian's exact callsign to prevent spam.
-- **Quorum Approval** — Requires 3 guardians to approve the recovery request.
-- **Atomic Migration** — Old identity data (posts, friends, balances) seamlessly migrates to a newly generated 12-word seed.
+### 🛡️ Sign-In Recovery (phone app only)
+An optional second way back onto a new device:
+- **Link an account** — Apple, Google, Facebook or GitHub, from Settings on the phone app.
+- **Two layers** — the linked account holds one fragment, your community node holds the other. Neither can restore your account alone.
+- **Not a copy of your words** — it restores the account, and only while your community node is running. The 12 words are the way back that depends on nobody.
+
+> **Keeper (social) recovery was removed in September 2026.** Enrolling friends as recovery
+> keepers is no longer offered on either client. See
+> [docs/keeper-recovery-parked.md](docs/keeper-recovery-parked.md) for why, and for what is
+> still present server-side.
 - **24-Hour Cooldown** — Security buffer to allow users to cancel fraudulent recovery attempts.
 
 ### 🏠 Landing Page (Welcome Hub)
@@ -486,7 +489,7 @@ BeanPool is in active development. The PWA is **fully functional** and a **React
 - ✅ Escrow Demurrage Exemption — escrow wallets exempt from circulation decay
 - ✅ **Sanitized Syncing** — Synthetic "Visitor" and escrow accounts automatically filtered from local member directories and map views.
 - ✅ **Admin Node Restore** — Supports offline restoration of system states via `.tar.gz` database upload.
-- ✅ **Social Recovery (3-of-N)** — Cryptographically secure identity recovery mechanism requiring quorum approval from trusted friends.
+- ⛔ **Social Recovery (3-of-N)** — shipped, then **removed in September 2026**. Client entry points are gone; see [docs/keeper-recovery-parked.md](docs/keeper-recovery-parked.md).
 - ✅ **Identity Spoofing Security** — Hardened identity endpoints against impersonation attacks.
 - ✅ **A11y & Stability** — Fixed P2P yamux stream crash loops and applied accessibility enhancements across the frontend.
 - ✅ **Security Hardening (Sentinel)** — Mitigated Stored XSS vulnerabilities across the Admin Dashboard and fixed Command Injection in server backup routines. Established automated security auditing via `.jules/sentinel.md`.

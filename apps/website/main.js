@@ -235,11 +235,11 @@ const STEP_DETAILS = [
         icon: '🔑',
         tag: 'Cryptographic Identity',
         title: 'Sovereign Identity & Dual-Custody',
-        subtitle: 'Own your keys and your trust reputation, with hardware-backed custody and decentralized social recovery.',
+        subtitle: 'Own your keys and your trust reputation, with hardware-backed custody and a 12-word phrase that restores your account anywhere.',
         points: [
             { title: 'Ed25519 Cryptographic Keys', text: 'Your unique cryptographic identity is generated directly on your mobile device, signed and anchored in the community web of trust.' },
             { title: 'Dual-Custody Protection', text: 'Keys held in your device\'s secure hardware behind biometrics, plus 1-click encrypted Apple/Google SSO backup so everyday members never lose access.' },
-            { title: 'Social Guardian Recovery', text: 'Appoint trusted neighborhood friends/vouchers to hold encrypted recovery shards in case your phone is ever lost or damaged.' }
+            { title: 'Sign-In Recovery', text: 'On the phone app, optionally link an Apple or Google account so your community node can help you back onto a new device. Your 12 words remain the way back that depends on nobody.' }
         ],
         primaryAction: { label: 'Read Identity Guide (§3) →', href: 'getting-started.html#3' },
         secondaryAction: { label: '▶ Watch Mobile Pairing Walkthrough', href: 'https://www.youtube.com/@beanpool' }

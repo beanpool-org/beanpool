@@ -166,7 +166,22 @@ export function FleetSidebar({
 
                 {/* Scrollable Node Cards */}
                 <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                    {profiles.map((p, index) => {
+                    {profiles.length === 0 ? (
+                        <div className="p-4 text-center rounded-xl bg-nature-950/40 border border-nature-800/80 space-y-2">
+                            <div className="text-xl">🌱</div>
+                            <div className="text-xs font-bold text-white">No Connected Nodes</div>
+                            <p className="text-[11px] text-nature-400 m-0">
+                                Add your first sovereign node profile to begin managing your fleet.
+                            </p>
+                            <button
+                                onClick={onOpenAddModal}
+                                className="px-3 py-1.5 rounded-lg bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow transition-all active:scale-95"
+                            >
+                                + Add Sovereign Node
+                            </button>
+                        </div>
+                    ) : (
+                        profiles.map((p, index) => {
                         const isSelected = p.id === activeProfileId;
                         const health = nodeHealthMap[p.id] || 'loading';
                         const isDragging = draggedIndex === index;
@@ -318,7 +333,8 @@ export function FleetSidebar({
                                 </div>
                             </div>
                         );
-                    })}
+                    })
+                    )}
                 </div>
             </div>
 

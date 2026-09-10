@@ -28,8 +28,9 @@ export function AiServicesModule({ activeNode, contextData }: AiServicesModulePr
         try {
             const res = await askAiCopilot(prompt.trim(), contextData, config);
             setResponse(res);
-        } catch (e: any) {
-            setResponse(`❌ AI Copilot Error: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setResponse(`❌ AI Copilot Error: ${msg}`);
         } finally {
             setLoading(false);
         }

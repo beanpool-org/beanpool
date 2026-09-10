@@ -42,6 +42,13 @@ export class SsrfSecurityError extends Error {
     }
 }
 
+export class ProhibitedContentTypeError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ProhibitedContentTypeError';
+    }
+}
+
 export class PayloadTooLargeError extends Error {
     constructor(message: string) {
         super(message);
@@ -639,14 +646,19 @@ export async function ssrfSafeFetch(
         const rawContentType = response.headers['content-type'] || '';
         const mimeType = rawContentType.split(';')[0].trim().toLowerCase();
 
-        if (mimeType && allowedTypes.length > 0) {
-            const isAllowed = allowedTypes.some((allowed) =>
-                allowed === '*/*' || mimeType === allowed.toLowerCase()
-            );
-            if (!isAllowed) {
-                response.cleanup();
-                response.incoming.destroy();
-                throw new SsrfSecurityError(`Prohibited Content-Type: ${mimeType}`);
+        // Only enforce allowedContentTypes on successful 2xx responses.
+        // For non-2xx responses (e.g. 403, 404, 500), upstream CDNs/servers return error
+        // bodies (text/plain, text/html) that would otherwise mask the actual HTTP status.
+        if (status >= 200 && status < 300) {
+            if (mimeType && allowedTypes.length > 0) {
+                const isAllowed = allowedTypes.some((allowed) =>
+                    allowed === '*/*' || mimeType === allowed.toLowerCase()
+                );
+                if (!isAllowed) {
+                    response.cleanup();
+                    response.incoming.destroy();
+                    throw new ProhibitedContentTypeError(`Prohibited Content-Type: ${mimeType}`);
+                }
             }
         }
 

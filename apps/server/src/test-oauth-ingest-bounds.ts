@@ -6,17 +6,17 @@
  * 2. Over-limit batch count (> MAX_OAUTH_INGEST_ITEMS = 50) is rejected with HTTP 400 (too_many_items),
  *    never truncated silently.
  * 3. Total payload exceeding MAX_OAUTH_INGEST_PAYLOAD_BYTES (512 KB) is rejected with HTTP 413 (payload_too_large).
- * 4. Per-item field over-limit checks reject with HTTP 400 rather than silently truncating:
- *    - URL > MAX_ITEM_URL_LENGTH (2048 chars) -> 400 item_url_too_long
- *    - Title > MAX_ITEM_TITLE_LENGTH (500 chars) -> 400 title_too_long
- *    - Thumbnail URL > MAX_ITEM_THUMBNAIL_URL_LENGTH (4096 chars) -> 400 thumbnail_url_too_long
- *    - External ID > MAX_ITEM_EXTERNAL_ID_LENGTH (512 chars) -> 400 external_id_too_long
- *    - PublishedAt > MAX_ITEM_PUBLISHED_AT_LENGTH (64 chars) -> 400 published_at_too_long
- *    - Category > MAX_ITEM_CATEGORY_LENGTH (50 chars) -> 400 category_too_long
- * 5. Malformed items payload (non-array, non-object item) is rejected with HTTP 400.
- * 6. Single submit/preview endpoints enforce URL and title caps without silent truncation.
+ * 4. Per-item field bounds cost the ITEM, never the batch, because these fields come from
+ *    TikTok and Instagram verbatim rather than from the client:
+ *    - Title > MAX_ITEM_TITLE_LENGTH (500) is truncated and still ingested
+ *    - URL (2048), thumbnailUrl (4096), externalId (512), publishedAt (64) and
+ *      category (50) over their bound drop that one item and report it in skippedCount
+ * 5. The request SHAPE is the client's own doing, so a non-array `items` is a hard 400.
+ * 6. Single submit caps its own URL at 400 but truncates the preview-resolved title.
  * 7. Sibling batch endpoints enforce bounds:
  *    - Group conversation > 50 participants -> 400
+ *    - A conversation type outside dm/group -> 400 (it bypassed both caps)
+ *    - Repeated participants are de-duplicated instead of hitting a UNIQUE constraint
  *    - Crowdfund project > 10 photos -> 400
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-oauth-ingest-bounds.ts
@@ -196,32 +196,40 @@ async function main(): Promise<void> {
     assert(payloadRes.status === 413, 'Payload exceeding 512 KB is rejected with HTTP 413');
     assert(payloadRes.body.error === 'payload_too_large', 'Error code is payload_too_large');
 
-    console.log('\n--- 4. Per-Item Field Size Bounds (Reject instead of Silent Truncation) ---');
-    // 4a: URL > 2048 chars rejected with 400
+    console.log('\n--- 4. Per-Item Field Bounds Skip or Truncate the Item, Never the Batch ---');
+    // These items come from TikTok's and Instagram's APIs verbatim, not from the client,
+    // so one upstream anomaly must not cost the member the rest of the batch.
+
+    // 4a: an over-long URL drops that item; its siblings still land.
     const longUrl = 'https://www.tiktok.com/@alice_creator/video/' + 'a'.repeat(MAX_ITEM_URL_LENGTH + 1);
     const longUrlRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
         actor: alice,
         body: {
             channelId: aliceChannel.id,
-            items: [{ url: longUrl, title: 'Long URL item' }],
+            items: [
+                { url: longUrl, title: 'Long URL item' },
+                { url: 'https://www.tiktok.com/@alice_creator/video/7500000000000000010', title: 'Good sibling', externalId: '7500000000000000010' },
+            ],
         },
     });
-    assert(longUrlRes.status === 400, 'Item URL > 2048 chars is rejected with HTTP 400');
-    assert(longUrlRes.body.error === 'item_url_too_long', 'Error code is item_url_too_long');
+    assert(longUrlRes.status === 200, 'A batch containing an over-long URL still returns 200');
+    assert(longUrlRes.body.count === 1, 'The good sibling was ingested');
+    assert(longUrlRes.body.skippedCount === 1, 'The over-long URL item was skipped, not fatal');
 
-    // 4b: Title > 500 chars rejected with 400 (not truncated silently)
+    // 4b: an over-long title is truncated, not rejected — TikTok captions run to 2,200 chars.
     const longTitle = 'T'.repeat(MAX_ITEM_TITLE_LENGTH + 1);
     const longTitleRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
         actor: alice,
         body: {
             channelId: aliceChannel.id,
-            items: [{ url: 'https://www.tiktok.com/@alice_creator/video/7500000000000000001', title: longTitle }],
+            items: [{ url: 'https://www.tiktok.com/@alice_creator/video/7500000000000000001', title: longTitle, externalId: '7500000000000000001' }],
         },
     });
-    assert(longTitleRes.status === 400, 'Item title > 500 chars is rejected with HTTP 400');
-    assert(longTitleRes.body.error === 'title_too_long', 'Error code is title_too_long');
+    assert(longTitleRes.status === 200, 'Item title > 500 chars is accepted');
+    assert(longTitleRes.body.count === 1, 'The long-title item was ingested, not dropped');
+    assert(longTitleRes.body.items[0].title.length === MAX_ITEM_TITLE_LENGTH, `Title truncated to ${MAX_ITEM_TITLE_LENGTH} chars`);
 
-    // 4c: Valid 500-char title succeeds without truncation
+    // 4c: a title of exactly the limit is stored whole.
     const maxTitle = 'T'.repeat(MAX_ITEM_TITLE_LENGTH);
     const maxTitleRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
         actor: alice,
@@ -237,69 +245,71 @@ async function main(): Promise<void> {
     assert(maxTitleRes.status === 200, 'Item title of exactly 500 chars returns 200 OK');
     assert(maxTitleRes.body.items[0].title === maxTitle, 'Item title was preserved completely without truncation');
 
-    // 4d: Thumbnail URL > 4096 chars rejected with 400
-    const hugeThumb = 'https://p16-sign.tiktokcdn.com/' + 'a'.repeat(MAX_ITEM_THUMBNAIL_URL_LENGTH + 1) + '.jpg';
-    const hugeThumbRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
-        actor: alice,
-        body: {
-            channelId: aliceChannel.id,
-            items: [{
+    // 4d-4g: every other over-long field drops just that item.
+    const oversizedFieldCases: Array<{ label: string; item: Record<string, unknown> }> = [
+        {
+            label: 'thumbnail URL > 4096 chars',
+            item: {
                 url: 'https://www.tiktok.com/@alice_creator/video/7500000000000000003',
                 title: 'Huge thumb item',
-                thumbnailUrl: hugeThumb,
-            }],
+                thumbnailUrl: 'https://p16-sign.tiktokcdn.com/' + 'a'.repeat(MAX_ITEM_THUMBNAIL_URL_LENGTH + 1) + '.jpg',
+            },
         },
-    });
-    assert(hugeThumbRes.status === 400, 'Thumbnail URL > 4096 chars is rejected with HTTP 400');
-    assert(hugeThumbRes.body.error === 'thumbnail_url_too_long', 'Error code is thumbnail_url_too_long');
-
-    // 4e: ExternalId > 512 chars rejected with 400
-    const longExtId = 'e'.repeat(MAX_ITEM_EXTERNAL_ID_LENGTH + 1);
-    const longExtIdRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
-        actor: alice,
-        body: {
-            channelId: aliceChannel.id,
-            items: [{
+        {
+            label: 'externalId > 512 chars',
+            item: {
                 url: 'https://www.tiktok.com/@alice_creator/video/7500000000000000004',
-                externalId: longExtId,
-            }],
+                externalId: 'e'.repeat(MAX_ITEM_EXTERNAL_ID_LENGTH + 1),
+            },
         },
-    });
-    assert(longExtIdRes.status === 400, 'External ID > 512 chars is rejected with HTTP 400');
-    assert(longExtIdRes.body.error === 'external_id_too_long', 'Error code is external_id_too_long');
-
-    // 4f: PublishedAt > 64 chars rejected with 400
-    const longDate = '2026-08-01T12:00:00Z' + '0'.repeat(MAX_ITEM_PUBLISHED_AT_LENGTH);
-    const longDateRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
-        actor: alice,
-        body: {
-            channelId: aliceChannel.id,
-            items: [{
+        {
+            label: 'publishedAt > 64 chars',
+            item: {
                 url: 'https://www.tiktok.com/@alice_creator/video/7500000000000000005',
-                publishedAt: longDate,
-            }],
+                publishedAt: '2026-08-01T12:00:00Z' + '0'.repeat(MAX_ITEM_PUBLISHED_AT_LENGTH),
+            },
         },
-    });
-    assert(longDateRes.status === 400, 'PublishedAt > 64 chars is rejected with HTTP 400');
-    assert(longDateRes.body.error === 'published_at_too_long', 'Error code is published_at_too_long');
-
-    // 4g: Category > 50 chars rejected with 400
-    const longCat = 'c'.repeat(MAX_ITEM_CATEGORY_LENGTH + 1);
-    const longCatRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
-        actor: alice,
-        body: {
-            channelId: aliceChannel.id,
-            items: [{
+        {
+            label: 'category > 50 chars',
+            item: {
                 url: 'https://www.tiktok.com/@alice_creator/video/7500000000000000006',
-                category: longCat,
-            }],
+                category: 'c'.repeat(MAX_ITEM_CATEGORY_LENGTH + 1),
+            },
         },
+        { label: 'item that is a primitive', item: 'primitive string' as any },
+        { label: 'item that is an array', item: [] as any },
+        { label: 'item that is null', item: null as any },
+    ];
+
+    for (const { label, item } of oversizedFieldCases) {
+        const res = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
+            actor: alice,
+            body: { channelId: aliceChannel.id, items: [item] },
+        });
+        assert(res.status === 200, `An item with ${label} does not fail the request`);
+        assert(res.body.count === 0, `An item with ${label} is not ingested`);
+        assert(res.body.skippedCount === 1, `An item with ${label} is reported as skipped`);
+    }
+
+    // A batch of 20 real items where one has a 2,200-char TikTok caption and one has a
+    // broken thumbnail still ingests the other 19 — the scenario that would otherwise have
+    // wedged every future sync, because the client swallows a non-2xx and reports success.
+    const realisticBatch = Array.from({ length: 20 }, (_, i) => ({
+        url: `https://www.tiktok.com/@alice_creator/video/76100000000000000${String(i).padStart(2, '0')}`,
+        title: i === 3 ? 'C'.repeat(2200) : `Video ${i}`,
+        thumbnailUrl: i === 7 ? 'https://cdn.example.com/' + 'z'.repeat(MAX_ITEM_THUMBNAIL_URL_LENGTH + 1) : undefined,
+        externalId: `76100000000000000${String(i).padStart(2, '0')}`,
+    }));
+    const realisticRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
+        actor: alice,
+        body: { channelId: aliceChannel.id, items: realisticBatch },
     });
-    assert(longCatRes.status === 400, 'Category > 50 chars is rejected with HTTP 400');
-    assert(longCatRes.body.error === 'category_too_long', 'Error code is category_too_long');
+    assert(realisticRes.status === 200, 'A realistic 20-item sync with two anomalies returns 200');
+    assert(realisticRes.body.count === 19, 'The other 19 videos were ingested');
+    assert(realisticRes.body.skippedCount === 1, 'Only the broken-thumbnail item was dropped');
 
     console.log('\n--- 5. Malformed Items Structure Rejection ---');
-    // Non-array items rejected with 400
+    // The shape of the request IS the client's own doing, so this stays a hard 400.
     const notArrayRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
         actor: alice,
         body: {
@@ -310,30 +320,10 @@ async function main(): Promise<void> {
     assert(notArrayRes.status === 400, 'Non-array items is rejected with HTTP 400');
     assert(notArrayRes.body.error === 'invalid_items', 'Error code is invalid_items');
 
-    // Array containing non-object rejected with 400
-    const nonObjectItemRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
-        actor: alice,
-        body: {
-            channelId: aliceChannel.id,
-            items: ['primitive string' as any],
-        },
-    });
-    assert(nonObjectItemRes.status === 400, 'Item that is not an object is rejected with HTTP 400');
-    assert(nonObjectItemRes.body.error === 'invalid_item', 'Error code is invalid_item');
-
-    // Array containing nested array rejected with 400
-    const nestedArrayItemRes = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/oauth-ingest', {
-        actor: alice,
-        body: {
-            channelId: aliceChannel.id,
-            items: [[] as any],
-        },
-    });
-    assert(nestedArrayItemRes.status === 400, 'Item that is an array is rejected with HTTP 400');
-    assert(nestedArrayItemRes.body.error === 'invalid_item', 'Error code is invalid_item');
-
     console.log('\n--- 6. Single Submit & Preview Route Bounds ---');
-    // Submit with title > 500 chars rejected with 400 (not truncated)
+    // The title the PWA posts here is the one our own /preview resolved, and the intake
+    // page gives the user no way to shorten it — so it truncates rather than locking them
+    // out of a link they cannot edit. The URL below is theirs, and still 400s.
     const submitLongTitle = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/submit', {
         actor: alice,
         body: {
@@ -342,8 +332,8 @@ async function main(): Promise<void> {
             title: 'T'.repeat(MAX_ITEM_TITLE_LENGTH + 1),
         },
     });
-    assert(submitLongTitle.status === 400, 'Submit title > 500 chars rejected with HTTP 400');
-    assert(submitLongTitle.body.error === 'title_too_long', 'Error code is title_too_long');
+    assert(submitLongTitle.status === 200, 'Submit with a title > 500 chars succeeds');
+    assert(submitLongTitle.body.item.title.length === MAX_ITEM_TITLE_LENGTH, `Submitted title truncated to ${MAX_ITEM_TITLE_LENGTH} chars`);
 
     // Submit with URL > 2048 chars rejected with 400
     const submitLongUrl = await callRouter(pulseSubmitRouter, 'POST', '/api/member/pulse/submit', {
@@ -394,6 +384,42 @@ async function main(): Promise<void> {
     });
     assert(legitGroupRes.status === 200, 'Legit 3-person group conversation returns 200 OK');
     assert(legitGroupRes.body.success === true, 'Group created successfully');
+
+    // An unrecognised `type` used to slip past both length rules, because the dm rule only
+    // fires on 'dm' and the group cap only on 'group' — so type "bulk" with 5,000
+    // participants took the write lock for 5,000 INSERTs and bypassed the cap entirely.
+    const bogusTypeRes = await callRouter(messagingRouter, 'POST', '/api/messages/conversation', {
+        actor: alice,
+        body: {
+            type: 'bulk',
+            createdBy: alice,
+            participants: [alice, ...tooManyParticipants.slice(0, 60)],
+            name: 'Cap bypass attempt',
+        },
+    });
+    assert(bogusTypeRes.status === 400, 'A conversation type other than dm/group is rejected');
+    assert(String(bogusTypeRes.body.error).includes('dm'), 'The error names the allowed types');
+
+    // conversation_participants is keyed on (conversation_id, public_key), so a repeated
+    // participant used to surface a raw SQLite UNIQUE constraint error.
+    const dupDmRes = await callRouter(messagingRouter, 'POST', '/api/messages/conversation', {
+        actor: alice,
+        body: { type: 'dm', createdBy: alice, participants: [alice, alice] },
+    });
+    assert(dupDmRes.status === 400, 'A DM with the same person twice is rejected');
+    assert(String(dupDmRes.body.error).includes('distinct'), 'The error explains it needs 2 distinct people');
+
+    const dupGroupRes = await callRouter(messagingRouter, 'POST', '/api/messages/conversation', {
+        actor: alice,
+        body: {
+            type: 'group',
+            createdBy: alice,
+            participants: [alice, bob, bob, tooManyParticipants[2]],
+            name: 'Group with a duplicate',
+        },
+    });
+    assert(dupGroupRes.status === 200, 'A group with a repeated participant is de-duplicated, not an error');
+    assert(dupGroupRes.body.success === true, 'The de-duplicated group was created');
 
     // Crowdfund project with > 10 photos is rejected with 400
     const excessPhotos = Array.from({ length: 11 }, (_, i) => `photo_${i}`);

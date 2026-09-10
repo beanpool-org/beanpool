@@ -684,14 +684,19 @@ export async function startHttpsServer(port: number): Promise<void> {
                 // well-behaved client gets a clean 413 before we read a byte. The
                 // streaming cap in readBody is the backstop for chunked / lying-length
                 // requests.
+                // Some routes are far tighter than the global cap. Applying their limit
+                // here rather than in the handler is the difference between refusing a
+                // request and buffering, Ed25519-verifying and JSON.parsing 2 MB on the
+                // one event loop first — which on a 1 vCPU node is most of the attack.
+                const routeLimit = routeBodyLimit(ctx.path);
                 const declaredLen = Number(ctx.get('content-length'));
-                if (Number.isFinite(declaredLen) && declaredLen > MAX_JSON_BODY_BYTES) {
+                if (Number.isFinite(declaredLen) && declaredLen > routeLimit) {
                     ctx.status = 413;
                     ctx.body = { error: 'Request body too large' };
                     return;
                 }
                 try {
-                    const body = await readBody(ctx.req);
+                    const body = await readBody(ctx.req, routeLimit);
                     (ctx as any).rawBody = body;  // X-1: exact bytes the client signed
                     const parsed = JSON.parse(body);
                     (ctx as any).requestBody = parsed;
@@ -1114,9 +1119,23 @@ export async function startHttpsServer(port: number): Promise<void> {
 // comfortably covers every legitimate JSON request (avatars/photos/attachments are
 // their own binary endpoints); past it we abort with 413.
 const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
+
+/** Routes whose legitimate bodies are much smaller than the global cap, enforced before
+ *  a byte is buffered. Pulse OAuth ingest is at most 50 items of link metadata. */
+const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
+    [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
+];
+
+function routeBodyLimit(path: string): number {
+    for (const [pattern, limit] of ROUTE_BODY_LIMITS) {
+        if (pattern.test(path)) return limit;
+    }
+    return MAX_JSON_BODY_BYTES;
+}
+
 class BodyTooLargeError extends Error { constructor() { super('Request body too large'); this.name = 'BodyTooLargeError'; } }
 
-function readBody(req: import('node:http').IncomingMessage): Promise<string> {
+function readBody(req: import('node:http').IncomingMessage, maxBytes: number = MAX_JSON_BODY_BYTES): Promise<string> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
         let total = 0;
@@ -1124,7 +1143,7 @@ function readBody(req: import('node:http').IncomingMessage): Promise<string> {
         req.on('data', (chunk: Buffer) => {
             if (aborted) return; // already over limit — discard without buffering
             total += chunk.length;
-            if (total > MAX_JSON_BODY_BYTES) {
+            if (total > maxBytes) {
                 aborted = true;
                 reject(new BodyTooLargeError()); // stop buffering; do NOT destroy the
                 // socket abruptly (that races the 413 response into an EPIPE) — just

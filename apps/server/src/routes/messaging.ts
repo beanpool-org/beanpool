@@ -22,6 +22,15 @@ export function createMessagingRoutes(deps: RouteDeps): Router {
 
 // ===================== MESSAGING API (PUBLIC) =====================
 
+/** Upper bound on people in one group conversation. Each one is a synchronous INSERT
+ *  inside the creation transaction, so this is what stops a single request holding the
+ *  SQLite write lock against the whole node. */
+const MAX_CONVERSATION_PARTICIPANTS = 50;
+
+/** Ed25519 public keys are 64 hex characters; 128 leaves room without allowing a
+ *  megabyte of text to reach the members lookup. */
+const MAX_PARTICIPANT_KEY_LENGTH = 128;
+
 router.post('/api/messages/conversation', async (ctx) => {
     const { type, participants, createdBy, name, postId } = (ctx as any).requestBody || {};
     if (!type || !participants || !createdBy) {
@@ -29,24 +38,38 @@ router.post('/api/messages/conversation', async (ctx) => {
         ctx.body = { error: 'type, participants, and createdBy are required' };
         return;
     }
+    // The engine types `type` as 'dm' | 'group', but TypeScript is not present at
+    // runtime and conversations.type has no CHECK constraint, so any other string
+    // sailed past both length rules below and re-opened the very hole the group cap
+    // closes: type "bulk" with 5,000 participants took the exclusive write lock for
+    // 5,000 INSERTs. Whitelist first, then the caps mean something.
+    if (type !== 'dm' && type !== 'group') {
+        ctx.status = 400;
+        ctx.body = { error: 'type must be either "dm" or "group"' };
+        return;
+    }
     if (!Array.isArray(participants)) {
         ctx.status = 400;
         ctx.body = { error: 'participants must be an array' };
         return;
     }
-    if (type === 'dm' && participants.length !== 2) {
-        ctx.status = 400;
-        ctx.body = { error: 'DM conversations must have exactly 2 participants' };
-        return;
-    }
-    if (type === 'group' && participants.length > 50) {
-        ctx.status = 400;
-        ctx.body = { error: 'Group conversations can have at most 50 participants' };
-        return;
-    }
-    if (!participants.every((p: unknown) => typeof p === 'string' && p.length > 0 && p.length <= 128)) {
+    if (!participants.every((p: unknown) => typeof p === 'string' && p.length > 0 && p.length <= MAX_PARTICIPANT_KEY_LENGTH)) {
         ctx.status = 400;
         ctx.body = { error: 'All participants must be valid public keys' };
+        return;
+    }
+    // conversation_participants is keyed on (conversation_id, public_key), so a repeated
+    // participant made the INSERT loop throw UNIQUE constraint failed and surfaced the raw
+    // SQLite error to the caller. De-duplicate and count distinct people.
+    const uniqueParticipants: string[] = Array.from(new Set<string>(participants));
+    if (type === 'dm' && uniqueParticipants.length !== 2) {
+        ctx.status = 400;
+        ctx.body = { error: 'DM conversations must have exactly 2 distinct participants' };
+        return;
+    }
+    if (type === 'group' && uniqueParticipants.length > MAX_CONVERSATION_PARTICIPANTS) {
+        ctx.status = 400;
+        ctx.body = { error: `Group conversations can have at most ${MAX_CONVERSATION_PARTICIPANTS} participants` };
         return;
     }
     // A2-15: the creator (bound to the verified signer by the spoof check) must
@@ -56,13 +79,13 @@ router.post('/api/messages/conversation', async (ctx) => {
     // this public route only — internal/system conversation creation
     // (ensureTransactionConversation, injectSystemMessage) calls
     // createConversation directly with a system actor and is unaffected.
-    if (!participants.includes(createdBy)) {
+    if (!uniqueParticipants.includes(createdBy)) {
         ctx.status = 403;
         ctx.body = { error: 'Creator must be a participant of the conversation' };
         return;
     }
     try {
-        const conv = createConversation(type, participants, createdBy, name, postId);
+        const conv = createConversation(type, uniqueParticipants, createdBy, name, postId);
         if (!conv) {
             ctx.status = 400;
             ctx.body = { error: 'Failed to create conversation — check all participants are registered' };

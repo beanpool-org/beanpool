@@ -12,7 +12,7 @@ import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 
 export default function ProjectDetailScreen() {
-    const params = useLocalSearchParams<{ id: string, title?: string, description?: string, goal?: string, current?: string, creator_pubkey?: string, creator_callsign?: string, photos?: string }>();
+    const params = useLocalSearchParams<{ id?: string, title?: string, description?: string, goal?: string, current?: string, creator_pubkey?: string, creator_callsign?: string, photos?: string }>();
     
     const [keyboardHeight, setKeyboardHeight] = useState(0);
     const { theme, colors } = useTheme();
@@ -99,6 +99,10 @@ export default function ProjectDetailScreen() {
     }, [params.id, params.creator_pubkey, projectData?.creator_pubkey]);
 
     const handlePledge = async () => {
+        if (!params.id) {
+            Alert.alert("Error", "Missing project ID.");
+            return;
+        }
         if (!pledgeAmount.trim() || isNaN(Number(pledgeAmount)) || Number(pledgeAmount) <= 0) {
             Alert.alert("Invalid Amount", "Please enter a valid amount to pledge.");
             return;
@@ -221,7 +225,7 @@ export default function ProjectDetailScreen() {
                                             disabled={!reportReason || submittingReport}
                                             onPress={async () => {
                                                 const pubkey = params.creator_pubkey || projectData?.creator_pubkey;
-                                                if (!identity || !pubkey) return;
+                                                if (!identity || !pubkey || !params.id) return;
                                                 setSubmittingReport(true);
                                                 try {
                                                     await reportAbuse(identity.publicKey, pubkey, reportReason, params.id);

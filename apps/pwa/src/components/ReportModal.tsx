@@ -96,14 +96,14 @@ export function ReportModal({
             >
                 <div className="flex items-center justify-between border-b border-nature-100 dark:border-nature-800 pb-3">
                     <h3 id="report-modal-title" className="text-base font-bold text-nature-950 dark:text-white flex items-center gap-2">
-                        <span>🚩</span> Report {targetName}
+                        <span aria-hidden="true">🚩</span> Report {targetName}
                     </h3>
                     <button
                         type="button"
                         onClick={onClose}
                         disabled={submitting}
                         aria-label="Close report dialog"
-                        className="text-nature-400 hover:text-nature-700 dark:hover:text-white bg-transparent border-none text-lg cursor-pointer p-1 rounded-lg"
+                        className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center text-nature-400 hover:text-nature-700 dark:hover:text-white bg-transparent border-none text-lg cursor-pointer p-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                     >
                         ✕
                     </button>
@@ -126,8 +126,9 @@ export function ReportModal({
                                 <button
                                     key={reason}
                                     type="button"
+                                    aria-pressed={isSelected}
                                     onClick={() => setSelectedReason(reason)}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer transition-all border ${
+                                    className={`min-h-[44px] px-3.5 py-2 rounded-full text-xs font-bold cursor-pointer transition-all border flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
                                         isSelected
                                             ? 'bg-red-600 text-white border-red-600 shadow-sm'
                                             : 'bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-200 dark:border-nature-700 hover:bg-nature-100 dark:hover:bg-nature-700'
@@ -160,7 +161,7 @@ export function ReportModal({
                         type="button"
                         onClick={onClose}
                         disabled={submitting}
-                        className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 border-none cursor-pointer transition-colors"
+                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
                     >
                         Cancel
                     </button>
@@ -168,7 +169,7 @@ export function ReportModal({
                         type="button"
                         onClick={handleSubmit}
                         disabled={submitting || !selectedReason}
-                        className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs bg-red-600 text-white hover:bg-red-500 disabled:opacity-60 border-none cursor-pointer shadow-sm transition-all flex items-center justify-center gap-1.5"
+                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-red-600 text-white hover:bg-red-500 disabled:opacity-60 border-none cursor-pointer shadow-sm transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                     >
                         {submitting ? 'Sending…' : 'Submit Report'}
                     </button>

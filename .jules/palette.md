@@ -120,3 +120,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 **Learning:** `CreditBar.tsx` rendered a visual credit balance gauge without ARIA meter semantics (`role="meter"`, `aria-label`, `aria-valuenow`, `aria-valuemin`, `aria-valuemax`, `aria-valuetext`), rendering the gauge invisible or invalid to screen-reader users, and included raw decorative emoji icons (`⚖️`, `🎣`) that created noise in screen-reader navigation.
 **Action:** Added `role="meter"`, `aria-label="Credit balance gauge"`, `aria-valuenow` clamped within `[floor, feeFreeMax]`, `aria-valuemin={floor}`, `aria-valuemax={feeFreeMax}`, and `aria-valuetext={`${fmt(balance)} Beans`}` to the container div, and wrapped decorative emojis with `<span aria-hidden="true">`.
 
+
+## 2026-09-06 - ReportModal Accessibility & Focus Indicators
+**Learning:** `ReportModal.tsx` close button and reason selection buttons lacked minimum accessible touch target sizes (< 44px height/width), missing `aria-pressed` states on selectable reason pills, raw decorative emoji `🚩` read by screen readers, and missing focus-visible outline rings on interactive buttons.
+**Action:** Added `aria-hidden="true"` to decorative emoji, `min-w-[44px] min-h-[44px]` touch target sizing, `aria-pressed={isSelected}` on reason pills, and `focus-visible:ring-2` focus rings across close, reason, cancel, and submit report buttons.

@@ -14,7 +14,7 @@ import { useTheme, useStyles } from './ThemeContext';
 // keepership of THIS enterprise additionally gets the keeper controls: post its Offer/Need and
 // sweep its surplus into the shared Commons pool.
 export default function TreasuryDetailScreen() {
-    const params = useLocalSearchParams<{ publicKey: string; name?: string; avatar?: string }>();
+    const params = useLocalSearchParams<{ publicKey?: string; name?: string; avatar?: string }>();
     const { theme, colors } = useTheme();
 
     const [detail, setDetail] = useState<any>(null);
@@ -101,7 +101,7 @@ export default function TreasuryDetailScreen() {
                 getBalance(id.publicKey).then((b: any) => {
                     if (!active) return;
                     const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
-                    setIsKeeperOfThis(mine.includes(String(params.publicKey)));
+                    setIsKeeperOfThis(!!params.publicKey && mine.includes(params.publicKey));
                 }).catch(() => {});
             }
         });
@@ -115,6 +115,7 @@ export default function TreasuryDetailScreen() {
     const avatar = detail?.avatar || params.avatar;
 
     const handleSweep = async () => {
+        if (!params.publicKey) return;
         const amt = Number(sweepAmount);
         if (isNaN(amt) || amt <= 0) { Alert.alert('Enter an amount', 'Type a positive number of Beans to sweep into the Commons.'); return; }
         if (amt > balance) { Alert.alert('Not enough surplus', `This treasury only holds ${balance} 🫘.`); return; }

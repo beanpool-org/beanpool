@@ -308,4 +308,43 @@ describe('2FA session token transmission in node client admin actions', () => {
         URL.createObjectURL = origCreate;
         URL.revokeObjectURL = origRevoke;
     });
+
+    it('harvester and registrar helpers send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+        const {
+            fetchHarvesterStatus,
+            triggerHarvesterSync,
+            fetchNodeHistory,
+            getRegistrarPending,
+            approveRegistrarClaim,
+            revokeRegistrarClaim,
+        } = await import('./node-client');
+
+        await fetchHarvesterStatus('secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        fetchMock.mockClear();
+
+        await triggerHarvesterSync('mullum', 'https://mullum.example', 'node-secret', 'manager-secret', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        fetchMock.mockClear();
+
+        await fetchNodeHistory('mullum', 'secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        fetchMock.mockClear();
+
+        await getRegistrarPending('https://node.example.com', 'secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        fetchMock.mockClear();
+
+        await approveRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        fetchMock.mockClear();
+
+        await revokeRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+    });
 });

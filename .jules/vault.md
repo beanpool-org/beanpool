@@ -77,3 +77,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** `downloadAdminFile()` constructed custom headers without `X-Admin-2FA-Session`, causing file downloads (database backups, snapshots, identity bundles, history archives) to fail with 401 Unauthorized on 2FA-protected nodes.
 **Learning:** Helper functions creating custom request headers must use `buildAdminHeaders(adminPassword, tfaToken)` so TOTP 2FA authentication is consistently forwarded across all admin actions.
 **Prevention:** Always use `buildAdminHeaders` for admin API requests and update all callers across the codebase when updating helper signatures.
+
+## 2026-09-11 - Missing 2FA Session Token in Topology and Harvester Actions
+**Vulnerability:** Harvester and registrar API client helpers (`fetchHarvesterStatus`, `triggerHarvesterSync`, `fetchNodeHistory`, `getRegistrarPending`, `approveRegistrarClaim`, `revokeRegistrarClaim`) constructed headers manually without `X-Admin-2FA-Session`, causing topology and harvester actions to fail with 401 Unauthorized on 2FA-enabled nodes or manager instances.
+**Learning:** All administrative fetch helpers must accept `tfaToken?: string` and use `buildAdminHeaders` rather than manually building header objects with only `X-Admin-Password`.
+**Prevention:** Consistently construct request headers with `buildAdminHeaders(adminPassword, tfaToken)` across all admin client functions and pass `getTfaSessionToken(node.id)` at call sites.

@@ -94,3 +94,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-09-03 - Add accessibilityLabel to camera and gallery source buttons in AvatarPickerSheet
 **Learning:** Source selection buttons containing emoji icons and text labels read unannounced or disjointed emoji characters to screen readers unless provided with an explicit `accessibilityLabel`.
 **Action:** Always provide explicit descriptive `accessibilityLabel` attributes on image source selection buttons.
+
+## 2026-09-11 - Add accessibilityLabel, hint, and busy state to pledge button
+**Learning:** Action buttons with loading states replacing text with ActivityIndicator leave screen readers with empty or ambiguous labels during async operations.
+**Action:** Provide dynamic accessibilityLabel and accessibilityState={{ disabled, busy }} on buttons that conditionally render ActivityIndicator.

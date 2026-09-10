@@ -132,9 +132,11 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                 disabled={stopping}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel="Stop recovery attempt now"
+                // Must be the VISIBLE text: this is the emergency control, and a speech-
+                // control user saying "tap Stop It Now" has to hit it (WCAG 2.5.3).
+                accessibilityLabel={stopping ? 'Stopping recovery' : 'Stop It Now'}
                 accessibilityHint="Cancels active recovery sessions"
-                accessibilityState={{ disabled: stopping }}
+                accessibilityState={{ disabled: stopping, busy: stopping }}
             >
                 {stopping ? (
                     <ActivityIndicator size="small" color={palette.white} />
@@ -187,6 +189,8 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         paddingHorizontal: 20,
         alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 44,
     },
     stopButtonText: {
         color: palette.white,

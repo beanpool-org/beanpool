@@ -1,5 +1,10 @@
 # Economy and Marketplace: Native vs PWA Parity Audit
 
+> **⚠️ Historical.** Keeper (social/guardian) recovery was scrapped in September 2026.
+> This document describes it as live because that was true when it was written.
+> The only recovery paths now are the member's 12 words and SSO (native only).
+> See [keeper-recovery-parked.md](../keeper-recovery-parked.md).
+
 ## Parity table
 
 | Feature | Native | PWA | Verdict |

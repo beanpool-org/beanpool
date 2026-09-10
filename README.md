@@ -100,14 +100,13 @@ Deterministic identity from a BIP-39 mnemonic:
 ### 🛡️ Sign-In Recovery (phone app only)
 An optional second way back onto a new device:
 - **Link an account** — Apple, Google, Facebook or GitHub, from Settings on the phone app.
-- **Two layers** — the linked account holds one fragment, your community node holds the other. Neither can restore your account alone.
+- **Two pieces** — your community node stores both encrypted pieces; signing in with the linked account is what unlocks one of them. Neither piece opens your account on its own.
 - **Not a copy of your words** — it restores the account, and only while your community node is running. The 12 words are the way back that depends on nobody.
 
 > **Keeper (social) recovery was removed in September 2026.** Enrolling friends as recovery
 > keepers is no longer offered on either client. See
 > [docs/keeper-recovery-parked.md](docs/keeper-recovery-parked.md) for why, and for what is
 > still present server-side.
-- **24-Hour Cooldown** — Security buffer to allow users to cancel fraudulent recovery attempts.
 
 ### 🏠 Landing Page (Welcome Hub)
 Port 80 serves a community welcome hub:

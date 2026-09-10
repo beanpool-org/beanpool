@@ -16,7 +16,7 @@ apps/native/
 │   ├── _layout.tsx              # Root layout — IdentityContext gate
 │   ├── IdentityContext.tsx       # Global identity provider (SecureStore)
 │   ├── welcome.tsx              # Onboarding: Create / Recover identity
-│   ├── recover-identity.tsx     # Social Recovery (3-of-N) and mnemonic restore
+│   ├── recover-identity.tsx     # Account restoration (SSO sign-in and 12-word mnemonic restore)
 │   ├── propose-project.tsx      # Propose community crowdfund project
 │   ├── edit-project.tsx         # Edit existing community project
 │   ├── project-detail.tsx       # Detailed view of a specific project
@@ -92,7 +92,7 @@ apps/native/
 - **Decoupled Release Versioning** — Support for individual native-only bumps (`node scripts/bump-version.mjs patch --native`) and Git tags (`native-v*`), decoupling review times from server nodes.
 - **Real-time Node Parity Settings** — Displaying sync status indicators (`🟢 Synced`, `⚠️ Out of Sync`, `⚪ Offline / Local-First`) under SQLite cache details by querying table aggregates against live remote transactions, posts, and member sizes.
 - **SQLite Integrity Diagnostics (v1.0.83 / v1.0.84)** — Active `PRAGMA integrity_check` scans, database file size display, and multi-table counters (Members, Posts, DMs, Txns) displaying database health indicators in Settings. Includes Koa health check `minAppVersion` gates matched dynamically on client boot to overlay updates.
-- **Client-Side Request Signing** — Signs requests natively using Ed25519 for all signature-required API routes (including profile update, ledger transfer, marketplace posts/deals, friends add/remove, set guardian, push token registration, and notification preferences).
+- **Client-Side Request Signing** — Signs requests natively using Ed25519 for all signature-required API routes (including profile update, ledger transfer, marketplace posts/deals, friends add/remove, push token registration, and notification preferences).
 - **SQLite Persistence** — all posts, projects, messages, and ledger data stored locally via `expo-sqlite`
 - **14-Category Marketplace** — Food, Services, Labour, Tools, Goods, Housing, Transport, Education, Arts, Health, Care, Animals, Energy, General (PWA has 13; native adds Care ❤️)
 - **Marketplace UX Modernization** — horizontal category chips via `CategoryPickerSheet`, author trust badges (`PostAuthorTrust`), and active deals tracking (`MyDealsSheet`)
@@ -118,7 +118,7 @@ apps/native/
 - **Settings Visual Overhaul** — identity card with bio, contact details, and contrast improvements
 - **iOS Crypto Polyfill** — SHA-512 and Ed25519 signing polyfilled for iOS via `expo-crypto`
 - **Escrow Actions** — request/approve/reject/cancel/complete marketplace deals with atomic escrow settlement
-- **Social Recovery (3-of-N)** — cryptographically secure identity recovery requiring a quorum of trusted guardians without central admins.
+- **Sign-In Recovery (SSO)** — Native-only two-layer account restoration using a linked Apple or Google account alongside the community node fragment. (Keeper/social recovery was scrapped in September 2026; the member's 12 words remain the sovereign, node-independent recovery method).
 - **Quadratic Voting** — native governance engine with voting stepper, dual progress bars, and CommonsInfoModal for community projects.
 - **Haptic Feedback** — contextual haptic responses for a tactile and responsive native experience.
 - **Cross-platform Avatar Sync** — robust `bundled://` protocol for seamless avatar resolution and cross-platform syncing.
@@ -192,7 +192,7 @@ npx expo start                      # Native dev client
 | Map clustering | ✅ | ✅ | Phase 6 overhaul with elder glow and stabilization patches |
 | Offline Outbox | — | ✅ | Native-only offline draft queuing |
 | Sanitized Syncing | ✅ | ✅ | Filtering of synthetic visitor accounts |
-| Social Recovery | — | ✅ | 3-of-N quorum-based Guardian identity restoration |
+| Sign-In Recovery (SSO) | — | ✅ | Native-only two-layer account restoration (requires node fragment); 12 words supported on both PWA & Native |
 | Synonym search | ✅ | ✅ | FTS5 on native, client-side on PWA (417-entry map) |
 | Blocked user filtering | ✅ | ✅ | localStorage (PWA) / SecureStore (native) |
 | Wipe identity | ✅ | ✅ | Double-confirm on both platforms |

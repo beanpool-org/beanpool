@@ -1,10 +1,12 @@
-# Keeper (social) recovery — parked 2026-09-10
+# Keeper (social) recovery — scrapped 2026-09-10
 
 BeanPool no longer offers keeper-based social recovery. Two recovery paths remain:
-the member's own 12 words, and SSO (native only).
+the member's own 12 words, and SSO (native only). The owner's decision is that this is
+permanent — the product stands on those two paths and does not deviate.
 
-This change removed the **client entry points**. The server routes, tables and existing
-rows are untouched, so the decision can be reversed without a migration.
+This change removed the **client entry points** only. The server routes, tables and existing
+rows were left untouched so that the client change could ship and be verified on its own.
+Deleting the server side is a separate, later PR — see "What can actually be deleted".
 
 ## Why
 
@@ -62,3 +64,27 @@ pass. Nothing calls them.
   `sso-client-handover.md`, `trust-profile-and-trade-safety.md` and others.
 - `state-engine.ts:926` still emits the trust reason "N people trust them as a recovery
   guardian". It never fires, because `getMyWards()` is zero everywhere.
+
+## What can actually be deleted
+
+A follow-up PR can remove the genuinely keeper-only server code. Note that **much of what
+looks like keeper machinery is shared with SSO and must stay**: the `recovery_shares` and
+`recovery_collections` tables, and the `/api/recovery/collect`, `collect/hub` and
+`collect/fragments` routes, are all used by SSO recovery. Dropping them breaks it.
+
+Safe to delete:
+
+| Area | Items |
+|---|---|
+| Keeper routes | `approve-keeper`, `approve-keeper/context`, `approve-keeper/pending`, `keepers/:callsign`, `keeper-candidates`, `POST /api/recovery/shares` |
+| Legacy guardian family | `lookup`, `request`, `pending`, `approve`, `reject`, `cancel`, `status`; tables `recovery_requests`, `recovery_approvals`; column `friends.is_guardian` |
+| The PIN | table `recovery_pin` and all of `routes/pin.ts` — never enforced by any recovery route, and zero rows on all ten nodes |
+| Client leftovers | `utils/friend-recovery.ts`, `utils/pin.ts`, `enrolFriendKeepers`, and the seven legacy guardian helpers in `utils/db.ts` |
+
+## The consequence to plan for
+
+SSO recovery only works while the community node still holds its hub fragment. The 12 words
+are the only path that depends on nobody. Keeper recovery was the answer to "I lost my phone
+**and** never wrote the words down" — scrapping it does not make that member disappear, it
+removes their last net. Forced type-back verification of the 12 words at setup should ship
+before or alongside the deletion PR, not after.

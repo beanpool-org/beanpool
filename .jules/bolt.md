@@ -150,3 +150,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-22 - N+1 Member Callsign Queries in Community Health Flags
 **Learning:** In `apps/server/src/state-engine.ts`, `getCommunityHealth` formatted wash trading and Sybil ring health flag descriptions by executing `db.prepare("SELECT callsign FROM members WHERE public_key=?")` for every flagged pair or ring member. This caused repeated SQLite queries per flagged member during health checks.
 **Action:** Pre-fetched member callsigns into a `callsignsMap` before evaluating health flags, converting per-member callsign resolution into constant-time $O(1)$ Map retrievals.
+
+## 2026-09-23 - O(1) Conversation List Member and Transaction Lookups in PWA MessagesPage
+**Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, rendering conversation lists invoked `getConversationTitle` and `relatedTx` resolution for every conversation item, which repeatedly ran `members.find(...)` and `userTransactions.find(...)` array scans on every render cycle ($O(C \times M + C \times T)$ complexity).
+**Action:** Hoisted `membersByPublicKey` and `completedTransactionsByPostId` Maps using `useMemo` at component scope, converting conversation title and related transaction resolution into constant-time $O(1)$ retrievals ($O(C + M + T)$ overall).

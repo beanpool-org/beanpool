@@ -6,7 +6,7 @@
  *  - Chat: shows messages in a conversation with send input
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi,
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi, getMembers,
@@ -163,6 +163,23 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const draftRef = useRef<HTMLTextAreaElement>(null);
     const activeConvIdRef = useRef<string | null>(null);
+
+    // ⚡ Bolt: O(1) Map lookups for member details and completed transactions in conversation list and chat views
+    const membersByPublicKey = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
+    const completedTransactionsByPostId = useMemo(() => {
+        const map = new Map<string, MarketplaceTransaction>();
+        for (const tx of userTransactions) {
+            // marketplace_transactions has no UNIQUE on post_id, so an offer bought by
+            // several people has several completed rows. The .find() this replaces took
+            // the first match, and a Map keeps the last — so writing unconditionally
+            // would quietly change which deal the review prompt is about. First wins,
+            // as before; picking the right one per conversation is a separate bug.
+            if (tx.postId && tx.status === 'completed' && !map.has(tx.postId)) {
+                map.set(tx.postId, tx);
+            }
+        }
+        return map;
+    }, [userTransactions]);
 
     // Auto-grow the composer with the draft (up to ~4 lines), collapsing back
     // to one line when the draft is cleared on send.
@@ -573,7 +590,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         // Prefer server-provided peerCallsign, fall back to member lookup
         if (conv.peerCallsign) return conv.peerCallsign;
         const otherPubkey = conv.participants.find(p => p !== identity.publicKey) || '';
-        const member = members.find(m => m.publicKey === otherPubkey);
+        const member = membersByPublicKey.get(otherPubkey);
         return member?.callsign || otherPubkey.substring(0, 12) + '…';
     }
 
@@ -711,8 +728,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         );
     }
 
-    // Pre-compute O(1) member & message lookup maps for message rendering performance in large chat threads.
-    const membersByPublicKey = new Map(members.map(m => [m.publicKey, m]));
+    // Pre-compute O(1) message lookup map for message rendering performance in large chat threads.
     const messagesById = new Map(messages.map(m => [m.id, m]));
 
     // Chat view
@@ -1541,7 +1557,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                         })
                         .map(conv => {
-                            const relatedTx = userTransactions.find(t => t.postId === conv.postId && t.status === 'completed');
+                            const relatedTx = conv.postId ? completedTransactionsByPostId.get(conv.postId) : undefined;
                             const isBuyer = relatedTx ? relatedTx.buyerPublicKey === identity.publicKey : false;
                             const hasRated = relatedTx ? (isBuyer ? relatedTx.ratedByBuyer : relatedTx.ratedBySeller) : false;
                             const needsReview = conv.lastMsgType === 'system' && conv.lastSysType === 'ESCROW_RELEASED' && !hasRated;

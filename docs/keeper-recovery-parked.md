@@ -23,7 +23,10 @@ Measured on all ten live nodes before removing anything:
 
 ## What survives, and why
 
-`RecoveryAlertBanner` stays rendered on **both** clients. The server routes are still live,
+`RecoveryAlertBanner` stays rendered on **both** clients. It had never actually fired:
+both clients filtered `/api/recovery/collect/mine` on a `status` field the route does not
+send, so the banner was suppressed on every node since it shipped. Fixed here, because this
+decision leans on it. The server routes are still live,
 so a crafted request or an old client build can still open a recovery session against a
 member who has shares on the node. The banner is the only thing that tells them, and it is
 now the sole defence against the collusion path described above.

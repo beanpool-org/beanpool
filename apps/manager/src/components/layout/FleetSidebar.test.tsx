@@ -102,4 +102,16 @@ describe('FleetSidebar Component', () => {
 
         expect(screen.getByTitle('Admin password needed')).toBeInTheDocument();
     });
+
+    it('renders empty state when profiles array is empty', () => {
+        const onOpenAddModal = vi.fn();
+        render(<FleetSidebar {...defaultProps} profiles={[]} onOpenAddModal={onOpenAddModal} />);
+
+        expect(screen.getByText('No Connected Nodes')).toBeInTheDocument();
+        expect(screen.getByText('Add your first sovereign node profile to begin managing your fleet.')).toBeInTheDocument();
+
+        const addSovereignButton = screen.getByRole('button', { name: /\+ add sovereign node/i });
+        fireEvent.click(addSovereignButton);
+        expect(onOpenAddModal).toHaveBeenCalledTimes(1);
+    });
 });

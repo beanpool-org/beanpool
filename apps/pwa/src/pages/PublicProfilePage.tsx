@@ -47,7 +47,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [vouching, setVouching] = useState(false);
     const [given, setGiven] = useState<Rating[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
-    const [guardianCount, setGuardianCount] = useState(0);
     const [activeTab, setActiveTab] = useState<'listings' | 'reviews' | 'given'>('listings');
     const [editingReview, setEditingReview] = useState<Rating | null>(null);
     const [reviewStars, setReviewStars] = useState(5);
@@ -172,7 +171,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             if (givenRatings) setGiven(givenRatings.ratings || []);
             if (Array.isArray(friends)) {
                 setFriendsCount(friends.length);
-                setGuardianCount(friends.filter((f: any) => f.isGuardian).length);
             }
             setLoading(false);
         });
@@ -539,20 +537,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             </span>
                             <span className="text-[10px] font-bold text-nature-400 uppercase mt-0.5">Trades</span>
                         </div>
-                        <div className="w-[1px] h-8 bg-nature-200 dark:bg-nature-800" />
-                        <button 
-                            onClick={() => onNavigateTab && onNavigateTab('people', 'guardians')}
-                            className="flex-1 flex flex-col items-center border-none bg-transparent cursor-pointer hover:opacity-85"
-                        >
-                            <span className={`text-xl font-black ${
-                                guardianCount >= 3 ? 'text-emerald-500' : guardianCount === 0 ? 'text-red-500' : 'text-nature-950 dark:text-white'
-                            }`}>
-                                {guardianCount}/5
-                            </span>
-                            <span className="text-[10px] font-bold text-nature-400 uppercase mt-0.5 flex items-center gap-0.5">
-                                Guardians{guardianCount >= 3 ? ' ✓' : ''}
-                            </span>
-                        </button>
                     </div>
                 )}
 

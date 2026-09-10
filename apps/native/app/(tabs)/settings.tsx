@@ -11,7 +11,7 @@ import { resolveBundledAvatar } from '../../utils/bundled-avatars';
 import { updateCallsign, wipeIdentity, getMnemonic, hasMnemonic } from '../../utils/identity';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
-import { updateMemberProfile, getMemberProfile, getPendingRecoveryRequests, approveRecoveryRequest, rejectRecoveryRequest, signedRequest } from '../../utils/db';
+import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
 import { getCanonicalProfile } from '../../utils/canonical-profile';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
@@ -26,14 +26,10 @@ import { authenticateUser, getAppLockEnabled, setAppLockEnabled } from '../../ut
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
-import { FriendPickerSheet } from '../../components/FriendPickerSheet';
 import { protectionFrom } from '../../utils/protection-state';
 import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
 import type { SsoProvider } from '../../utils/sso-signin';
 import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../../utils/node-post';
-import { RecoveryPinModal } from '../../components/RecoveryPinModal';
-import { IncomingRecoveryApprovalModal } from '../../components/IncomingRecoveryApprovalModal';
-import { getPinStatus } from '../../utils/pin';
 import { parseArchetype, type QuizResult } from '@beanpool/core';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 
@@ -283,7 +279,7 @@ export default function SettingsScreen() {
         const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
         return () => { showSub.remove(); hideSub.remove(); };
     }, []);
-    const [mode, setMode] = useState<'menu' | 'profile' | 'seed' | 'advanced' | 'wipe' | 'notifications' | 'recovery-requests' | 'diagnostics' | 'protection'>('menu');
+    const [mode, setMode] = useState<'menu' | 'profile' | 'seed' | 'advanced' | 'wipe' | 'notifications' | 'diagnostics' | 'protection'>('menu');
 
     // --- Protection state ---
     const [protectionResult, setProtectionResult] = useState<KeeperEnrolmentResult | null>(null);
@@ -293,14 +289,9 @@ export default function SettingsScreen() {
     const [protectionNodeLabel, setProtectionNodeLabel] = useState<string | null>(null);
     const [protectionLoading, setProtectionLoading] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
-    /** Set before an SSO/friend flow leaves the app, so the return trip does not reset the section. */
+    /** Set before an SSO flow leaves the app, so the return trip does not reset the section. */
     const skipNextFocusResetRef = React.useRef(false);
     const [ssoEnrolProvider, setSsoEnrolProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
-    const [showPinModal, setShowPinModal] = useState(false);
-    const [pinSet, setPinSet] = useState<boolean | null>(null);
-    const [showFriendSheet, setShowFriendSheet] = useState(false);
-    const [showApprovalModal, setShowApprovalModal] = useState(false);
-    const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
     const [revealWords, setRevealWords] = useState(false);
     const [revealLoading, setRevealLoading] = useState(false);
     const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
@@ -399,9 +390,6 @@ export default function SettingsScreen() {
                 available: body.total,
                 enrolledSso: body.enrolledSso ?? [],
             });
-
-            const pinRes = await getPinStatus(url, identity);
-            setPinSet(pinRes.pinSet);
         } catch (e) {
             console.warn('[Protection] fetch failed:', e);
         } finally {
@@ -454,15 +442,7 @@ export default function SettingsScreen() {
     const [diagLoading, setDiagLoading] = useState(false);
     const [dbSize, setDbSize] = useState<string>('0.0 MB');
     const [remoteStats, setRemoteStats] = useState<{ members: number, posts: number, transactions: number } | null>(null);
-    const params = useLocalSearchParams<{ section?: string; collectionId?: string }>();
-
-    useEffect(() => {
-        if (params.collectionId) {
-            setActiveCollectionId(params.collectionId);
-            setShowApprovalModal(true);
-            router.setParams({ collectionId: undefined });
-        }
-    }, [params.collectionId]);
+    const params = useLocalSearchParams<{ section?: string }>();
 
     // Location permission (relocated here from the global header)
     const [locationEnabled, setLocationEnabled] = useState(false);
@@ -868,19 +848,8 @@ export default function SettingsScreen() {
     
 
 
-    // Recovery logic
-    const [recoveryReqs, setRecoveryReqs] = useState<any[]>([]);
-    const [recoveryLoading, setRecoveryLoading] = useState(false);
 
-    React.useEffect(() => {
-        if (mode === 'recovery-requests') {
-            setRecoveryLoading(true);
-            getPendingRecoveryRequests()
-                .then(setRecoveryReqs)
-                .catch(console.error)
-                .finally(() => setRecoveryLoading(false));
-        }
-    }, [mode]);
+
 
     if (!identity) {
         return (
@@ -1439,14 +1408,6 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
-                    <Pressable style={styles.menuBtn} onPress={() => { setMode('recovery-requests'); }} accessibilityRole="button">
-                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🤝</Text></View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Recovery Requests</Text>
-                            <Text style={styles.menuSub}>Help a friend recover their identity</Text>
-                        </View>
-                        <Text style={styles.menuChevron}>›</Text>
-                    </Pressable>
 
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/pulse')} accessibilityRole="button" accessibilityLabel="The Pulse community feed">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🗞️</Text></View>
@@ -1753,7 +1714,6 @@ export default function SettingsScreen() {
                                     setShowSsoSheet(true);
                                 } : undefined}
                                 onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
-                                onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                             />
 
                             <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
@@ -1823,42 +1783,13 @@ export default function SettingsScreen() {
                                 )}
                             </View>
 
-                            <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                                <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
-                                    🔢 Friend List Recovery PIN (Optional)
-                                </Text>
-                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
-                                    Protects your trusted friends list during recovery so strangers cannot harvest your contacts. Forgetting it does not lock you out.
-                                </Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface.subtle, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default }}>
-                                    <View style={{ flex: 1, marginRight: 12 }}>
-                                        <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 14 }}>
-                                            {pinSet ? '✓ PIN Active' : 'No PIN Set'}
-                                        </Text>
-                                        <Text style={{ color: colors.text.muted, fontSize: 12, marginTop: 2 }}>
-                                            {pinSet ? 'Hides friend list during recovery' : 'Friend list is revealed during recovery'}
-                                        </Text>
-                                    </View>
-                                    <Pressable
-                                        style={{ backgroundColor: colors.surface.card, borderColor: colors.border.default, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 }}
-                                        onPress={() => setShowPinModal(true)}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={pinSet ? 'Manage recovery PIN' : 'Set recovery PIN'}
-                                    >
-                                        <Text style={{ color: colors.text.heading, fontWeight: '600', fontSize: 13 }}>
-                                            {pinSet ? 'Manage' : 'Set PIN'}
-                                        </Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-
                             {Platform.OS === 'web' && (
                                 <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
                                     <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>
                                         The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
                                     </Text>
                                     <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-                                        For Apple sign-in or friend-based recovery, use the BeanPool app on your phone.
+                                        For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
                                     </Text>
                                 </View>
                             )}
@@ -1884,99 +1815,6 @@ export default function SettingsScreen() {
                     setShowSsoSheet(false);
                 }}
             />
-            <FriendPickerSheet
-                visible={showFriendSheet}
-                onClose={() => setShowFriendSheet(false)}
-                onEnrolled={(result) => {
-                    setProtectionResult(result);
-                    setShowFriendSheet(false);
-                }}
-            />
-            {identity && (
-                <RecoveryPinModal
-                    visible={showPinModal}
-                    currentPinSet={!!pinSet}
-                    identity={identity}
-                    onClose={() => setShowPinModal(false)}
-                    onSuccess={(newPinSet) => setPinSet(newPinSet)}
-                />
-            )}
-            <IncomingRecoveryApprovalModal
-                visible={showApprovalModal}
-                collectionId={activeCollectionId}
-                onClose={() => {
-                    setShowApprovalModal(false);
-                    setActiveCollectionId(null);
-                }}
-            />
-
-            {mode === 'recovery-requests' && (
-                <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>🛡️ Recovery Requests</Text>
-                    <Text style={styles.infoText}>These friends have requested to recover their identity on a new device. Verify it's really them before approving.</Text>
-                    
-                    {recoveryLoading ? (
-                        <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} />
-                    ) : recoveryReqs.length === 0 ? (
-                        <View style={{ padding: 20, alignItems: 'center' }}>
-                            <Text style={{ fontSize: 32, marginBottom: 8 }}>✨</Text>
-                            <Text style={{ color: colors.text.muted }}>No pending requests.</Text>
-                        </View>
-                    ) : (
-                        recoveryReqs.map(req => (
-                            <View key={req.id} style={{ backgroundColor: colors.surface.subtle, padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.border.strong, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                                        <Text style={{ fontSize: 18 }}>👤</Text>
-                                    </View>
-                                    <View>
-                                        <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold' }}>{req.old_callsign}</Text>
-                                        <Text style={{ color: colors.text.muted, fontSize: 12 }}>Requested: {new Date(req.created_at).toLocaleDateString()}</Text>
-                                    </View>
-                                </View>
-                                
-                                <View style={{ flexDirection: 'row', gap: 8 }}>
-                                    <Pressable
-                                        style={[styles.primaryBtn, { flex: 1, backgroundColor: colors.feedback.danger.solid }]}
-                                        accessibilityRole="button"
-                                        accessibilityHint="Rejects this identity recovery request"
-                                        onPress={async () => {
-                                            try {
-                                                await rejectRecoveryRequest(req.id);
-                                                setRecoveryReqs(prev => prev.filter(r => r.id !== req.id));
-                                                Alert.alert('Rejected', 'Request has been rejected.');
-                                            } catch(e) {
-                                                Alert.alert('Error', 'Failed to reject request.');
-                                            }
-                                        }}
-                                    >
-                                        <Text style={styles.primaryBtnText}>Reject</Text>
-                                    </Pressable>
-                                    <Pressable
-                                        style={[styles.primaryBtn, { flex: 1, backgroundColor: colors.brand.primary }]}
-                                        accessibilityRole="button"
-                                        onPress={async () => {
-                                            try {
-                                                await approveRecoveryRequest(req.id);
-                                                setRecoveryReqs(prev => prev.filter(r => r.id !== req.id));
-                                                Alert.alert('Approved', 'Request has been approved.');
-                                            } catch(e) {
-                                                Alert.alert('Error', 'Failed to approve request.');
-                                            }
-                                        }}
-                                    >
-                                        <Text style={styles.primaryBtnText}>Approve</Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        ))
-                    )}
-                    
-                    <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
-                        <Text style={styles.backBtnText}>← Back</Text>
-                    </Pressable>
-                </View>
-            )}
 
             {mode === 'profile' && (
                 <View style={styles.card}>

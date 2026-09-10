@@ -1,5 +1,5 @@
 /**
- * SettingsPage — Identity management, recovery phrase, social recovery,
+ * SettingsPage — Identity management, recovery phrase,
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
@@ -8,17 +8,13 @@ import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedView
 import { clearAccountStorage } from '../lib/device-prefs';
 import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
-    getNodeApiUrl, setNodeApiUrl, testNodeConnection, getPendingRecoveryRequests,
-    approveRecoveryRequest, rejectRecoveryRequest, getNotificationPreferences,
+    getNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, purgeAccountApi,
-    getPendingKeeperActions, type PendingKeeperAction,
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
 import { type Theme } from '../lib/useTheme';
-import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
-import { IncomingRecoveryApprovalModal } from '../components/IncomingRecoveryApprovalModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
 import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
@@ -29,7 +25,7 @@ interface Props {
     onBack: () => void;
     theme: Theme;
     onToggleTheme: () => void;
-    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications' | 'protection' | 'blocked-users';
+    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users';
     onReRunSetup?: () => void;
     /** Version reported by the connected node, when its health check has answered. */
     nodeVersion?: string;
@@ -77,7 +73,7 @@ function ToggleSwitch({
 }
 
 export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode, onReRunSetup, nodeVersion }: Props) {
-    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'recovery-requests' | 'diagnostics' | 'notifications' | 'protection' | 'blocked-users'>(initialMode || 'menu');
+    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users'>(initialMode || 'menu');
 
     useEffect(() => {
         if (initialMode) {
@@ -205,59 +201,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
         }
     }, [mode]);
 
-    // Recovery Requests (Keepers & Guardians)
-    const [recoveryReqs, setRecoveryReqs] = useState<any[]>([]);
-    const [pendingKeeperActions, setPendingKeeperActions] = useState<PendingKeeperAction[]>([]);
-    const [recoveryLoading, setRecoveryLoading] = useState(false);
-    const [selectedKeeperCollectionId, setSelectedKeeperCollectionId] = useState<string | null>(null);
-    const [showKeeperModal, setShowKeeperModal] = useState(false);
-    const [manualSessionCode, setManualSessionCode] = useState('');
-    const [manualCodeError, setManualCodeError] = useState('');
 
-    const loadRecoveryRequests = () => {
-        setRecoveryLoading(true);
-        Promise.all([
-            getPendingKeeperActions().catch((err) => {
-                console.warn('[KeeperActions] Failed:', err);
-                return [] as PendingKeeperAction[];
-            }),
-            getPendingRecoveryRequests(identity.publicKey).catch((err) => {
-                console.warn('[RecoveryReqs] Failed:', err);
-                return [] as any[];
-            }),
-        ])
-            .then(([keeperActions, legacyReqs]) => {
-                setPendingKeeperActions(keeperActions);
-                setRecoveryReqs(legacyReqs);
-            })
-            .finally(() => setRecoveryLoading(false));
-    };
-
-    useEffect(() => {
-        if (mode === 'recovery-requests') {
-            loadRecoveryRequests();
-        }
-    }, [mode, identity.publicKey]);
-
-    const handleApproveRecovery = async (reqId: string) => {
-        if (!window.confirm('Approve this recovery request? This confirms you vouch for this member restoring their identity.')) return;
-        try {
-            await approveRecoveryRequest(reqId);
-            setRecoveryReqs(prev => prev.filter(r => r.id !== reqId));
-        } catch (e: any) {
-            alert(e.message || 'Approval failed');
-        }
-    };
-
-    const handleRejectRecovery = async (reqId: string) => {
-        if (!window.confirm('Reject this recovery request?')) return;
-        try {
-            await rejectRecoveryRequest(reqId);
-            setRecoveryReqs(prev => prev.filter(r => r.id !== reqId));
-        } catch (e: any) {
-            alert(e.message || 'Rejection failed');
-        }
-    };
 
     // Database Diagnostics
     const [diagLoading, setDiagLoading] = useState(false);
@@ -526,6 +470,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
                 {mode === 'menu' && (
                     <div className="space-y-6">
+                        <RecoveryAlertBanner identity={identity} />
                         {/* ─── COMMUNITY WORKING STYLE ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
@@ -682,29 +627,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                     </button>
                                 )}
 
-                                <button
-                                    onClick={() => setMode('protection')}
-                                    className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
-                                >
-                                    <span className="text-xl">🛡️</span>
-                                    <div className="flex-1">
-                                        <div className="text-[15px] font-bold">Account Protection</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Manage trusted friend keepers & backup</div>
-                                    </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
-                                </button>
 
-                                <button
-                                    onClick={() => setMode('recovery-requests')}
-                                    className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
-                                >
-                                    <span className="text-xl">🛡️</span>
-                                    <div className="flex-1">
-                                        <div className="text-[15px] font-bold">Recovery Requests</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Help a friend recover their identity</div>
-                                    </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
-                                </button>
 
                                 <button
                                     onClick={() => setMode('seed')}
@@ -1109,176 +1032,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                     </div>
                 )}
 
-                {/* ─── MODE: ACCOUNT PROTECTION & KEEPERS ─── */}
-                {mode === 'protection' && (
-                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🛡️ Account Protection</h3>
-                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
-                            This is how you get back into your account if you lose your device. Keepers hold encrypted pieces that can restore your identity.
-                        </p>
 
-                        <RecoveryAlertBanner identity={identity} />
-                        <KeeperProtectionPanel identity={identity} />
-
-                        <div className="mt-6 pt-6 border-t border-nature-200 dark:border-nature-800">
-                            <h4 className="text-sm font-bold text-nature-900 dark:text-white mb-1">🔑 12 Recovery Words</h4>
-                            <p className="text-xs text-nature-500 dark:text-nature-400 mb-4 leading-relaxed">
-                                Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.
-                            </p>
-                            <button
-                                type="button"
-                                onClick={() => setMode('seed')}
-                                className="w-full py-3 rounded-xl border border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-200 font-semibold hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-sm cursor-pointer"
-                            >
-                                👁️ View 12 Recovery Words
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={() => setMode('menu')}
-                            className="w-full mt-5 py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
-                        >
-                            ← Back to Settings
-                        </button>
-                    </div>
-                )}
-
-                {/* ─── MODE: RECOVERY REQUESTS ─── */}
-                {mode === 'recovery-requests' && (
-                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-2">🛡️ Recovery Requests</h3>
-                        <p className="text-xs text-nature-500 dark:text-nature-400 mb-5 leading-relaxed">
-                            Members who listed you as a Recovery Keeper or Guardian can request account recovery if they lose their device. Verify their identity before approving.
-                        </p>
-
-                        {/* Approve by Session Code (Phone-directed) */}
-                        <div className="mb-6 p-4 rounded-xl bg-nature-50 dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800">
-                            <div className="flex items-center gap-2 mb-1.5">
-                                <span className="text-base" aria-hidden="true">📞</span>
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-nature-900 dark:text-nature-200">
-                                    Approve by Session Code
-                                </h4>
-                            </div>
-                            <p className="text-xs text-nature-600 dark:text-nature-400 mb-3 leading-relaxed">
-                                If a friend called you with their recovery session code, enter it below to verify their identity and safely release your recovery piece.
-                            </p>
-                            <div className="flex flex-col sm:flex-row gap-2">
-                                <input
-                                    type="text"
-                                    value={manualSessionCode}
-                                    onChange={(e) => {
-                                        setManualSessionCode(e.target.value);
-                                        setManualCodeError('');
-                                    }}
-                                    placeholder="Enter Session Code (e.g. coll_...)"
-                                    className="flex-1 py-2.5 px-3.5 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const code = manualSessionCode.trim();
-                                        if (!code) {
-                                            setManualCodeError('Please enter a recovery session code.');
-                                            return;
-                                        }
-                                        setSelectedKeeperCollectionId(code);
-                                        setShowKeeperModal(true);
-                                    }}
-                                    className="py-2.5 px-5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-none cursor-pointer transition-colors shadow-sm whitespace-nowrap"
-                                >
-                                    Review Request
-                                </button>
-                            </div>
-                            {manualCodeError && (
-                                <p className="text-xs text-red-600 dark:text-red-400 mt-2 font-medium" role="alert">
-                                    {manualCodeError}
-                                </p>
-                            )}
-                        </div>
-
-                        {recoveryLoading ? (
-                            <div className="py-8 text-center text-sm text-nature-400 animate-pulse">Checking pending recovery requests...</div>
-                        ) : pendingKeeperActions.length === 0 && recoveryReqs.length === 0 ? (
-                            <div className="bg-oat-50 dark:bg-nature-950/50 p-6 rounded-2xl text-center text-xs text-nature-500 dark:text-nature-400 border border-nature-200 dark:border-nature-800 mb-6">
-                                🟢 No automatic requests pending. If a friend called you directly, enter their session code above.
-                            </div>
-                        ) : (
-                            <div className="space-y-4 mb-6">
-                                {/* Inbound Keeper Requests (Two-Layer) */}
-                                {pendingKeeperActions.length > 0 && (
-                                    <div className="space-y-3">
-                                        <div className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 px-1">
-                                            Trusted Friend Keeper Requests
-                                        </div>
-                                        {pendingKeeperActions.map((act) => (
-                                            <div
-                                                key={act.collectionId}
-                                                className="p-4 rounded-xl border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/50 dark:bg-emerald-950/40"
-                                            >
-                                                <div className="font-bold text-sm text-nature-900 dark:text-white mb-1">
-                                                    Request from <span className="text-emerald-700 dark:text-emerald-300 font-bold">{act.callsign || 'Unknown Member'}</span>
-                                                </div>
-                                                <div className="text-xs text-nature-600 dark:text-nature-400 mb-3">
-                                                    Listed you as a recovery keeper to restore their account on a new device.
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setSelectedKeeperCollectionId(act.collectionId);
-                                                        setShowKeeperModal(true);
-                                                    }}
-                                                    className="w-full py-2.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-none cursor-pointer transition-colors shadow-sm"
-                                                >
-                                                    Review & Release Piece
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Legacy Guardian Requests */}
-                                {recoveryReqs.length > 0 && (
-                                    <div className="space-y-3">
-                                        <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 px-1">
-                                            Guardian Requests
-                                        </div>
-                                        {recoveryReqs.map((req) => (
-                                            <div key={req.id} className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
-                                                <div className="font-bold text-sm text-nature-900 dark:text-white mb-1">
-                                                    Request from <span className="text-terra-600 dark:text-terra-400">{req.callsign || 'Unknown Member'}</span>
-                                                </div>
-                                                <div className="text-xs text-nature-500 dark:text-nature-400 mb-3">
-                                                    Submitted {new Date(req.createdAt).toLocaleDateString()}
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => handleRejectRecovery(req.id)}
-                                                        className="flex-1 py-2 rounded-lg text-xs font-bold bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 cursor-pointer"
-                                                    >
-                                                        Reject
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleApproveRecovery(req.id)}
-                                                        className="flex-1 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white border-none cursor-pointer hover:bg-emerald-700"
-                                                    >
-                                                        Approve
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <button
-                            onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
-                        >
-                            ← Back to Settings
-                        </button>
-                    </div>
-                )}
 
                 {/* ─── MODE: DATABASE DIAGNOSTICS & HEALTH ─── */}
                 {mode === 'diagnostics' && (
@@ -1595,21 +1349,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                     </div>
                 )}
 
-                {/* ─── INCOMING RECOVERY APPROVAL MODAL ─── */}
-                {selectedKeeperCollectionId && (
-                    <IncomingRecoveryApprovalModal
-                        isOpen={showKeeperModal}
-                        collectionId={selectedKeeperCollectionId}
-                        identity={identity}
-                        onClose={() => {
-                            setShowKeeperModal(false);
-                            setSelectedKeeperCollectionId(null);
-                        }}
-                        onApproved={() => {
-                            loadRecoveryRequests();
-                        }}
-                    />
-                )}
+
 
                 <ArchetypeQuizModal
                     visible={showQuizModal}

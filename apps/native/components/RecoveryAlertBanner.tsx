@@ -63,8 +63,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
     const handleStopIt = useCallback(async () => {
         Alert.alert(
             '🛑 Stop Recovery Attempt',
-            'This will cancel all active recovery sessions and re-split your keepers, '
-            + 'making any collected fragments permanently useless.\n\n'
+            'This will cancel all active recovery sessions, preventing any further fragment releases.\n\n'
             + 'Do this only if you did NOT start this recovery.',
             [
                 { text: 'Keep Watching', style: 'cancel' },
@@ -92,9 +91,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             onStopSuccess?.();
                             Alert.alert(
                                 '✅ Recovery Stopped',
-                                'All active recovery sessions have been cancelled. '
-                                + 'If you want to make collected fragments permanently useless, '
-                                + 're-split your keepers from Settings.',
+                                'All active recovery sessions have been cancelled.',
                             );
                         } catch (e) {
                             Alert.alert('Error', 'Failed to stop recovery. Please try again.');

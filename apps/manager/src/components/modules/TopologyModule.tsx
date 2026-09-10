@@ -14,6 +14,7 @@ import {
     approveRegistrarClaim,
     revokeRegistrarClaim,
     downloadAdminFile,
+    getTfaSessionToken,
     type HarvesterNodeState,
     type HistoryFileItem,
     type SnapshotItem,
@@ -192,6 +193,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 kind === 'db'
                     ? `beanpool-backup-${slug}.db`
                     : `identity-bundle-${slug}.tar.gz`,
+                node ? getTfaSessionToken(node.id) : undefined,
             );
         } catch (e: any) {
             // "Failed to fetch" is what a browser says when the request never got an answer
@@ -229,6 +231,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 { name: snapName },
                 targetSnapshotNode.adminPassword,
                 snapName,
+                getTfaSessionToken(targetSnapshotNode.id),
             );
         } catch (e: any) {
             alert(`Snapshot download failed: ${e.message || String(e)}`);
@@ -243,6 +246,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 { nodeId, filename },
                 historyNode?.adminPassword,
                 filename,
+                historyNode ? getTfaSessionToken(historyNode.id) : undefined,
             );
         } catch (e: any) {
             alert(`Archive download failed: ${e.message || String(e)}`);

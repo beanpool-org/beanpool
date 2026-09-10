@@ -287,4 +287,25 @@ describe('2FA session token transmission in node client admin actions', () => {
         await generateNodeInvite('https://node.example.com', 'secret123', 'standard', 'tfa-sess-123');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
     });
+
+    it('downloadAdminFile sends X-Admin-2FA-Session header when tfaToken is provided', async () => {
+        const { downloadAdminFile } = await import('./node-client');
+        const origCreate = URL.createObjectURL;
+        const origRevoke = URL.revokeObjectURL;
+        URL.createObjectURL = vi.fn().mockReturnValue('blob:test');
+        URL.revokeObjectURL = vi.fn();
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            headers: new Map(),
+            blob: async () => new Blob(['test']),
+        });
+
+        await downloadAdminFile('/api/manager/backups/download-db', { nodeId: 'test' }, 'secret123', 'test.db', 'tfa-sess-123');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+
+        URL.createObjectURL = origCreate;
+        URL.revokeObjectURL = origRevoke;
+    });
 });

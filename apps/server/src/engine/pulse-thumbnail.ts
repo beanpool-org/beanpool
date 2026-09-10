@@ -37,6 +37,8 @@ export const DEFAULT_MAX_CACHE_TOTAL_BYTES = 20 * 1024 * 1024; // 20 MB RAM
 export const DEFAULT_MAX_DISK_CACHE_BYTES = 100 * 1024 * 1024; // 100 MB disk
 export const DEFAULT_FETCH_TIMEOUT_MS = 5000; // 5 seconds
 export const DEFAULT_NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+/** Outbound thumbnail fetches allowed in flight at once during a batch ingest. */
+export const INGEST_CONCURRENCY = 3;
 export const MAX_NEGATIVE_CACHE_ENTRIES = 1000;
 
 export const ALLOWED_IMAGE_CONTENT_TYPES = [
@@ -207,24 +209,60 @@ export class PulseThumbnailDiskStore {
     private maxDiskBytes: number;
     private maxEntryBytes: number;
 
+    /** Everything eviction needs to decide, held in memory.
+     *
+     *  The first cut re-read and re-parsed every .json in the directory on every single
+     *  set(), and rewrote the meta file on every get() just to touch lastAccessedAt. At a
+     *  full 100 MB store that is 1,000-2,000 synchronous open/read/close syscalls per
+     *  cached thumbnail on the one event loop, and an OAuth sync of 50 items would have
+     *  done it fifty times over — seconds of total freeze, long enough for the watchdog to
+     *  call the node dead. The index makes eviction O(1) and get() read-only. */
+    private index = new Map<string, DiskStoreEntryMeta>();
+    private currentDiskBytes = 0;
+
     constructor(options: {
         diskDir?: string;
         maxDiskBytes?: number;
         maxEntryBytes?: number;
     } = {}) {
         const dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-        this.diskDir = options.diskDir ?? path.join(dataDir, 'pulse-thumbnails');
+        // Under data/cache/ rather than beside state.db: these bytes are re-fetchable, and
+        // apps/server/README.md tells operators to back up ./data wholesale, so 100 MB of
+        // thumbnails would otherwise dwarf a 1-6 MB database in every backup and get moved
+        // file-by-file by deploy.sh on every deploy.
+        this.diskDir = options.diskDir ?? path.join(dataDir, 'cache', 'pulse-thumbnails');
         this.maxDiskBytes = options.maxDiskBytes ?? DEFAULT_MAX_DISK_CACHE_BYTES;
         this.maxEntryBytes = options.maxEntryBytes ?? MAX_THUMBNAIL_BYTES;
         try {
-            if (!fs.existsSync(this.diskDir)) {
-                fs.mkdirSync(this.diskDir, { recursive: true });
+            fs.mkdirSync(this.diskDir, { recursive: true });
+        } catch {}
+        this.hydrateIndex();
+    }
+
+    /** One directory scan at construction, to adopt whatever survived the last restart. */
+    private hydrateIndex(): void {
+        try {
+            for (const f of fs.readdirSync(this.diskDir)) {
+                if (!f.endsWith('.json')) continue;
+                try {
+                    const meta = JSON.parse(fs.readFileSync(path.join(this.diskDir, f), 'utf8')) as DiskStoreEntryMeta;
+                    if (!meta?.itemId || typeof meta.size !== 'number') continue;
+                    if (!fs.existsSync(this.binPath(meta.itemId))) continue;
+                    this.index.set(meta.itemId, meta);
+                    this.currentDiskBytes += meta.size;
+                } catch {}
             }
         } catch {}
     }
 
+    /** Hashed, so the mapping is 1:1.
+     *
+     *  Stripping unsafe characters to '_' was many-to-one: pulse item ids include
+     *  `item_curated_<youtube id>` and ids arriving over federation, so `item:123.foo` and
+     *  `item_123_foo` collapsed to the same file and one member's thumbnail was served for
+     *  another's item. */
     private safeFilename(itemId: string): string {
-        return itemId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        return crypto.createHash('sha256').update(itemId).digest('hex');
     }
 
     private metaPath(itemId: string): string {
@@ -235,21 +273,17 @@ export class PulseThumbnailDiskStore {
         return path.join(this.diskDir, `${this.safeFilename(itemId)}.bin`);
     }
 
-    get(itemId: string): ThumbnailCacheEntry | null {
+    async get(itemId: string): Promise<ThumbnailCacheEntry | null> {
+        const meta = this.index.get(itemId);
+        if (!meta) return null;
+        // Belt and braces against a stale or hand-edited meta file.
+        if (meta.itemId !== itemId) return null;
+
         try {
-            const metaFile = this.metaPath(itemId);
-            const binFile = this.binPath(itemId);
-            if (!fs.existsSync(metaFile) || !fs.existsSync(binFile)) return null;
-
-            const meta: DiskStoreEntryMeta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
-            const buffer = fs.readFileSync(binFile);
-
-            // Touch lastAccessedAt
+            const buffer = await fs.promises.readFile(this.binPath(itemId));
+            // Access time lives in memory only. Persisting it made every feed scroll a
+            // synchronous disk write; losing it on restart only costs eviction ordering.
             meta.lastAccessedAt = getMonotonicTime();
-            try {
-                fs.writeFileSync(metaFile, JSON.stringify(meta));
-            } catch {}
-
             return {
                 buffer,
                 contentType: meta.contentType,
@@ -258,20 +292,19 @@ export class PulseThumbnailDiskStore {
                 size: meta.size,
             };
         } catch {
+            // The file went missing under us — drop it from the index so we stop counting it.
+            this.index.delete(itemId);
+            this.currentDiskBytes -= meta.size;
             return null;
         }
     }
 
-    set(itemId: string, buffer: Buffer, contentType: string, etag?: string): ThumbnailCacheEntry | null {
+    async set(itemId: string, buffer: Buffer, contentType: string, etag?: string): Promise<ThumbnailCacheEntry | null> {
         if (buffer.length > this.maxEntryBytes || buffer.length > this.maxDiskBytes) {
             return null;
         }
 
         try {
-            if (!fs.existsSync(this.diskDir)) {
-                fs.mkdirSync(this.diskDir, { recursive: true });
-            }
-
             const calculatedEtag = etag || `"${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
             const now = getMonotonicTime();
             const meta: DiskStoreEntryMeta = {
@@ -283,13 +316,19 @@ export class PulseThumbnailDiskStore {
                 lastAccessedAt: now,
             };
 
-            const metaFile = this.metaPath(itemId);
             const binFile = this.binPath(itemId);
+            const metaFile = this.metaPath(itemId);
+            // Bytes first, then the meta file that makes them findable, so a crash between
+            // the two leaves an orphan blob rather than an index entry pointing at nothing.
+            await fs.promises.writeFile(binFile, buffer);
+            await fs.promises.writeFile(metaFile, JSON.stringify(meta));
 
-            fs.writeFileSync(binFile, buffer);
-            fs.writeFileSync(metaFile, JSON.stringify(meta));
+            const previous = this.index.get(itemId);
+            if (previous) this.currentDiskBytes -= previous.size;
+            this.index.set(itemId, meta);
+            this.currentDiskBytes += meta.size;
 
-            this.evictIfNeeded();
+            await this.evictIfNeeded();
 
             return {
                 buffer,
@@ -303,83 +342,43 @@ export class PulseThumbnailDiskStore {
         }
     }
 
-    delete(itemId: string): void {
+    async delete(itemId: string): Promise<void> {
+        const meta = this.index.get(itemId);
+        if (meta) {
+            this.index.delete(itemId);
+            this.currentDiskBytes -= meta.size;
+        }
+        await Promise.allSettled([
+            fs.promises.unlink(this.metaPath(itemId)),
+            fs.promises.unlink(this.binPath(itemId)),
+        ]);
+    }
+
+    async clear(): Promise<void> {
+        this.index.clear();
+        this.currentDiskBytes = 0;
         try {
-            const metaFile = this.metaPath(itemId);
-            const binFile = this.binPath(itemId);
-            if (fs.existsSync(metaFile)) fs.unlinkSync(metaFile);
-            if (fs.existsSync(binFile)) fs.unlinkSync(binFile);
+            const files = await fs.promises.readdir(this.diskDir);
+            await Promise.allSettled(files.map(f => fs.promises.unlink(path.join(this.diskDir, f))));
         } catch {}
     }
 
-    clear(): void {
-        try {
-            if (!fs.existsSync(this.diskDir)) return;
-            const files = fs.readdirSync(this.diskDir);
-            for (const f of files) {
-                try {
-                    fs.unlinkSync(path.join(this.diskDir, f));
-                } catch {}
-            }
-        } catch {}
-    }
-
-    private evictIfNeeded(): void {
-        try {
-            const files = fs.readdirSync(this.diskDir);
-            const metaFiles = files.filter(f => f.endsWith('.json'));
-            const entries: Array<{ itemId: string; size: number; lastAccessedAt: number }> = [];
-            let totalBytes = 0;
-
-            for (const mf of metaFiles) {
-                try {
-                    const raw = fs.readFileSync(path.join(this.diskDir, mf), 'utf8');
-                    const parsed = JSON.parse(raw) as DiskStoreEntryMeta;
-                    entries.push({
-                        itemId: parsed.itemId,
-                        size: parsed.size || 0,
-                        lastAccessedAt: parsed.lastAccessedAt || parsed.cachedAt || 0,
-                    });
-                    totalBytes += (parsed.size || 0);
-                } catch {}
-            }
-
-            if (totalBytes <= this.maxDiskBytes) return;
-
-            // Sort ascending by lastAccessedAt (oldest first)
-            entries.sort((a, b) => a.lastAccessedAt - b.lastAccessedAt);
-
-            for (const entry of entries) {
-                if (totalBytes <= this.maxDiskBytes) break;
-                this.delete(entry.itemId);
-                totalBytes -= entry.size;
-            }
-        } catch {}
+    /** O(evicted), not O(stored) — the index already knows the sizes and access times. */
+    private async evictIfNeeded(): Promise<void> {
+        if (this.currentDiskBytes <= this.maxDiskBytes) return;
+        const oldestFirst = [...this.index.values()].sort((a, b) => a.lastAccessedAt - b.lastAccessedAt);
+        for (const entry of oldestFirst) {
+            if (this.currentDiskBytes <= this.maxDiskBytes) break;
+            await this.delete(entry.itemId);
+        }
     }
 
     getStats(): { count: number; totalBytes: number; maxDiskBytes: number } {
-        try {
-            if (!fs.existsSync(this.diskDir)) {
-                return { count: 0, totalBytes: 0, maxDiskBytes: this.maxDiskBytes };
-            }
-            const files = fs.readdirSync(this.diskDir);
-            const metaFiles = files.filter(f => f.endsWith('.json'));
-            let totalBytes = 0;
-            for (const mf of metaFiles) {
-                try {
-                    const raw = fs.readFileSync(path.join(this.diskDir, mf), 'utf8');
-                    const parsed = JSON.parse(raw);
-                    totalBytes += parsed.size || 0;
-                } catch {}
-            }
-            return {
-                count: metaFiles.length,
-                totalBytes,
-                maxDiskBytes: this.maxDiskBytes,
-            };
-        } catch {
-            return { count: 0, totalBytes: 0, maxDiskBytes: this.maxDiskBytes };
-        }
+        return {
+            count: this.index.size,
+            totalBytes: this.currentDiskBytes,
+            maxDiskBytes: this.maxDiskBytes,
+        };
     }
 }
 
@@ -399,6 +398,7 @@ export class PulseThumbnailService {
     public readonly cache: PulseThumbnailCache;
     public readonly diskStore: PulseThumbnailDiskStore | null;
     private inFlight = new Map<string, Promise<ThumbnailResult>>();
+    private ingestQueue: Promise<void> = Promise.resolve();
     private fetchFn: (url: string, options?: SsrfSafeFetchOptions) => Promise<SsrfSafeResponse>;
     private maxEntryBytes: number;
     private timeoutMs: number;
@@ -429,7 +429,28 @@ export class PulseThumbnailService {
             return { status: 400, error: 'Invalid item ID' };
         }
 
-        // 1. Check in-memory LRU cache
+        // 1. The tombstone check comes FIRST, ahead of both cache tiers.
+        //
+        // Caching the URL was harmless to get wrong; caching the bytes is not. Only
+        // POST /api/member/pulse/items/:id/delete calls thumbnailService.delete — a member
+        // erasing their account (purgeMemberSelf), an inactivity prune, a channel
+        // disconnect and the 30-day retention cleaner all reach scrubPulseItems directly,
+        // which stamps deleted_at and NULLs thumbnail_url but knows nothing about a disk
+        // cache. Behind the old ordering their images kept answering 200 forever, and
+        // because each hit refreshed lastAccessedAt they were never evicted either. A
+        // primary-key lookup costs microseconds; a deletion that does not delete costs the
+        // promise the app makes about erasing an account.
+        const row = db.prepare(
+            `SELECT id, thumbnail_url, deleted_at FROM pulse_items WHERE id = ?`
+        ).get(itemId) as { id: string; thumbnail_url: string | null; deleted_at: string | null } | undefined;
+
+        if (!row || row.deleted_at !== null) {
+            // Scrubbed out from under the cache — take the bytes with it.
+            this.delete(itemId);
+            return { status: 404, error: 'Item not found' };
+        }
+
+        // 2. Check in-memory LRU cache
         const cached = this.cache.get(itemId);
         if (cached) {
             if (options.ifNoneMatch && options.ifNoneMatch === cached.etag) {
@@ -443,9 +464,9 @@ export class PulseThumbnailService {
             };
         }
 
-        // 2. Check persistent disk store
+        // 3. Check persistent disk store
         if (this.diskStore) {
-            const diskEntry = this.diskStore.get(itemId);
+            const diskEntry = await this.diskStore.get(itemId);
             if (diskEntry) {
                 this.cache.set(itemId, diskEntry.buffer, diskEntry.contentType);
                 if (options.ifNoneMatch && options.ifNoneMatch === diskEntry.etag) {
@@ -460,19 +481,10 @@ export class PulseThumbnailService {
             }
         }
 
-        // 3. Check negative cache (fast rejection to prevent tight retry loops)
+        // 4. Check negative cache (fast rejection to prevent tight retry loops)
         const neg = this.cache.getNegative(itemId);
         if (neg) {
             return { status: neg.status, error: neg.error };
-        }
-
-        // 4. Database lookup for feed item
-        const row = db.prepare(
-            `SELECT id, thumbnail_url, deleted_at FROM pulse_items WHERE id = ?`
-        ).get(itemId) as { id: string; thumbnail_url: string | null; deleted_at: string | null } | undefined;
-
-        if (!row || row.deleted_at !== null) {
-            return { status: 404, error: 'Item not found' };
         }
 
         if (!row.thumbnail_url || !row.thumbnail_url.trim()) {
@@ -498,7 +510,7 @@ export class PulseThumbnailService {
                 const entry = this.cache.set(itemId, buf, mimeType);
                 const etag = entry?.etag || `"${crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16)}"`;
                 if (this.diskStore) {
-                    this.diskStore.set(itemId, buf, mimeType, etag);
+                    await this.diskStore.set(itemId, buf, mimeType, etag);
                 }
                 if (options.ifNoneMatch && options.ifNoneMatch === etag) {
                     return { status: 304 };
@@ -566,7 +578,7 @@ export class PulseThumbnailService {
                 const entry = this.cache.set(itemId, buffer, mimeType);
                 const etag = entry?.etag || `"${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
                 if (this.diskStore) {
-                    this.diskStore.set(itemId, buffer, mimeType, etag);
+                    await this.diskStore.set(itemId, buffer, mimeType, etag);
                 }
 
                 if (options.ifNoneMatch && options.ifNoneMatch === etag) {
@@ -625,13 +637,28 @@ export class PulseThumbnailService {
             return { status: 200, buffer: cached.buffer, contentType: cached.contentType, etag: cached.etag };
         }
         if (this.diskStore) {
-            const diskEntry = this.diskStore.get(itemId);
+            const diskEntry = await this.diskStore.get(itemId);
             if (diskEntry) {
                 this.cache.set(itemId, diskEntry.buffer, diskEntry.contentType);
                 return { status: 200, buffer: diskEntry.buffer, contentType: diskEntry.contentType, etag: diskEntry.etag };
             }
         }
 
+        // Share the coalescing map with getThumbnail. Without it, a member scrolling the
+        // feed while their sync is still filling it fetched the same image twice.
+        const pending = this.inFlight.get(itemId);
+        if (pending) return await pending;
+
+        const work = this.ingestUncoalesced(itemId, rawUrl);
+        this.inFlight.set(itemId, work);
+        try {
+            return await work;
+        } finally {
+            this.inFlight.delete(itemId);
+        }
+    }
+
+    private async ingestUncoalesced(itemId: string, rawUrl: string): Promise<ThumbnailResult> {
         const trimmed = rawUrl.trim();
 
         // 2. Base64 data URI
@@ -649,7 +676,7 @@ export class PulseThumbnailService {
                 const entry = this.cache.set(itemId, buf, mimeType);
                 const etag = entry?.etag || `"${crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16)}"`;
                 if (this.diskStore) {
-                    this.diskStore.set(itemId, buf, mimeType, etag);
+                    await this.diskStore.set(itemId, buf, mimeType, etag);
                 }
                 return { status: 200, buffer: buf, contentType: mimeType, etag };
             } catch {
@@ -700,7 +727,7 @@ export class PulseThumbnailService {
             const entry = this.cache.set(itemId, buffer, mimeType);
             const etag = entry?.etag || `"${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
             if (this.diskStore) {
-                this.diskStore.set(itemId, buffer, mimeType, etag);
+                await this.diskStore.set(itemId, buffer, mimeType, etag);
             }
 
             return { status: 200, buffer, contentType: mimeType, etag };
@@ -731,18 +758,59 @@ export class PulseThumbnailService {
         }
     }
 
+    /** Synchronous for callers on a request path; the disk unlink settles on its own. */
     delete(itemId: string): void {
         this.cache.delete(itemId);
-        if (this.diskStore) {
-            this.diskStore.delete(itemId);
-        }
+        void this.diskStore?.delete(itemId).catch(() => {});
     }
 
     clear(): void {
         this.cache.clear();
-        if (this.diskStore) {
-            this.diskStore.clear();
-        }
+        void this.diskStore?.clear().catch(() => {});
+    }
+
+    /**
+     * Cache a batch of thumbnails, at most `concurrency` fetches in the air at once.
+     *
+     * Firing one fetch per item with Promise.allSettled put up to fifty 2 MB downloads in
+     * flight together — 100 MB of live buffers against a 512 MB heap that already sits at
+     * 120-180 MB, and an outbound request flood a member could aim at any host by choosing
+     * what they post. Three at a time keeps the peak near 6 MB and the node a poor
+     * amplifier, at the cost of a slower background fill nobody is waiting on.
+     */
+    async ingestThumbnails(entries: Array<{ id: string; url: string }>, concurrency = INGEST_CONCURRENCY): Promise<void> {
+        let cursor = 0;
+        const workers = Array.from({ length: Math.min(concurrency, entries.length) }, async () => {
+            while (cursor < entries.length) {
+                const entry = entries[cursor++];
+                try {
+                    await this.ingestThumbnail(entry.id, entry.url);
+                } catch { /* best effort: the proxy can still fetch on demand */ }
+            }
+        });
+        await Promise.all(workers);
+    }
+
+    /**
+     * Queue a batch to fill in after the response has gone out, and expose the tail so a
+     * test (or a shutdown) can wait for it. Ingest exists to catch the signed URL while it
+     * is fresh, which it still does seconds later — it does not need to be on the critical
+     * path of the member's request.
+     */
+    queueIngest(entries: Array<{ id: string; url: string }>): void {
+        if (entries.length === 0) return;
+        this.ingestQueue = this.ingestQueue
+            .then(() => this.ingestThumbnails(entries))
+            .catch(() => {});
+    }
+
+    /** Resolves when every queued background ingest has settled. */
+    async idle(): Promise<void> {
+        let previous: Promise<void>;
+        do {
+            previous = this.ingestQueue;
+            await previous;
+        } while (previous !== this.ingestQueue);
     }
 }
 

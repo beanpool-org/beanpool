@@ -38,6 +38,7 @@ import {
     SsrfSecurityError,
     ProhibitedContentTypeError,
     PayloadTooLargeError,
+    scrubPulseItems,
     type SsrfSafeResponse,
 } from './engine/pulse-resolver.js';
 import type { RouteDeps } from './routes/types.js';
@@ -460,29 +461,48 @@ async function main(): Promise<void> {
     const diskB2 = Buffer.alloc(120, 2);
     const diskB3 = Buffer.alloc(120, 3);
 
-    boundedDiskStore.set('item_d1', diskB1, 'image/jpeg');
-    boundedDiskStore.set('item_d2', diskB2, 'image/jpeg');
+    await boundedDiskStore.set('item_d1', diskB1, 'image/jpeg');
+    await boundedDiskStore.set('item_d2', diskB2, 'image/jpeg');
     assert(boundedDiskStore.getStats().count === 2, 'Disk store contains 2 entries');
     assert(boundedDiskStore.getStats().totalBytes === 240, 'Disk store totalBytes is 240');
 
     // Adding item_d3 (120 bytes) causes total to exceed 300 bytes -> oldest (item_d1) evicted
-    boundedDiskStore.set('item_d3', diskB3, 'image/jpeg');
-    assert(boundedDiskStore.get('item_d1') === null, 'Oldest entry item_d1 was evicted from disk');
-    assert(boundedDiskStore.get('item_d2') !== null, 'item_d2 is retained on disk');
-    assert(boundedDiskStore.get('item_d3') !== null, 'item_d3 is retained on disk');
+    await boundedDiskStore.set('item_d3', diskB3, 'image/jpeg');
+    assert(await boundedDiskStore.get('item_d1') === null, 'Oldest entry item_d1 was evicted from disk');
+    assert(await boundedDiskStore.get('item_d2') !== null, 'item_d2 is retained on disk');
+    assert(await boundedDiskStore.get('item_d3') !== null, 'item_d3 is retained on disk');
     assert(boundedDiskStore.getStats().totalBytes === 240, 'Disk store size remains strictly bounded');
 
     // Accessing item_d2 updates lastAccessedAt; adding item_d4 evicts item_d3
-    boundedDiskStore.get('item_d2');
+    await boundedDiskStore.get('item_d2');
     const diskB4 = Buffer.alloc(120, 4);
-    boundedDiskStore.set('item_d4', diskB4, 'image/jpeg');
-    assert(boundedDiskStore.get('item_d3') === null, 'item_d3 was evicted after item_d2 touch');
-    assert(boundedDiskStore.get('item_d2') !== null, 'item_d2 is retained on disk');
-    assert(boundedDiskStore.get('item_d4') !== null, 'item_d4 is retained on disk');
+    await boundedDiskStore.set('item_d4', diskB4, 'image/jpeg');
+    assert(await boundedDiskStore.get('item_d3') === null, 'item_d3 was evicted after item_d2 touch');
+    assert(await boundedDiskStore.get('item_d2') !== null, 'item_d2 is retained on disk');
+    assert(await boundedDiskStore.get('item_d4') !== null, 'item_d4 is retained on disk');
 
     // Explicit delete
-    boundedDiskStore.delete('item_d2');
-    assert(boundedDiskStore.get('item_d2') === null, 'item_d2 was deleted from disk');
+    await boundedDiskStore.delete('item_d2');
+    assert(await boundedDiskStore.get('item_d2') === null, 'item_d2 was deleted from disk');
+
+    // Two ids that the old character-stripping filename would have collapsed onto the same
+    // file must stay separate, or one member's image is served for another's item.
+    const collideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-test-disk-collide-'));
+    const collideStore = new PulseThumbnailDiskStore({ diskDir: collideDir, maxDiskBytes: 10 * 1024 });
+    const collideA = Buffer.alloc(64, 0xa);
+    const collideB = Buffer.alloc(64, 0xb);
+    await collideStore.set('item:123.foo', collideA, 'image/jpeg');
+    await collideStore.set('item_123_foo', collideB, 'image/jpeg');
+    const gotA = await collideStore.get('item:123.foo');
+    const gotB = await collideStore.get('item_123_foo');
+    assert(gotA?.buffer.equals(collideA) === true, 'item:123.foo kept its own bytes');
+    assert(gotB?.buffer.equals(collideB) === true, 'item_123_foo kept its own bytes despite the lookalike id');
+    assert(collideStore.getStats().count === 2, 'Lookalike ids occupy two distinct disk entries');
+
+    // The index must survive a restart: a second store over the same directory rehydrates.
+    const rehydrated = new PulseThumbnailDiskStore({ diskDir: collideDir, maxDiskBytes: 10 * 1024 });
+    assert(rehydrated.getStats().count === 2, 'A new store over the same directory rehydrates its index');
+    assert((await rehydrated.get('item:123.foo'))?.buffer.equals(collideA) === true, 'Rehydrated store serves the right bytes');
 
     // ──────────────────────────────────────────────────────────────────────────
     // Ingest-time caching: pre-fetches and caches bytes at ingest time
@@ -527,6 +547,106 @@ async function main(): Promise<void> {
     assert(resProxy.status === 200, 'Proxy serves pre-cached thumbnail with 200');
     assert(resProxy.body.equals(sampleJpeg), 'Proxy serves matching bytes from ingest cache');
     assert(ingestFetchCount === 1, 'Zero additional upstream fetches occurred when proxy served ingested thumbnail');
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Tombstones beat the cache: an erased item must stop being served
+    // ──────────────────────────────────────────────────────────────────────────
+    // Only the single-item delete route calls thumbnailService.delete. Erasing an account
+    // (purgeMemberSelf), an inactivity prune, a channel disconnect and the 30-day retention
+    // cleaner all go straight to scrubPulseItems, so the DB check has to come first or the
+    // bytes outlive the deletion — and every request refreshed the entry's access time, so
+    // they would never have been evicted either.
+    const scrubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-test-disk-scrub-'));
+    let scrubFetchCount = 0;
+    const scrubService = new PulseThumbnailService({
+        diskStore: new PulseThumbnailDiskStore({ diskDir: scrubDir, maxDiskBytes: 1024 * 1024 }),
+        fetchFn: (async (url: string) => {
+            scrubFetchCount++;
+            return {
+                status: 200, statusText: 'OK', headers: { 'content-type': 'image/jpeg' },
+                url, buffer: async () => sampleJpeg, text: async () => '', json: async () => ({}),
+            };
+        }) as any,
+    });
+    const scrubRouter = createPulseRoutes({ ...deps, thumbnailService: scrubService } as any);
+    const scrubItemId = makePulseItem(chan, alice, {
+        thumbnailUrl: 'https://images.example.org/to-be-erased.jpg',
+    });
+
+    const scrubBefore = await callRouter(scrubRouter, 'GET', `/api/pulse/items/${scrubItemId}/thumbnail`);
+    assert(scrubBefore.status === 200, 'The item serves its thumbnail before erasure');
+    assert(scrubFetchCount === 1, 'Bytes were fetched and cached to L1 and disk');
+
+    // Erase the way a member account purge does — no call to thumbnailService.delete.
+    scrubPulseItems({ id: scrubItemId }, new Date().toISOString());
+
+    const scrubAfter = await callRouter(scrubRouter, 'GET', `/api/pulse/items/${scrubItemId}/thumbnail`);
+    assert(scrubAfter.status === 404, 'A scrubbed item is 404, not served from the memory cache');
+    assert(scrubService.cache.get(scrubItemId) === null, 'The scrubbed item was dropped from L1');
+
+    scrubService.cache.clear();
+    const scrubAfterRestart = await callRouter(scrubRouter, 'GET', `/api/pulse/items/${scrubItemId}/thumbnail`);
+    assert(scrubAfterRestart.status === 404, 'Still 404 with an empty L1 — the disk copy is not served either');
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Batch ingest is concurrency-bounded and coalesced
+    // ──────────────────────────────────────────────────────────────────────────
+    // Fifty 2 MB downloads in flight together is 100 MB of live buffers against a 512 MB
+    // heap, and an outbound flood a member aims by choosing what they post.
+    let inFlightNow = 0, peakInFlight = 0, batchFetches = 0;
+    const batchService = new PulseThumbnailService({
+        diskStore: null,
+        fetchFn: (async (url: string) => {
+            batchFetches++;
+            inFlightNow++;
+            peakInFlight = Math.max(peakInFlight, inFlightNow);
+            await new Promise(r => setTimeout(r, 5));
+            inFlightNow--;
+            return {
+                status: 200, statusText: 'OK', headers: { 'content-type': 'image/jpeg' },
+                url, buffer: async () => sampleJpeg, text: async () => '', json: async () => ({}),
+            };
+        }) as any,
+    });
+    const batchEntries = Array.from({ length: 24 }, (_, i) => ({
+        id: `item_batch_${i}`,
+        url: `https://images.example.org/batch-${i}.jpg`,
+    }));
+    await batchService.ingestThumbnails(batchEntries);
+    assert(peakInFlight <= 3, `Never more than 3 upstream fetches at once (peak was ${peakInFlight})`);
+    assert(batchFetches === 24, 'Every item in the batch was still fetched');
+
+    // The same item asked for twice concurrently is fetched once.
+    let coalesceFetches = 0;
+    const coalesceService = new PulseThumbnailService({
+        diskStore: null,
+        fetchFn: (async (url: string) => {
+            coalesceFetches++;
+            await new Promise(r => setTimeout(r, 10));
+            return {
+                status: 200, statusText: 'OK', headers: { 'content-type': 'image/jpeg' },
+                url, buffer: async () => sampleJpeg, text: async () => '', json: async () => ({}),
+            };
+        }) as any,
+    });
+    await Promise.all([
+        coalesceService.ingestThumbnail('item_coalesce', 'https://images.example.org/c.jpg'),
+        coalesceService.ingestThumbnail('item_coalesce', 'https://images.example.org/c.jpg'),
+    ]);
+    assert(coalesceFetches === 1, 'Two concurrent ingests of one item share a single upstream fetch');
+
+    // queueIngest runs behind the response, and idle() waits for it.
+    const queueService = new PulseThumbnailService({
+        diskStore: null,
+        fetchFn: (async (url: string) => ({
+            status: 200, statusText: 'OK', headers: { 'content-type': 'image/jpeg' },
+            url, buffer: async () => sampleJpeg, text: async () => '', json: async () => ({}),
+        })) as any,
+    });
+    queueService.queueIngest([{ id: 'item_queued', url: 'https://images.example.org/q.jpg' }]);
+    assert(queueService.cache.get('item_queued') === null, 'queueIngest returns before the fetch completes');
+    await queueService.idle();
+    assert(queueService.cache.get('item_queued') !== null, 'idle() waits for the queued ingest to land');
 
     console.log(`\nResults: ${passed}/${run} assertions passed.`);
     if (passed !== run) {

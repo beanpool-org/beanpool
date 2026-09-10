@@ -1701,6 +1701,15 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                 maxBytes: 256 * 1024,
             });
 
+            // A 502 from the site's CDN returns an HTML error page, which has no
+            // <link rel="alternate"> in it — so without this check a momentary outage was
+            // read as "this site has no feed" and set supports_autolist = 0 permanently.
+            // The default allowedContentTypes includes text/html, so this was never caught
+            // upstream either.
+            if (initialResp.status < 200 || initialResp.status >= 300) {
+                throw new Error(`Upstream site returned HTTP ${initialResp.status}`);
+            }
+
             const initialText = await initialResp.text();
             const trimmedLower = initialText.slice(0, 2000).trimStart().toLowerCase();
             const isHtml = trimmedLower.startsWith('<!doctype html') || trimmedLower.startsWith('<html') || /<html[\s>]/i.test(trimmedLower);
@@ -1765,6 +1774,13 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                 timeoutMs: 8000,
                 maxBytes: 2 * 1024 * 1024,
             });
+            // Same trap, worse ending: an HTTP 500 error page parsed as feed XML yields
+            // zero items, and the success path below then wrote supports_autolist = 1,
+            // fail_count = 0, last_error = NULL — reporting a dead feed as a healthy poll
+            // with no new posts, and wiping the failure counter that would have surfaced it.
+            if (response.status < 200 || response.status >= 300) {
+                throw new Error(`Upstream feed returned HTTP ${response.status}`);
+            }
             xml = await response.text();
         }
 

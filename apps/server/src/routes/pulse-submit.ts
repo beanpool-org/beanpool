@@ -1181,15 +1181,11 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                 }
             })();
 
-            // Ingest image bytes while the thumbnail URLs are fresh
-            if (itemsToCache.length > 0) {
-                const thumbPromises = itemsToCache.map(entry =>
-                    thumbnailService.ingestThumbnail(entry.id, entry.url).catch(err => {
-                        logger.warn('SYS', `[PulseOAuth] Failed to cache thumbnail at ingest for item ${entry.id}: ${err?.message || err}`);
-                    })
-                );
-                await Promise.allSettled(thumbPromises);
-            }
+            // Fill the thumbnail cache behind the response, three fetches at a time.
+            // Awaiting up to 50 downloads here put the member's sync behind a minute of
+            // upstream latency and every buffer on the heap at once; the signed URLs stay
+            // valid for days, so seconds later is just as fresh.
+            thumbnailService.queueIngest(itemsToCache);
 
             ctx.body = {
                 success: true,

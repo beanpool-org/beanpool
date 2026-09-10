@@ -46,6 +46,23 @@ const { id } = req.body; // could be undefined, crashes downstream
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-11 — "Missing x-public-key checks" on signature-gated routes is UNREACHABLE. Closed #717.
+`requireSignature` (`apps/server/src/https-server.ts:742`) treats every `POST|PUT|DELETE` on
+`/api/` as mutating and returns **401 before the handler runs** when `X-Public-Key` or
+`X-Signature` is absent. So on any such route, a `!pubkey` guard inside the handler can never
+fire, and the "undefined bound into SQLite" crash is not reachable over HTTP. Bypassed paths
+are only `/api/local/*`, `/api/invite/redeem`, `/api/invite/redeem-offline` and
+`/api/recovery/sso/github-exchange`.
+
+The underlying pattern — a header passed into a DB call without a presence check — is real
+and worth watching, but **only re-file it against a route that is a GET, or on that bypass
+list**, where the middleware makes no such guarantee. Check the method and the bypass list
+before filing.
+
+Separately: #717's targets (`/api/friends/guardian`, `/api/recovery/approve|reject|cancel`)
+are slated for deletion with the keeper-recovery removal (#713 and its follow-up). Do not
+file reliability or hardening work against guardian/social-recovery routes.
+
 ### 2026-09-09 — Dangling interval timer in LE cert request timeout LANDED in #677.
 In `apps/server/src/services/tls.ts`, wrapped `Promise.race` in `try...finally` to guarantee both `timer` and `checkInterval` are cleared upon resolution or rejection. Do not re-file.
 When racing an asynchronous operation against a polling interval or timer using `Promise.race`, always wrap the race in `try...finally` to explicitly clear all active timers and intervals upon resolution or rejection.

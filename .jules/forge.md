@@ -78,3 +78,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/local/admin/users/:pubkey/status` in `apps/server/src/routes/admin.ts` returned `200 OK` with `{ success: true }` when `status` was not `'active'` or `'disabled'`.
 **Learning:** Endpoints that validate input parameters using `if (condition)` blocks without an `else` branch returning a 400 error status can silently succeed without applying requested mutations.
 **Pattern:** Look for route handlers where input validation conditions guard the mutation logic but fall through to a default `200 OK` response.
+
+## 2026-09-10 - [Unchecked header pubkeys and missing try/catch in guardian and recovery routes]
+**Issue:** `POST /api/friends/guardian` in `apps/server/src/routes/community.ts` extracted `ownerPubkey` from `x-public-key` header without validating presence and called `setGuardian` without a `try/catch` block, causing an unhandled `TypeError` when binding `undefined` in SQLite. Other recovery endpoints also lacked `x-public-key` presence checks.
+**Learning:** Extracting header values directly into database query functions without presence validation causes parameter binding type errors in SQLite drivers, leading to unhandled 500 server crashes instead of proper 400 validation responses.
+**Pattern:** Look for route handlers extracting headers (e.g., `ctx.request.header['x-public-key']`) that pass them directly to database or engine functions without checking `!pubkey` first or wrapping calls in `try/catch`.

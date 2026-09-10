@@ -1241,15 +1241,19 @@ router.post('/api/friends/remove', async (ctx) => {
 router.post('/api/friends/guardian', async (ctx) => {
     const ownerPubkey = ctx.request.header['x-public-key'] as string;
     const body = (ctx as any).requestBody;
-    if (!body || !body.friendPubkey || typeof body.isGuardian !== 'boolean') {
+    if (!ownerPubkey || !body || !body.friendPubkey || typeof body.isGuardian !== 'boolean') {
         ctx.status = 400; ctx.body = { error: 'Invalid payload' }; return;
     }
 
-    const success = setGuardian(ownerPubkey, body.friendPubkey, body.isGuardian);
-    if (success) {
-        ctx.status = 200; ctx.body = { success: true };
-    } else {
-        ctx.status = 400; ctx.body = { error: 'Could not set guardian status' };
+    try {
+        const success = setGuardian(ownerPubkey, body.friendPubkey, body.isGuardian);
+        if (success) {
+            ctx.status = 200; ctx.body = { success: true };
+        } else {
+            ctx.status = 400; ctx.body = { error: 'Could not set guardian status' };
+        }
+    } catch (e: any) {
+        ctx.status = 400; ctx.body = { error: e.message || 'Could not set guardian status' };
     }
 });
 
@@ -1369,7 +1373,7 @@ router.get('/api/recovery/pending/:guardianPubkey', async (ctx) => {
 router.post('/api/recovery/approve', async (ctx) => {
     const guardianPubkey = ctx.request.header['x-public-key'] as string;
     const body = (ctx as any).requestBody;
-    if (!body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
+    if (!guardianPubkey || !body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
 
     try {
         approveRecovery(body.requestId, guardianPubkey);
@@ -1415,7 +1419,7 @@ router.post('/api/recovery/approve', async (ctx) => {
 router.post('/api/recovery/reject', async (ctx) => {
     const guardianPubkey = ctx.request.header['x-public-key'] as string;
     const body = (ctx as any).requestBody;
-    if (!body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
+    if (!guardianPubkey || !body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
 
     try {
         rejectRecovery(body.requestId, guardianPubkey);
@@ -1438,7 +1442,7 @@ router.get('/api/recovery/status/:pubkey', async (ctx) => {
 router.post('/api/recovery/cancel', async (ctx) => {
     const cancellerPubkey = ctx.request.header['x-public-key'] as string;
     const body = (ctx as any).requestBody;
-    if (!body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
+    if (!cancellerPubkey || !body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
 
     try {
         cancelRecovery(body.requestId, cancellerPubkey);

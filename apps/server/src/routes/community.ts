@@ -1078,7 +1078,8 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'Missing publicKey or token' };
         return;
     }
-    const success = registerPushToken(publicKey, token, platform || 'ios');
+    const activeKey = ctx.state.actor || publicKey;
+    const success = registerPushToken(activeKey, token, platform || 'ios');
     ctx.body = { success };
 });
 
@@ -1089,7 +1090,8 @@ router.delete('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'Missing publicKey' };
         return;
     }
-    const success = removePushToken(publicKey, token);
+    const activeKey = ctx.state.actor || publicKey;
+    const success = removePushToken(activeKey, token);
     ctx.body = { success };
 });
 
@@ -1117,7 +1119,8 @@ router.post('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'Missing publicKey or preferences' };
         return;
     }
-    const success = setMemberPreferences(publicKey, preferences);
+    const activeKey = ctx.state.actor || publicKey;
+    const success = setMemberPreferences(activeKey, preferences);
     ctx.body = { success };
 });
 
@@ -1208,12 +1211,13 @@ router.get('/api/friends/:publicKey', async (ctx) => {
 
 router.post('/api/friends/add', async (ctx) => {
     const { ownerPubkey, friendPubkey } = (ctx as any).requestBody || {};
-    if (!ownerPubkey || !friendPubkey) {
+    const activeOwner = ctx.state.actor || ownerPubkey;
+    if (!activeOwner || !friendPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
         return;
     }
-    const entry = addFriend(ownerPubkey, friendPubkey);
+    const entry = addFriend(activeOwner, friendPubkey);
     if (!entry) {
         ctx.status = 400;
         ctx.body = { error: 'Failed — both must be registered members' };
@@ -1224,12 +1228,13 @@ router.post('/api/friends/add', async (ctx) => {
 
 router.post('/api/friends/remove', async (ctx) => {
     const { ownerPubkey, friendPubkey } = (ctx as any).requestBody || {};
-    if (!ownerPubkey || !friendPubkey) {
+    const activeOwner = ctx.state.actor || ownerPubkey;
+    if (!activeOwner || !friendPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
         return;
     }
-    const ok = removeFriend(ownerPubkey, friendPubkey);
+    const ok = removeFriend(activeOwner, friendPubkey);
     if (!ok) {
         ctx.status = 400;
         ctx.body = { error: 'Failed to remove friend — friend relationship not found' };
@@ -1239,7 +1244,12 @@ router.post('/api/friends/remove', async (ctx) => {
 });
 
 router.post('/api/friends/guardian', async (ctx) => {
-    const ownerPubkey = ctx.request.header['x-public-key'] as string;
+    const ownerPubkey = ctx.state.actor || (ctx.request.header['x-public-key'] as string);
+    if (!ownerPubkey) {
+        ctx.status = 401;
+        ctx.body = { error: 'Signed request required' };
+        return;
+    }
     const body = (ctx as any).requestBody;
     if (!body || !body.friendPubkey || typeof body.isGuardian !== 'boolean') {
         ctx.status = 400; ctx.body = { error: 'Invalid payload' }; return;

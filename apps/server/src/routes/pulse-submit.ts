@@ -89,6 +89,23 @@ function pulseErrorStatus(code: string): number {
     }
 }
 
+/** Maximum items accepted in a single OAuth batch ingest request.
+ * TikTok Display API returns up to 20 videos per call; Instagram Graph API returns 25.
+ * 50 provides 2x headroom over actual client usage without permitting unbounded DoS batches. */
+export const MAX_OAUTH_INGEST_ITEMS = 50;
+
+/** Maximum total payload size for an OAuth batch ingest request body (512 KB). */
+export const MAX_OAUTH_INGEST_PAYLOAD_BYTES = 512 * 1024;
+
+/** Maximum character lengths per item field */
+export const MAX_ITEM_URL_LENGTH = 2048;
+export const MAX_ITEM_TITLE_LENGTH = 500;
+export const MAX_ITEM_THUMBNAIL_URL_LENGTH = 4096; // TikTok CDN signed URLs can reach ~3KB
+export const MAX_ITEM_EXTERNAL_ID_LENGTH = 512;
+export const MAX_ITEM_PUBLISHED_AT_LENGTH = 64;
+export const MAX_ITEM_CATEGORY_LENGTH = 50;
+
+
 function extractMetaProperty(html: string, prop: string): string | null {
     if (!html) return null;
     const escaped = prop.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
@@ -585,6 +602,12 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             return;
         }
 
+        if (rawUrl.length > MAX_ITEM_URL_LENGTH) {
+            ctx.status = 400;
+            ctx.body = { error: 'url_too_long', message: `URL exceeds maximum length of ${MAX_ITEM_URL_LENGTH} characters.` };
+            return;
+        }
+
         try {
             const { platform, externalId, canonicalUrl, accountHandle } = identifyPlatformAndExternalId(rawUrl);
             const channel = matchOwnedChannel(actor, platform, canonicalUrl, accountHandle, requestedChannelId);
@@ -646,18 +669,22 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         const body = (ctx as any).requestBody || {};
         const rawUrl = typeof body.url === 'string' ? body.url.trim() : '';
         const requestedChannelId = typeof body.channelId === 'string' ? body.channelId.trim() : undefined;
+        // The title the PWA sends back here is the one OUR OWN /preview resolved from the
+        // page's OpenGraph tags, and PulseIntakePage gives the user no field to edit it. A
+        // 400 on a long title would lock them out of posting a link they cannot shorten, so
+        // this is bounded by truncation, not rejection.
         const customTitle = typeof body.title === 'string' && body.title.trim()
-            ? cleanXmlText(body.title.trim()).slice(0, 500)
+            ? cleanXmlText(body.title.trim()).slice(0, MAX_ITEM_TITLE_LENGTH)
             : undefined;
 
         let customThumbnailUrl: string | undefined;
         if (typeof body.thumbnailUrl === 'string' && body.thumbnailUrl.trim()) {
             const trimmedThumb = body.thumbnailUrl.trim();
-            if (trimmedThumb.length <= 2048 && /^https?:\/\//i.test(trimmedThumb)) {
+            if (trimmedThumb.length <= MAX_ITEM_THUMBNAIL_URL_LENGTH && /^https?:\/\//i.test(trimmedThumb)) {
                 customThumbnailUrl = trimmedThumb;
             } else {
                 ctx.status = 400;
-                ctx.body = { error: 'invalid_thumbnail_url', message: 'Thumbnail URL must be a valid HTTP or HTTPS URL under 2048 characters.' };
+                ctx.body = { error: 'invalid_thumbnail_url', message: `Thumbnail URL must be a valid HTTP or HTTPS URL under ${MAX_ITEM_THUMBNAIL_URL_LENGTH} characters.` };
                 return;
             }
         }
@@ -667,6 +694,12 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         if (!rawUrl) {
             ctx.status = 400;
             ctx.body = { error: 'invalid_url', message: 'URL is required.' };
+            return;
+        }
+
+        if (rawUrl.length > MAX_ITEM_URL_LENGTH) {
+            ctx.status = 400;
+            ctx.body = { error: 'url_too_long', message: `URL exceeds maximum length of ${MAX_ITEM_URL_LENGTH} characters.` };
             return;
         }
 
@@ -934,9 +967,21 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         }
 
         const body = (ctx as any).requestBody || {};
-        const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
-        const rawItems = Array.isArray(body.items) ? body.items : [];
 
+        // 1. Total payload size check (protects against multi-megabyte payloads)
+        const payloadBytes = (ctx as any).rawBody
+            ? Buffer.byteLength((ctx as any).rawBody)
+            : Buffer.byteLength(JSON.stringify(body));
+        if (payloadBytes > MAX_OAUTH_INGEST_PAYLOAD_BYTES) {
+            ctx.status = 413;
+            ctx.body = {
+                error: 'payload_too_large',
+                message: `OAuth ingest payload exceeds maximum allowed size of ${MAX_OAUTH_INGEST_PAYLOAD_BYTES} bytes (received ${payloadBytes} bytes).`,
+            };
+            return;
+        }
+
+        const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
         if (!channelId) {
             ctx.status = 400;
             ctx.body = { error: 'missing_field', message: 'channelId is required.' };
@@ -956,14 +1001,61 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             return;
         }
 
+        // 2. Items array validation & batch size capping
+        if (!Array.isArray(body.items)) {
+            ctx.status = 400;
+            ctx.body = { error: 'invalid_items', message: 'items must be an array.' };
+            return;
+        }
+
+        const rawItems = body.items;
+        if (rawItems.length > MAX_OAUTH_INGEST_ITEMS) {
+            ctx.status = 400;
+            ctx.body = {
+                error: 'too_many_items',
+                message: `Batch item count exceeds maximum limit of ${MAX_OAUTH_INGEST_ITEMS} (received ${rawItems.length}).`,
+            };
+            return;
+        }
+
+        // 3. Per-item sanitising upfront, before the SQLite write lock is acquired.
+        //
+        // These items are NOT authored by the client — they are whatever TikTok's Display
+        // API or Instagram Graph handed the phone, verbatim. So a single oversized field is
+        // an upstream anomaly, not client misbehaviour, and must not cost the member the
+        // other 19 videos in the batch: TikTok captions run to 2,200 characters and
+        // apps/native/utils/pulse-oauth.ts falls back to v.video_description when v.title
+        // is empty, which is most videos. Worse, that client swallows a non-2xx and still
+        // reports "20 synced", so a 400 here would be a silent, permanent sync failure.
+        //
+        // The title is therefore truncated and the rest of the oversized fields drop their
+        // item, matching what the transaction loop already did for a bad URL. The bound is
+        // still enforced before the lock is taken, which is what the DoS fix is for; only
+        // the blast radius of one bad item changes.
+        const items: Record<string, any>[] = [];
+        let skippedCount = 0;
+        for (const rawItem of rawItems) {
+            if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) { skippedCount++; continue; }
+            if (typeof rawItem.url === 'string' && rawItem.url.length > MAX_ITEM_URL_LENGTH) { skippedCount++; continue; }
+            if (typeof rawItem.thumbnailUrl === 'string' && rawItem.thumbnailUrl.length > MAX_ITEM_THUMBNAIL_URL_LENGTH) { skippedCount++; continue; }
+            if (typeof rawItem.externalId === 'string' && rawItem.externalId.length > MAX_ITEM_EXTERNAL_ID_LENGTH) { skippedCount++; continue; }
+            if (typeof rawItem.publishedAt === 'string' && rawItem.publishedAt.length > MAX_ITEM_PUBLISHED_AT_LENGTH) { skippedCount++; continue; }
+            if (typeof rawItem.category === 'string' && rawItem.category.length > MAX_ITEM_CATEGORY_LENGTH) { skippedCount++; continue; }
+
+            items.push(
+                typeof rawItem.title === 'string' && rawItem.title.length > MAX_ITEM_TITLE_LENGTH
+                    ? { ...rawItem, title: rawItem.title.slice(0, MAX_ITEM_TITLE_LENGTH) }
+                    : rawItem
+            );
+        }
+
         const now = new Date().toISOString();
         const results: PulseFeedCard[] = [];
         let deduplicatedCount = 0;
 
         try {
             db.transaction(() => {
-                for (const rawItem of rawItems) {
-                    if (!rawItem || typeof rawItem !== 'object') continue;
+                for (const rawItem of items) {
                     const itemUrl = typeof rawItem.url === 'string' ? rawItem.url.trim() : '';
                     if (!itemUrl || !/^https?:\/\//i.test(itemUrl)) continue;
 
@@ -980,17 +1072,21 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                         // Fall back to provided url
                     }
 
+                    // Truncated again after cleanXmlText, which decodes entities and can
+                    // change the length either way; the pre-loop bounds the work, this
+                    // bounds what actually lands in the column.
                     const title = typeof rawItem.title === 'string' && rawItem.title.trim()
-                        ? cleanXmlText(rawItem.title.trim()).slice(0, 500)
+                        ? cleanXmlText(rawItem.title.trim()).slice(0, MAX_ITEM_TITLE_LENGTH)
                         : (channel.platform === 'tiktok' ? 'TikTok Video' : 'Post');
 
                     let thumbnailUrl: string | null = null;
                     if (typeof rawItem.thumbnailUrl === 'string' && rawItem.thumbnailUrl.trim()) {
                         const trimmedThumb = rawItem.thumbnailUrl.trim();
-                        if (trimmedThumb.length <= 4096 && /^https?:\/\//i.test(trimmedThumb)) {
+                        // Length was already bounded by the pre-loop; this is the scheme check.
+                        if (/^https?:\/\//i.test(trimmedThumb)) {
                             thumbnailUrl = trimmedThumb;
                         } else {
-                            // Refuse item if thumbnail URL is invalid/unsafe (e.g. non-http(s) scheme or too long)
+                            // Refuse the item outright if the thumbnail scheme is unsafe.
                             continue;
                         }
                     }
@@ -1066,6 +1162,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             ctx.body = {
                 success: true,
                 count: results.length,
+                skippedCount,
                 deduplicatedCount,
                 items: results,
             };

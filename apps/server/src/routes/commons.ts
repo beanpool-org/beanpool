@@ -143,6 +143,19 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         }
     }
 
+    if (photos !== undefined && photos !== null) {
+        if (!Array.isArray(photos)) {
+            ctx.status = 400;
+            ctx.body = { error: 'photos must be an array' };
+            return;
+        }
+        if (photos.length > 10) {
+            ctx.status = 400;
+            ctx.body = { error: 'A project can have at most 10 photos' };
+            return;
+        }
+    }
+
     const projectId = id || crypto.randomUUID();
     createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
     const project = getCrowdfundProject(projectId);
@@ -166,6 +179,19 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         if (diffDays > maxDays) {
             ctx.status = 400;
             ctx.body = { error: `Project deadline cannot exceed ${maxDays} days` };
+            return;
+        }
+    }
+
+    if (photos !== undefined && photos !== null) {
+        if (!Array.isArray(photos)) {
+            ctx.status = 400;
+            ctx.body = { error: 'photos must be an array' };
+            return;
+        }
+        if (photos.length > 10) {
+            ctx.status = 400;
+            ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
     }

@@ -163,12 +163,13 @@ export function runWashTradingAnalysis(db: Db): WashAnalysis {
             let compIdx = 0;
             for (const comp of components) {
                 if (comp.length <= 12) {
-                    const compSet = new Set(comp);
+                    // ⚡ Bolt: Look up pairs directly in edgeVol30 O(N^2) instead of scanning all E entries O(E) per component
                     let internalVol = 0;
-                    for (const [key, vol] of edgeVol30.entries()) {
-                        const [u, v] = key.split('|');
-                        if (compSet.has(u) && compSet.has(v)) {
-                            internalVol += vol;
+                    for (let i = 0; i < comp.length; i++) {
+                        for (let j = i + 1; j < comp.length; j++) {
+                            const u = comp[i] < comp[j] ? comp[i] : comp[j];
+                            const v = comp[i] < comp[j] ? comp[j] : comp[i];
+                            internalVol += edgeVol30.get(`${u}|${v}`) || 0;
                         }
                     }
 

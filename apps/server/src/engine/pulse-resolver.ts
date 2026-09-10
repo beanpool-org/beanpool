@@ -42,6 +42,13 @@ export class SsrfSecurityError extends Error {
     }
 }
 
+export class ProhibitedContentTypeError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ProhibitedContentTypeError';
+    }
+}
+
 export class PayloadTooLargeError extends Error {
     constructor(message: string) {
         super(message);
@@ -639,14 +646,19 @@ export async function ssrfSafeFetch(
         const rawContentType = response.headers['content-type'] || '';
         const mimeType = rawContentType.split(';')[0].trim().toLowerCase();
 
-        if (mimeType && allowedTypes.length > 0) {
-            const isAllowed = allowedTypes.some((allowed) =>
-                allowed === '*/*' || mimeType === allowed.toLowerCase()
-            );
-            if (!isAllowed) {
-                response.cleanup();
-                response.incoming.destroy();
-                throw new SsrfSecurityError(`Prohibited Content-Type: ${mimeType}`);
+        // Only enforce allowedContentTypes on successful 2xx responses.
+        // For non-2xx responses (e.g. 403, 404, 500), upstream CDNs/servers return error
+        // bodies (text/plain, text/html) that would otherwise mask the actual HTTP status.
+        if (status >= 200 && status < 300) {
+            if (mimeType && allowedTypes.length > 0) {
+                const isAllowed = allowedTypes.some((allowed) =>
+                    allowed === '*/*' || mimeType === allowed.toLowerCase()
+                );
+                if (!isAllowed) {
+                    response.cleanup();
+                    response.incoming.destroy();
+                    throw new ProhibitedContentTypeError(`Prohibited Content-Type: ${mimeType}`);
+                }
             }
         }
 
@@ -1689,6 +1701,15 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                 maxBytes: 256 * 1024,
             });
 
+            // A 502 from the site's CDN returns an HTML error page, which has no
+            // <link rel="alternate"> in it — so without this check a momentary outage was
+            // read as "this site has no feed" and set supports_autolist = 0 permanently.
+            // The default allowedContentTypes includes text/html, so this was never caught
+            // upstream either.
+            if (initialResp.status < 200 || initialResp.status >= 300) {
+                throw new Error(`Upstream site returned HTTP ${initialResp.status}`);
+            }
+
             const initialText = await initialResp.text();
             const trimmedLower = initialText.slice(0, 2000).trimStart().toLowerCase();
             const isHtml = trimmedLower.startsWith('<!doctype html') || trimmedLower.startsWith('<html') || /<html[\s>]/i.test(trimmedLower);
@@ -1753,6 +1774,13 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                 timeoutMs: 8000,
                 maxBytes: 2 * 1024 * 1024,
             });
+            // Same trap, worse ending: an HTTP 500 error page parsed as feed XML yields
+            // zero items, and the success path below then wrote supports_autolist = 1,
+            // fail_count = 0, last_error = NULL — reporting a dead feed as a healthy poll
+            // with no new posts, and wiping the failure counter that would have surfaced it.
+            if (response.status < 200 || response.status >= 300) {
+                throw new Error(`Upstream feed returned HTTP ${response.status}`);
+            }
             xml = await response.text();
         }
 

@@ -98,7 +98,6 @@ export function createPulseRoutes(deps: RouteDeps | PulseRouteDeps): Router {
     }
 
     router.get('/api/pulse/items/:id/thumbnail', handleThumbnail);
-    router.get('/api/pulse/thumbnail/:id', handleThumbnail);
 
     /**
      * Mute / un-mute a pulse feed item.

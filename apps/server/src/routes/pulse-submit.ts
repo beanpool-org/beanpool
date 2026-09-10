@@ -56,8 +56,14 @@ import {
     normaliseChannelInput,
     SOUNDCLOUD_RESERVED_SEGMENTS,
 } from '../engine/creator-channels.js';
+import { getPulseThumbnailService, PulseThumbnailService } from '../engine/pulse-thumbnail.js';
+import { logger } from '../logger.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
+
+export interface PulseSubmitRouteDeps extends RouteDeps {
+    thumbnailService?: PulseThumbnailService;
+}
 
 export interface ResolvedPulsePreview {
     channelId: string;
@@ -484,8 +490,9 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
     };
 }
 
-export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
+export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps): Router {
     const router = new Router();
+    const thumbnailService = (deps as PulseSubmitRouteDeps)?.thumbnailService ?? getPulseThumbnailService();
 
     // Prepare statements outside request and transaction loops (Contract A Rule 4)
     const stmtFindActiveByExternalId = db.prepare(
@@ -721,7 +728,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             const now = new Date().toISOString();
             const finalPublishedAt = meta.publishedAt || now;
 
-            let finalItemId: string;
+            let finalItemId = '';
             let isDeduplicated = false;
 
             db.transaction(() => {
@@ -776,6 +783,15 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                     isDeduplicated = false;
                 }
             })();
+
+            // Ingest image bytes while the thumbnail URL is fresh
+            if (finalThumbnailUrl && /^https?:\/\//i.test(finalThumbnailUrl)) {
+                try {
+                    await thumbnailService.ingestThumbnail(finalItemId!, finalThumbnailUrl);
+                } catch (err: any) {
+                    logger.warn('SYS', `[PulseSubmit] Failed to ingest thumbnail for item ${finalItemId}: ${err?.message || err}`);
+                }
+            }
 
             const item = rowToPulseFeedCard(finalItemId!);
             ctx.body = { success: true, item, deduplicated: isDeduplicated };
@@ -878,6 +894,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
 
         const now = new Date().toISOString();
         scrubPulseItems({ id: itemId, ownerPubkey: actor }, now);
+        thumbnailService.delete(itemId);
 
         ctx.body = { success: true };
     });
@@ -1051,6 +1068,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
 
         const now = new Date().toISOString();
         const results: PulseFeedCard[] = [];
+        const itemsToCache: Array<{ id: string; url: string }> = [];
         let deduplicatedCount = 0;
 
         try {
@@ -1151,6 +1169,10 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                     try {
                         results.push(rowToPulseFeedCard(finalItemId));
                     } catch { }
+
+                    if (thumbnailUrl) {
+                        itemsToCache.push({ id: finalItemId, url: thumbnailUrl });
+                    }
                 }
 
                 // Advance watermark if channel has post_count_seen
@@ -1158,6 +1180,12 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                     stmtUpdateChannelWatermark.run(rawItems.length, now, channel.id, actor);
                 }
             })();
+
+            // Fill the thumbnail cache behind the response, three fetches at a time.
+            // Awaiting up to 50 downloads here put the member's sync behind a minute of
+            // upstream latency and every buffer on the heap at once; the signed URLs stay
+            // valid for days, so seconds later is just as fresh.
+            thumbnailService.queueIngest(itemsToCache);
 
             ctx.body = {
                 success: true,

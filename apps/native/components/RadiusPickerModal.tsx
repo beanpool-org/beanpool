@@ -184,7 +184,13 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
 
                     <Text style={styles.hintText}>Tap the map or drag the pin to move the center point</Text>
 
-                    <Pressable style={styles.applyBtn} accessibilityRole="button" onPress={() => onApply(radius, center.latitude, center.longitude)}>
+                    <Pressable
+                        style={styles.applyBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Apply ${radius < 1 ? `${Math.round(radius * 1000)} metre` : `${radius} kilometre`} radius`}
+                        accessibilityHint="Applies the selected location and search radius"
+                        onPress={() => onApply(radius, center.latitude, center.longitude)}
+                    >
                         <Text style={styles.applyBtnText}>Apply — {radius < 1 ? `${Math.round(radius * 1000)}m` : `${radius}km`} radius</Text>
                     </Pressable>
                 </View>

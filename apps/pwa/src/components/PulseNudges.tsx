@@ -209,7 +209,7 @@ export function PulseNudges({
                         <button
                             type="button"
                             onClick={dismissClipboard}
-                            className="text-nature-400 hover:text-nature-700 dark:hover:text-nature-200 p-1 rounded-lg bg-transparent border-none cursor-pointer"
+                            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-nature-400 hover:text-nature-700 dark:hover:text-nature-200 rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
                             aria-label="Dismiss clipboard suggestion"
                         >
                             ✕
@@ -228,14 +228,14 @@ export function PulseNudges({
                         <button
                             type="button"
                             onClick={dismissClipboard}
-                            className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer transition-colors"
+                            className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                         >
                             Dismiss
                         </button>
                         <button
                             type="button"
                             onClick={handleAddClipboard}
-                            className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-colors"
+                            className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                         >
                             Add to Pulse
                         </button>
@@ -263,7 +263,7 @@ export function PulseNudges({
                             <button
                                 type="button"
                                 onClick={() => handleDismissPostCountNudge(nudge)}
-                                className="text-nature-400 hover:text-nature-700 dark:hover:text-nature-200 p-1 rounded-lg bg-transparent border-none cursor-pointer"
+                                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-nature-400 hover:text-nature-700 dark:hover:text-nature-200 rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
                                 aria-label="Dismiss update notice"
                             >
                                 ✕
@@ -278,14 +278,14 @@ export function PulseNudges({
                             <button
                                 type="button"
                                 onClick={() => handleDismissPostCountNudge(nudge)}
-                                className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer transition-colors"
+                                className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                             >
                                 Dismiss
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onShareChannel && onShareChannel(nudge.channelId)}
-                                className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-colors"
+                                className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                             >
                                 Share
                             </button>

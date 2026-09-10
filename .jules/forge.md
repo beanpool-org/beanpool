@@ -73,3 +73,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `startRetryLoop` in `apps/server/src/connector-manager.ts` ran an async callback inside `setInterval` without a `try/catch` block.
 **Learning:** Unhandled exceptions inside async `setInterval` callbacks produce unhandled promise rejections that can destabilize or crash Node.js process state.
 **Pattern:** Ensure all async callbacks passed to `setInterval` or `setTimeout` are enclosed in a top-level `try/catch` block.
+
+## 2026-09-09 - [Missing 400 status on invalid user status in admin route]
+**Issue:** `POST /api/local/admin/users/:pubkey/status` in `apps/server/src/routes/admin.ts` returned `200 OK` with `{ success: true }` when `status` was not `'active'` or `'disabled'`.
+**Learning:** Endpoints that validate input parameters using `if (condition)` blocks without an `else` branch returning a 400 error status can silently succeed without applying requested mutations.
+**Pattern:** Look for route handlers where input validation conditions guard the mutation logic but fall through to a default `200 OK` response.

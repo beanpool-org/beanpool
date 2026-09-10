@@ -169,7 +169,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const completedTransactionsByPostId = useMemo(() => {
         const map = new Map<string, MarketplaceTransaction>();
         for (const tx of userTransactions) {
-            if (tx.postId && tx.status === 'completed') {
+            // marketplace_transactions has no UNIQUE on post_id, so an offer bought by
+            // several people has several completed rows. The .find() this replaces took
+            // the first match, and a Map keeps the last — so writing unconditionally
+            // would quietly change which deal the review prompt is about. First wins,
+            // as before; picking the right one per conversation is a separate bug.
+            if (tx.postId && tx.status === 'completed' && !map.has(tx.postId)) {
                 map.set(tx.postId, tx);
             }
         }

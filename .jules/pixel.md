@@ -48,6 +48,21 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-12 — Do NOT file against keeper / guardian / social-recovery components. Closed #730.
+Keeper (social/guardian) recovery was scrapped. #713 DELETES these files on both clients:
+`IncomingRecoveryApprovalModal.tsx`, `KeeperProtectionPanel.tsx` (PWA), `RecoveryPinModal.tsx`,
+`FriendPickerSheet.tsx`, `info-content/GuardianInfoModal.tsx`. Work filed against any of them
+is spent twice — once on review, once on the merge conflict. The only recovery paths now are
+the member's 12 words and SSO.
+
+`RecoveryAlertBanner.tsx` is the exception: it SURVIVES on both clients and is fair game.
+
+The underlying a11y pattern is real and still wanted — a button whose visible content is an
+icon, or whose label vanishes behind a loading spinner, needs an `accessibilityLabel` that
+matches the VISIBLE text (WCAG 2.5.3) plus `accessibilityState={{ busy }}`. That has produced
+three genuine findings on live screens recently: the recovery alert kill-switch, the project
+pledge button, and the recover-identity option rows. Target screens that survive.
+
 ### 2026-09-09 — AvatarPickerSheet accessibility labels LANDED in #680.
 Added explicit `accessibilityLabel` attributes to camera and gallery source buttons in `apps/native/components/AvatarPickerSheet.tsx`, cleanly masking decorative emojis for screen readers. Do not re-file.
 When creating touchable components (`Pressable`, `TouchableOpacity`) that contain decorative or standalone emoji icons, always supply an explicit `accessibilityLabel` to ensure screen readers do not read raw emoji glyphs.

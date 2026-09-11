@@ -417,7 +417,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         return id;
     };
 
-    const fleetNodesList = profiles.length > 0 ? profiles : [activeNode];
+    const fleetNodesList = profiles.length > 0 ? profiles : (activeNode ? [activeNode] : []);
     const totalFleetBackupBytes = Object.values(harvesterState).reduce((acc, curr) => acc + (curr.dbSizeBytes || 0), 0);
 
     return (
@@ -543,7 +543,19 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             </h4>
                             <span className="text-xs text-nature-400 font-mono">Auto-prunes history archives &gt;30d</span>
                         </div>
-                        {harvestLoading && Object.keys(harvesterState).length === 0 ? (
+                        {fleetNodesList.length === 0 ? (
+                            <div className="p-8 text-center space-y-3 font-sans">
+                                <div className="w-12 h-12 rounded-2xl bg-nature-900 border border-nature-800 text-terra-400 flex items-center justify-center text-xl font-bold mx-auto shadow-inner">
+                                    📦
+                                </div>
+                                <div>
+                                    <h5 className="text-sm font-bold text-white m-0">No Fleet Nodes Configured</h5>
+                                    <p className="text-xs text-nature-400 m-0 mt-1 max-w-sm mx-auto">
+                                        Configure or select a sovereign node profile in Fleet Settings to view harvested fleet backups.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : harvestLoading && Object.keys(harvesterState).length === 0 ? (
                             <div className="p-8 text-center text-xs text-sky-400 font-mono animate-pulse">
                                 🔄 Loading harvested fleet backup status...
                             </div>

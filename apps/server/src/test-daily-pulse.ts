@@ -222,6 +222,17 @@ async function main() {
     const dispatchRoute = async (method: string, path: string, ctx: any) => {
         const route = router.stack.find(r => r.methods.includes(method.toUpperCase()) && r.regexp.test(path));
         if (!route) throw new Error(`Route not found: ${method} ${path}`);
+        // These context literals are hand-rolled, so they lack the header helpers every real
+        // Koa ctx has. The marketplace GET now sets ETag/Cache-Control, which threw
+        // "ctx.set is not a function" here — a gap in the harness, not in the route.
+        ctx.headers = ctx.headers || {};
+        ctx.response = ctx.response || { headers: {} };
+        if (typeof ctx.set !== 'function') {
+            ctx.set = (k: string, v: string) => { ctx.response.headers[String(k).toLowerCase()] = v; };
+        }
+        if (typeof ctx.get !== 'function') {
+            ctx.get = (k: string) => ctx.headers[String(k).toLowerCase()] || '';
+        }
         await route.stack[0](ctx, async () => {});
     };
 

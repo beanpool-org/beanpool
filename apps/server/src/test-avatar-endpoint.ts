@@ -49,6 +49,9 @@ const deps: RouteDeps = {
         const n = Number(v);
         return Number.isFinite(n) && n >= 0 ? n : def;
     },
+    // Same shape as test-keeper-pending-route.ts — RouteDeps requires these two.
+    activeConnections: new Map(),
+    calculateAnalytics: () => ({}),
     enforceReadAuth: false,
 };
 

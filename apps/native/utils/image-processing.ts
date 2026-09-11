@@ -39,23 +39,33 @@ export async function processProfileImage(uri: string): Promise<string | null> {
     }
 }
 
+import { getCachedAnchorUrl } from './node-post';
+
 /**
  * Build a cache-busted avatar URI for rendering.
- * Handles data URIs, remote URLs, and adds cache-busting query params.
+ * Handles data URIs, remote URLs, relative paths, and adds cache-busting query params.
  * 
- * @param url - The raw avatar URL (data: URI, remote URL, or null)
+ * @param url - The raw avatar URL (data: URI, remote URL, relative /api/ path, or null)
  * @param pubkey - User's public key (fallback cache key)
  * @param updatedAt - ISO timestamp of last profile update (preferred cache key)
+ * @param nodeUrl - Optional base node URL to resolve relative paths
  * @returns Cache-busted URI string, or null if no avatar
  */
-export function avatarUri(url: string | null | undefined, pubkey: string, updatedAt?: string | null): string | null {
+export function avatarUri(url: string | null | undefined, pubkey: string, updatedAt?: string | null, nodeUrl?: string | null): string | null {
     if (!url) return null;
     // data: URIs are already unique by content
     if (url.startsWith('data:')) return url;
     // Bundled avatar references don't need cache-busting
     if (url.startsWith('bundled://')) return url;
+    let resolved = url;
+    if (resolved.startsWith('/')) {
+        const base = (nodeUrl || getCachedAnchorUrl() || '').replace(/\/+$/, '');
+        if (base) {
+            resolved = `${base}${resolved}`;
+        }
+    }
     // Use profile_updated_at for precise cache-busting, fall back to pubkey slice
     const cacheKey = updatedAt ? new Date(updatedAt).getTime() : pubkey.slice(0, 8);
-    const sep = url.includes('?') ? '&' : '?';
-    return `${url}${sep}_v=${cacheKey}`;
+    const sep = resolved.includes('?') ? '&' : '?';
+    return `${resolved}${sep}_v=${cacheKey}`;
 }

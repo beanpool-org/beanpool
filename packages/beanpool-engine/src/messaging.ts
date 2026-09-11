@@ -162,7 +162,11 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
             const peerMember = membersByPubkey.get(peerPubkey);
             if (peerMember) {
                 peerCallsign = peerMember.callsign;
-                peerAvatar = peerMember.avatar_url || null;
+                peerAvatar = peerMember.avatar_url
+                    ? (peerMember.avatar_url.startsWith('bundled://')
+                        ? peerMember.avatar_url
+                        : `/api/avatar/${peerMember.public_key}?size=thumb`)
+                    : null;
             }
         }
 

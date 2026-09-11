@@ -3,6 +3,7 @@
  * Friends, Recovery, Push Notifications, Preferences, Ratings routes.
  */
 
+import crypto from 'node:crypto';
 import Router from '@koa/router';
 import {
     registerMember, getMembers, getAllMembers, getMember,
@@ -709,7 +710,34 @@ router.get('/api/community/membership/:publicKey', async (ctx) => {
 
 router.get('/api/community/members', async (ctx) => {
     // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
-    ctx.body = getMembers().filter(m => !m.isTreasury);
+    const members = getMembers()
+        .filter(m => !m.isTreasury)
+        .map(m => ({
+            ...m,
+            avatarUrl: m.avatarUrl
+                ? (m.avatarUrl.startsWith('bundled://')
+                    ? m.avatarUrl
+                    : `/api/avatar/${m.publicKey}?size=thumb`)
+                : null,
+        }));
+
+    const bodyStr = JSON.stringify(members);
+    const etag = `"${crypto.createHash('sha256').update(bodyStr).digest('hex').slice(0, 16)}"`;
+    ctx.set('ETag', etag);
+
+    const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+    if (ifNoneMatch) {
+        const cleanInm = ifNoneMatch.replace(/^W\//, '');
+        const cleanEtag = etag.replace(/^W\//, '');
+        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+            ctx.status = 304;
+            return;
+        }
+    }
+
+    ctx.status = 200;
+    ctx.type = 'application/json';
+    ctx.body = bodyStr;
 });
 
 router.post('/api/community/register', async (ctx) => {
@@ -1480,16 +1508,38 @@ router.get('/api/members', async (ctx) => {
         );
     }
 
-    ctx.body = allMembers.map(m => ({
+    const members = allMembers.map(m => ({
         publicKey: m.publicKey,
         callsign: m.callsign,
         joinedAt: m.joinedAt,
-        avatarUrl: m.avatarUrl,
+        avatarUrl: m.avatarUrl
+            ? (m.avatarUrl.startsWith('bundled://')
+                ? m.avatarUrl
+                : `/api/avatar/${m.publicKey}?size=thumb`)
+            : null,
         profileUpdatedAt: m.profileUpdatedAt,
         earnedCredit: m.earnedCredit ?? 0,
         elderVouchedBy: m.elderVouchedBy || null,
         archetype: m.archetype || null,
     }));
+
+    const bodyStr = JSON.stringify(members);
+    const etag = `"${crypto.createHash('sha256').update(bodyStr).digest('hex').slice(0, 16)}"`;
+    ctx.set('ETag', etag);
+
+    const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+    if (ifNoneMatch) {
+        const cleanInm = ifNoneMatch.replace(/^W\//, '');
+        const cleanEtag = etag.replace(/^W\//, '');
+        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+            ctx.status = 304;
+            return;
+        }
+    }
+
+    ctx.status = 200;
+    ctx.type = 'application/json';
+    ctx.body = bodyStr;
 });
 
 router.post('/api/admin/reports', async (ctx) => {

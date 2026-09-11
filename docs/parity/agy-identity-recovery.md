@@ -1,5 +1,10 @@
 # Parity Audit: Identity, Onboarding, Recovery, Security, Settings
 
+> **⚠️ Historical.** Keeper (social/guardian) recovery was scrapped in September 2026.
+> This document describes it as live because that was true when it was written.
+> The only recovery paths now are the member's 12 words and SSO (native only).
+> See [keeper-recovery-parked.md](../keeper-recovery-parked.md).
+
 **Repository**: `beanpool`  
 **Scope**: Native client (`apps/native`) vs Web PWA client (`apps/pwa`)  
 **Domain**: Identity, Onboarding, Recovery, Security, Settings  

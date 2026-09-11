@@ -29,8 +29,8 @@ This single file IS the node. It contains everything:
 | Unread Tracking | 3054–3076 | Message read state |
 | State Sync | 3077–4448 | **1,372 lines** — import/export, Merkle, delta |
 | Ratings | 4449–4535 | Bean reputation system |
-| Friends & Guardians | 4536–4574 | Social graph |
-| Social Recovery | 4575–4804 | Guardian-based account recovery |
+| Friends | 4536–4574 | Social graph |
+| Recovery (Legacy server stubs) | 4575–4804 | Unreferenced legacy recovery stubs (client recovery is 12 words everywhere; SSO on native only) |
 | Abuse Reports | 4805–4932 | Report lifecycle |
 | Community Health | 4933–5267 | Health checks, monitoring |
 | Admin Controls | 5268–5396 | Admin action handlers |

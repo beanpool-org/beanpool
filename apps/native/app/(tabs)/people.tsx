@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi, setGuardianApi } from '../../utils/db';
+import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { useIdentity } from '../IdentityContext';
 import { hexToBytes, encodeUtf8, encodeBase64, signData, buildSignedHeaders } from '../../utils/crypto';
@@ -17,7 +17,7 @@ import { extractNodeOrigin, normaliseInviteCode } from '../../utils/invite-parse
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 
-type SubView = 'friends' | 'community' | 'invites' | 'guardians';
+type SubView = 'friends' | 'community' | 'invites';
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
 
 const MEMBER_ROW_HEIGHT = 66;
@@ -134,14 +134,14 @@ export default function PeopleScreen() {
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {
-        if (params.view && ['friends', 'community', 'invites', 'guardians'].includes(params.view)) {
+        if (params.view && ['friends', 'community', 'invites'].includes(params.view)) {
             setView(params.view as SubView);
         }
     }, [params.view]);
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('set_people_view', (data) => {
-            if (data && data.view && ['friends', 'community', 'invites', 'guardians'].includes(data.view)) {
+            if (data && data.view && ['friends', 'community', 'invites'].includes(data.view)) {
                 setView(data.view as SubView);
                 router.setParams({ view: data.view });
             }
@@ -172,14 +172,13 @@ export default function PeopleScreen() {
 
     const [searchQuery, setSearchQuery] = useState('');
     const [sortOption, setSortOption] = useState<SortOption>('newest');
-    const [guardianSyncing, setGuardianSyncing] = useState<string | null>(null);
 
     const [friends, setFriends] = useState<any[]>([]);
     const [friendPubkeys, setFriendPubkeys] = useState<Set<string>>(new Set());
     const [friendsLoading, setFriendsLoading] = useState(false);
 
     useEffect(() => {
-        if (view === 'friends' || view === 'guardians') {
+        if (view === 'friends') {
             loadFriends();
         } else {
             loadFriends(true); // background load to keep "+ Add" / "✓ Added" indicators fresh
@@ -225,7 +224,7 @@ export default function PeopleScreen() {
         const sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
             if (view === 'community') {
                 loadMembers(searchQuery, sortOption);
-            } else if (view === 'friends' || view === 'guardians') {
+            } else if (view === 'friends') {
                 loadFriends(true); // background refresh — silent, no spinner toggle
             }
         });
@@ -642,7 +641,7 @@ export default function PeopleScreen() {
         <View style={styles.safeArea}>
             {/* Header sub-nav */}
             <View style={styles.navRow}>
-                {(['friends', 'community', 'invites', 'guardians'] as SubView[]).map(v => {
+                {(['friends', 'community', 'invites'] as SubView[]).map(v => {
                     const isActive = view === v;
                     return (
                         <Pressable
@@ -656,7 +655,6 @@ export default function PeopleScreen() {
                                 {v === 'friends' && '👫 Friends'}
                                 {v === 'community' && '🏘️ Community'}
                                 {v === 'invites' && (isGuest ? '🎟️ Register' : '🎟️ Invites')}
-                                {v === 'guardians' && '🛡️ Guardians'}
                             </Text>
                         </Pressable>
                     );
@@ -1023,90 +1021,7 @@ export default function PeopleScreen() {
                 </ScrollView>
             )}
 
-            {view === 'guardians' && (
-                <ScrollView contentContainerStyle={[styles.list, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 16 }]}>
-                    {friends.length === 0 ? (
-                        <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyEmoji}>🛡️</Text>
-                            <Text style={styles.emptyTitle}>Social Recovery Ready</Text>
-                            <Text style={styles.emptyDesc}>Add some friends first, then come back here to choose your guardians.</Text>
-                        </View>
-                    ) : (
-                        <>
-                            <Text style={styles.sectionHeader}>🛡️ Choose Guardians</Text>
-                            <Text style={styles.sectionDesc}>
-                                Select 3 to 5 trusted friends to act as your guardians. If you lose your device, they can help you recover your identity.
-                            </Text>
 
-                            {friends.filter(f => f.isGuardian).length >= 3 && (
-                                <View style={styles.infoBanner}>
-                                    <Text style={styles.infoText}>
-                                        <Text style={styles.boldGreen}>✅ Social Recovery Ready.</Text> You have enough guardians selected to recover your account if you lose access.
-                                    </Text>
-                                </View>
-                            )}
-
-                            <View style={{ marginBottom: 16 }}>
-                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.secondary, textTransform: 'uppercase' }}>
-                                    Selected ({friends.filter(f => f.isGuardian).length}/5)
-                                </Text>
-                            </View>
-
-                            {friends.map((friend, index) => {
-                                const isFirst = index === 0;
-                                const isLast = index === friends.length - 1;
-                                return (
-                                <View key={friend.publicKey} style={[
-                                    styles.peopleRow,
-                                    isFirst && { borderTopLeftRadius: 12, borderTopRightRadius: 12 },
-                                    isLast && { borderBottomLeftRadius: 12, borderBottomRightRadius: 12, borderBottomWidth: 0 },
-                                    { overflow: 'hidden' }
-                                ]}>
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        style={styles.cardHeader}
-                                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: friend.publicKey, callsign: friend.callsign || 'Unknown' } })}
-                                    >
-                                        <View style={styles.avatar}>
-                                            <MemberAvatar avatarUrl={friend.avatar_url} pubkey={friend.publicKey} callsign={friend.callsign || '?'} size={44} />
-                                        </View>
-                                        <View style={styles.textStack}>
-                                            <Text style={styles.callsign} numberOfLines={1}>{friend.callsign}</Text>
-                                            <Text style={styles.dateText}>Friend</Text>
-                                        </View>
-                                    </Pressable>
-                                    
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        accessibilityState={{ selected: !!friend.isGuardian }}
-                                        style={[styles.addBtn, friend.isGuardian && styles.addBtnFriended]}
-                                        disabled={guardianSyncing === friend.publicKey || (!friend.isGuardian && friends.filter(f => f.isGuardian).length >= 5)}
-                                        onPress={async () => {
-                                            setGuardianSyncing(friend.publicKey);
-                                            const newStatus = !friend.isGuardian;
-                                            const success = await setGuardianApi(friend.publicKey, newStatus);
-                                            if (success) {
-                                                setFriends(prev => prev.map(f => f.publicKey === friend.publicKey ? { ...f, isGuardian: newStatus } : f));
-                                            } else {
-                                                Alert.alert('Error', 'Failed to update guardian status. Check your connection.');
-                                            }
-                                            setGuardianSyncing(null);
-                                        }}
-                                    >
-                                        {guardianSyncing === friend.publicKey ? (
-                                            <ActivityIndicator size="small" color={friend.isGuardian ? colors.brand.dark : colors.text.inverse} />
-                                        ) : (
-                                            <Text style={[styles.addBtnText, friend.isGuardian && styles.addBtnTextFriended]}>
-                                                {friend.isGuardian ? 'Remove' : 'Make Guardian'}
-                                            </Text>
-                                        )}
-                                    </Pressable>
-                                </View>
-                            );})}
-                        </>
-                    )}
-                </ScrollView>
-            )}
             </KeyboardAvoidingView>
         </View>
     );

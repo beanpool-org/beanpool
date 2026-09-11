@@ -499,10 +499,10 @@ function RootLayoutNav() {
                 recoveryNavPrompted.current = true;
                 Alert.alert(
                     'Account recovery reported',
-                    'The node you are connected to reports a recovery in progress for your account. This may be a legitimate guardian recovery — or a node trying to mislead you. Open the recovery screen to review?',
+                    'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
                     [
                         { text: 'Not now', style: 'cancel' },
-                        { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace('/recover-identity'); } },
+                        { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
                     ],
                 );
             }

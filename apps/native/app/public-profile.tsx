@@ -383,7 +383,6 @@ export default function PublicProfileScreen() {
     const [balanceInfo, setBalanceInfo] = useState<any>(null);
     const [given, setGiven] = useState<any[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
-    const [guardianCount, setGuardianCount] = useState(0);
     const [trust, setTrust] = useState<any>(null);
     const [viewerBalance, setViewerBalance] = useState<any>(null);
     const [vouching, setVouching] = useState(false);
@@ -508,7 +507,6 @@ export default function PublicProfileScreen() {
             if (bal) setBalanceInfo(bal);
             if (Array.isArray(friends)) {
                 setFriendsCount(friends.length);
-                setGuardianCount(friends.filter((f: any) => f.isGuardian).length);
             }
             setLoading(false);
         });
@@ -941,10 +939,10 @@ export default function PublicProfileScreen() {
                                 </View>
                             )}
 
-                            {/* Vouched in by / trusted as guardian */}
-                            {(trust.vouchedInBy || trust.wardsCount > 0) && (
+                            {/* Vouched in by */}
+                            {trust.vouchedInBy && (
                                 <View style={styles.vouchCard}>
-                                    {trust.vouchedInBy && trust.vouchedInBy.kind === 'member' && (
+                                    {trust.vouchedInBy.kind === 'member' && (
                                         <Pressable
                                             accessibilityRole="button"
                                             style={styles.vouchInviterRow}
@@ -958,7 +956,7 @@ export default function PublicProfileScreen() {
                                             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.secondary} />
                                         </Pressable>
                                     )}
-                                    {trust.vouchedInBy && trust.vouchedInBy.kind !== 'member' && (
+                                    {trust.vouchedInBy.kind !== 'member' && (
                                         <View style={styles.vouchInviterRow}>
                                             <View style={styles.systemBadge}>
                                                 <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
@@ -972,11 +970,6 @@ export default function PublicProfileScreen() {
                                                 </Text>
                                             </View>
                                         </View>
-                                    )}
-                                    {trust.wardsCount > 0 && (
-                                        <Text style={styles.vouchLine} numberOfLines={2}>
-                                            🛡️ {trust.wardsCount} {trust.wardsCount === 1 ? 'person trusts' : 'people trust'} them as a recovery guardian
-                                        </Text>
                                     )}
                                 </View>
                             )}
@@ -1039,14 +1032,6 @@ export default function PublicProfileScreen() {
                             <Text style={styles.statTileNum} numberOfLines={1}>{balanceInfo?.trustStats?.tradeCount ?? 0}</Text>
                             <Text style={styles.statTileLabel} numberOfLines={1}>Trades</Text>
                         </View>
-                        <View style={styles.statDivider} />
-                        <Pressable accessibilityRole="button" style={styles.statTile} onPress={() => {
-                            DeviceEventEmitter.emit('set_people_view', { view: 'guardians' });
-                            router.push({ pathname: '/(tabs)/people', params: { view: 'guardians' } });
-                        }}>
-                            <Text style={[styles.statTileNum, guardianCount >= 3 ? { color: colors.brand.primary } : guardianCount === 0 ? { color: colors.text.muted } : null]} numberOfLines={1}>{guardianCount}/5</Text>
-                            <Text style={styles.statTileLabel} numberOfLines={1}>Guardians{guardianCount >= 3 ? ' ✓' : ''}</Text>
-                        </Pressable>
                     </View>
                 )}
 

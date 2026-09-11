@@ -1,12 +1,12 @@
 /**
- * PeoplePage — Friends, Community, Invites, Guardians
+ * PeoplePage — Friends, Community, Invites
  *
  * Multi-view People tab with search, avatars, and relative dates.
  */
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-    getFriends, addFriendApi, removeFriendApi, setGuardianApi,
+    getFriends, addFriendApi, removeFriendApi,
     getMembers,
     type FriendEntry, type Member,
 } from '../lib/api';
@@ -22,7 +22,7 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
 }
 
-type SubView = 'friends' | 'community' | 'invites' | 'guardians';
+type SubView = 'friends' | 'community' | 'invites';
 
 /** Convert a date to a relative "Xd ago" / "Xw ago" string */
 function relativeDate(dateStr: string): string {
@@ -45,7 +45,7 @@ function relativeDate(dateStr: string): string {
 }
 
 /** Avatar circle with image or initials fallback */
-function Avatar({ callsign, avatarUrl, isGuardian, size = 40 }: { callsign: string; avatarUrl?: string | null; isGuardian?: boolean; size?: number }) {
+function Avatar({ callsign, avatarUrl, size = 40 }: { callsign: string; avatarUrl?: string | null; size?: number }) {
     const initial = callsign.charAt(0).toUpperCase();
     const sizeStyle = { width: size, height: size, minWidth: size };
 
@@ -64,11 +64,7 @@ function Avatar({ callsign, avatarUrl, isGuardian, size = 40 }: { callsign: stri
 
     return (
         <div 
-            className={`rounded-full flex items-center justify-center font-bold text-lg border ${
-                isGuardian 
-                    ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-500 border-amber-200 dark:border-amber-800'
-                    : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700'
-            }`}
+            className="rounded-full flex items-center justify-center font-bold text-lg border bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700"
             style={sizeStyle}
         >
             {initial}
@@ -127,15 +123,6 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         } catch { /* error */ }
     }
 
-    async function handleToggleGuardian(pubkey: string, isGuardian: boolean) {
-        try {
-            await setGuardianApi(identity.publicKey, pubkey, isGuardian);
-            setFriends(f => f.map(fr =>
-                fr.publicKey === pubkey ? { ...fr, isGuardian } : fr
-            ));
-        } catch { /* error */ }
-    }
-
     async function handleMessage(friendPubkey: string) {
         if (onNavigate) {
             // Navigate to messages tab and open conversation with this friend
@@ -150,7 +137,6 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
 
     // ⚡ Bolt: Memoize friendPubkeys Set to prevent rebuilding on every render cycle
     const friendPubkeys = useMemo(() => new Set(visibleFriends.map(f => f.publicKey)), [visibleFriends]);
-    const guardians = useMemo(() => visibleFriends.filter(f => f.isGuardian), [visibleFriends]);
 
     // Build avatar lookup from members for friends view
     const memberAvatarMap = useMemo(() => {
@@ -173,7 +159,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
             {/* Sub-nav pills */}
             <div className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800" role="tablist" aria-label="People navigation">
-                {(['friends', 'community', 'invites', 'guardians'] as SubView[]).map(v => (
+                {(['friends', 'community', 'invites'] as SubView[]).map(v => (
                     <button
                         key={v}
                         type="button"
@@ -189,7 +175,6 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                         {v === 'friends' && '👫 Friends'}
                         {v === 'community' && '🏘️ Community'}
                         {v === 'invites' && '🎟️ Invites'}
-                        {v === 'guardians' && '🛡️ Guardians'}
                     </button>
                 ))}
             </div>
@@ -219,7 +204,6 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             <Avatar 
                                                 callsign={f.callsign} 
                                                 avatarUrl={memberAvatarMap[f.publicKey]} 
-                                                isGuardian={f.isGuardian} 
                                                 size={36}
                                             />
                                         </button>
@@ -230,7 +214,6 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 onClick={() => onOpenProfile && onOpenProfile(f.publicKey)}
                                             >
                                                 {f.callsign}
-                                                {f.isGuardian && <span className="text-[10px] text-amber-500 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/40 border border-amber-100 dark:border-amber-800 px-1.5 py-0.5 rounded-md no-underline">Guardian</span>}
                                             </button>
                                             <div className="text-[11px] text-nature-400 dark:text-nature-500 font-medium mt-0.5">
                                                 Added {relativeDate(f.addedAt)}
@@ -344,78 +327,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                 </div>
             )}
 
-            {/* ===== GUARDIANS ===== */}
-            {view === 'guardians' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <p className="text-[13px] text-nature-600 dark:text-nature-300 mb-5 leading-relaxed bg-emerald-50/50 dark:bg-emerald-900/20 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800 shadow-sm">
-                        Choose up to <strong className="text-nature-900 dark:text-white">5 trusted friends</strong> as recovery guardians. 
-                        If you ever lose your device, any 3 of them can help you get your identity back.
-                    </p>
 
-                    {visibleFriends.length === 0 ? (
-                        <div className="text-center p-10 text-nature-500 dark:text-nature-400 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mt-4">
-                            <p className="text-4xl mb-3">🛡️</p>
-                            <p className="text-[14px] font-semibold text-nature-800 dark:text-white leading-relaxed max-w-[250px] mx-auto">
-                                Add some friends first, then come back here to choose your guardians.
-                            </p>
-                        </div>
-                    ) : (
-                        <div>
-                            <div className="flex justify-between items-center mb-4 px-1">
-                                <h3 className="font-bold text-nature-950 dark:text-white text-[15px] m-0">Your Guardians</h3>
-                                <div className={`text-xs font-bold px-3 py-1 rounded-full ${guardians.length >= 5 ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'}`}>
-                                    {guardians.length}/5 selected
-                                </div>
-                            </div>
-                            
-                            <div className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden">
-                                {visibleFriends.map(f => (
-                                    <div key={f.publicKey} className={`p-3 px-4 flex items-center justify-between transition-colors hover:bg-oat-50/50 dark:hover:bg-nature-800/30 ${
-                                        f.isGuardian
-                                            ? 'bg-amber-50/40 dark:bg-amber-950/10'
-                                            : ''
-                                    }`}>
-                                        <div className="flex items-center gap-3">
-                                            <Avatar 
-                                                callsign={f.callsign} 
-                                                avatarUrl={memberAvatarMap[f.publicKey]} 
-                                                isGuardian={f.isGuardian} 
-                                                size={36}
-                                            />
-                                            <div className={`font-bold text-[14px] ${f.isGuardian ? 'text-amber-900 dark:text-amber-400' : 'text-nature-900 dark:text-white'}`}>
-                                                {f.callsign}
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => handleToggleGuardian(f.publicKey, !f.isGuardian)}
-                                            disabled={!f.isGuardian && guardians.length >= 5}
-                                            className={`border-none rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer transition-all shadow-sm ${
-                                                f.isGuardian 
-                                                    ? 'bg-amber-600 text-white hover:bg-amber-700' 
-                                                    : 'bg-nature-800 text-white hover:bg-nature-900'
-                                            } ${(!f.isGuardian && guardians.length >= 5) ? 'opacity-40 cursor-not-allowed' : 'hover:shadow-md'}`}
-                                        >
-                                            {f.isGuardian ? 'Remove' : 'Make Guardian'}
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {guardians.length >= 3 && (
-                                <div className="mt-5 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-[13px] text-emerald-800 dark:text-emerald-300 text-center leading-relaxed border border-emerald-200 dark:border-emerald-800 shadow-sm font-medium">
-                                    <div className="font-bold text-emerald-700 dark:text-emerald-400 mb-1 flex items-center justify-center gap-1.5 animate-pulse">
-                                        <span className="text-base">✅</span> Social Recovery Ready
-                                    </div>
-                                    If you lose your device, any 3 of them can help restore your identity.
-                                    <div className="mt-2 text-[11px] font-bold text-emerald-600/70 dark:text-emerald-400/70 border-t border-emerald-200/50 dark:border-emerald-800/50 pt-2 uppercase tracking-wider">
-                                        Full recovery flow coming soon.
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            )}
         </div>
     );
 }

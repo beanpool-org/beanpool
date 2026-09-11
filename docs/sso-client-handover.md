@@ -1,5 +1,10 @@
 # SSO client handover — 2026-08-11, revised 2026-08-14
 
+> **⚠️ Historical.** Keeper (social/guardian) recovery was scrapped in September 2026.
+> This document describes it as live because that was true when it was written.
+> The only recovery paths now are the member's 12 words and SSO (native only).
+> See [keeper-recovery-parked.md](keeper-recovery-parked.md).
+
 **Read this before touching recovery, keepers, or Sign in with Apple or Google.**
 
 You are picking up mid-build. The design was settled on 2026-08-10 and the server half merged

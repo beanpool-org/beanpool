@@ -1,5 +1,10 @@
 # Native ↔ PWA parity audit
 
+> **⚠️ Historical.** Keeper (social/guardian) recovery was scrapped in September 2026.
+> This document describes it as live because that was true when it was written.
+> The only recovery paths now are the member's 12 words and SSO (native only).
+> See [keeper-recovery-parked.md](keeper-recovery-parked.md).
+
 **Date:** 2026-09-08 · **Scope:** `apps/native` vs `apps/pwa` against `apps/server` at commit `210204c`.
 
 **Method.** Three domain sweeps (identity/recovery, economy/marketplace, social/pulse/shell) were run by

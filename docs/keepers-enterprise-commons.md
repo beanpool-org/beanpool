@@ -1,5 +1,10 @@
 # Keepers, Enterprises, and the Commons: Architectural Manual
 
+> **⚠️ Historical.** Keeper (social/guardian) recovery was scrapped in September 2026.
+> This document describes it as live because that was true when it was written.
+> The only recovery paths now are the member's 12 words and SSO (native only).
+> See [keeper-recovery-parked.md](keeper-recovery-parked.md).
+
 This document provides a technical audit of three interlocking subsystems in BeanPool: **Keepers** (identity recovery), **Enterprises** (community treasury accounts), and the **Commons** (shared wealth, community governance, and crowdfunding).
 
 Every statement in this manual is grounded directly in the codebase. Each feature, constraint, and flow is tagged with one of four implementation states:

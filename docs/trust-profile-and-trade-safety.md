@@ -38,7 +38,6 @@ Good news: most "track record" signals are **already computed** server-side in
 
 ### Small new queries
 - **Completion rate** — completed vs cancelled `marketplace_transactions` (high cancel rate = yellow flag)
-- **Guardians** — how many people made them a recovery guardian (`friends.is_guardian`); deep-trust signal
 - **Mutual connections** — intersection of viewer's friends and the target's (needs viewer context)
 - **Last active** (`last_active_at`)
 - **Invited by / invited N** — from `members.invited_by` (the invite tree is tier-gated → some sybil-resistance)
@@ -101,16 +100,16 @@ a risk band that scales the friction:
 Only prompts on **first / low-trust** deals; repeat trades with a trusted partner never re-nag.
 
 ### Layer 3 — buddy nudge — DEFERRED (roadmap)
-One-tap "Let a guardian know" sharing trade details to a friend/guardian DM at the meeting
+One-tap "Let a friend know" sharing trade details to a trusted friend DM at the meeting
 moment. Deferred: community is largely closed/low-risk and members can message someone
 manually. Revisit if the network opens up.
 
 ---
 
 ## 5. Build surface (when we get to it)
-- Server: small additions to the trust-profile endpoint (completion rate, guardians, invited-by);
+- Server: small additions to the trust-profile endpoint (completion rate, invited-by);
   mutual-connections needs viewer context.
 - Native: public-profile UI; `PostAuthorTrust` pills; the accept-confirm risk gate; shared
   `assessTradeRisk` helper. PWA parity optional.
-- Anti-gaming: lean on reciprocal signals (distinct partners, mutuals, guardians, tenure),
+- Anti-gaming: lean on reciprocal signals (distinct partners, mutuals, vouchers, tenure),
   not raw counts.

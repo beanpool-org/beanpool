@@ -22,8 +22,8 @@ import { signedRequest } from '../utils/db';
 interface RecoverySession {
     collectionId: string;
     requester: string;
-    createdAt: string;
-    status: string;
+    /** Wire field name from POST /api/recovery/collect/mine. There is no `createdAt`. */
+    startedAt: string;
 }
 
 export interface RecoveryAlertBannerProps {
@@ -39,9 +39,15 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
         try {
             const res = await signedRequest('/api/recovery/collect/mine', {});
             if (res?.collections && Array.isArray(res.collections)) {
-                const active = res.collections.filter(
-                    (c: any) => c.status === 'open'
-                );
+                // The route returns ONLY open collections — openCollectionsFor filters at
+                // query time — and sends no `status` field at all. Filtering on
+                // `c.status === 'open'` therefore matched nothing and this banner never
+                // rendered, on any node, ever. Take the rows as given.
+                const active: RecoverySession[] = res.collections.map((c: any) => ({
+                    collectionId: c.collectionId,
+                    requester: c.requester || '',
+                    startedAt: c.startedAt,
+                }));
                 setSessions(active);
             }
         } catch (e) {
@@ -63,8 +69,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
     const handleStopIt = useCallback(async () => {
         Alert.alert(
             '🛑 Stop Recovery Attempt',
-            'This will cancel all active recovery sessions and re-split your keepers, '
-            + 'making any collected fragments permanently useless.\n\n'
+            'This will cancel all active recovery sessions, preventing any further fragment releases.\n\n'
             + 'Do this only if you did NOT start this recovery.',
             [
                 { text: 'Keep Watching', style: 'cancel' },
@@ -92,9 +97,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             onStopSuccess?.();
                             Alert.alert(
                                 '✅ Recovery Stopped',
-                                'All active recovery sessions have been cancelled. '
-                                + 'If you want to make collected fragments permanently useless, '
-                                + 're-split your keepers from Settings.',
+                                'All active recovery sessions have been cancelled.',
                             );
                         } catch (e) {
                             Alert.alert('Error', 'Failed to stop recovery. Please try again.');
@@ -120,8 +123,8 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                 If this is not you, stop it immediately.
             </Text>
             <Text style={styles.detail}>
-                {sessions.length} active session{sessions.length > 1 ? 's' : ''} •
-                Started {new Date(sessions[0].createdAt).toLocaleString()}
+                {sessions.length} active session{sessions.length > 1 ? 's' : ''}
+                {sessions[0].startedAt ? ` • Started ${new Date(sessions[0].startedAt).toLocaleString()}` : ''}
             </Text>
             <TouchableOpacity
                 style={styles.stopButton}
@@ -129,9 +132,11 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                 disabled={stopping}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel="Stop recovery attempt now"
+                // Must be the VISIBLE text: this is the emergency control, and a speech-
+                // control user saying "tap Stop It Now" has to hit it (WCAG 2.5.3).
+                accessibilityLabel={stopping ? 'Stopping recovery' : 'Stop It Now'}
                 accessibilityHint="Cancels active recovery sessions"
-                accessibilityState={{ disabled: stopping }}
+                accessibilityState={{ disabled: stopping, busy: stopping }}
             >
                 {stopping ? (
                     <ActivityIndicator size="small" color={palette.white} />
@@ -184,6 +189,8 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         paddingHorizontal: 20,
         alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 44,
     },
     stopButtonText: {
         color: palette.white,

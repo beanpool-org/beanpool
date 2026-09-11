@@ -308,11 +308,12 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
 
                         <div className="p-4 rounded-xl bg-nature-800/60 border border-nature-700">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block mb-2">
-                                Keepers at signup
+                                Keepers at signup (historical)
                             </span>
                             {Object.keys(view.protectionStates).length === 0 ? (
                                 <p className="text-xs text-nature-500 italic m-0">
-                                    Arrives with the new protection screen.
+                                    Nothing recorded. Keeper enrolment was removed from both
+                                    clients, so no new signups land here.
                                 </p>
                             ) : (
                                 <ul className="m-0 p-0 list-none space-y-1.5">
@@ -330,6 +331,12 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                                             </li>
                                         ))}
                                 </ul>
+                            )}
+                            {Object.keys(view.protectionStates).length > 0 && (
+                                <p className="text-[10px] text-nature-500 italic mt-2 mb-0">
+                                    Closed funnel — keeper enrolment was removed from both
+                                    clients, so these counts no longer grow.
+                                </p>
                             )}
                         </div>
                     </div>

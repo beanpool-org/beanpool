@@ -20,7 +20,6 @@ import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/b
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
-import { FriendPickerSheet } from '../components/FriendPickerSheet';
 import { GoogleButton, AppleButton, FacebookButton, GitHubButton, GoogleLogo, AppleLogo, FacebookLogo, GitHubLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
@@ -74,7 +73,21 @@ export default function WelcomeScreen() {
     const incomingUrl = Linking.useURL();
     const { setIdentity } = useIdentity();
     const { recheck: recheckNodeStatus } = useNodeStatus();
-    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>('home');
+    const initialMode = (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string))
+        ? (params.mode as any)
+        : 'home';
+    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>(initialMode);
+    useEffect(() => {
+        if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string)) {
+            setMode(params.mode as any);
+            // Consume the param. Leaving it set meant any later re-render re-applied it,
+            // so "← Back to Restore Options" out of SSO recovery snapped straight back
+            // into SSO recovery. Cleared with '' rather than undefined, matching how the
+            // rest of the app retires a consumed param (index.tsx, map.tsx) — '' is
+            // falsy, so the guard above still short-circuits.
+            router.setParams({ mode: '' });
+        }
+    }, [params?.mode]);
     const [callsign, setCallsign] = useState('');
     // Fun-name suggestions shown when the chosen first-join name is taken on the node.
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
@@ -143,7 +156,6 @@ export default function WelcomeScreen() {
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [ssoProvider, setSsoProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
-    const [showFriendSheet, setShowFriendSheet] = useState(false);
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
@@ -1051,7 +1063,6 @@ export default function WelcomeScreen() {
                                 if (prov) setSsoProvider(prov);
                                 setShowSsoSheet(true);
                             } : undefined}
-                            onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                         />
 
                         {Platform.OS === 'web' && (
@@ -1060,7 +1071,7 @@ export default function WelcomeScreen() {
                                     The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
                                 </Text>
                                 <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-                                    For Apple sign-in or friend-based recovery, use the BeanPool app on your phone.
+                                    For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
                                 </Text>
                             </View>
                         )}
@@ -1073,14 +1084,6 @@ export default function WelcomeScreen() {
                             onEnrolled={(result) => {
                                 setEnrolment(result);
                                 setShowSsoSheet(false);
-                            }}
-                        />
-                        <FriendPickerSheet
-                            visible={showFriendSheet}
-                            onClose={() => setShowFriendSheet(false)}
-                            onEnrolled={(result) => {
-                                setEnrolment(result);
-                                setShowFriendSheet(false);
                             }}
                         />
 
@@ -1526,7 +1529,7 @@ export default function WelcomeScreen() {
                     <View style={styles.card}>
                         <Text style={styles.title} accessibilityRole="header">🔑 Restore your account</Text>
                         <Text style={styles.subtitle}>
-                            Your account isn't lost — bring it to this device with your social sign-in, 12 recovery words, or Guardians.
+                            Your account isn't lost — bring it to this device with your social sign-in or 12 recovery words.
                         </Text>
 
                         <Pressable
@@ -1551,10 +1554,6 @@ export default function WelcomeScreen() {
 
                         <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
                             <Text style={styles.recoverBtnText}>🔑 Recover with 12 Words</Text>
-                        </Pressable>
-
-                        <Pressable style={styles.socialRecoverBtn} onPress={() => { router.push('/recover-identity'); }} accessibilityRole="button">
-                            <Text style={styles.socialRecoverBtnText}>🛡️ Recover via Guardians</Text>
                         </Pressable>
 
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back to Home">

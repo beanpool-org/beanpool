@@ -102,7 +102,7 @@ export function IncomingRecoveryApprovalModal({
                                     <Text style={[styles.bodyText, { color: colors.feedback.danger.solid }]} accessibilityRole="alert" accessibilityLiveRegion="assertive">
                                         {errorMsg}
                                     </Text>
-                                    <TouchableOpacity style={[styles.primaryBtn, { minWidth: 140 }]} onPress={onClose} accessibilityRole="button">
+                                    <TouchableOpacity style={[styles.primaryBtn, { minWidth: 140 }]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close modal">
                                         <Text style={styles.primaryBtnText}>Close</Text>
                                     </TouchableOpacity>
                                 </View>
@@ -113,7 +113,7 @@ export function IncomingRecoveryApprovalModal({
                                     <Text style={styles.bodyText}>
                                         You safely released your recovery piece for <Text style={styles.bold}>{context?.callsign}</Text>. Once they collect their remaining pieces, they will be back in their account.
                                     </Text>
-                                    <TouchableOpacity style={[styles.primaryBtn, { minWidth: 140 }]} onPress={onClose} accessibilityRole="button">
+                                    <TouchableOpacity style={[styles.primaryBtn, { minWidth: 140 }]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Done">
                                         <Text style={styles.primaryBtnText}>Done</Text>
                                     </TouchableOpacity>
                                 </View>
@@ -171,6 +171,7 @@ export function IncomingRecoveryApprovalModal({
                                             onPress={onClose}
                                             disabled={approving}
                                             accessibilityRole="button"
+                                            accessibilityLabel="Decline or cancel recovery request"
                                             accessibilityState={{ disabled: approving }}
                                         >
                                             <Text style={styles.cancelBtnText}>Decline / Cancel</Text>

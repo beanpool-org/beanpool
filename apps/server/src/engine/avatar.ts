@@ -19,6 +19,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db } from '../db/db.js';
 
+
+/**
+ * Raster image types an avatar may be served as. Deliberately excludes SVG: an SVG is a
+ * document that can carry script, and this route is public and unauthenticated.
+ */
+const ALLOWED_AVATAR_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 export const DEFAULT_MAX_AVATAR_CACHE_TOTAL_BYTES = 10 * 1024 * 1024; // 10 MB RAM
 
@@ -121,6 +128,9 @@ export class AvatarCache {
 }
 
 function findBundledAvatarFile(name: string): string | null {
+    // `name` comes from member-supplied `avatar_url` ("bundled://<name>"), so it must not be
+    // allowed to walk out of the avatars directory via path separators or "..".
+    if (!/^[a-z0-9_-]{1,64}$/i.test(name)) return null;
     const filename = `avatar_${name.replace(/-/g, '_')}.jpg`;
     const candidates = [
         path.resolve('public', 'avatars', filename),
@@ -204,7 +214,17 @@ export class AvatarService {
             // Match behaviour of /api/marketplace/posts/:id/photos/:orderNum
             const dataMatch = rawUrl.match(/^data:([^;]+);base64,(.*)$/);
             if (dataMatch) {
-                mimeType = dataMatch[1].toLowerCase().trim();
+                // Allowlist on the way OUT, not only on the way in. `members.avatar_url` is
+                // member-supplied and `POST /api/profile/update` does not validate its format
+                // the way post photos do, so the stored MIME type is attacker-controlled. This
+                // route is public and unauthenticated, so echoing a stored `text/html` or
+                // `image/svg+xml` would serve attacker script from the node's own origin —
+                // enough to read the Ed25519 identity out of localStorage. Raster types only.
+                const candidate = dataMatch[1].toLowerCase().trim();
+                if (!ALLOWED_AVATAR_MIMES.has(candidate)) {
+                    return { status: 400, error: 'Unsupported avatar MIME type' };
+                }
+                mimeType = candidate;
                 try {
                     fullBuffer = Buffer.from(dataMatch[2], 'base64');
                 } catch {

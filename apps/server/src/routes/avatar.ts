@@ -28,7 +28,7 @@ export function createAvatarRoutes(deps?: AvatarRouteDeps) {
             if (result.etag) {
                 ctx.set('ETag', result.etag);
             }
-            ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
+            ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
             return;
         }
 
@@ -41,10 +41,18 @@ export function createAvatarRoutes(deps?: AvatarRouteDeps) {
         ctx.status = 200;
         ctx.type = result.contentType!;
         ctx.set('Content-Type', result.contentType!);
+        // The MIME type is allow-listed in the service, but this route is public and
+        // unauthenticated, so refuse sniffing and force a non-navigational disposition too.
+        ctx.set('X-Content-Type-Options', 'nosniff');
+        ctx.set('Content-Disposition', 'inline');
         if (result.etag) {
             ctx.set('ETag', result.etag);
         }
-        ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
+        // NOT `immutable`. The emitted URL carries no version, so `immutable` would freeze a
+        // changed avatar in every client cache for a year — and the native `_v=` buster falls
+        // back to a static value because almost no caller passes `updatedAt`. Revalidating
+        // costs one conditional request that answers 304 with an empty body.
+        ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
         ctx.body = result.buffer;
     });
 

@@ -274,7 +274,11 @@ async function main() {
     assert(Buffer.isBuffer(fullRes.body), 'Body is binary Buffer');
     assert(fullRes.body.length === sampleJpegBuffer.length, `Full size matches stored bytes (${fullRes.body.length}B)`);
     assert(fullRes.type === 'image/jpeg', `Content-Type is image/jpeg (got: ${fullRes.type})`);
-    assert(fullRes.headers['cache-control']?.includes('immutable'), 'Cache-Control is immutable');
+    // Deliberately NOT `immutable`: the emitted avatar URL carries no version, so an
+    // immutable year-long cache would freeze a changed avatar in every client.
+    assert(fullRes.headers['cache-control']?.includes('must-revalidate'), 'Cache-Control revalidates');
+    assert(!fullRes.headers['cache-control']?.includes('immutable'), 'Cache-Control is not immutable');
+    assert(fullRes.headers['x-content-type-options'] === 'nosniff', 'nosniff is set on the public avatar route');
     const fullEtag = fullRes.headers['etag'];
     assert(!!fullEtag && fullEtag.startsWith('"'), `Full avatar returns strong ETag: ${fullEtag}`);
 
@@ -330,6 +334,30 @@ async function main() {
     // Member with no avatar
     const noAvatarRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkNone}`);
     assert(noAvatarRes.status === 404, 'Member with no avatar returns 404');
+
+    // Stored XSS regression. `POST /api/profile/update` does not validate the avatar format,
+    // so the stored MIME type is member-controlled. This route is public and unauthenticated:
+    // serving a stored text/html or SVG would run attacker script on the node's own origin and
+    // could read the Ed25519 identity out of localStorage. Refuse anything not a raster image.
+    const hostileTypes = [
+        'data:text/html;base64,' + Buffer.from('<script>alert(1)</script>').toString('base64'),
+        'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>').toString('base64'),
+        'data:application/javascript;base64,' + Buffer.from('alert(1)').toString('base64'),
+    ];
+    for (const hostile of hostileTypes) {
+        db.prepare(`UPDATE members SET avatar_url = ? WHERE public_key = ?`).run(hostile, pkPhoto);
+        avatarService.cache.clear();
+        const res = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
+        const label = hostile.slice(5, hostile.indexOf(';'));
+        assert(res.status === 400, `Hostile avatar MIME ${label} is refused, not served`);
+        assert(!String(res.headers['content-type'] || '').includes(label), `${label} is never echoed as Content-Type`);
+    }
+
+    // A bundled id must not be able to walk out of the avatars directory.
+    db.prepare(`UPDATE members SET avatar_url = ? WHERE public_key = ?`).run('bundled://../../../../etc/passwd', pkPhoto);
+    avatarService.cache.clear();
+    const traversalRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
+    assert(traversalRes.status === 404, 'Bundled avatar path traversal is refused');
 
     // Avatar update busts cache and changes ETag
     const newSampleBuffer = createTestJpegBuffer(35 * 1024);

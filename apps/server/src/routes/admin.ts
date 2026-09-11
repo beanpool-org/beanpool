@@ -477,14 +477,24 @@ router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
 
 router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    adminPruneUser(ctx.params.pubkey);
-    ctx.body = { success: true };
+    try {
+        adminPruneUser(ctx.params.pubkey);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to prune user' };
+    }
 });
 
 router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    adminPruneBranch(ctx.params.pubkey);
-    ctx.body = { success: true };
+    try {
+        adminPruneBranch(ctx.params.pubkey);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to prune branch' };
+    }
 });
 
 router.post('/api/local/admin/announcements', async (ctx) => {
@@ -596,8 +606,18 @@ router.post('/api/local/admin/inbox', async (ctx) => {
 router.post('/api/local/admin/inbox/send', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { targetPubkey, message } = (ctx as any).requestBody || {};
-    adminSendMessage(targetPubkey, message || '');
-    ctx.body = { success: true };
+    if (!targetPubkey || !message) {
+        ctx.status = 400;
+        ctx.body = { error: 'targetPubkey and message are required' };
+        return;
+    }
+    try {
+        adminSendMessage(targetPubkey, message);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to send admin message' };
+    }
 });
 
 router.post('/api/local/admin/commons/round', async (ctx) => {
@@ -644,8 +664,13 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
         ctx.body = { error: 'projectId required' };
         return;
     }
-    adminRejectProject(projectId);
-    ctx.body = { success: true };
+    try {
+        adminRejectProject(projectId);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to reject project' };
+    }
 });
 
 // Admin: get all projects (unified — reads from crowdfund SQL table)

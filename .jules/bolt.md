@@ -158,3 +158,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-24 - O(1) Edge Lookups for Cluster Internal Volume in Wash Analysis
 **Learning:** In `packages/beanpool-engine/src/trust.ts`, `runWashTradingAnalysis` previously calculated internal 30-day trade volume for connected component clusters by scanning all entries in `edgeVol30` for every component ($O(K \times E)$ complexity across $K$ components and $E$ edges).
 **Action:** Replaced the full $O(E)$ edge scan per component with $O(N^2)$ direct pair lookups (`edgeVol30.get(...)`) over members in `comp` (where $N \le 12$), reducing overall component volume calculation to constant-time pair retrievals.
+
+## 2026-09-25 - Grouping Active Transactions in Native MyDealsSheet
+**Learning:** In `apps/native/components/MyDealsSheet.tsx`, deriving `myPosts`, `pendingDeals`, `usePendingDealsCount`, and rendering deal items previously executed `transactions.some(...)` and `transactions.find(...)` scans inside `posts.filter` loops and list renders, leading to $O(P \times T)$ nested array iterations per render.
+**Action:** Grouped active (`pending` / `requested`) transactions by `postId` into a `Map<string, Transaction[]>` via `useMemo`. This turns `myPosts` and `pendingDeals` filter checks and `renderDealItem` related-transaction lookups into $O(1)$ retrievals ($O(P + T)$ overall).

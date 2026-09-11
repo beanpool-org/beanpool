@@ -522,8 +522,9 @@ export function releaseHubFragment(collectionId: string): ReleasedFragment {
         const waitMs = eligibleAt - Date.now();
         const hours = Math.ceil(waitMs / 3_600_000);
         throw new RecoveryReleaseError(
-            `The hub's fragment is held for ${hours}h unless a human keeper approves first (D7). `
-            + 'Ask any of your keepers to approve and it releases immediately.',
+            `The hub's fragment is held for ${hours}h. `
+            + 'Signing in with a connected provider releases it immediately; '
+            + 'otherwise your twelve words recover the account without waiting.',
         );
     }
 

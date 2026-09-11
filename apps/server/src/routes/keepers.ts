@@ -505,11 +505,13 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             recoverable: total >= threshold,
             unattendedPieces,
             humanKeepers,
-            // True when getting back in REQUIRES a particular person to agree. Not a warning about
-            // those people — it is a fact about the shape of the split, and the screen should say
-            // so plainly and tell the member to write their twelve words down. The words are the
-            // floor under all of this; keepers are convenience on top, never a replacement.
-            dependsOnPeople: unattendedPieces < threshold,
+            // True when getting back in REQUIRES a particular person to agree. With human keepers
+            // deleted, no surviving path does: SSO and the hub fragment are both unattended, so
+            // this is now always false and is derived from the count rather than hardcoded, so it
+            // stays honest if a holder type is ever added back. It was previously
+            // `unattendedPieces < threshold`, which reported TRUE for a member with no SSO
+            // enrolled — telling them recovery depended on a person who can no longer exist.
+            dependsOnPeople: humanKeepers > 0,
         };
     });
 

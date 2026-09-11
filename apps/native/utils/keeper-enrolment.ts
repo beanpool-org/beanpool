@@ -22,16 +22,16 @@
  * returns immediately with `enrolled: []` and `generation: null`. The caller
  * (`welcome.tsx`) renders the words-only screen, which is correct.
  *
- * ## Future entry points (not yet built)
+ ## Entry point
  *
- * When an SSO or friend flow triggers a split, it will call the server's deposit endpoint
- * directly — either `POST /api/recovery/shares/sso` (which verifies the token and derives
- * the lookup hash server-side) or `POST /api/recovery/shares` (for friend fragments sealed
- * client-side). Both already exist and both write a full generation atomically through
- * `putShareGeneration`.
+ * An SSO sign-in triggers a split which calls `POST /api/recovery/shares/sso` — the node
+ * verifies the token and derives the lookup hash server-side, then writes a full generation
+ * atomically through `putShareGeneration`.
  *
- * The functions below — {@link enrolSsoKeeper} and {@link enrolFriendKeepers} — provide the
- * client-side split logic for those flows. They are exported but not called at signup.
+ * {@link enrolSsoKeeper} below holds the client-side split logic. It is not called at signup:
+ * it runs when the member signs in with a provider for the first time. The friend-keeper
+ * counterpart and its `POST /api/recovery/shares` endpoint are deleted — social recovery is
+ * scrapped, and the only paths back in are SSO and the member's twelve words.
  */
 
 import {

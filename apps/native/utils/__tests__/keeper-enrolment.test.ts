@@ -26,7 +26,7 @@ vi.mock('../node-post', () => ({
 
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    enrolKeepers, enrolFriendKeepers, enrolSsoKeeper, disconnectSsoKeeper,
+    enrolKeepers, enrolSsoKeeper, disconnectSsoKeeper,
 } from '../keeper-enrolment';
 import { signedPost, signedDelete, anchorUrl } from '../node-post';
 import { readHubShare, recordShareForHub, toEd25519Pkcs8 } from '@beanpool/core';
@@ -112,75 +112,6 @@ describe('keeper-enrolment.ts', () => {
         it('returns empty skipped array — nothing was attempted', async () => {
             const result = await enrolKeepers(IDENTITY);
             expect(result.skipped).toEqual([]);
-        });
-    });
-
-    // ---------------------------------------------------------------------------
-    // Friend-tier enrolment
-    // ---------------------------------------------------------------------------
-    describe('enrolFriendKeepers', () => {
-        it('rejects if fewer than 2 friends provided', async () => {
-            const result = await enrolFriendKeepers({
-                identity: IDENTITY,
-                friendPublicKeys: ['11'.repeat(32)],
-            });
-            expect(result.enrolled).toEqual([]);
-            expect(result.error).toContain('need at least 2 friends');
-        });
-
-        it('rejects if identity has no mnemonic', async () => {
-            const result = await enrolFriendKeepers({
-                identity: { ...IDENTITY, mnemonic: undefined },
-                friendPublicKeys: FRIEND_KEYS,
-            });
-            expect(result.enrolled).toEqual([]);
-            expect(result.error).toContain('no recovery words');
-        });
-
-        it('successfully splits and deposits shares with friends', async () => {
-            (signedPost as any).mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ generation: 1 }),
-            });
-
-            const result = await enrolFriendKeepers({
-                identity: IDENTITY,
-                friendPublicKeys: FRIEND_KEYS,
-            });
-
-            expect(result.enrolled).toEqual(['hub', 'member', 'member', 'member']);
-            expect(result.generation).toBe(1);
-            expect(result.available).toBe(4);
-            expect(result.error).toBeUndefined();
-            expect(signedPost).toHaveBeenCalledWith(
-                'https://test.beanpool.org',
-                '/api/recovery/shares',
-                expect.objectContaining({
-                    shares: expect.arrayContaining([
-                        expect.objectContaining({ holderType: 'hub', shareIndex: 1 }),
-                        expect.objectContaining({ holderType: 'member', shareIndex: 2 }),
-                        expect.objectContaining({ holderType: 'member', shareIndex: 3 }),
-                        expect.objectContaining({ holderType: 'member', shareIndex: 4 }),
-                    ]),
-                }),
-                IDENTITY,
-            );
-        });
-
-        it('handles node HTTP error gracefully', async () => {
-            (signedPost as any).mockResolvedValueOnce({
-                ok: false,
-                status: 400,
-                text: async () => 'Invalid share format',
-            });
-
-            const result = await enrolFriendKeepers({
-                identity: IDENTITY,
-                friendPublicKeys: FRIEND_KEYS,
-            });
-
-            expect(result.enrolled).toEqual([]);
-            expect(result.error).toContain('node refused the fragments (400)');
         });
     });
 

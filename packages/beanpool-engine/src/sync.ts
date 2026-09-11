@@ -511,27 +511,37 @@ export function exportSyncState(
         // pulse_items table may not exist on older test fixtures
     }
 
-    const recoveryReqRows = sel('recovery_requests', 'updated_at');
-    const recoveryRequests: SyncRecoveryRequest[] = recoveryReqRows.map(row => ({
-        id: row.id,
-        oldPubkey: row.old_pubkey,
-        newPubkey: row.new_pubkey,
-        status: row.status,
-        quorumRequired: row.quorum_required,
-        createdAt: row.created_at,
-        cooldownUntil: row.cooldown_until,
-        executedAt: row.executed_at,
-        expiresAt: row.expires_at,
-        updatedAt: row.updated_at || row.executed_at || row.cooldown_until || row.created_at,
-    }));
+    let recoveryRequests: SyncRecoveryRequest[] = [];
+    try {
+        const recoveryReqRows = sel('recovery_requests', 'updated_at');
+        recoveryRequests = recoveryReqRows.map(row => ({
+            id: row.id,
+            oldPubkey: row.old_pubkey,
+            newPubkey: row.new_pubkey,
+            status: row.status,
+            quorumRequired: row.quorum_required,
+            createdAt: row.created_at,
+            cooldownUntil: row.cooldown_until,
+            executedAt: row.executed_at,
+            expiresAt: row.expires_at,
+            updatedAt: row.updated_at || row.executed_at || row.cooldown_until || row.created_at,
+        }));
+    } catch {
+        // recovery_requests table may not exist on fresh databases
+    }
 
-    const recoveryAppRows = sel('recovery_approvals', 'created_at');
-    const recoveryApprovals: SyncRecoveryApproval[] = recoveryAppRows.map(row => ({
-        requestId: row.request_id,
-        guardianPubkey: row.guardian_pubkey,
-        decision: row.decision,
-        createdAt: row.created_at,
-    }));
+    let recoveryApprovals: SyncRecoveryApproval[] = [];
+    try {
+        const recoveryAppRows = sel('recovery_approvals', 'created_at');
+        recoveryApprovals = recoveryAppRows.map(row => ({
+            requestId: row.request_id,
+            guardianPubkey: row.guardian_pubkey,
+            decision: row.decision,
+            createdAt: row.created_at,
+        }));
+    } catch {
+        // recovery_approvals table may not exist on fresh databases
+    }
 
     const recoveryShareRows = sel('recovery_shares', 'updated_at');
     const recoveryShares: SyncRecoveryShare[] = recoveryShareRows.map((row: any) => ({

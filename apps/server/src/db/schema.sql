@@ -249,7 +249,6 @@ CREATE TABLE IF NOT EXISTS friends (
     owner_pubkey TEXT REFERENCES members(public_key),
     friend_pubkey TEXT REFERENCES members(public_key),
     added_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    is_guardian INTEGER DEFAULT 0,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (owner_pubkey, friend_pubkey)
 );
@@ -351,31 +350,7 @@ CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts BEGIN
     VALUES (new.rowid, new.title, new.description, new.search_keywords);
 END;
 
--- 14. Social Recovery
-CREATE TABLE IF NOT EXISTS recovery_requests (
-    id TEXT PRIMARY KEY,
-    old_pubkey TEXT NOT NULL REFERENCES members(public_key),
-    new_pubkey TEXT NOT NULL,
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'cancelled', 'expired', 'executed')),
-    quorum_required INTEGER DEFAULT 3,
-    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    cooldown_until DATETIME,
-    executed_at DATETIME,
-    expires_at DATETIME,
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_recovery_requests_updated_at ON recovery_requests(updated_at);
-
-CREATE TABLE IF NOT EXISTS recovery_approvals (
-    request_id TEXT NOT NULL REFERENCES recovery_requests(id) ON DELETE CASCADE,
-    guardian_pubkey TEXT NOT NULL REFERENCES members(public_key),
-    decision TEXT NOT NULL CHECK (decision IN ('approve', 'reject')),
-    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (request_id, guardian_pubkey)
-);
-CREATE INDEX IF NOT EXISTS idx_recovery_approvals_created_at ON recovery_approvals(created_at);
-
--- 14b. Keyholder model (docs/ONBOARDING.md Part 0) — one encrypted fragment per keeper.
+-- 14. Keyholder recovery (docs/ONBOARDING.md Part 0) — one encrypted fragment per keeper.
 --
 -- Distinct from recovery_requests above, which is the guardian-quorum flow for migrating an
 -- account to a NEW key. This table serves the other half: rebuilding the ORIGINAL phrase from
@@ -571,14 +546,6 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE projects SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
-END;
-
-CREATE TRIGGER IF NOT EXISTS recovery_requests_touch_updated_at
-AFTER UPDATE ON recovery_requests
-FOR EACH ROW
-WHEN NEW.updated_at IS OLD.updated_at
-BEGIN
-    UPDATE recovery_requests SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
 
 -- ============================================================================
@@ -881,26 +848,6 @@ CREATE TABLE IF NOT EXISTS sync_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_peer ON sync_audit_log(origin_peer_id, synced_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sync_audit_log_time ON sync_audit_log(synced_at DESC);
-
--- ===================== RECOVERY PIN =====================
--- Optional 6-digit numeric PIN for non-SSO recovery. When set, a correct PIN entry
--- reveals the member's keeper list (which friends hold their Shamir fragments) —
--- it does NOT gate release of fragment A itself.
---
--- Rate limited: 2 free attempts, then 1 attempt per 15 minutes. No hard lockout.
--- The response for "wrong PIN" and "no such callsign" is intentionally identical
--- to prevent member enumeration.
-CREATE TABLE IF NOT EXISTS recovery_pin (
-    owner_pubkey   TEXT PRIMARY KEY REFERENCES members(public_key),
-    pin_hash       TEXT NOT NULL,
-    pin_salt       TEXT NOT NULL,
-    attempts       INTEGER NOT NULL DEFAULT 0,
-    last_attempt_at DATETIME,
-    created_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_recovery_pin_updated_at ON recovery_pin(updated_at);
 
 -- ===================== COMMUNITY PRICING GUIDE (#206) =====================
 -- Searchable, auto-adjusting community pricing guide for goods & services.

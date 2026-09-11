@@ -18,14 +18,14 @@ import {
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
     submitReport, getReports, getReportCount,
-    getFriends, addFriend, removeFriend, setGuardian,
+    getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
     exportLedgerAudit,
     registerPushToken, removePushToken,
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
-    getGuardiansOf, createRecoveryRequest, getRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery,
+    dispatchPushNotification,
     getNodeRole, exportSyncState,
     createTreasury,
     purgeMemberSelf,
@@ -50,7 +50,6 @@ import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
-import { pendingKeeperActionsFor } from '../engine/recovery-release.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -697,13 +696,11 @@ router.get('/api/community/membership/:publicKey', async (ctx) => {
     if (member) {
         ctx.body = { isMember: true, callsign: member.callsign };
     } else {
-        const recovery = getRecoveryStatus(ctx.params.publicKey);
-        const isRecovering = recovery && (recovery.status === 'pending' || recovery.status === 'approved');
         ctx.body = {
             isMember: false,
             callsign: null,
-            isRecovering: !!isRecovering,
-            recoveryStatus: recovery?.status || null
+            isRecovering: false,
+            recoveryStatus: null
         };
     }
 });
@@ -1271,27 +1268,7 @@ router.post('/api/friends/remove', async (ctx) => {
     ctx.body = { success: true };
 });
 
-router.post('/api/friends/guardian', async (ctx) => {
-    const ownerPubkey = ctx.state.actor || (ctx.request.header['x-public-key'] as string);
-    if (!ownerPubkey) {
-        ctx.status = 401;
-        ctx.body = { error: 'Signed request required' };
-        return;
-    }
-    const body = (ctx as any).requestBody;
-    if (!body || !body.friendPubkey || typeof body.isGuardian !== 'boolean') {
-        ctx.status = 400; ctx.body = { error: 'Invalid payload' }; return;
-    }
-
-    const success = setGuardian(ownerPubkey, body.friendPubkey, body.isGuardian);
-    if (success) {
-        ctx.status = 200; ctx.body = { success: true };
-    } else {
-        ctx.status = 400; ctx.body = { error: 'Could not set guardian status' };
-    }
-});
-
-// ======================== SOCIAL RECOVERY ========================
+// ======================== SSO RECOVERY LOOKUP ========================
 
 // 1. Lookup identities by callsign (Public, but we rate limit it in practice, handled loosely here)
 router.get('/api/recovery/lookup/:callsign', async (ctx) => {
@@ -1316,174 +1293,6 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
     const available = raw.length >= 2 && isCallsignAvailable(raw, exclude);
     ctx.status = 200;
     ctx.body = { callsign: raw, available, tooShort: raw.length < 2 };
-});
-
-// 2. Submit a recovery request (Signed by NEW pubkey)
-router.post('/api/recovery/request', async (ctx) => {
-    if (!rateLimit(ctx)) return; // SRV-4: throttle recovery-request spam / guardian-guessing
-    const newPubkey = ctx.request.header['x-public-key'] as string;
-    const body = (ctx as any).requestBody;
-    
-    if (!body || !body.oldPubkey || !body.guardianGuess) {
-        ctx.status = 400; ctx.body = { error: 'Missing oldPubkey or guardianGuess' }; return;
-    }
-
-    try {
-        const req = createRecoveryRequest(body.oldPubkey, newPubkey, body.guardianGuess);
-        
-        // Push notification to guardians
-        // Disabled push notifications to prevent complacent approvals without offline verification.
-        // Guardians must be actively contacted by the recovering user.
-        /*
-        const guardians = getGuardiansOf(body.oldPubkey);
-        const targetMember = getMember(body.oldPubkey);
-        if (targetMember) {
-            dispatchPushNotification(
-                guardians,
-                body.oldPubkey, // actor
-                '🛡️ Recovery Request',
-                `${targetMember.callsign} is requesting identity recovery. Open BeanPool to review.`,
-                { screen: 'settings' }, // data payload
-                'escrow' // closest matching notification category
-            );
-        }
-        */
-
-        ctx.status = 200;
-        ctx.body = req;
-    } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e.message };
-    }
-});
-
-// 3. Get pending requests for a guardian
-router.get('/api/recovery/pending/:guardianPubkey', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    const guardianPubkey = ctx.params.guardianPubkey;
-    // A2-16: under ENFORCE_READ_AUTH this route is gated, so ctx.state.actor is the
-    // CRYPTOGRAPHICALLY VERIFIED signer — require it to be the guardian. The
-    // x-public-key header check below is non-authenticating (a caller just sets it
-    // to the value being queried); it remains only as the flag-off fallback. Full
-    // fix is a guardian-signed-proof recovery flow (tracked).
-    if (ENFORCE_READ_AUTH) {
-        if (ctx.state.actor !== guardianPubkey) {
-            ctx.status = 403; ctx.body = { error: 'Unauthorized' }; return;
-        }
-    } else if (ctx.request.header['x-public-key'] !== guardianPubkey) {
-        ctx.status = 403; ctx.body = { error: 'Unauthorized' }; return;
-    }
-    try {
-        const reqs = getPendingRecoveryRequests(guardianPubkey);
-
-        // The approve RESPONSE can only report an obligation that already exists at the moment of
-        // the vote — and the usual ordering is the other way round: the guardian votes first, the
-        // recovering device opens its collection afterwards. A keeper who approved early would
-        // otherwise never be told their fragment is still needed, which is the same silent stall
-        // in a different order (CR #239).
-        //
-        // This list is where a keeper's client already polls, and it keeps returning a request
-        // after that guardian has voted (status IN 'pending','approved'), so the obligation
-        // surfaces on the next poll whenever the collection opens. Attached per request rather
-        // than alongside the array, so the response stays an array and old clients are unaffected.
-        ctx.status = 200;
-        ctx.body = reqs.map((r: any) => {
-            const pending = pendingKeeperActionsFor(guardianPubkey, r.oldPubkey);
-            return pending.length
-                ? { ...r, keeperActionRequired: pending.map(p => ({
-                    collectionId: p.collectionId,
-                    ownerPubkey: p.ownerPubkey,
-                    expiresAt: p.expiresAt,
-                })) }
-                : r;
-        });
-    } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e.message };
-    }
-});
-
-// 4. Approve recovery
-router.post('/api/recovery/approve', async (ctx) => {
-    const guardianPubkey = ctx.request.header['x-public-key'] as string;
-    const body = (ctx as any).requestBody;
-    if (!body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
-
-    try {
-        approveRecovery(body.requestId, guardianPubkey);
-
-        // ONBOARDING Part 5: "the approve endpoint gains a side effect: releasing that approver's
-        // piece." It cannot, quite — a member fragment is released only when it has been re-wrapped
-        // to the recovering device's ephemeral key, and that needs the keeper's PRIVATE key. The
-        // node has no plaintext and must not pretend otherwise.
-        //
-        // What it can do is refuse to let the approval read as finished when it is not. The old
-        // guardian vote and the keyholder split are two mechanisms wearing the same word on the
-        // same button: a guardian who is also a keeper taps Approve, is told it worked, and stops —
-        // while the fragment recovery actually needs has not moved. The owner then sees an approval
-        // and no piece, with nothing to explain the gap.
-        //
-        // So the response carries the outstanding obligation and the client finishes it against
-        // /api/recovery/approve-keeper, which stays the single path that releases anything.
-        const req = getRecoveryRequest(body.requestId);
-        const pending = req ? pendingKeeperActionsFor(guardianPubkey, req.oldPubkey) : [];
-
-        ctx.status = 200;
-        ctx.body = {
-            success: true,
-            // Absent rather than empty when there is nothing to do, so a client that ignores this
-            // field behaves exactly as before.
-            ...(pending.length ? {
-                keeperActionRequired: pending.map(p => ({
-                    collectionId: p.collectionId,
-                    // Whose account. Without it the client has a session id and no way to say who
-                    // it belongs to without a second lookup — and "someone needs your help" with
-                    // no name attached is exactly the prompt people dismiss (CR #239).
-                    ownerPubkey: p.ownerPubkey,
-                    expiresAt: p.expiresAt,
-                })),
-            } : {}),
-        };
-    } catch (e: any) {
-        ctx.status = 400; ctx.body = { error: e.message };
-    }
-});
-
-// 5. Reject recovery
-router.post('/api/recovery/reject', async (ctx) => {
-    const guardianPubkey = ctx.request.header['x-public-key'] as string;
-    const body = (ctx as any).requestBody;
-    if (!body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
-
-    try {
-        rejectRecovery(body.requestId, guardianPubkey);
-        ctx.status = 200; ctx.body = { success: true };
-    } catch (e: any) {
-        ctx.status = 400; ctx.body = { error: e.message };
-    }
-});
-
-// 6. Check recovery status
-router.get('/api/recovery/status/:pubkey', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    const pubkey = ctx.params.pubkey;
-    const status = getRecoveryStatus(pubkey);
-    ctx.status = 200;
-    ctx.body = status || { status: 'none' };
-});
-
-// 7. Cancel recovery
-router.post('/api/recovery/cancel', async (ctx) => {
-    const cancellerPubkey = ctx.request.header['x-public-key'] as string;
-    const body = (ctx as any).requestBody;
-    if (!body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
-
-    try {
-        cancelRecovery(body.requestId, cancellerPubkey);
-        ctx.status = 200; ctx.body = { success: true };
-    } catch (e: any) {
-        ctx.status = 400; ctx.body = { error: e.message };
-    }
 });
 
 // ======================== MEMBERS LIST ========================

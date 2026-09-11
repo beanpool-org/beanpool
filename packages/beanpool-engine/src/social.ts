@@ -108,7 +108,7 @@ export function getAverageRating(db: Db, targetPubkey: string): AverageRatingRes
 
 export function getFriends(db: Db, pubkey: string): FriendEntry[] {
     const rows = db.prepare(`
-        SELECT f.friend_pubkey, m.callsign, f.added_at, f.is_guardian 
+        SELECT f.friend_pubkey, m.callsign, f.added_at 
         FROM friends f 
         JOIN members m ON f.friend_pubkey = m.public_key 
         WHERE f.owner_pubkey=?
@@ -118,6 +118,6 @@ export function getFriends(db: Db, pubkey: string): FriendEntry[] {
         publicKey: r.friend_pubkey,
         callsign: r.callsign,
         addedAt: r.added_at,
-        isGuardian: Boolean(r.is_guardian)
+        isGuardian: false
     }));
 }

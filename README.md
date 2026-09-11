@@ -100,7 +100,7 @@ Deterministic identity from a BIP-39 mnemonic:
 ### 🛡️ Sign-In Recovery (phone app only)
 An optional second way back onto a new device:
 - **Link an account** — Apple, Google, Facebook or GitHub, from Settings on the phone app.
-- **Two pieces** — your community node stores both encrypted pieces; signing in with the linked account is what unlocks one of them. Neither piece opens your account on its own.
+- **Two pieces, both held by your node** — one stored in the clear, one encrypted so that signing in with the linked account is what unlocks it. Your node therefore needs only your sign-in identity to rebuild the account, which is why SSO is a convenience, not a second custodian.
 - **Not a copy of your words** — it restores the account, and only while your community node is running. The 12 words are the way back that depends on nobody.
 
 > **Keeper (social) recovery was removed in September 2026.** Enrolling friends as recovery

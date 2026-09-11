@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
@@ -333,14 +333,29 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         }
     };
 
+    // ⚡ Bolt: Group active/requested transactions by postId into a 1:N Map for O(1) lookups without array scans
+    const activeTxsByPostId = useMemo(() => {
+        const map = new Map<string, any[]>();
+        for (const t of transactions) {
+            if (t.status === 'pending' || t.status === 'requested') {
+                const list = map.get(t.postId);
+                if (list) {
+                    list.push(t);
+                } else {
+                    map.set(t.postId, [t]);
+                }
+            }
+        }
+        return map;
+    }, [transactions]);
+
     // ── Data derivation ──
-    const myPosts = posts.filter(p =>
-        identity && (
-            p.author_pubkey === identity.publicKey ||
-            p.accepted_by === identity.publicKey ||
-            transactions.some(t => t.postId === p.id && (t.status === 'pending' || t.status === 'requested') && (t.buyerPublicKey === identity.publicKey || t.sellerPublicKey === identity.publicKey))
-        )
-    ).sort((a, b) => {
+    const myPosts = posts.filter(p => {
+        if (!identity) return false;
+        if (p.author_pubkey === identity.publicKey || p.accepted_by === identity.publicKey) return true;
+        const txs = activeTxsByPostId.get(p.id);
+        return txs?.some(t => t.buyerPublicKey === identity.publicKey || t.sellerPublicKey === identity.publicKey);
+    }).sort((a, b) => {
         if (a.status === 'pending' && b.status !== 'pending') return -1;
         if (b.status === 'pending' && a.status !== 'pending') return 1;
         if (a.status === 'active' && b.status !== 'active') return -1;
@@ -351,7 +366,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
     const pendingDeals = posts.filter(p => {
         if (!identity) return false;
         if (p.status === 'pending' && (p.author_pubkey === identity.publicKey || p.accepted_by === identity.publicKey)) return true;
-        return transactions.some(t => t.postId === p.id && (t.status === 'pending' || t.status === 'requested'));
+        return activeTxsByPostId.has(p.id);
     });
 
     const pendingCount = pendingDeals.length;
@@ -463,7 +478,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             } catch {}
         }
 
-        const relatedTx = transactions.find(t => t.postId === item.id && (t.status === 'pending' || t.status === 'requested'));
+        const relatedTx = activeTxsByPostId.get(item.id)?.[0];
         let displayStatusText = 'Active';
         let highlightStyle = {};
         
@@ -633,9 +648,14 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
 /** Export pending count helper for header badge */
 export function usePendingDealsCount(identity: { publicKey: string } | null, posts: any[], transactions: any[]): number {
     if (!identity) return 0;
+    const activeTxPostIds = new Set(
+        transactions
+            .filter((t: any) => t.status === 'pending' || t.status === 'requested')
+            .map((t: any) => t.postId)
+    );
     return posts.filter(p => {
         if (p.status === 'pending' && (p.author_pubkey === identity.publicKey || p.accepted_by === identity.publicKey)) return true;
-        return transactions.some((t: any) => t.postId === p.id && (t.status === 'pending' || t.status === 'requested'));
+        return activeTxPostIds.has(p.id);
     }).length;
 }
 

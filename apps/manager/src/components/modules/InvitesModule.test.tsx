@@ -66,7 +66,8 @@ describe('InvitesModule', () => {
         expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
             'https://test-node.beanpool.org',
             'secretpassword',
-            'standard'
+            'standard',
+            undefined
         );
         expect(screen.getAllByText('INV-API-PASS-1').length).toBeGreaterThan(0);
     });
@@ -115,7 +116,8 @@ describe('InvitesModule', () => {
         expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
             'https://test-node.beanpool.org',
             'secretpassword',
-            'trusted'
+            'trusted',
+            undefined
         );
         expect(screen.getAllByText('🏠 Resident').length).toBeGreaterThan(0);
     });

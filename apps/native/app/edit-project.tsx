@@ -13,7 +13,7 @@ import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 
 export default function EditProjectModal() {
-    const params = useLocalSearchParams<{ id: string, title?: string, description?: string, goal?: string, current?: string, photos?: string }>();
+    const params = useLocalSearchParams<{ id?: string, title?: string, description?: string, goal?: string, current?: string, photos?: string }>();
     const { theme, colors } = useTheme();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.app },
@@ -70,6 +70,10 @@ export default function EditProjectModal() {
 
     const handleSubmit = async () => {
         if (submittingRef.current) return;
+        if (!params.id) {
+            Alert.alert("Error", "Missing project ID.");
+            return;
+        }
         if (!title.trim() || !goalAmount.trim()) {
             Alert.alert("Missing Fields", "Please provide a project title and requested goal amount.");
             return;
@@ -110,6 +114,10 @@ export default function EditProjectModal() {
     };
 
     const handleDelete = async () => {
+        if (!params.id) {
+            Alert.alert("Error", "Missing project ID.");
+            return;
+        }
         Alert.alert(
             "Delete Project?",
             "This will permanently erase the project. Pledges currently held in a Trust Wallet will be automatically refunded to backers.",
@@ -119,6 +127,7 @@ export default function EditProjectModal() {
                     text: "Delete & Refund",
                     style: "destructive",
                     onPress: async () => {
+                        if (!params.id) return;
                         setSubmitting(true);
                         try {
                             await deleteCrowdfundProjectApi(params.id);

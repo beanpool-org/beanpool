@@ -132,7 +132,7 @@ export function ArchetypeQuizModal({
         <div
             role="dialog"
             aria-modal="true"
-            aria-label="Archetype Quiz"
+            aria-labelledby="quiz-modal-title"
             className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex justify-center items-start sm:items-center p-0 sm:p-4 animate-in fade-in duration-200"
         >
             <div className="w-full max-w-lg min-h-screen sm:min-h-0 sm:max-h-[90vh] bg-oat-50 dark:bg-nature-950 sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-nature-200 dark:border-nature-800 transition-colors">
@@ -143,7 +143,7 @@ export function ArchetypeQuizModal({
                             type="button"
                             aria-label="Go back to previous question"
                             onClick={handleBackQuestion}
-                            className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-700 dark:text-nature-300 transition-colors cursor-pointer border-none"
+                            className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-700 dark:text-nature-300 transition-colors cursor-pointer border-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
@@ -153,7 +153,7 @@ export function ArchetypeQuizModal({
                         <div className="w-11 h-11 min-w-[44px] min-h-[44px]" />
                     )}
 
-                    <h3 className="text-base sm:text-lg font-bold text-nature-950 dark:text-white m-0 text-center flex-1 px-2 truncate">
+                    <h3 id="quiz-modal-title" className="text-base sm:text-lg font-bold text-nature-950 dark:text-white m-0 text-center flex-1 px-2 truncate">
                         {step === 'intro'
                             ? 'Discover Your Archetype'
                             : step === 'quiz'
@@ -165,7 +165,7 @@ export function ArchetypeQuizModal({
                         type="button"
                         aria-label="Close quiz modal"
                         onClick={handleClose}
-                        className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-500 hover:text-nature-900 dark:text-nature-400 dark:hover:text-white transition-colors cursor-pointer border-none text-lg font-bold"
+                        className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-nature-500 hover:text-nature-900 dark:text-nature-400 dark:hover:text-white transition-colors cursor-pointer border-none text-lg font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                         ✕
                     </button>
@@ -175,7 +175,7 @@ export function ArchetypeQuizModal({
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                     {step === 'intro' && (
                         <div className="flex flex-col items-center max-w-md mx-auto py-2">
-                            <div className="w-20 h-20 rounded-3xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-center text-4xl mb-4 shadow-sm">
+                            <div className="w-20 h-20 rounded-3xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-center text-4xl mb-4 shadow-sm" aria-hidden="true">
                                 🌱
                             </div>
 
@@ -198,10 +198,10 @@ export function ArchetypeQuizModal({
                                     setAnswers([]);
                                     setStep('quiz');
                                 }}
-                                className="w-full text-left bg-white dark:bg-nature-900 p-4 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm hover:border-emerald-500 dark:hover:border-emerald-500 transition-all cursor-pointer mb-3 group"
+                                className="w-full text-left bg-white dark:bg-nature-900 p-4 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm hover:border-emerald-500 dark:hover:border-emerald-500 transition-all cursor-pointer mb-3 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 <div className="flex items-start gap-3.5">
-                                    <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-2xl shrink-0">
+                                    <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-2xl shrink-0" aria-hidden="true">
                                         ⚡
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -231,10 +231,10 @@ export function ArchetypeQuizModal({
                                     setAnswers([]);
                                     setStep('quiz');
                                 }}
-                                className="w-full text-left bg-white dark:bg-nature-900 p-4 rounded-2xl border-2 border-emerald-500/80 dark:border-emerald-500 shadow-sm hover:border-emerald-600 transition-all cursor-pointer mb-5 group"
+                                className="w-full text-left bg-white dark:bg-nature-900 p-4 rounded-2xl border-2 border-emerald-500/80 dark:border-emerald-500 shadow-sm hover:border-emerald-600 transition-all cursor-pointer mb-5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 <div className="flex items-start gap-3.5">
-                                    <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 flex items-center justify-center text-2xl shrink-0">
+                                    <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 flex items-center justify-center text-2xl shrink-0" aria-hidden="true">
                                         🧭
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -256,7 +256,7 @@ export function ArchetypeQuizModal({
 
                             {/* Privacy Note */}
                             <div className="w-full flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-nature-900/60 border border-emerald-200/80 dark:border-nature-800 text-xs text-nature-700 dark:text-nature-300 leading-relaxed">
-                                <span className="text-emerald-600 dark:text-emerald-400 text-base shrink-0 leading-none mt-0.5">🛡️</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 text-base shrink-0 leading-none mt-0.5" aria-hidden="true">🛡️</span>
                                 <div>
                                     <strong className="font-bold text-nature-900 dark:text-white">Privacy-First:</strong> We never
                                     display psychological type numbers or clinical labels. The app only
@@ -307,7 +307,7 @@ export function ArchetypeQuizModal({
                                             aria-checked={isSelected}
                                             aria-label={opt.text}
                                             onClick={() => handleSelectOption(opt.target)}
-                                            className={`w-full flex items-center gap-3 p-4 rounded-2xl border text-left transition-all cursor-pointer shadow-sm ${
+                                            className={`w-full flex items-center gap-3 p-4 rounded-2xl border text-left transition-all cursor-pointer shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                                 isSelected
                                                     ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-950 dark:text-emerald-200 font-bold ring-2 ring-emerald-500/20'
                                                     : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-800 dark:text-nature-200 hover:border-emerald-300 dark:hover:border-nature-700'
@@ -359,8 +359,8 @@ export function ArchetypeQuizModal({
 
                             {/* Superpowers */}
                             <div className="bg-white dark:bg-nature-900 p-5 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm">
-                                <h4 className="text-sm font-bold text-nature-950 dark:text-white uppercase tracking-wider mb-3">
-                                    🌟 Your Community Superpowers
+                                <h4 className="text-sm font-bold text-nature-950 dark:text-white uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                    <span aria-hidden="true">🌟</span> Your Community Superpowers
                                 </h4>
                                 <ul className="space-y-2 m-0 p-0 list-none">
                                     {primaryInfo.superpowers.map((power, i) => (
@@ -374,8 +374,8 @@ export function ArchetypeQuizModal({
 
                             {/* Ideal Collaborators */}
                             <div className="bg-white dark:bg-nature-900 p-5 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm">
-                                <h4 className="text-sm font-bold text-nature-950 dark:text-white uppercase tracking-wider mb-1">
-                                    👥 Ideal Collaborator Pairings
+                                <h4 className="text-sm font-bold text-nature-950 dark:text-white uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                                    <span aria-hidden="true">👥</span> Ideal Collaborator Pairings
                                 </h4>
                                 <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-normal">
                                     You naturally build high synergy when collaborating on projects or deals with:
@@ -410,7 +410,7 @@ export function ArchetypeQuizModal({
                                     aria-label={saving ? "Saving archetype to profile" : "Done · Save to Profile"}
                                     onClick={handleSave}
                                     disabled={saving}
-                                    className="w-full py-3.5 px-4 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white shadow-md transition-all cursor-pointer text-sm sm:text-base border-none flex items-center justify-center gap-2"
+                                    className="w-full py-3.5 px-4 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white shadow-md transition-all cursor-pointer text-sm sm:text-base border-none flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                                 >
                                     {saving ? (
                                         <>
@@ -432,7 +432,7 @@ export function ArchetypeQuizModal({
                                             setAnswers([]);
                                             setStep('quiz');
                                         }}
-                                        className="w-full py-3 px-4 rounded-xl font-bold bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-emerald-600 dark:text-emerald-400 transition-all cursor-pointer text-xs sm:text-sm border border-emerald-300 dark:border-emerald-800"
+                                        className="w-full py-3 px-4 rounded-xl font-bold bg-transparent hover:bg-nature-100 dark:hover:bg-nature-800 text-emerald-600 dark:text-emerald-400 transition-all cursor-pointer text-xs sm:text-sm border border-emerald-300 dark:border-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                     >
                                         🧭 Deepen with 27 Questions (~3 min)
                                     </button>

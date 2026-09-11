@@ -128,3 +128,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-07 - PulseNudges Touch Target Sizing & Keyboard Focus Ring Styling
 **Learning:** `PulseNudges.tsx` dismiss icon `✕` buttons and action buttons ("Dismiss", "Add to Pulse", "Share") lacked minimum touch target sizing (< 44px height/width) and visible focus ring indicators (`focus-visible:ring-2`) for keyboard users.
 **Action:** Added `min-w-[44px] min-h-[44px]` to dismiss `✕` buttons and `min-h-[44px]` to action buttons, along with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500` styling across all interactive buttons in `PulseNudges.tsx`.
+
+## 2026-09-08 - ArchetypeQuizModal Dialog Title Linking, Emojis, and Focus Rings
+**Learning:** `ArchetypeQuizModal.tsx` modal header lacked title ID linking (`id="quiz-modal-title"` with `aria-labelledby="quiz-modal-title"`), decorative emojis (`🌱`, `⚡`, `🧭`, `🛡️`, `🌟`, `👥`) were unhidden from screen readers, and interactive controls (back/close buttons, quiz mode cards, radio options, save, and deepen buttons) lacked visible keyboard focus ring indicators (`focus-visible:ring-2`).
+**Action:** Linked modal header title via `id="quiz-modal-title"` and `aria-labelledby="quiz-modal-title"`, added `aria-hidden="true"` to decorative emojis, and added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` styling across all modal buttons.

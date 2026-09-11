@@ -12,9 +12,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 
+let _cachedAnchorUrl: string | null = null;
+
+export function getCachedAnchorUrl(): string | null {
+    return _cachedAnchorUrl;
+}
+
+export function setCachedAnchorUrl(url: string | null): void {
+    _cachedAnchorUrl = url ? url.replace(/\/+$/, '') : null;
+}
+
 /** The node this member belongs to, or null before one is chosen. */
 export async function anchorUrl(): Promise<string | null> {
-    return AsyncStorage.getItem('beanpool_anchor_url');
+    const val = await AsyncStorage.getItem('beanpool_anchor_url');
+    _cachedAnchorUrl = val ? val.replace(/\/+$/, '') : null;
+    return val;
 }
 
 export async function signedPost(

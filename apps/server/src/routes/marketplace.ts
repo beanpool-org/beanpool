@@ -3,6 +3,7 @@
  */
 
 import Router from '@koa/router';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -89,7 +90,25 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
-    ctx.body = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined, sync, beansOnly });
+    const posts = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined, sync, beansOnly });
+    const bodyStr = JSON.stringify(posts);
+    const etag = `"${crypto.createHash('sha256').update(bodyStr).digest('hex').slice(0, 16)}"`;
+
+    ctx.set('ETag', etag);
+
+    const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+    if (ifNoneMatch) {
+        const cleanInm = ifNoneMatch.replace(/^W\//, '');
+        const cleanEtag = etag.replace(/^W\//, '');
+        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+            ctx.status = 304;
+            return;
+        }
+    }
+
+    ctx.status = 200;
+    ctx.type = 'application/json';
+    ctx.body = bodyStr;
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {

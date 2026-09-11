@@ -99,6 +99,10 @@ async function main() {
         { messageId: msgId, authorPubkey: A.pubKeyHex, emoji: '👍' });
     assert(reactA.status === 200, `reactions: participant A can react (got ${reactA.status})`);
 
+    const reactOverlength = await signedFetch('POST', '/api/messages/react', A,
+        { messageId: msgId, authorPubkey: A.pubKeyHex, emoji: 'A'.repeat(100) });
+    assert(reactOverlength.status === 400, `reactions: overlength emoji is REJECTED with 400 (got ${reactOverlength.status})`);
+
     const reactC = await signedFetch('POST', '/api/messages/react', C,
         { messageId: msgId, authorPubkey: C.pubKeyHex, emoji: '👎' });
     assert(reactC.status === 404, `reactions: outsider C is DENIED reacting to message (got ${reactC.status} ${reactC.error ?? ''})`);

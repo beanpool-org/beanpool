@@ -100,3 +100,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `TelemetryModule` component in `apps/manager/src/components/modules/TelemetryModule.tsx` was untested.
 **Learning:** Testing `TelemetryModule` required mocking `NodeProfile` objects and `DiagnosticsResponse` state objects (including `callsign`) to verify calculations for total users, database storage size in MB, active WebSocket/P2P streams, view mode toggles, and callback triggers.
 **Action:** Identify remaining untested module components in `apps/manager/src/components/modules/` for unit test coverage.
+
+## 2026-09-10 - [manager tests] OnboardingModule component unit tests
+**Gap:** `OnboardingModule` component in `apps/manager/src/components/modules/OnboardingModule.tsx` was untested.
+**Learning:** Testing `OnboardingModule` required mocking `fetchOnboardingFunnel` to verify initial loading, error states, funnel step rendering with percentages/notes, day window toggles (7/30/90 days), and node selection callbacks.
+**Action:** Check remaining module components in `apps/manager/src/components/modules/` for unit test coverage gaps.

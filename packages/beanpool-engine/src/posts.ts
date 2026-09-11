@@ -185,7 +185,11 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         reachPeers: parseReachPeers(row.reach_peers),
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
-        authorAvatarUrl: row.author_avatar ?? null
+        authorAvatarUrl: row.author_avatar
+            ? (row.author_avatar.startsWith('bundled://')
+                ? row.author_avatar
+                : `/api/avatar/${row.author_pubkey}?size=thumb`)
+            : null
     };
 }
 

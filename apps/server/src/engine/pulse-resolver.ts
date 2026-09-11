@@ -2058,7 +2058,11 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
         id: r.id,
         ownerPubkey: r.owner_pubkey,
         callsign: r.callsign || 'Neighbour',
-        avatarUrl: r.avatar_url || null,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://')
+                ? r.avatar_url
+                : `/api/avatar/${r.owner_pubkey}?size=thumb`)
+            : null,
         platform: r.platform,
         category: r.category,
         url: r.url || null,
@@ -2106,7 +2110,11 @@ export function setPulseItemMute(actorPubkey: string, itemId: string, muted: boo
             id: row.id,
             ownerPubkey: row.owner_pubkey,
             callsign: row.callsign || 'Neighbour',
-            avatarUrl: row.avatar_url || null,
+            avatarUrl: row.avatar_url
+                ? (row.avatar_url.startsWith('bundled://')
+                    ? row.avatar_url
+                    : `/api/avatar/${row.owner_pubkey}?size=thumb`)
+                : null,
             platform: row.platform,
             category: row.category,
             url: row.url || null,

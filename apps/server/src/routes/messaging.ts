@@ -271,13 +271,14 @@ router.get('/api/messages/:conversationId', async (ctx) => {
 
 router.post('/api/messages/react', async (ctx) => {
     const { messageId, authorPubkey, emoji } = (ctx as any).requestBody || {};
-    if (!messageId || !authorPubkey || !emoji) {
+    const actor = (ctx.state.actor as string) || authorPubkey;
+    if (!messageId || !actor || !emoji || typeof emoji !== 'string' || !emoji.trim() || emoji.length > 32) {
         ctx.status = 400;
-        ctx.body = { error: 'messageId, authorPubkey, and emoji are required' };
+        ctx.body = { error: 'messageId, authorPubkey, and a valid emoji (<=32 chars) are required' };
         return;
     }
     try {
-        const result = toggleMessageReaction(messageId, authorPubkey, emoji);
+        const result = toggleMessageReaction(messageId, actor, emoji.trim());
         if (!result) {
             ctx.status = 404;
             ctx.body = { error: 'Message not found' };

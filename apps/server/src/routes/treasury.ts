@@ -121,7 +121,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 // detail read returns.
                 const link = linksByTreasury.get(r.public_key);
                 return {
-                    publicKey: r.public_key, name: r.callsign, avatar: r.avatar_url,
+                    publicKey: r.public_key, name: r.callsign,
+                    avatar: r.avatar_url
+                        ? (r.avatar_url.startsWith('bundled://')
+                            ? r.avatar_url
+                            : `/api/avatar/${r.public_key}?size=thumb`)
+                        : null,
                     balance: b.balance, creditLine: r.earned_credit, liveOffers: b.liveOffers,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
@@ -146,7 +151,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             amount: f.amount, memo: f.memo, timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
         }));
         ctx.body = {
-            publicKey: treasury, name: m.callsign, avatar: m.avatar_url,
+            publicKey: treasury, name: m.callsign,
+            avatar: m.avatar_url
+                ? (m.avatar_url.startsWith('bundled://')
+                    ? m.avatar_url
+                    : `/api/avatar/${treasury}?size=thumb`)
+                : null,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
             liveOffers: b.liveOffers, posts, flow,
             // #106: who is accountable for this enterprise, public by design — a community should be

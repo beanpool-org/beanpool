@@ -1016,7 +1016,11 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
         kind: 'member',
         publicKey: inviterKey,
         callsign: inviter.callsign,
-        avatarUrl: inviter.avatarUrl || null,
+        avatarUrl: inviter.avatarUrl
+            ? (inviter.avatarUrl.startsWith('bundled://')
+                ? inviter.avatarUrl
+                : `/api/avatar/${inviter.publicKey}?size=thumb`)
+            : null,
         tier: getMemberTrustProfile(inviterKey).tier.name,
     };
 }
@@ -1055,8 +1059,15 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
               AND fv.friend_pubkey != ? AND fv.friend_pubkey != ?
             ORDER BY m.callsign COLLATE NOCASE
             LIMIT 12
-        `).all(viewerPubkey, targetPubkey, viewerPubkey, targetPubkey) as any[])
-            .map(r => ({ publicKey: r.publicKey, callsign: r.callsign, avatarUrl: r.avatarUrl || null }))
+        `).all(viewerPubkey, targetPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
+            publicKey: r.publicKey,
+            callsign: r.callsign,
+            avatarUrl: r.avatarUrl
+                ? (r.avatarUrl.startsWith('bundled://')
+                    ? r.avatarUrl
+                    : `/api/avatar/${r.publicKey}?size=thumb`)
+                : null
+        }))
         : [];
     const mutualCount = mutualConnections.length;
 
@@ -1105,7 +1116,11 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
             elderVouch = {
                 publicKey: voucher.publicKey,
                 callsign: voucher.callsign,
-                avatarUrl: voucher.avatarUrl || null,
+                avatarUrl: voucher.avatarUrl
+                    ? (voucher.avatarUrl.startsWith('bundled://')
+                        ? voucher.avatarUrl
+                        : `/api/avatar/${voucher.publicKey}?size=thumb`)
+                    : null,
             };
         }
     }
@@ -1726,7 +1741,11 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{ publicKey: stri
     `).all(treasuryPubkey) as any[]).map(r => ({
         publicKey: r.public_key,
         callsign: r.callsign,
-        avatarUrl: r.avatar_url ?? null,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://')
+                ? r.avatar_url
+                : `/api/avatar/${r.public_key}?size=thumb`)
+            : null,
         grantedAt: r.granted_at ?? null,
     }));
 }

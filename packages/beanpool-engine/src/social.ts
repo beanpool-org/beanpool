@@ -58,6 +58,10 @@ export function getRatings(db: Db, targetPubkey: string): any[] {
         createdAt: r.created_at,
         rater_callsign: r.rater_callsign,
         rater_avatar: r.rater_avatar
+            ? (r.rater_avatar.startsWith('bundled://')
+                ? r.rater_avatar
+                : `/api/avatar/${r.rater_pubkey}?size=thumb`)
+            : null
     }));
 }
 
@@ -82,6 +86,10 @@ export function getRatingsGiven(db: Db, raterPubkey: string): Rating[] {
         createdAt: r.created_at,
         target_callsign: r.target_callsign,
         target_avatar: r.target_avatar
+            ? (r.target_avatar.startsWith('bundled://')
+                ? r.target_avatar
+                : `/api/avatar/${r.target_pubkey}?size=thumb`)
+            : null
     }));
 }
 

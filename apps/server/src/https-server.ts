@@ -115,6 +115,7 @@ import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
 import { createPulseRoutes } from './routes/pulse.js';
 import { createPulseSubmitRoutes } from './routes/pulse-submit.js';
+import { createAvatarRoutes } from './routes/avatar.js';
 import { startPulseScheduler } from './engine/pulse-resolver.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
@@ -272,6 +273,7 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
+    /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
 ];
 
 function isPublicRead(path: string): boolean {
@@ -929,6 +931,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createActivityRouter(deps),
         createPulseRoutes(deps),
         createPulseSubmitRoutes(deps),
+        createAvatarRoutes(deps),
         // Temporary Apple `sub` parity probe. Registers nothing unless APPLE_PROBE=1
         // (the domain-association file aside) — see routes/apple-probe.ts.
         createAppleProbeRoutes(),

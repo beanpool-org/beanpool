@@ -124,7 +124,6 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE recovery_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // Phase 2 delta backup — the remaining mutable tables gain their watermark
     // column here, BEFORE schema.sql exec, so the messages/friends/abuse_reports/
     // conversation_participants touch triggers below can reference updated_at at
@@ -268,10 +267,6 @@ export function initSchema() {
         db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run();
         db.prepare(`UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL`).run();
     } catch { }
-    try {
-        db.prepare(`ALTER TABLE recovery_requests ADD COLUMN updated_at DATETIME`).run();
-        db.prepare(`UPDATE recovery_requests SET updated_at = COALESCE(executed_at, cooldown_until, created_at) WHERE updated_at IS NULL`).run();
-    } catch { }
 
     // Step 7: recovery share replication audit column
     try { db.prepare(`ALTER TABLE sync_audit_log ADD COLUMN recovery_shares_imported INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
@@ -363,8 +358,6 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at)`).run(); } catch { }
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
-
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_recovery_requests_updated_at ON recovery_requests(updated_at)`).run(); } catch { }
 
     // Phase 2 delta backup — backfill the four newly-watermarked mutable tables.
     // Seed each row's updated_at from the best existing timestamp so a first delta
@@ -515,8 +508,8 @@ export function migrateLegacyState() {
     `);
 
     const insertFriend = db.prepare(`
-        INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at, is_guardian)
-        VALUES (?, ?, ?, ?)
+        INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at)
+        VALUES (?, ?, ?)
     `);
 
     const insertRating = db.prepare(`
@@ -638,7 +631,7 @@ export function migrateLegacyState() {
                     }
                 }
                 for (const friend of uniqueFriends.values()) {
-                    insertFriend.run(ownerPubkey, friend.publicKey, friend.addedAt, friend.isGuardian ? 1 : 0);
+                    insertFriend.run(ownerPubkey, friend.publicKey, friend.addedAt);
                 }
             }
         }

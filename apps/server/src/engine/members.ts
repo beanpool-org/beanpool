@@ -57,13 +57,6 @@ export function isCallsignAvailable(callsign: string, excludePublicKey?: string)
     return !row;
 }
 
-/**
- * Guardians needed before a member is worth offering as a recovery target. This is the
- * LEGACY guardian-vote path, not the keyholder split — it happens to share the number 3
- * with core's RECOVERY_THRESHOLD, so it is kept as its own constant rather than importing
- * that one and quietly coupling two unrelated schemes.
- */
-const RECOVERY_MIN_GUARDIANS = 3;
 /** Bounded so a one-letter prefix cannot ask the node to serialise the whole member table. */
 const RECOVERY_CANDIDATE_LIMIT = 20;
 
@@ -123,8 +116,6 @@ export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
     const rows = db.prepare(`
         SELECT * FROM (
             SELECT m.public_key, m.callsign, m.joined_at, m.avatar_url,
-                   (SELECT COUNT(*) FROM friends f
-                     WHERE f.owner_pubkey = m.public_key AND f.is_guardian = 1) AS guardian_count,
                    (SELECT COUNT(*) FROM recovery_shares s
                      WHERE s.owner_pubkey = m.public_key AND s.holder_type = 'sso'
                        AND s.generation = (SELECT MAX(generation) FROM recovery_shares
@@ -133,17 +124,17 @@ export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
             WHERE lower(m.callsign) LIKE ? ESCAPE '\\'
               AND m.status NOT IN ('migrated', 'pruned')
         )
-        WHERE guardian_count >= ? OR sso_count > 0
+        WHERE sso_count > 0
         ORDER BY length(callsign), callsign
         LIMIT ?
-    `).all(escaped + '%', RECOVERY_MIN_GUARDIANS, RECOVERY_CANDIDATE_LIMIT) as any[];
+    `).all(escaped + '%', RECOVERY_CANDIDATE_LIMIT) as any[];
 
     return rows.map(r => ({
         publicKey: r.public_key,
         callsign: r.callsign,
         joinedAt: r.joined_at,
         avatarUrl: r.avatar_url,
-        canRecoverByGuardians: Number(r.guardian_count) >= RECOVERY_MIN_GUARDIANS,
+        canRecoverByGuardians: false,
         canRecoverBySso: Number(r.sso_count) > 0,
     }));
 }

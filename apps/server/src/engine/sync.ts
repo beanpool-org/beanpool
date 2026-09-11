@@ -576,14 +576,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
             if (remote.friends) {
                 for (const fr of remote.friends) {
-                    db.prepare(`INSERT INTO friends (owner_pubkey, friend_pubkey, added_at, is_guardian)
-                                VALUES (?, ?, ?, ?)
-                                ON CONFLICT(owner_pubkey, friend_pubkey) DO UPDATE SET
-                                    is_guardian = excluded.is_guardian`).run(
+                    db.prepare(`INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at)
+                                VALUES (?, ?, ?)`).run(
                         fr.ownerPubkey,
                         fr.friendPubkey,
-                        fr.addedAt,
-                        fr.isGuardian ? 1 : 0
+                        fr.addedAt
                     );
                 }
             }
@@ -778,40 +775,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
-            if (remote.recoveryRequests) {
-                for (const rr of remote.recoveryRequests) {
-                    db.prepare(`INSERT INTO recovery_requests (id, old_pubkey, new_pubkey, status, quorum_required, created_at, cooldown_until, executed_at, expires_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ON CONFLICT(id) DO UPDATE SET
-                                    status = excluded.status,
-                                    cooldown_until = excluded.cooldown_until,
-                                    executed_at = excluded.executed_at,
-                                    expires_at = excluded.expires_at`).run(
-                        rr.id,
-                        rr.oldPubkey,
-                        rr.newPubkey,
-                        rr.status,
-                        rr.quorumRequired,
-                        rr.createdAt,
-                        rr.cooldownUntil || null,
-                        rr.executedAt || null,
-                        rr.expiresAt || null
-                    );
-                }
-            }
-
-            if (remote.recoveryApprovals) {
-                for (const ra of remote.recoveryApprovals) {
-                    db.prepare(`INSERT OR IGNORE INTO recovery_approvals (request_id, guardian_pubkey, decision, created_at)
-                                VALUES (?, ?, ?, ?)`).run(
-                        ra.requestId,
-                        ra.guardianPubkey,
-                        ra.decision,
-                        ra.createdAt
-                    );
-                }
-            }
-
             // Settlements (#104). INSERT OR REPLACE keyed on `key`, so a later state from the primary wins —
             // a settlement's states only ever move forward, and the primary is the only writer.
             if (remote.settlements) {
@@ -852,34 +815,6 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt,
                     );
                     if (res.changes > 0) recoverySharesImported++;
-                }
-            }
-
-            // Recovery PINs — 6-digit PIN bcrypt hashes protecting friend lists.
-            // LWW on updated_at so newer PIN updates or attempts win on backup nodes.
-            if (remote.recoveryPins) {
-                try {
-                    const insertPin = db.prepare(`
-                        INSERT INTO recovery_pin
-                            (owner_pubkey, pin_hash, pin_salt, attempts, last_attempt_at, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(owner_pubkey) DO UPDATE SET
-                            pin_hash = excluded.pin_hash,
-                            pin_salt = excluded.pin_salt,
-                            attempts = excluded.attempts,
-                            last_attempt_at = excluded.last_attempt_at,
-                            updated_at = excluded.updated_at
-                        WHERE recovery_pin.updated_at IS NULL OR excluded.updated_at >= recovery_pin.updated_at
-                    `);
-                    for (const rp of remote.recoveryPins) {
-                        insertPin.run(
-                            rp.ownerPubkey, rp.pinHash, rp.pinSalt,
-                            rp.attempts ?? 0, rp.lastAttemptAt ?? null,
-                            rp.createdAt, rp.updatedAt || rp.createdAt,
-                        );
-                    }
-                } catch {
-                    // recovery_pin table may not exist on certain older migrations/mocks
                 }
             }
 

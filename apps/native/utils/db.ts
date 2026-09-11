@@ -2162,7 +2162,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
                     if (!localSet.has(fpk)) {
                         await txn.runAsync(
                             'INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at, is_guardian) VALUES (?, ?, ?, ?)',
-                            [identity.publicKey, fpk, f.addedAt || f.added_at || new Date().toISOString(), f.isGuardian ? 1 : 0]
+                            [identity.publicKey, fpk, f.addedAt || f.added_at || new Date().toISOString(), 0]
                         );
                     }
                 }
@@ -4121,17 +4121,14 @@ export async function getEscrowTotal(pubkey: string): Promise<number> {
 export async function getFriendsLocal(ownerPubkey: string): Promise<any[]> {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(
-        `SELECT f.friend_pubkey as publicKey, m.callsign, m.avatar_url, f.added_at as addedAt, f.is_guardian as isGuardian, m.joined_at as joinedAt
+        `SELECT f.friend_pubkey as publicKey, m.callsign, m.avatar_url, f.added_at as addedAt, m.joined_at as joinedAt
          FROM friends f
          INNER JOIN members m ON f.friend_pubkey = m.public_key
          WHERE f.owner_pubkey = ?
          ORDER BY f.added_at DESC`,
         [ownerPubkey]
     );
-    return rows.map((r: any) => ({
-        ...r,
-        isGuardian: !!r.isGuardian,
-    }));
+    return rows;
 }
 
 /** Check if a pubkey is a friend */
@@ -4203,120 +4200,7 @@ export async function getRecentChatMembers(myPubkey: string, limit = 10): Promis
     );
 }
 
-// ======================== SOCIAL RECOVERY & GUARDIANS ========================
 
-export async function setGuardianApi(friendPubkey: string, isGuardian: boolean): Promise<boolean> {
-    const identity = await loadIdentity();
-    if (!identity) return false;
-
-    // Locally update DB first
-    const database = await getDb();
-    await database.runAsync(`UPDATE friends SET is_guardian=? WHERE owner_pubkey=? AND friend_pubkey=?`,
-        [isGuardian ? 1 : 0, identity.publicKey, friendPubkey]);
-
-    try {
-        await _signedRequest('/api/friends/guardian', { friendPubkey, isGuardian });
-        return true;
-    } catch (e) {
-        console.warn('[Guardians] Server sync failed:', e);
-        return false;
-    }
-}
-
-export async function lookupRecoveryCallsign(callsign: string): Promise<any[]> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('Not connected');
-    const res = await fetch(`${anchorUrl}/api/recovery/lookup/${encodeURIComponent(callsign)}`);
-    if (!res.ok) throw new Error('Lookup failed');
-    return res.json();
-}
-
-export async function createRecoveryRequest(oldPubkey: string, guardianGuess: string, newIdentity: any): Promise<any> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('Not connected');
-
-    const bodyObj = { oldPubkey, guardianGuess, newPubkey: newIdentity.publicKey };
-    const bodyStr = JSON.stringify(bodyObj);
-    const headers = await buildSignedHeaders('POST', '/api/recovery/request', bodyStr, newIdentity.privateKey, newIdentity.publicKey);
-
-    const res = await fetch(`${anchorUrl}/api/recovery/request`, {
-        method: 'POST',
-        headers,
-        body: bodyStr,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
-    return data;
-}
-
-export async function getPendingRecoveryRequests(): Promise<any[]> {
-    const identity = await loadIdentity();
-    if (!identity) return [];
-
-    const res = await signedGet(`/api/recovery/pending/${identity.publicKey}`);
-    if (!res.ok) throw new Error('Failed to fetch requests');
-    return res.json();
-}
-
-export async function approveRecoveryRequest(requestId: string): Promise<void> {
-    await sendRecoveryDecision(requestId, 'approve');
-}
-
-export async function rejectRecoveryRequest(requestId: string): Promise<void> {
-    await sendRecoveryDecision(requestId, 'reject');
-}
-
-async function sendRecoveryDecision(requestId: string, decision: 'approve' | 'reject' | 'cancel'): Promise<void> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('Not connected');
-    const identity = await loadIdentity();
-    if (!identity) throw new Error('No identity');
-
-    const bodyStr = JSON.stringify({ requestId });
-    const headers = await buildSignedHeaders('POST', `/api/recovery/${decision}`, bodyStr, identity.privateKey, identity.publicKey);
-
-    const res = await fetch(`${anchorUrl}/api/recovery/${decision}`, {
-        method: 'POST',
-        headers,
-        body: bodyStr,
-    });
-    if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || `Failed to ${decision} request`);
-    }
-}
-
-export async function cancelRecoveryRequest(requestId: string, identityToUse?: any): Promise<void> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('Not connected');
-    const identity = identityToUse || await loadIdentity();
-    if (!identity) throw new Error('No identity');
-
-    const bodyStr = JSON.stringify({ requestId });
-    const headers = await buildSignedHeaders('POST', '/api/recovery/cancel', bodyStr, identity.privateKey, identity.publicKey);
-
-    const res = await fetch(`${anchorUrl}/api/recovery/cancel`, {
-        method: 'POST',
-        headers,
-        body: bodyStr,
-    });
-    if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to cancel request');
-    }
-}
-
-export async function getRecoveryStatus(pubkey: string): Promise<any> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) return { status: 'none' };
-    try {
-        const res = await fetch(`${anchorUrl}/api/recovery/status/${pubkey}`);
-        if (!res.ok) return { status: 'none' };
-        return res.json();
-    } catch {
-        return { status: 'none' };
-    }
-}
 
 export async function getMemberPosts(pubkey: string) {
     const database = await waitForInit();

@@ -41,15 +41,16 @@ function throws(fn: () => void, needle: string, msg: string): void {
     }
 }
 
-function seedMember(pk: string, callsign: string, status: string, guardians = 0) {
+function seedMember(pk: string, callsign: string, status: string, hasSso = true) {
     db.prepare(
         `INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, status, joined_at)
          VALUES (?, ?, 'a.png', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pk, callsign, status);
-    for (let i = 0; i < guardians; i++) {
+    if (hasSso) {
         db.prepare(
-            `INSERT OR REPLACE INTO friends (owner_pubkey, friend_pubkey, is_guardian) VALUES (?, ?, 1)`
-        ).run(pk, `${pk}-guardian-${i}`);
+            `INSERT OR REPLACE INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)
+             VALUES (?, 'sso', 'google', 1, 'x', 'y', 'z', 1)`
+        ).run(pk);
     }
 }
 
@@ -64,10 +65,10 @@ function main() {
 
     // Three members sharing one name, in the three states that matter. They can coexist
     // precisely BECAUSE the unique index ignores the departed two.
-    seedMember('activePK', 'ripple', 'active', 3);
-    seedMember('migratedPK', 'ripple', 'migrated', 3);
-    seedMember('prunedPK', 'ripple', 'pruned', 3);
-    seedMember('goneOnlyPK', 'driftwood', 'pruned', 3);
+    seedMember('activePK', 'ripple', 'active');
+    seedMember('migratedPK', 'ripple', 'migrated');
+    seedMember('prunedPK', 'ripple', 'pruned');
+    seedMember('goneOnlyPK', 'driftwood', 'pruned');
 
     // ── 1. Recovery lookup returns the living only ──
     // Calls the real function the route calls. An earlier draft of this test pasted the SQL

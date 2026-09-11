@@ -109,8 +109,7 @@ import {
 import {
     addRating,
     addFriend,
-    removeFriend,
-    setGuardian
+    removeFriend
 } from './engine/social.js';
 import {
     createPost as createPostEngine,
@@ -923,7 +922,6 @@ export function assessTradeRisk(s: {
         && (s.completionRate === null || s.completionRate >= 0.8);
     if (established && !poorCompletion) {
         reasons.push(`Established member — ${s.tradeCount} completed trades.`);
-        if (s.wardsCount > 0) reasons.push(`${s.wardsCount} ${s.wardsCount === 1 ? 'person trusts' : 'people trust'} them as a recovery guardian.`);
         reasons.push('No connections in common with you yet.');
         return { band: 'green', headline: 'Established member', reasons, tips: [] };
     }
@@ -1044,8 +1042,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     const totalResolved = completedTrades + cancelledTrades;
     const completionRate = totalResolved > 0 ? completedTrades / totalResolved : null;
 
-    // Deep-trust signal: how many people made the target their recovery guardian.
-    const wardsCount = getMyWards(targetPubkey).length;
+    const wardsCount = 0;
 
     // Mutual connections: viewer's friends ∩ target's friends. Only ever
     // surfaces people the viewer already knows — never the target's wider graph.
@@ -2047,7 +2044,7 @@ export function importRemoteState(remote: SyncPayload): Promise<ImportResult> {
 }
 // ===================== RATINGS =====================
 
-export { addRating, addFriend, removeFriend, setGuardian };
+export { addRating, addFriend, removeFriend };
 
 export function getRatings(targetPubkey: string): any[] {
     return getRatingsEngine(db, targetPubkey);
@@ -2061,241 +2058,10 @@ export function getAverageRating(targetPubkey: string) {
     return getAverageRatingEngine(db, targetPubkey);
 }
 
-// ===================== FRIENDS & GUARDIANS =====================
+// ===================== FRIENDS =====================
 
 export function getFriends(pubkey: string): FriendEntry[] {
     return getFriendsEngine(db, pubkey);
-}
-
-// ===================== SOCIAL RECOVERY =====================
-
-export function getGuardiansOf(pubkey: string): string[] {
-    const rows = db.prepare(`SELECT friend_pubkey FROM friends WHERE owner_pubkey=? AND is_guardian=1`).all(pubkey) as any[];
-    return rows.map(r => r.friend_pubkey);
-}
-
-export function getMyWards(guardianPubkey: string): { publicKey: string; callsign: string; avatarUrl: string | null }[] {
-    const rows = db.prepare(`
-        SELECT f.owner_pubkey as publicKey, m.callsign, m.avatar_url as avatarUrl
-        FROM friends f 
-        JOIN members m ON f.owner_pubkey = m.public_key 
-        WHERE f.friend_pubkey=? AND f.is_guardian=1
-    `).all(guardianPubkey) as any[];
-    return rows;
-}
-
-export function createRecoveryRequest(oldPubkey: string, newPubkey: string, guardianGuessCallsign: string): RecoveryRequest | null {
-    const oldMember = getMember(oldPubkey);
-    if (!oldMember || oldMember.status === 'migrated') throw new Error('Invalid or already migrated member');
-    
-    // Guardian knowledge check
-    const guardians = getGuardiansOf(oldPubkey);
-    if (guardians.length < 3) throw new Error('Account does not have enough guardians to recover');
-    
-    const normalizedGuess = guardianGuessCallsign.toLowerCase().trim();
-    const guessMatch = guardians.some(pubkey => {
-        const m = getMember(pubkey);
-        return m ? m.callsign.toLowerCase().trim() === normalizedGuess : false;
-    });
-    
-    if (!guessMatch) {
-        throw new Error('Guardian knowledge check failed. You must provide the exact callsign of one of your guardians.');
-    }
-
-    const existingPending = db.prepare(`SELECT * FROM recovery_requests WHERE old_pubkey=? AND status='pending'`).get(oldPubkey);
-    if (existingPending) throw new Error('A recovery request is already pending for this account');
-    
-    if (getMember(newPubkey)) throw new Error('New public key is already registered');
-
-    const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    
-    // Expire in 24 hours (forces active coordination and prevents stale requests)
-    const expiresAtDate = new Date();
-    expiresAtDate.setHours(expiresAtDate.getHours() + 24);
-    const expiresAt = expiresAtDate.toISOString();
-
-    db.prepare(`
-        INSERT INTO recovery_requests (id, old_pubkey, new_pubkey, status, quorum_required, created_at, expires_at)
-        VALUES (?, ?, ?, 'pending', 3, ?, ?)
-    `).run(id, oldPubkey, newPubkey, createdAt, expiresAt);
-
-    return getRecoveryRequest(id)!;
-}
-
-export function getRecoveryRequest(id: string): RecoveryRequest | undefined {
-    const row = db.prepare(`SELECT * FROM recovery_requests WHERE id=?`).get(id) as any;
-    if (!row) return undefined;
-    return {
-        id: row.id,
-        oldPubkey: row.old_pubkey,
-        newPubkey: row.new_pubkey,
-        status: row.status,
-        quorumRequired: row.quorum_required,
-        createdAt: row.created_at,
-        cooldownUntil: row.cooldown_until,
-        executedAt: row.executed_at,
-        expiresAt: row.expires_at
-    };
-}
-
-export function approveRecovery(requestId: string, guardianPubkey: string): boolean {
-    const req = getRecoveryRequest(requestId);
-    if (!req || req.status !== 'pending') throw new Error('Invalid or non-pending request');
-    
-    const guardians = getGuardiansOf(req.oldPubkey);
-    if (!guardians.includes(guardianPubkey)) throw new Error('Not a guardian for this account');
-
-    db.transaction(() => {
-        db.prepare(`INSERT OR REPLACE INTO recovery_approvals (request_id, guardian_pubkey, decision, created_at) VALUES (?, ?, 'approve', ?)`).run(requestId, guardianPubkey, new Date().toISOString());
-        
-        // Check quorum
-        const approvals = db.prepare(`SELECT COUNT(*) as count FROM recovery_approvals WHERE request_id=? AND decision='approve'`).get(requestId) as any;
-        if (approvals.count >= req.quorumRequired) {
-            const cooldownDate = new Date();
-            cooldownDate.setHours(cooldownDate.getHours() + 24);
-            db.prepare(`UPDATE recovery_requests SET status='approved', cooldown_until=? WHERE id=?`).run(cooldownDate.toISOString(), requestId);
-        }
-    })();
-    return true;
-}
-
-export function rejectRecovery(requestId: string, guardianPubkey: string): boolean {
-    const req = getRecoveryRequest(requestId);
-    if (!req || req.status !== 'pending') throw new Error('Invalid or non-pending request');
-    
-    const guardians = getGuardiansOf(req.oldPubkey);
-    if (!guardians.includes(guardianPubkey)) throw new Error('Not a guardian for this account');
-
-    db.transaction(() => {
-        db.prepare(`INSERT OR REPLACE INTO recovery_approvals (request_id, guardian_pubkey, decision, created_at) VALUES (?, ?, 'reject', ?)`).run(requestId, guardianPubkey, new Date().toISOString());
-        
-        // Check if impossible to reach quorum
-        const rejections = db.prepare(`SELECT COUNT(*) as count FROM recovery_approvals WHERE request_id=? AND decision='reject'`).get(requestId) as any;
-        const maxPossibleApprovals = guardians.length - rejections.count;
-        if (maxPossibleApprovals < req.quorumRequired) {
-            db.prepare(`UPDATE recovery_requests SET status='cancelled' WHERE id=?`).run(requestId);
-        }
-    })();
-    return true;
-}
-
-export function cancelRecovery(requestId: string, cancellerPubkey: string): boolean {
-    const req = getRecoveryRequest(requestId);
-    if (!req || (req.status !== 'pending' && req.status !== 'approved')) throw new Error('Cannot cancel this request');
-    
-    if (req.oldPubkey !== cancellerPubkey && req.newPubkey !== cancellerPubkey) {
-        throw new Error('Only the original or new identity can cancel');
-    }
-
-    db.prepare(`UPDATE recovery_requests SET status='cancelled' WHERE id=?`).run(requestId);
-    return true;
-}
-
-export function executeRecovery(requestId: string): boolean {
-    const req = getRecoveryRequest(requestId);
-    if (!req || req.status !== 'approved') throw new Error('Request not ready for execution');
-    if (!req.cooldownUntil || new Date() < new Date(req.cooldownUntil)) throw new Error('Cooldown period has not elapsed');
-
-    const oldP = req.oldPubkey;
-    const newP = req.newPubkey;
-
-    db.transaction(() => {
-        // 1. Members and Accounts
-        db.prepare(`UPDATE members SET public_key=? WHERE public_key=?`).run(newP, oldP);
-        db.prepare(`UPDATE accounts SET public_key=? WHERE public_key=?`).run(newP, oldP);
-        
-        // 2. Transactions
-        db.prepare(`UPDATE transactions SET from_pubkey=? WHERE from_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE transactions SET to_pubkey=? WHERE to_pubkey=?`).run(newP, oldP);
-        
-        // 3. Posts & Marketplace
-        db.prepare(`UPDATE posts SET author_pubkey=? WHERE author_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE posts SET accepted_by=? WHERE accepted_by=?`).run(newP, oldP);
-        db.prepare(`UPDATE marketplace_transactions SET buyer_pubkey=? WHERE buyer_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE marketplace_transactions SET seller_pubkey=? WHERE seller_pubkey=?`).run(newP, oldP);
-        
-        // 4. Conversations & Messages
-        db.prepare(`UPDATE conversations SET created_by=? WHERE created_by=?`).run(newP, oldP);
-        db.prepare(`UPDATE conversation_participants SET public_key=? WHERE public_key=?`).run(newP, oldP);
-        db.prepare(`UPDATE messages SET author_pubkey=? WHERE author_pubkey=?`).run(newP, oldP);
-        
-        // 5. Friends
-        db.prepare(`UPDATE friends SET owner_pubkey=? WHERE owner_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE friends SET friend_pubkey=? WHERE friend_pubkey=?`).run(newP, oldP);
-        
-        // 6. Ratings & Abuse
-        db.prepare(`UPDATE ratings SET target_pubkey=? WHERE target_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE ratings SET rater_pubkey=? WHERE rater_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE abuse_reports SET reporter_pubkey=? WHERE reporter_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE abuse_reports SET target_pubkey=? WHERE target_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE creator_channels SET owner_pubkey=?, updated_at=? WHERE owner_pubkey=?`).run(newP, new Date().toISOString(), oldP);
-        
-        // 7. Projects
-        db.prepare(`UPDATE projects SET creator_pubkey=? WHERE creator_pubkey=?`).run(newP, oldP);
-        
-        // 8. Push Tokens & Prefs
-        db.prepare(`UPDATE push_tokens SET public_key=? WHERE public_key=?`).run(newP, oldP);
-        db.prepare(`UPDATE member_preferences SET public_key=? WHERE public_key=?`).run(newP, oldP);
-
-        // 9. Mark old as migrated (already changed above, so wait. If we UPDATE members SET public_key=newP WHERE public_key=oldP, oldP is GONE).
-        // Let's create a tombstone for oldP just in case.
-        const migratedCallsign = 'migrated_' + oldP.substring(0, 8);
-        db.prepare(`INSERT INTO members (public_key, callsign, status) VALUES (?, ?, 'migrated')`).run(oldP, migratedCallsign);
-
-        // 10. Update request status
-        db.prepare(`UPDATE recovery_requests SET status='executed', executed_at=? WHERE id=?`).run(new Date().toISOString(), requestId);
-    })();
-    return true;
-}
-
-export function getPendingRecoveryRequests(guardianPubkey: string): any[] {
-    const wards = getMyWards(guardianPubkey).map(w => w.publicKey);
-    if (wards.length === 0) return [];
-    
-    const rows = selectInChunks(wards, ph => `
-        SELECT r.*, m.callsign as old_callsign, m.avatar_url,
-               (SELECT COUNT(*) FROM recovery_approvals WHERE request_id=r.id AND decision='approve') as approvals,
-               (SELECT decision FROM recovery_approvals WHERE request_id=r.id AND guardian_pubkey=?) as my_decision
-        FROM recovery_requests r
-        JOIN members m ON r.old_pubkey = m.public_key
-        WHERE r.old_pubkey IN (${ph}) AND r.status IN ('pending', 'approved')
-    `, [guardianPubkey]);
-
-    return rows.map(r => ({
-        id: r.id,
-        oldPubkey: r.old_pubkey,
-        newPubkey: r.new_pubkey,
-        oldCallsign: r.old_callsign,
-        avatarUrl: r.avatar_url,
-        status: r.status,
-        quorumRequired: r.quorum_required,
-        approvals: r.approvals,
-        myDecision: r.my_decision,
-        createdAt: r.created_at,
-        cooldownUntil: r.cooldown_until,
-        expiresAt: r.expires_at
-    }));
-}
-
-export function getRecoveryStatus(pubkey: string): any | null {
-    const row = db.prepare(`
-        SELECT r.*,
-               (SELECT COUNT(*) FROM recovery_approvals WHERE request_id=r.id AND decision='approve') as approvals
-        FROM recovery_requests r 
-        WHERE (r.old_pubkey=? OR r.new_pubkey=?) AND r.status IN ('pending', 'approved')
-        ORDER BY r.created_at DESC LIMIT 1
-    `).get(pubkey, pubkey) as any;
-    
-    if (!row) return null;
-    return {
-        id: row.id,
-        status: row.status,
-        approvals: row.approvals,
-        quorumRequired: row.quorum_required,
-        createdAt: row.created_at,
-        cooldownUntil: row.cooldown_until
-    };
 }
 
 // ===================== ABUSE REPORTS =====================
@@ -3111,19 +2877,12 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             scrubPulseItems({ ownerPubkey: publicKey }, now);
         } catch { }
         try {
-            db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)").run(publicKey, publicKey);
-        } catch { }
-        try {
-            db.prepare("DELETE FROM recovery_approvals WHERE guardian_pubkey = ? OR request_id IN (SELECT id FROM recovery_requests WHERE old_pubkey = ? OR new_pubkey = ?)").run(publicKey, publicKey, publicKey);
-        } catch { }
-        try {
-            db.prepare("DELETE FROM recovery_requests WHERE old_pubkey = ? OR new_pubkey = ?").run(publicKey, publicKey);
+            db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
         try {
             db.prepare("DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)").run(publicKey);
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
-        try { db.prepare("DELETE FROM recovery_pin WHERE owner_pubkey = ?").run(publicKey); } catch { }
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {
@@ -3688,8 +3447,7 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_requests', 'recovery_approvals', 'recovery_shares',
-        'recovery_pin', 'settlements', 'tombstones',
+        'pulse_items', 'recovery_shares', 'settlements', 'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {

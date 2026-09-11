@@ -40,7 +40,6 @@ import {
     collectionState,
     collectionProgress,
     listReleases,
-    releaseMemberFragment,
     releaseHubFragment,
     releaseSsoFragmentForIdentity,
     cancelCollection,
@@ -67,13 +66,6 @@ function resolveCallsign(callsign: string): { pubkey?: string; ambiguous: boolea
     return { pubkey: rows[0]?.public_key, ambiguous: false };
 }
 
-/** The human keepers on a member's current split — who D7 says to warn. */
-function humanKeepersOf(ownerPubkey: string, generation: number): string[] {
-    return (db.prepare(`
-        SELECT holder_ref FROM recovery_shares
-        WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'member'
-    `).all(ownerPubkey, generation) as { holder_ref: string }[]).map(r => r.holder_ref);
-}
 
 function fail(ctx: any, e: unknown): void {
     if (e instanceof RecoveryReleaseError || e instanceof SsoVerificationError) {
@@ -154,7 +146,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         // recovery — a legitimate user is on the other end of this and push is best-effort — but
         // it is logged, because a notification that silently never fires would make D7 decorative.
         try {
-            const targets = [pubkey, ...humanKeepersOf(pubkey, collection.generation)];
+            const targets = [pubkey];
             const member = getMember(pubkey);
             dispatchPushNotification(
                 targets,
@@ -268,146 +260,6 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             ctx.body = collectionProgress(collection.id);
         } catch (e) { return fail(ctx, e); }
     });
-
-    /**
-     * D6 — a human keeper approves, signed by that keeper.
-     *
-     * They send the fragment already decrypted with their own key and re-wrapped to the recovering
-     * device's ephemeral key. The node never sees a plaintext piece, which is what keeps "a stolen
-     * database plus a compromised hub is still short of the threshold" true.
-     */
-    router.post('/api/recovery/approve-keeper', async (ctx) => {
-        const keeper = ctx.state?.actor as string | undefined;
-        if (!keeper || !getMember(keeper)) {
-            ctx.status = 401;
-            ctx.body = { error: 'Approving a recovery must be signed by the keeper doing it.' };
-            return;
-        }
-        const body = (ctx as any).requestBody || {};
-        const state = typeof body.collectionId === 'string' ? collectionState(body.collectionId) : null;
-        if (!state) return notMySession(ctx);
-
-        try {
-            const released = releaseMemberFragment(state.collection.id, keeper, {
-                payload: String(body.payload ?? ''),
-                payloadIv: String(body.payloadIv ?? ''),
-                payloadTag: String(body.payloadTag ?? ''),
-                ephemeralPubkey: String(body.ephemeralPubkey ?? ''),
-            });
-            ctx.status = 200;
-            ctx.body = { released: released.holderType, progress: collectionProgress(state.collection.id) };
-        } catch (e) { return fail(ctx, e); }
-    });
-
-    /**
-     * What a keeper needs in order to approve: whose account, and what to wrap the fragment to.
-     *
-     * Signed by the keeper, and answers only for collections they are actually a keeper on — so it
-     * cannot be used to look up an arbitrary session.
-     */
-    router.post('/api/recovery/approve-keeper/context', async (ctx) => {
-        const keeper = ctx.state?.actor as string | undefined;
-        if (!keeper || !getMember(keeper)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
-
-        const body = (ctx as any).requestBody || {};
-        const state = typeof body.collectionId === 'string' ? collectionState(body.collectionId) : null;
-        if (!state) return notMySession(ctx);
-
-        const share = db.prepare(`
-            SELECT encrypted_share, share_iv, share_tag, ephemeral_pubkey, share_index
-            FROM recovery_shares
-            WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'member' AND holder_ref = ?
-        `).get(state.collection.ownerPubkey, state.collection.generation, keeper) as
-            Record<string, unknown> | undefined;
-        if (!share) return notMySession(ctx);
-
-        const owner = getMember(state.collection.ownerPubkey);
-        ctx.status = 200;
-        ctx.body = {
-            callsign: owner?.callsign,
-            live: state.live,
-            reason: state.reason,
-            // What the keeper unwraps with their own key...
-            fragment: {
-                encryptedShare: share.encrypted_share,
-                shareIv: share.share_iv,
-                shareTag: share.share_tag,
-                ephemeralPubkey: share.ephemeral_pubkey,
-                shareIndex: share.share_index,
-            },
-            // ...and what they re-wrap it to.
-            recipientEphemeralPubkey: state.collection.requesterEphemeralPubkey,
-        };
-    });
-
-    /**
-     * Discovery for keepers: which open collections need this member's approval?
-     *
-     * Answers ONLY for the authenticated caller (ctx.state.actor). A member never sees
-     * someone else's keeper obligations or discovers recoveries they are not a keeper for.
-     * Returns minimal metadata needed to render the banner and open the approval modal
-     * (collectionId, ownerPubkey, callsign, createdAt, expiresAt). No fragments or key material.
-     *
-     * Reuses humanKeepersOf to resolve keepers, collectionState for generation/expiry/cancellation
-     * liveness semantics, and listReleases to stop reporting once approved.
-     */
-    async function pendingKeeperHandler(ctx: any): Promise<void> {
-        const keeper = ctx.state?.actor as string | undefined;
-        if (!keeper || !getMember(keeper)) {
-            ctx.status = 401;
-            ctx.body = { error: 'Sign in first.' };
-            return;
-        }
-
-        try {
-            const now = new Date().toISOString();
-            const rows = db.prepare(`
-                SELECT id FROM recovery_collections
-                WHERE status = 'open' AND expires_at > ?
-                ORDER BY created_at DESC
-            `).all(now) as { id: string }[];
-
-            const pending: {
-                collectionId: string;
-                ownerPubkey: string;
-                callsign: string;
-                createdAt: string;
-                expiresAt: string;
-            }[] = [];
-
-            for (const row of rows) {
-                const state = collectionState(row.id);
-                if (!state || !state.live) continue;
-                // A member cannot approve their own recovery as a keeper
-                if (state.collection.ownerPubkey === keeper) continue;
-
-                const keepers = humanKeepersOf(state.collection.ownerPubkey, state.collection.generation);
-                if (!keepers.includes(keeper)) continue;
-
-                // Stop reporting once this keeper has released their fragment
-                const releases = listReleases(state.collection.id);
-                if (releases.some(r => r.holderType === 'member' && r.releasedBy === keeper)) {
-                    continue;
-                }
-
-                const owner = getMember(state.collection.ownerPubkey);
-                pending.push({
-                    collectionId: state.collection.id,
-                    ownerPubkey: state.collection.ownerPubkey,
-                    callsign: owner?.callsign ?? 'Unknown Member',
-                    createdAt: state.collection.createdAt,
-                    expiresAt: state.collection.expiresAt,
-                });
-            }
-
-            ctx.status = 200;
-            ctx.body = { pending };
-        } catch (e) {
-            return fail(ctx, e);
-        }
-    }
-
-    router.post('/api/recovery/approve-keeper/pending', pendingKeeperHandler);
 
     /** R1's cheap stop — reachable by the OWNER, who is the one without the attacker's session id. */
     router.post('/api/recovery/collect/cancel', async (ctx) => {

@@ -62,7 +62,7 @@ import {
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
     submitReport, getReports, dismissReport, actionReport, getReportCount,
-    getFriends, addFriend, removeFriend, setGuardian,
+    getFriends, addFriend, removeFriend,
     adminSetUserStatus, adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     getAdminPubkey, recordActivity,
@@ -76,7 +76,7 @@ import {
     registerPushToken, removePushToken,
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
-    getGuardiansOf, createRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery
+    dispatchPushNotification
 } from './state-engine.js';
 import { getCrowdfundProjects, getCrowdfundProject, createCrowdfundProject, updateCrowdfundProject, pledgeToProject, deleteCrowdfundProject, db, getDbDataVersion } from './db/db.js';
 import { initDirectoryPublisher, pushDirectoryNow } from './services/directory-publisher.js';
@@ -108,7 +108,6 @@ import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createChannelRoutes } from './routes/channels.js';
-import { createPinRoutes } from './routes/pin.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
@@ -260,16 +259,7 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
     /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
     /^\/api\/treasury\/[^/]+$/,                             // community transparency: one treasury's detail
-    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up guardians by callsign
-    /^\/api\/recovery\/status\/[^/]+$/,                     // pre-membership: recovering user polls status
-    // Keyholder restore screen (D8): a user on a new phone has no identity to sign with, and the
-    // screen cannot be drawn without knowing which keepers exist. Types and counts only, never
-    // identities, and rate-limited in the handler — it is a membership oracle by necessity, which
-    // ONBOARDING Part 9 accepts and records rather than pretends away.
-    /^\/api\/recovery\/keepers\/[^/]+$/,
-    // A2-16: /api/recovery/pending/:guardian is deliberately NOT public — it lists a
-    // guardian's wards' recovery requests. It is gated under ENFORCE_READ_AUTH and the
-    // route additionally requires the verified signer to BE that guardian.
+    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up SSO recovery candidates by callsign
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
@@ -924,7 +914,6 @@ export async function startHttpsServer(port: number): Promise<void> {
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
         createChannelRoutes(deps),
-        createPinRoutes(deps),
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),

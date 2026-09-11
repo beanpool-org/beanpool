@@ -22,24 +22,22 @@
  * returns immediately with `enrolled: []` and `generation: null`. The caller
  * (`welcome.tsx`) renders the words-only screen, which is correct.
  *
- * ## Future entry points (not yet built)
+ ## Entry point
  *
- * When an SSO or friend flow triggers a split, it will call the server's deposit endpoint
- * directly — either `POST /api/recovery/shares/sso` (which verifies the token and derives
- * the lookup hash server-side) or `POST /api/recovery/shares` (for friend fragments sealed
- * client-side). Both already exist and both write a full generation atomically through
- * `putShareGeneration`.
+ * An SSO sign-in triggers a split which calls `POST /api/recovery/shares/sso` — the node
+ * verifies the token and derives the lookup hash server-side, then writes a full generation
+ * atomically through `putShareGeneration`.
  *
- * The functions below — {@link enrolSsoKeeper} and {@link enrolFriendKeepers} — provide the
- * client-side split logic for those flows. They are exported but not called at signup.
+ * {@link enrolSsoKeeper} below holds the client-side split logic. It is not called at signup:
+ * it runs when the member signs in with a provider for the first time. The friend-keeper
+ * counterpart and its `POST /api/recovery/shares` endpoint are deleted — social recovery is
+ * scrapped, and the only paths back in are SSO and the member's twelve words.
  */
 
 import {
     readHubShare,
     recordShareForHub,
-    sealShareToMember,
     sealShareToSso,
-    splitTwoLayer,
     splitHubAndWhole,
     toEd25519Seed,
     type SealedShare,
@@ -322,95 +320,5 @@ export async function disconnectSsoKeeper(
         return { success: true, enrolledSso: data.enrolledSso ?? [] };
     } catch (e) {
         return { success: false, error: (e as Error).message };
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Friend-tier enrolment — called from add-a-friend (not at signup)
-// ---------------------------------------------------------------------------
-
-export interface FriendEnrolmentInput {
-    /** The identity of the member being enrolled. */
-    identity: BeanPoolIdentity;
-    /** Public keys of the friends to split across. Must be ≥ 2. */
-    friendPublicKeys: string[];
-}
-
-/**
- * Split the member's seed into hub + friend shares using `splitTwoLayer`, then deposit
- * through `POST /api/recovery/shares`.
- *
- * This is NOT called at signup. It is called when the member adds friends through the
- * add-a-friend flow.
- *
- * Never throws.
- */
-export async function enrolFriendKeepers(input: FriendEnrolmentInput): Promise<KeeperEnrolmentResult> {
-    const { identity, friendPublicKeys } = input;
-    const skipped: { keeper: string; reason: string }[] = [];
-    const nothing = (error: string): KeeperEnrolmentResult =>
-        ({ enrolled: [], generation: null, skipped, available: 0, error });
-
-    if (friendPublicKeys.length < 2) {
-        return nothing(`need at least 2 friends, got ${friendPublicKeys.length}`);
-    }
-
-    const words = identity.mnemonic;
-    if (!words || words.length === 0) {
-        return nothing('this identity has no recovery words to split');
-    }
-
-    const url = await anchorUrl();
-    if (!url) return nothing('no node configured yet');
-
-    let seed: Uint8Array;
-    try {
-        seed = toEd25519Seed(hexToBytes(identity.privateKey));
-    } catch (e) {
-        return nothing(`could not read the private key: ${(e as Error).message}`);
-    }
-
-    let hubShare: Uint8Array;
-    let friendShares: Uint8Array[];
-    try {
-        const result = await splitTwoLayer(seed, friendPublicKeys.length);
-        hubShare = result.hubShare;
-        friendShares = result.friendShares;
-    } catch (e) {
-        return nothing(`could not split the seed: ${(e as Error).message}`);
-    }
-
-    const shares: (SealedShare & { holderType: string; holderRef: string; shareIndex: number })[] = [];
-    try {
-        shares.push({
-            holderType: 'hub', holderRef: 'node', shareIndex: 1,
-            ...recordShareForHub(hubShare),
-        });
-        for (let i = 0; i < friendPublicKeys.length; i++) {
-            shares.push({
-                holderType: 'member', holderRef: friendPublicKeys[i], shareIndex: i + 2,
-                ...sealShareToMember(friendShares[i], friendPublicKeys[i]),
-            });
-        }
-    } catch (e) {
-        return nothing(`could not seal the pieces: ${(e as Error).message}`);
-    }
-
-    try {
-        const res = await signedPost(url, '/api/recovery/shares', { shares }, identity);
-        if (!res.ok) {
-            const detail = await res.text().catch(() => '');
-            return nothing(`node refused the fragments (${res.status}): ${detail.slice(0, 200)}`);
-        }
-        const body = await res.json() as { generation?: number };
-        const enrolled: EnrolledKeeper[] = ['hub', ...friendPublicKeys.map(() => 'member' as const)];
-        return {
-            enrolled,
-            generation: body.generation ?? null,
-            skipped,
-            available: enrolled.length,
-        };
-    } catch (e) {
-        return nothing(`could not reach the node: ${(e as Error).message}`);
     }
 }

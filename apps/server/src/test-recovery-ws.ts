@@ -1,9 +1,6 @@
 /**
- * A2-16 (recovery pending authz) + A2-20 (WS transaction scoping) against the real
- * server, with ENFORCE_READ_AUTH and ENFORCE_WS_AUTH ON.
+ * A2-20 (WS transaction scoping) against the real server, with ENFORCE_READ_AUTH and ENFORCE_WS_AUTH ON.
  *
- *   A2-16 GET /api/recovery/pending/:guardian requires the VERIFIED signer to be
- *         that guardian (the unsigned x-public-key header was non-authenticating).
  *   A2-20 a ledger 'transaction' event on the /ws feed is delivered ONLY to its two
  *         parties, not broadcast to every connected member.
  *
@@ -37,14 +34,6 @@ function makeId(callsign: string) {
 }
 const sign = (msg: string, pk: crypto.KeyObject) => crypto.sign(null, Buffer.from(msg), pk).toString('base64');
 
-async function signedGet(path: string, id: { pubKeyHex: string; privateKey: crypto.KeyObject }) {
-    const ts = Date.now(), nonce = crypto.randomBytes(16).toString('hex');
-    const res = await fetch(`${BASE}${path}`, {
-        headers: { 'X-Public-Key': id.pubKeyHex, 'X-Signature': sign(`GET\n${path}\n${ts}\n${nonce}\n`, id.privateKey), 'X-Timestamp': String(ts), 'X-Nonce': nonce },
-    });
-    return res.status;
-}
-
 function wsConnect(id: { pubKeyHex: string; privateKey: crypto.KeyObject }): Promise<{ ws: WebSocket; events: any[] }> {
     const ts = Date.now(), nonce = crypto.randomBytes(16).toString('hex');
     const sig = sign(`WS\n/ws\n${ts}\n${nonce}\n`, id.privateKey);
@@ -60,22 +49,15 @@ function wsConnect(id: { pubKeyHex: string; privateKey: crypto.KeyObject }): Pro
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 async function main() {
-    console.log('Running A2-16 + A2-20 tests (ENFORCE_READ_AUTH + ENFORCE_WS_AUTH on)...\n');
+    console.log('Running A2-20 tests (ENFORCE_READ_AUTH + ENFORCE_WS_AUTH on)...\n');
     if (process.env.ENFORCE_READ_AUTH !== 'true' || process.env.ENFORCE_WS_AUTH !== 'true')
         throw new Error('Run with ENFORCE_READ_AUTH=true ENFORCE_WS_AUTH=true');
     await initTls();
     initStateEngine();
     await startHttpsServer(PORT);
 
-    const guardian = makeId('Guardian');
     const ward = makeId('Ward');
     const outsider = makeId('Outsider');
-
-    // A2-16 — the guardian may read their own pending; an outsider may not.
-    assert(await signedGet(`/api/recovery/pending/${guardian.pubKeyHex}`, guardian) === 200,
-        'A2-16: guardian reads their OWN pending recovery requests (200)');
-    assert(await signedGet(`/api/recovery/pending/${guardian.pubKeyHex}`, outsider) === 403,
-        'A2-16: a non-guardian is DENIED another guardian\'s pending requests (403)');
 
     // A2-20 — connect the ward (a party) and the outsider (not a party); a transfer
     // to the ward must reach only the ward's socket.
@@ -95,6 +77,6 @@ async function main() {
     wardWs.ws.close(); outWs.ws.close();
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ A2-16 + A2-20 checks PASSED.');
+    console.log('⭐️ A2-20 checks PASSED.');
 }
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

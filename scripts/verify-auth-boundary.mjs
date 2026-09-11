@@ -57,11 +57,6 @@ const PROTECTED_ROUTES = [
     '/api/reports',
     '/api/friends/add',
     '/api/friends/remove',
-    '/api/friends/guardian',
-    '/api/recovery/request',
-    '/api/recovery/approve',
-    '/api/recovery/reject',
-    '/api/recovery/cancel',
     '/api/push-tokens',
     '/api/members/preferences',
 ];

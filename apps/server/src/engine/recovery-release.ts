@@ -56,7 +56,7 @@ export const COLLECTION_TTL_MS = 72 * 60 * 60 * 1000;
 export const HUB_DELAY_MS = 24 * 60 * 60 * 1000;
 
 /** Keeper types the node will ever hand over. `device` is absent on purpose — see the header. */
-const RELEASABLE: readonly KeeperType[] = ['hub', 'member', 'sso'];
+const RELEASABLE: readonly KeeperType[] = ['hub', 'sso'];
 
 /**
  * Most live sessions one account may have at once.
@@ -148,15 +148,6 @@ export interface ReleasedFragment {
     kdfParams: string | null;
     releasedBy: string | null;
     releasedAt: string;
-}
-
-/** What a keeper's fragment looks like once they have re-wrapped it to the recovering device. */
-export interface RewrappedFragment {
-    payload: string;
-    payloadIv: string;
-    payloadTag: string;
-    /** The keeper's X25519 ephemeral for THIS re-wrap — not the one from the original split. */
-    ephemeralPubkey: string;
 }
 
 const nowIso = (): string => new Date().toISOString();
@@ -417,52 +408,6 @@ function recordRelease(args: {
 }
 
 /**
- * D6 — a human keeper approves, and their fragment goes immediately.
- *
- * The keeper supplies the fragment already re-wrapped to the recovering device: they decrypted
- * their own copy with their own key, and encrypted the result to `requesterEphemeralPubkey`. The
- * node never sees a plaintext piece, which is what keeps it honest that a stolen database plus a
- * compromised hub is still short of the threshold.
- *
- * @param keeperPubkey the VERIFIED signer. Must be the keeper the fragment belongs to.
- */
-export function releaseMemberFragment(
-    collectionId: string, keeperPubkey: string, rewrapped: RewrappedFragment,
-): ReleasedFragment {
-    const collection = requireLive(collectionId);
-    if (!keeperPubkey) throw new RecoveryReleaseError('A keeper must be signed in to approve.');
-    if (keeperPubkey === collection.ownerPubkey) {
-        // Not a rule about trust — a rule about arithmetic. If the owner could approve their own
-        // fragment they would not be recovering, and allowing it would let anyone who compromised
-        // the account approve pieces towards rebuilding the phrase itself.
-        throw new RecoveryReleaseError('An account cannot approve its own recovery.');
-    }
-    if (!rewrapped?.payload || !rewrapped.payloadIv || !rewrapped.payloadTag || !rewrapped.ephemeralPubkey) {
-        throw new RecoveryReleaseError(
-            'An approved fragment must be re-wrapped to the recovering device (payload, iv, tag, ephemeral key).',
-        );
-    }
-
-    // holder_ref for a member keeper IS their pubkey, so this both finds the row and proves the
-    // signer is entitled to release it. There is no separate authorisation check because there is
-    // no separate question.
-    const share = shareForRelease(collection, 'member', keeperPubkey);
-
-    return recordRelease({
-        collectionId,
-        shareId: share.id as number,
-        holderType: 'member',
-        shareIndex: share.share_index as number,
-        payload: rewrapped.payload,
-        payloadIv: rewrapped.payloadIv,
-        payloadTag: rewrapped.payloadTag,
-        ephemeralPubkey: rewrapped.ephemeralPubkey,
-        kdfParams: null,
-        releasedBy: keeperPubkey,
-    });
-}
-
-/**
  * K3 — released on a verified fresh sign-in.
  *
  * The caller is responsible for having verified the provider token and derived the lookup hash;
@@ -577,8 +522,9 @@ export function releaseHubFragment(collectionId: string): ReleasedFragment {
         const waitMs = eligibleAt - Date.now();
         const hours = Math.ceil(waitMs / 3_600_000);
         throw new RecoveryReleaseError(
-            `The hub's fragment is held for ${hours}h unless a human keeper approves first (D7). `
-            + 'Ask any of your keepers to approve and it releases immediately.',
+            `The hub's fragment is held for ${hours}h. `
+            + 'Signing in with a connected provider releases it immediately; '
+            + 'otherwise your twelve words recover the account without waiting.',
         );
     }
 
@@ -690,56 +636,4 @@ export function openCollectionsFor(ownerPubkey: string): Collection[] {
 /** Exported so a route and its tests cannot disagree about what the node will hand over. */
 export function isReleasableType(holderType: string): boolean {
     return (RELEASABLE as readonly string[]).includes(holderType);
-}
-
-/** A keeper obligation the approver has not discharged yet. */
-export interface PendingKeeperAction {
-    collectionId: string;
-    ownerPubkey: string;
-    expiresAt: string;
-}
-
-/**
- * Live collections where `keeperPubkey` still holds an unreleased fragment for `ownerPubkey`.
- *
- * This exists because of a seam between two systems that look like one to the person using them.
- * The old guardian vote (`/api/recovery/request` → `/approve`) and the keyholder split are
- * different mechanisms with the same word on the button. A guardian who is ALSO a keeper taps
- * "Approve", is told it worked, and reasonably stops there — while their fragment, the thing
- * recovery actually needs, has not moved. The owner sees an approval and no piece, and nothing
- * says why.
- *
- * The node cannot discharge the obligation on their behalf: releasing a member fragment needs it
- * re-wrapped to the recovering device's ephemeral key, which requires the keeper's private key.
- * That is the whole point of the design and is not a limitation to engineer around. What the node
- * CAN do is stop the approval reading as complete when it is not, which is what this backs.
- *
- * Returns only collections that are open, unexpired, on the current generation, and where this
- * keeper's fragment has not already been released — so a keeper who has done both jobs is not
- * nagged, and a stale session is not resurrected.
- */
-export function pendingKeeperActionsFor(keeperPubkey: string, ownerPubkey: string): PendingKeeperAction[] {
-    const rows = db.prepare(`
-        SELECT c.id, c.owner_pubkey, c.expires_at
-        FROM recovery_collections c
-        JOIN recovery_shares s
-          ON s.owner_pubkey = c.owner_pubkey
-         AND s.generation   = c.generation
-         AND s.holder_type  = 'member'
-         AND s.holder_ref   = ?
-        WHERE c.owner_pubkey = ?
-          AND c.status = 'open'
-          AND c.expires_at > ?
-          AND NOT EXISTS (
-              SELECT 1 FROM recovery_releases r
-              WHERE r.collection_id = c.id AND r.share_id = s.id
-          )
-        ORDER BY c.created_at DESC
-    `).all(keeperPubkey, ownerPubkey, nowIso()) as Record<string, unknown>[];
-
-    return rows.map(r => ({
-        collectionId: r.id as string,
-        ownerPubkey: r.owner_pubkey as string,
-        expiresAt: r.expires_at as string,
-    }));
 }

@@ -39,15 +39,13 @@
 import Router from '@koa/router';
 import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 
-import { db } from '../db/db.js';
-import { getMember, resolveVouchedInBy } from '../state-engine.js';
+import { getMember } from '../state-engine.js';
 import {
     putShareGeneration,
     listKeeperTypes,
     countCurrentShares,
     getCurrentGeneration,
     getCurrentShares,
-    getShareForHolder,
     canRemoveKeeper,
     deleteAllShares,
     RecoveryShareError,
@@ -242,61 +240,6 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
     });
 
     /**
-     * Upload a whole generation — the initial split, adding a keeper, removing one, or rotating
-     * after a keeper's key changed. All four are the same operation, which is what keeps "how many
-     * fragments does this member have" answerable at every instant.
-     *
-     * Refuses sso fragments. See the file header — this is the point of the file.
-     */
-    router.post('/api/recovery/shares', async (ctx) => {
-        const owner = activeSigner(ctx);
-        if (!owner) return unauthenticated(ctx);
-
-        const body = (ctx as any).requestBody || {};
-        let shares: KeeperShareInput[];
-        try {
-            shares = parseShares(body.shares);
-        } catch (e) {
-            if (e instanceof BadRequest) { ctx.status = 400; ctx.body = { error: e.message }; return; }
-            throw e;
-        }
-
-        // Refused, not stripped. A client sending one believes it decides which provider account a
-        // fragment belongs to; quietly removing the field would leave that belief intact until it
-        // mattered, and the next thing it would try is a hash pointing at somebody else.
-        if (shares.some(s => s.holderType === 'sso')) {
-            ctx.status = 400;
-            ctx.body = {
-                error: 'A sign-in fragment cannot be deposited here. Use POST /api/recovery/shares/sso, '
-                    + 'which verifies the provider token and derives the lookup hash on this node.',
-            };
-            return;
-        }
-        // Same reasoning one level down: a lookup hash on a device or hub fragment is still a
-        // lookup hash, and findShareBySsoLookup matches on the column with no keeper-type filter.
-        if (shares.some(s => s.ssoLookupHash || s.ssoLookupSalt)) {
-            ctx.status = 400;
-            ctx.body = { error: 'A lookup hash is derived by this node, not supplied by the client.' };
-            return;
-        }
-
-        try {
-            const generation = putShareGeneration(owner, shares);
-            const threshold = memberThreshold(shares.some(s => s.holderType === 'sso'));
-            ctx.status = 200;
-            ctx.body = {
-                generation,
-                shareCount: shares.length,
-                threshold,
-                keepers: listKeeperTypes(owner),
-            };
-        } catch (e) {
-            if (e instanceof RecoveryShareError) { ctx.status = 400; ctx.body = { error: e.message }; return; }
-            throw e;
-        }
-    });
-
-    /**
      * Upload a generation that includes exactly one sign-in fragment.
      *
      * Separate from the route above because the fragment cannot be stored until a provider token
@@ -389,65 +332,6 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
     });
 
     /**
-     * How a member is protected, for the restore screen. Public and rate-limited (D8: recovery
-     * starts at the hub, and the recovering device has no identity yet).
-     *
-     * Types and counts only. See the file header for what this deliberately does not answer.
-     */
-    router.get('/api/recovery/keepers/:callsign', async (ctx) => {
-        if (!rateLimit(ctx)) return;
-
-        const callsign = (ctx.params.callsign || '').trim().toLowerCase();
-        if (!callsign) { ctx.status = 400; ctx.body = { error: 'Missing callsign' }; return; }
-
-        // The predicate MUST match idx_members_callsign_unique's exactly — it is
-        // `WHERE status NOT IN ('migrated', 'pruned')` (db.ts). Two things go wrong otherwise, and
-        // this route had both (CR):
-        //
-        //   1. A FALSE 409 blocking a real recovery. Pruning never clears the callsign and the
-        //      index excludes pruned rows on purpose, so a callsign IS reusable once its owner is
-        //      pruned. `status != 'migrated'` matches the tombstone as well as the live member,
-        //      sees two rows, and calls an unambiguous member ambiguous — on the one screen that
-        //      exists for somebody who has just lost their phone.
-        //   2. A full table SCAN on a public, unauthenticated endpoint. A predicate that does not
-        //      match the partial index cannot use it; matching it turns the plan into
-        //      SEARCH members USING INDEX idx_members_callsign_unique.
-        //
-        // Verified both with EXPLAIN QUERY PLAN against the real index DDL.
-        const matches = db.prepare(`
-            SELECT public_key FROM members
-            WHERE LOWER(callsign) = ? AND status NOT IN ('migrated', 'pruned')
-        `).all(callsign) as { public_key: string }[];
-
-        // Callsigns are unique per node (#83), so this is one row or none. Refusing rather than
-        // picking on the ambiguous case matters on nodes that predate the unique index: choosing
-        // arbitrarily would show one stranger's keeper layout under another's name.
-        if (matches.length > 1) {
-            ctx.status = 409;
-            ctx.body = { error: 'That callsign is ambiguous on this node.' };
-            return;
-        }
-        // Same 200 shape for "no such callsign" and "member with no split", deliberately. The
-        // endpoint is already a membership oracle by necessity; it does not need to be a crisper
-        // one, and the restore screen's next step is identical either way — fall back to the 12
-        // words. See R-oracle in ONBOARDING Part 9.
-        const owner = matches[0]?.public_key;
-        const keepers = owner ? listKeeperTypes(owner) : [];
-        const total = keepers.reduce((n, k) => n + k.count, 0);
-        const threshold = memberThreshold(keepers.some(k => k.holderType === 'sso'));
-
-        ctx.status = 200;
-        ctx.body = {
-            callsign,
-            keepers,
-            total,
-            threshold,
-            canAffordToLose: Math.max(0, total - threshold),
-            recoverable: total >= threshold,
-        };
-    });
-
-    /**
      * Drop every fragment — "stop protecting my account this way".
      *
      * NOT how a single keeper is removed. Removing one keeper is a re-split uploaded through
@@ -504,36 +388,9 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         }
 
         const remainingSso = ssoShares.filter(s => s.holderRef !== provider);
-        const memberShares = current.filter(s => s.holderType === 'member');
         const hubShare = current.find(s => s.holderType === 'hub');
 
-        // Removing the last sign-in keeper drops the member from the SSO tier to the non-SSO
-        // tier, and the two tiers do not need the same number of fragments: SSO recovers on
-        // hub + 1 sealed whole, non-SSO needs hub + 2 friend shares. A member with one provider
-        // and one friend sits exactly on that seam — disconnecting leaves hub + 1 friend, which
-        // is one short of the Shamir threshold and therefore not recoverable by anything.
-        //
-        // Writing that generation would be silent: the write succeeds, the UI reports the
-        // provider disconnected, and the account is unrecoverable from that instant. Refuse and
-        // say which keeper is missing. Dropping to ZERO keepers is a different case and is
-        // allowed below — that returns the member to words-only, which is honest and is a state
-        // the model supports.
-        if (remainingSso.length === 0 && memberShares.length > 0) {
-            const needed = memberThreshold(false) - 1; // fragments other than the hub
-            if (memberShares.length < needed) {
-                ctx.status = 400;
-                ctx.body = {
-                    error: `Disconnecting '${provider}' would leave this account unrecoverable. `
-                        + `Without a sign-in keeper, recovery needs ${needed} friend keepers and `
-                        + `this account has ${memberShares.length}. Add another friend keeper `
-                        + 'first, or remove your friend keepers too and go back to using your '
-                        + 'twelve words.',
-                };
-                return;
-            }
-        }
-
-        if (remainingSso.length === 0 && memberShares.length === 0) {
+        if (remainingSso.length === 0) {
             deleteAllShares(owner);
             ctx.status = 200;
             ctx.body = {
@@ -577,17 +434,6 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 ssoLookupHash: s.ssoLookupHash,
                 ssoLookupSalt: s.ssoLookupSalt,
                 kdfParams: s.kdfParams,
-            });
-        }
-        for (const s of memberShares) {
-            newShares.push({
-                holderType: 'member',
-                holderRef: s.holderRef,
-                shareIndex: nextIndex++,
-                encryptedShare: s.encryptedShare,
-                shareIv: s.shareIv,
-                shareTag: s.shareTag,
-                ephemeralPubkey: s.ephemeralPubkey,
             });
         }
 
@@ -659,70 +505,13 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             recoverable: total >= threshold,
             unattendedPieces,
             humanKeepers,
-            // True when getting back in REQUIRES a particular person to agree. Not a warning about
-            // those people — it is a fact about the shape of the split, and the screen should say
-            // so plainly and tell the member to write their twelve words down. The words are the
-            // floor under all of this; keepers are convenience on top, never a replacement.
-            dependsOnPeople: unattendedPieces < threshold,
-        };
-    });
-
-    /**
-     * K4 — who this member can enrol as their inviter keeper.
-     *
-     * The client splits and wraps; the node's only job here is to answer "who is your inviter,
-     * and can they hold a piece?" honestly. It returns the keeper's ACCOUNT public key, which is
-     * what a member fragment is ECDH-wrapped to (`holder_ref` on the row, and the whole of the
-     * authorization check at release time).
-     *
-     * The three outcomes are not decoration. `invited_by` is populated for every real join, but
-     * it is not always a PERSON:
-     *
-     *   member    a peer — enrolable, the ordinary case
-     *   founder   invited_by = 'genesis'; nobody to ask
-     *   admin     invited_by = SYSTEM or the admin key; nobody to ask
-     *
-     * Founding and admin-invited members therefore have no K4 at all, and land at signup with two
-     * pieces rather than three. That is exactly the state `dependsOnPeople` reports, and the
-     * client must not paper over it by pretending the admin is a keeper — an account nobody can
-     * recover is worse than one that says so on day one.
-     *
-     * Signed POST, not GET, for the same reason as /shares/status: ctx.state.actor is only
-     * populated for GETs when ENFORCE_READ_AUTH is on, which is off by default.
-     */
-    router.post('/api/recovery/keeper-candidates', async (ctx) => {
-        const owner = activeSigner(ctx);
-        if (!owner) return unauthenticated(ctx);
-
-        const vouchedInBy = resolveVouchedInBy(owner);
-
-        // Already a keeper on the CURRENT generation? Then this is a re-split, not enrolment, and
-        // offering them again would be a duplicate the engine refuses anyway (one keeper, one
-        // fragment per generation). Answering it here turns a 400 into a UI that just doesn't ask.
-        const alreadyEnrolled = vouchedInBy?.publicKey
-            ? getShareForHolder(owner, 'member', vouchedInBy.publicKey) !== null
-            : false;
-
-        const inviter = !vouchedInBy
-            ? { eligible: false as const, reason: 'none' as const }
-            : vouchedInBy.kind !== 'member' || !vouchedInBy.publicKey
-                ? { eligible: false as const, reason: vouchedInBy.kind }
-                : {
-                    eligible: !alreadyEnrolled,
-                    reason: alreadyEnrolled ? ('already_enrolled' as const) : undefined,
-                    publicKey: vouchedInBy.publicKey,
-                    callsign: vouchedInBy.callsign,
-                    avatarUrl: vouchedInBy.avatarUrl,
-                };
-
-        const hasSso = getShareForHolder(owner, 'sso', '') !== null || listKeeperTypes(owner).some(k => k.holderType === 'sso');
-        const threshold = memberThreshold(hasSso);
-
-        ctx.status = 200;
-        ctx.body = {
-            inviter,
-            generation: getCurrentGeneration(owner),
-            threshold,
+            // True when getting back in REQUIRES a particular person to agree. With human keepers
+            // deleted, no surviving path does: SSO and the hub fragment are both unattended, so
+            // this is now always false and is derived from the count rather than hardcoded, so it
+            // stays honest if a holder type is ever added back. It was previously
+            // `unattendedPieces < threshold`, which reported TRUE for a member with no SSO
+            // enrolled — telling them recovery depended on a person who can no longer exist.
+            dependsOnPeople: humanKeepers > 0,
         };
     });
 

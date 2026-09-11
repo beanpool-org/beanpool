@@ -1,14 +1,15 @@
 /**
  * The recovery collection routes — who may drive a session, and what falls out of it.
  *
- * engine/recovery-release.ts already proves D6, D7 and the K1 refusal. What is new here is that a
- * device with NO identity can drive the flow at all, and the property that replaced the bearer
- * token the engine was drafted around:
- *
- *   THE SESSION IS OWNED BY A KEY, NOT BY ITS ID. Every request is checked against
- *   `ctx.state.actor` — the cryptographically verified signer — so a leaked collection id is an
- *   identifier rather than a credential. It can appear in a log or a screenshot without being a
- *   way in.
+ * Covers:
+ *   - POST /api/recovery/collect
+ *   - POST /api/recovery/collect/status
+ *   - POST /api/recovery/collect/hub
+ *   - POST /api/recovery/collect/sso-nonce
+ *   - POST /api/recovery/collect/sso
+ *   - POST /api/recovery/collect/fragments
+ *   - POST /api/recovery/collect/mine
+ *   - POST /api/recovery/collect/cancel
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-recovery-collect.ts
  */
@@ -73,25 +74,13 @@ const frag = (i: number) => ({
     shareTag: Buffer.from(`tag-${i}`).toString('base64'),
 });
 
-const rewrap = (label: string) => ({
-    payload: Buffer.from(`rw-${label}`).toString('base64'),
-    payloadIv: Buffer.from(`rwiv-${label}`).toString('base64'),
-    payloadTag: Buffer.from(`rwtag-${label}`).toString('base64'),
-    ephemeralPubkey: Buffer.from(`rweph-${label}`).toString('base64'),
-});
-
 const SSO_HASH_SALT = crypto.randomBytes(16).toString('base64url');
-function split(owner: string, buddy: string, ssoHash?: string): number {
+function split(owner: string, ssoHash: string): number {
     const shares: KeeperShareInput[] = [
         { holderType: 'hub', holderRef: 'node', ...frag(1) },
-        { holderType: 'member', holderRef: buddy, ephemeralPubkey: 'ZXBo', ...frag(2) },
+        { holderType: 'sso', holderRef: 'google', ssoLookupHash: ssoHash,
+          ssoLookupSalt: SSO_HASH_SALT, ...frag(2) },
     ];
-    if (ssoHash) {
-        shares.push({ holderType: 'sso', holderRef: 'google', ssoLookupHash: ssoHash,
-                      ssoLookupSalt: SSO_HASH_SALT, ...frag(3) });
-    } else {
-        shares.push({ holderType: 'member', holderRef: 'buddy-2', ephemeralPubkey: 'ZXBoMg', ...frag(3) });
-    }
     return putShareGeneration(owner, shares);
 }
 
@@ -100,8 +89,9 @@ async function main(): Promise<void> {
     _resetJwksCacheForTests(); _clearNoncesForTests();
 
     const owner = member();
-    const buddy = member();
-    split(owner.pubkey, buddy.pubkey);
+    const other = member();
+    const dummySsoHash = crypto.randomBytes(32).toString('base64url');
+    split(owner.pubkey, dummySsoHash);
 
     // ── opening ───────────────────────────────────────────────────────────────────────────────
     console.log('── opening a session ────────────────────────────────────');
@@ -110,8 +100,8 @@ async function main(): Promise<void> {
     const opened = await call('/api/recovery/collect', device, { callsign: owner.callsign });
     assert(opened.status === 200 && typeof opened.body.collectionId === 'string',
         'a device with NO identity can open a collection — it only has to sign');
-    assert(opened.body.generation === 1 && opened.body.threshold === 3,
-        '...pinned to the generation it is collecting');
+    assert(opened.body.generation === 1 && opened.body.threshold === 2,
+        '...pinned to the generation it is collecting with threshold 2');
     const cid = opened.body.collectionId as string;
 
     assert((await call('/api/recovery/collect', undefined, { callsign: owner.callsign })).status === 401,
@@ -139,82 +129,43 @@ async function main(): Promise<void> {
     assert(mine.status === 200 && mine.body.collected === 0,
         '...while the device that opened it can read its own progress');
 
-    // ── D6 through the route ──────────────────────────────────────────────────────────────────
-    console.log('\n── a keeper approves ────────────────────────────────────');
-
-    const outsider = member();
-    assert((await call('/api/recovery/approve-keeper', outsider.pubkey,
-        { collectionId: cid, ...rewrap('outsider') })).status === 400,
-        'somebody who is not a keeper on this account cannot approve');
-    assert((await call('/api/recovery/approve-keeper', undefined,
-        { collectionId: cid, ...rewrap('x') })).status === 401,
-        'and an unsigned approval is refused');
-    assert((await call('/api/recovery/approve-keeper', owner.pubkey,
-        { collectionId: cid, ...rewrap('self') })).status === 400,
-        'and the account being recovered cannot approve its own recovery');
-    assert(listReleases(cid).length === 0, 'none of which released anything');
-
-    // What the keeper needs in order to approve at all.
-    const context = await call('/api/recovery/approve-keeper/context', buddy.pubkey, { collectionId: cid });
-    assert(context.status === 200 && context.body.callsign === owner.callsign,
-        'a keeper can see WHOSE account is being recovered...');
-    assert(context.body.fragment.encryptedShare === frag(2).encryptedShare,
-        '...and gets their own wrapped fragment to unwrap');
-    assert(context.body.recipientEphemeralPubkey === device,
-        '...and the key to re-wrap it to, which is the device that opened the session');
-    assert((await call('/api/recovery/approve-keeper/context', outsider.pubkey,
-        { collectionId: cid })).status === 404,
-        '...while a non-keeper is told nothing about the session at all');
-
-    const approved = await call('/api/recovery/approve-keeper', buddy.pubkey,
-        { collectionId: cid, ...rewrap('buddy') });
-    assert(approved.status === 200 && approved.body.progress.collected === 1,
-        'the keeper approves and their fragment releases instantly (D6)');
-
-    // ── fragments come from releases, never from polling ──────────────────────────────────────
-    console.log('\n── fragments ────────────────────────────────────────────');
-
-    const status = await call('/api/recovery/collect/status', device, { collectionId: cid });
-    assert(!JSON.stringify(status.body).includes(rewrap('buddy').payload),
-        'polling status never returns the fragments themselves');
-
-    const frags = await call('/api/recovery/collect/fragments', device, { collectionId: cid });
-    assert(frags.status === 200 && frags.body.fragments.length === 1,
-        'asking for the fragments returns what was actually released');
-    assert(frags.body.fragments[0].payload === rewrap('buddy').payload,
-        '...as the keeper re-wrapped it, not as the node stored it');
-    assert(frags.body.enough === false, '...and one of three is not enough');
-
     // ── D7 through the route ──────────────────────────────────────────────────────────────────
     console.log('\n── the hub (D7) ─────────────────────────────────────────');
 
-    const hubNow = await call('/api/recovery/collect/hub', device, { collectionId: cid });
-    assert(hubNow.status === 200 && hubNow.body.collected === 2,
-        'with a human already approved, the hub releases immediately');
-
-    // A cold session: no human, so the hub waits.
+    // Fresh session: no verified SSO yet, hub waits 24h
     const coldDevice = ephemeral();
     const cold = await call('/api/recovery/collect', coldDevice, { callsign: owner.callsign });
     const coldId = cold.body.collectionId as string;
     const coldHub = await call('/api/recovery/collect/hub', coldDevice, { collectionId: coldId });
-    assert(coldHub.status === 400 && /24h|human keeper/i.test(String(coldHub.body.error)),
-        'with no human approval the hub refuses, and says how to unblock it');
+    assert(coldHub.status === 400 && /held for/i.test(String(coldHub.body.error)),
+        'with no sign-in approval the hub refuses on 24h delay');
     assert(listReleases(coldId).length === 0, '...having released nothing');
     assert(cold.body.progress.hubReason === 'delay', '...and the session reports it is on the delay path');
 
+    // Age past 24h
     db.prepare('UPDATE recovery_collections SET created_at = ? WHERE id = ?')
       .run(new Date(Date.now() - HUB_DELAY_MS - 60_000).toISOString(), coldId);
-    assert((await call('/api/recovery/collect/hub', coldDevice, { collectionId: coldId })).status === 200,
-        '...and releases once the 24 hours are up, with no human involved');
+    const agedHub = await call('/api/recovery/collect/hub', coldDevice, { collectionId: coldId });
+    assert(agedHub.status === 200 && agedHub.body.collected === 1,
+        '...and releases once the 24 hours are up');
+
+    // ── fragments come from releases ──────────────────────────────────────────────────────────
+    console.log('\n── fragments ────────────────────────────────────────────');
+
+    const frags = await call('/api/recovery/collect/fragments', coldDevice, { collectionId: coldId });
+    assert(frags.status === 200 && frags.body.fragments.length === 1,
+        'asking for the fragments returns what was actually released');
+    assert(frags.body.fragments[0].payload === frag(1).encryptedShare,
+        '...as the stored hub ciphertext');
+    assert(frags.body.enough === false, '...and one of two is not enough');
 
     // ── K4 through the route ──────────────────────────────────────────────────────────────────
     console.log('\n── the sign-in keeper ───────────────────────────────────');
 
     const ssoOwner = member();
-    const ssoBuddy = member();
     const { ssoLookupHash } = await import('./sso.js');
     const REAL_SUB = '110169484474386276334';
-    split(ssoOwner.pubkey, ssoBuddy.pubkey, await ssoLookupHash('google', REAL_SUB, SSO_HASH_SALT));
+    split(ssoOwner.pubkey, await ssoLookupHash('google', REAL_SUB, SSO_HASH_SALT));
 
     const ssoDevice = ephemeral();
     const ssoSession = await call('/api/recovery/collect', ssoDevice, { callsign: ssoOwner.callsign });
@@ -245,8 +196,8 @@ async function main(): Promise<void> {
     assert((await call('/api/recovery/collect/mine', undefined)).status === 401,
         '...and an unsigned caller sees nothing');
 
-    assert((await call('/api/recovery/collect/cancel', buddy.pubkey, { collectionId: cid })).status === 400,
-        'a keeper cannot cancel somebody else\'s recovery');
+    assert((await call('/api/recovery/collect/cancel', other.pubkey, { collectionId: cid })).status === 400,
+        'another member cannot cancel somebody else\'s recovery');
     const cancelled = await call('/api/recovery/collect/cancel', owner.pubkey, { collectionId: cid });
     assert(cancelled.status === 200 && cancelled.body.cancelled === true,
         'but the account owner can — the one person who does not have the session id');
@@ -258,12 +209,6 @@ async function main(): Promise<void> {
         '...and reports itself cancelled rather than silently stalling');
     assert(deadStatus.body.hubEligibleAt === null,
         '...with no hub countdown to wait on');
-
-    // The fragments it already collected stay readable — the device may still be mid-rebuild, and
-    // taking them back would not un-release them anyway.
-    const afterCancel = await call('/api/recovery/collect/fragments', device, { collectionId: cid });
-    assert(afterCancel.status === 200 && afterCancel.body.fragments.length === 2,
-        'what was already released stays readable — cancelling stops the future, not the past');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

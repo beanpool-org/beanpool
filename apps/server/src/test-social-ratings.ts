@@ -5,7 +5,7 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-import { initStateEngine, seedGenesisMember, addRating, addFriend, removeFriend, setGuardian } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, addRating, addFriend, removeFriend } from './state-engine.js';
 import { db } from './db/db.js';
 
 let run = 0, passed = 0;
@@ -74,15 +74,9 @@ async function main() {
     const rating2 = addRating(alice, bob, 5, 'Great help!', txIdSeek);
     assert(rating2 !== null && rating2.role === 'receiver', 'Target role determined correctly as receiver for seek post');
 
-    // 2. addFriend, setGuardian, and removeFriend graph tests
+    // 2. addFriend and removeFriend graph tests
     const friendRes = addFriend(alice, bob);
     assert(friendRes !== null && friendRes.publicKey === bob, 'addFriend establishes connection');
-
-    const setGuardRes = setGuardian(alice, bob, true);
-    assert(setGuardRes === true, 'setGuardian promotes friend to guardian');
-
-    const guardRow = db.prepare("SELECT is_guardian FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(alice, bob) as { is_guardian: number } | undefined;
-    assert(guardRow?.is_guardian === 1, 'is_guardian set to 1 in DB');
 
     const removeRes = removeFriend(alice, bob);
     assert(removeRes === true, 'removeFriend deletes friend connection');

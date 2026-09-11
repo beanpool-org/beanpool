@@ -95,3 +95,6 @@ scripts/federation/fed-state.json
 # rejected by GitHub, and the only fix is rewriting history.
 *.apk
 *.aab
+
+# Jules agent runtime cache — local session state, never shared
+.jules/cache/

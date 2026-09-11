@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { generateNodeInvite } from '../../lib/node-client';
+import { generateNodeInvite, getTfaSessionToken } from '../../lib/node-client';
 
 interface InvitesModuleProps {
     activeNode: NodeProfile;
@@ -39,7 +39,12 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
             for (let i = 0; i < inviteCount; i++) {
                 let code = '';
                 try {
-                    const res = await generateNodeInvite(activeNode.url, activeNode.adminPassword, inviteTier);
+                    const res = await generateNodeInvite(
+                        activeNode.url,
+                        activeNode.adminPassword,
+                        inviteTier,
+                        activeNode ? getTfaSessionToken(activeNode.id) : undefined
+                    );
                     if (res?.code) {
                         code = res.code;
                     }

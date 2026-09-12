@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getActivityFeedApi, type ActivityFeedItem } from '../lib/api';
+import { withJitter } from '../lib/jitter';
 
 interface Props {
     isFullView?: boolean;
@@ -29,6 +30,7 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
 
     useEffect(() => {
         let isMounted = true;
+        let timer: ReturnType<typeof setInterval> | null = null;
 
         async function fetchFeed() {
             try {
@@ -43,12 +45,38 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
             }
         }
 
-        fetchFeed();
-        const timer = setInterval(fetchFeed, 30_000); // 30s live pulse refresh
+        const startPolling = () => {
+            if (!timer) {
+                fetchFeed();
+                timer = setInterval(fetchFeed, withJitter(30_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
             isMounted = false;
-            clearInterval(timer);
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, []);
 

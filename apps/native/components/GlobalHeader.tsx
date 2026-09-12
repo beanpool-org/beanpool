@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Image, Alert, Linking, Modal, Pressable, Platform, DeviceEventEmitter } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image, Alert, Linking, Modal, Pressable, Platform, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, usePathname } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { withJitter } from '../utils/jitter';
 import { getSavedNodes, SavedNode, removeSavedNode } from '../utils/nodes';
 import { getMemberProfile } from '../utils/db';
 import { MemberAvatar } from './MemberAvatar';
@@ -315,9 +316,41 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 await updateVersionBanner(active, null);
             }
         };
-        pingActive();
-        const iv = setInterval(pingActive, 30000);
-        return () => { isMounted = false; clearInterval(iv); };
+        let iv: ReturnType<typeof setInterval> | null = null;
+
+        const startPolling = () => {
+            if (!iv) {
+                pingActive();
+                iv = setInterval(pingActive, withJitter(30000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (iv) {
+                clearInterval(iv);
+                iv = null;
+            }
+        };
+
+        const handleAppStateChange = (nextState: AppStateStatus) => {
+            if (nextState === 'active') {
+                startPolling();
+            } else {
+                stopPolling();
+            }
+        };
+
+        if (AppState.currentState === 'active') {
+            startPolling();
+        }
+
+        const sub = AppState.addEventListener('change', handleAppStateChange);
+
+        return () => {
+            isMounted = false;
+            stopPolling();
+            sub.remove();
+        };
     }, []);
 
     useEffect(() => {

@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { onSyncChange, type SyncState } from '../lib/sync';
 import { checkMembership } from '../lib/api';
 import { loadIdentity } from '../lib/identity';
+import { withJitter } from '../lib/jitter';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -35,9 +36,11 @@ export function SyncStatus() {
         return unsub;
     }, []);
 
-    // Membership probe — probe HTTP API continuously regardless of WebSocket state
+    // Membership probe — backed off to 30s + jitter, suspended when WS is connected, paused when hidden
     useEffect(() => {
         let cancelled = false;
+        let interval: ReturnType<typeof setInterval> | null = null;
+
         const probe = async () => {
             try {
                 const identity = await loadIdentity();
@@ -51,16 +54,79 @@ export function SyncStatus() {
                 if (!cancelled) setIsHttpOnline(false);
             }
         };
-        probe();
-        const interval = setInterval(probe, 5000);
-        return () => { cancelled = true; clearInterval(interval); };
-    }, []);
 
-    // Auto-update the "time ago" label
+        const startPolling = () => {
+            if (interval) return;
+            probe();
+            // Suspend recurring HTTP probe while the WebSocket is connected
+            if (!sync.connected) {
+                interval = setInterval(probe, withJitter(30_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            cancelled = true;
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [sync.connected]);
+
+    // Auto-update the "time ago" label (pauses when hidden)
     const [, setTick] = useState(0);
     useEffect(() => {
-        const timer = setInterval(() => setTick((t) => t + 1), 10000);
-        return () => clearInterval(timer);
+        let timer: ReturnType<typeof setInterval> | null = null;
+
+        const startTimer = () => {
+            if (!timer) {
+                timer = setInterval(() => setTick((t) => t + 1), 10000);
+            }
+        };
+
+        const stopTimer = () => {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopTimer();
+            } else {
+                setTick((t) => t + 1);
+                startTimer();
+            }
+        };
+
+        if (!document.hidden) {
+            startTimer();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            stopTimer();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, []);
 
     // Resolve display state

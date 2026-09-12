@@ -2,7 +2,7 @@ import { Tabs, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { StatusBar } from 'expo-status-bar';
 import { GlobalHeader } from '../../components/GlobalHeader';
-import { View, Text, Platform, DeviceEventEmitter, useWindowDimensions } from 'react-native';
+import { View, Text, Platform, DeviceEventEmitter, useWindowDimensions, AppState, type AppStateStatus } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname } from 'expo-router';
@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getGlobalUnreadCount, syncMessages, getPosts, getMarketplaceTransactions } from '../../utils/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../ThemeContext';
+import { withJitter } from '../../utils/jitter';
 
 // Tab bar sits under the brand header, so its height is fixed here rather than left to
 // the library, which would add the status-bar inset a second time (GlobalHeader already
@@ -172,18 +173,54 @@ export default function TabLayout() {
                 setDealsCount(active);
             } catch (e) {}
         };
-        checkUnread(true);
-        // Local badge refresh every 5s; full network message-sync only as a 30s
-        // backstop — real-time arrival is covered by the ws_activity nudge below
-        // (throttled, so a chatty session doesn't turn into a sync-per-message).
-        const iv = setInterval(() => checkUnread(false), 5000);
-        const netIv = setInterval(() => checkUnread(true), 30000);
+
+        let iv: ReturnType<typeof setInterval> | null = null;
+        let netIv: ReturnType<typeof setInterval> | null = null;
+
+        const startPolling = () => {
+            if (!iv) {
+                checkUnread(true);
+                // Local badge refresh every 5s; full network message-sync only as a 30s
+                // backstop — real-time arrival is covered by the ws_activity nudge below
+                iv = setInterval(() => checkUnread(false), withJitter(5000));
+                netIv = setInterval(() => checkUnread(true), withJitter(30000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (iv) {
+                clearInterval(iv);
+                iv = null;
+            }
+            if (netIv) {
+                clearInterval(netIv);
+                netIv = null;
+            }
+        };
+
+        const handleAppStateChange = (nextState: AppStateStatus) => {
+            if (nextState === 'active') {
+                startPolling();
+            } else {
+                stopPolling();
+            }
+        };
+
+        if (AppState.currentState === 'active') {
+            startPolling();
+        }
+
+        const appStateSub = AppState.addEventListener('change', handleAppStateChange);
+
         const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
-            if (Date.now() - lastNetSyncAtRef.current > 10000) checkUnread(true);
+            if (AppState.currentState === 'active' && Date.now() - lastNetSyncAtRef.current > 10000) {
+                checkUnread(true);
+            }
         });
+
         return () => {
-            clearInterval(iv);
-            clearInterval(netIv);
+            stopPolling();
+            appStateSub.remove();
             wsSub.remove();
         };
     }, [identity]);

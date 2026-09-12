@@ -24,6 +24,7 @@ import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
+import { withJitter } from '../lib/jitter';
 import { ImageLightbox } from '../components/ImageLightbox';
 
 // Simple deterministic hash for consistent pin placement
@@ -356,9 +357,39 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
     }, []);
 
     useEffect(() => {
-        refreshPosts();
-        const interval = setInterval(refreshPosts, 30_000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const startPolling = () => {
+            if (!interval) {
+                refreshPosts();
+                interval = setInterval(refreshPosts, withJitter(30_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [refreshPosts]);
 
     // Create a new post from the map

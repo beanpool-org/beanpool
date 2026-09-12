@@ -18,7 +18,7 @@ import type { Libp2p } from 'libp2p';
 import { db } from './db/db.js';
 import { reachAdmitsPeer, parseReachPeers, isSyntheticAccount } from '@beanpool/core';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
-import { getMember, registerVisitor } from './state-engine.js';
+import { getMember, registerVisitor, bumpPostsVersion, bumpMembersVersion } from './state-engine.js';
 import { logger } from './logger.js';
 
 /**
@@ -137,10 +137,12 @@ export function cacheRemoteListings(
     const incoming = Array.isArray(listings) ? listings : [];
     let cached = 0, dropped = 0;
 
+    let deletedCount = 0;
     db.transaction(() => {
         // Everything we currently hold FOR THIS PEER. Deleted below unless the answer re-states it, so a
         // withdrawn listing disappears without a retraction message.
-        db.prepare('DELETE FROM posts WHERE origin_node = ?').run(originNode);
+        const delRes = db.prepare('DELETE FROM posts WHERE origin_node = ?').run(originNode);
+        deletedCount = delRes.changes;
 
         for (const raw of incoming) {
             const l = raw as any;
@@ -201,6 +203,13 @@ export function cacheRemoteListings(
             }
         }
     })();
+
+    if (deletedCount > 0 || cached > 0) {
+        bumpPostsVersion();
+    }
+    if (cached > 0) {
+        bumpMembersVersion();
+    }
 
     return { cached, dropped };
 }

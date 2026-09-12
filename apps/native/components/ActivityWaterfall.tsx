@@ -12,9 +12,12 @@ import {
     StyleSheet,
     ActivityIndicator,
     Pressable,
+    AppState,
+    type AppStateStatus,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../app/ThemeContext';
+import { withJitter } from '../utils/jitter';
 
 export interface ActivityFeedItem {
     id: number;
@@ -74,10 +77,41 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
         }
 
         loadFeed();
-        const interval = setInterval(loadFeed, 30_000);
+
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const startPolling = () => {
+            if (!interval) {
+                loadFeed();
+                interval = setInterval(loadFeed, withJitter(30_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleAppStateChange = (nextState: AppStateStatus) => {
+            if (nextState === 'active') {
+                startPolling();
+            } else {
+                stopPolling();
+            }
+        };
+
+        if (AppState.currentState === 'active') {
+            startPolling();
+        }
+
+        const sub = AppState.addEventListener('change', handleAppStateChange);
+
         return () => {
             isMounted = false;
-            clearInterval(interval);
+            stopPolling();
+            sub.remove();
         };
     }, []);
 

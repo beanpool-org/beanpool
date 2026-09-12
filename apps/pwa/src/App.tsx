@@ -10,7 +10,8 @@
 import { useState, useEffect } from 'react';
 import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
 import { connectToAnchor, onSystemAnnouncement, onSyncActivity } from './lib/sync';
-import { checkMembership, getConversations, getMarketplacePosts, getMyMarketplaceTransactions, getCommunityHealth } from './lib/api';
+import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth } from './lib/api';
+import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
@@ -203,21 +204,17 @@ export function App() {
     // Poll unread message count and active deals
     useEffect(() => {
         if (!identity) return;
+        let interval: ReturnType<typeof setInterval> | null = null;
+
         const pollUnread = async () => {
             try {
                 const result = await getConversations(identity.publicKey);
                 setTotalUnread(result.totalUnread || 0);
 
-                // Poll marketplace for active deals + inbound requests
-                const [posts, txs] = await Promise.all([
-                    getMarketplacePosts(),
-                    getMyMarketplaceTransactions(identity.publicKey)
-                ]);
+                // Poll marketplace for active deals + inbound requests (computed from txs alone)
+                const txs = await getMyMarketplaceTransactions(identity.publicKey);
                 
-                const activeDeals = posts.filter(p => 
-                    p.status === 'pending' && 
-                    (p.authorPublicKey === identity.publicKey || p.acceptedBy === identity.publicKey)
-                ).length;
+                const activeDeals = txs.filter(t => t.status === 'pending').length;
                 
                 const pendingRequests = txs.filter(t => 
                     t.buyerPublicKey === identity.publicKey && t.status === 'requested'
@@ -226,12 +223,43 @@ export function App() {
                 setPendingDealsCount(activeDeals + pendingRequests);
             } catch { /* offline */ }
         };
-        pollUnread();
-        const interval = setInterval(pollUnread, 10000);
+
+        const startPolling = () => {
+            if (!interval) {
+                pollUnread();
+                interval = setInterval(pollUnread, withJitter(10000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
         // Fast path: update unread counts immediately on WebSocket activity
-        const unsubscribe = onSyncActivity(() => pollUnread());
+        const unsubscribe = onSyncActivity(() => {
+            if (!document.hidden) pollUnread();
+        });
+
         return () => {
-            clearInterval(interval);
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
             unsubscribe();
         };
     }, [identity]);

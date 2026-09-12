@@ -224,7 +224,7 @@ async function main() {
         `Member without avatar has null avatarUrl: ${noneMember?.avatarUrl}`);
 
     const membersEtag = membersRes.headers['etag'];
-    assert(!!membersEtag && membersEtag.startsWith('"'), `GET /api/community/members returns strong ETag: ${membersEtag}`);
+    assert(!!membersEtag && (membersEtag.startsWith('"') || membersEtag.startsWith('W/"')), `GET /api/community/members returns ETag: ${membersEtag}`);
 
     // Test ETag conditional 304 on /api/community/members
     const conditionalMembersRes = await dispatchRoute(communityRouter, 'GET', '/api/community/members', {
@@ -257,7 +257,7 @@ async function main() {
         `Author without avatar has null authorAvatarUrl: ${nonePost?.authorAvatarUrl}`);
 
     const feedEtag = postsRes.headers['etag'];
-    assert(!!feedEtag && feedEtag.startsWith('"'), `GET /api/marketplace/posts returns strong ETag: ${feedEtag}`);
+    assert(!!feedEtag && (feedEtag.startsWith('"') || feedEtag.startsWith('W/"')), `GET /api/marketplace/posts returns ETag: ${feedEtag}`);
 
     // Test ETag conditional 304 on /api/marketplace/posts
     const conditionalPostsRes = await dispatchRoute(marketplaceRouter, 'GET', '/api/marketplace/posts', {

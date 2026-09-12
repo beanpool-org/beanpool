@@ -15,6 +15,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
 import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
+import { withJitter } from '../lib/jitter';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -117,9 +118,39 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     }, [identity.publicKey]);
 
     useEffect(() => {
-        refresh();
-        const interval = setInterval(refresh, 10_000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const startPolling = () => {
+            if (!interval) {
+                refresh();
+                interval = setInterval(refresh, withJitter(10_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [refresh]);
 
     async function handleSend() {

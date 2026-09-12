@@ -29,6 +29,7 @@ import {
     getNodeRole, exportSyncState,
     createTreasury,
     purgeMemberSelf,
+    getMembersVersion,
 } from '../state-engine.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword,
@@ -706,6 +707,22 @@ router.get('/api/community/membership/:publicKey', async (ctx) => {
 });
 
 router.get('/api/community/members', async (ctx) => {
+    const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
+    const etag = `W/"community-members-${getMembersVersion()}${querySig}"`;
+
+    ctx.set('ETag', etag);
+    ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
+
+    const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+    if (ifNoneMatch) {
+        const cleanInm = ifNoneMatch.replace(/^W\//, '');
+        const cleanEtag = etag.replace(/^W\//, '');
+        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+            ctx.status = 304;
+            return;
+        }
+    }
+
     // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
     const members = getMembers()
         .filter(m => !m.isTreasury)
@@ -719,18 +736,6 @@ router.get('/api/community/members', async (ctx) => {
         }));
 
     const bodyStr = JSON.stringify(members);
-    const etag = `"${crypto.createHash('sha256').update(bodyStr).digest('hex').slice(0, 16)}"`;
-    ctx.set('ETag', etag);
-
-    const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
-    if (ifNoneMatch) {
-        const cleanInm = ifNoneMatch.replace(/^W\//, '');
-        const cleanEtag = etag.replace(/^W\//, '');
-        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
-            ctx.status = 304;
-            return;
-        }
-    }
 
     ctx.status = 200;
     ctx.type = 'application/json';
@@ -1299,6 +1304,22 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
 
 
 router.get('/api/members', async (ctx) => {
+    const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
+    const etag = `W/"members-${getMembersVersion()}${querySig}"`;
+
+    ctx.set('ETag', etag);
+    ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
+
+    const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+    if (ifNoneMatch) {
+        const cleanInm = ifNoneMatch.replace(/^W\//, '');
+        const cleanEtag = etag.replace(/^W\//, '');
+        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+            ctx.status = 304;
+            return;
+        }
+    }
+
     // Use getMembers() (excludes pruned) so the directory matches the count reported by
     // /api/community/info — otherwise clients keep pruned members locally and read as
     // permanently "out of sync" against the node's pruned-excluding member count.
@@ -1333,18 +1354,6 @@ router.get('/api/members', async (ctx) => {
     }));
 
     const bodyStr = JSON.stringify(members);
-    const etag = `"${crypto.createHash('sha256').update(bodyStr).digest('hex').slice(0, 16)}"`;
-    ctx.set('ETag', etag);
-
-    const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
-    if (ifNoneMatch) {
-        const cleanInm = ifNoneMatch.replace(/^W\//, '');
-        const cleanEtag = etag.replace(/^W\//, '');
-        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
-            ctx.status = 304;
-            return;
-        }
-    }
 
     ctx.status = 200;
     ctx.type = 'application/json';

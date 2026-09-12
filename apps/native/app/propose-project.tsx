@@ -260,7 +260,15 @@ export default function ProposeProjectModal() {
                 ) : null}
 
                 <View style={styles.footer}>
-                    <Pressable style={styles.submitBtn} onPress={handleSubmit} disabled={submitting} accessibilityRole="button">
+                    <Pressable
+                        style={styles.submitBtn}
+                        onPress={handleSubmit}
+                        disabled={submitting}
+                        accessibilityRole="button"
+                        accessibilityLabel={submitting ? "Submitting to network" : "Submit to network"}
+                        accessibilityHint="Submits your community project proposal"
+                        accessibilityState={{ disabled: submitting, busy: submitting }}
+                    >
                         {submitting ? (
                             <ActivityIndicator color={colors.text.inverse} />
                         ) : (

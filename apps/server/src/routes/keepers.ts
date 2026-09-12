@@ -37,7 +37,7 @@
  */
 
 import Router from '@koa/router';
-import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
+import { TWO_LAYER_THRESHOLD, isSingleBlobSso } from '@beanpool/core';
 
 import { getMember } from '../state-engine.js';
 import {
@@ -308,13 +308,14 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
                 nonce: typeof body.nonce === 'string' ? body.nonce : '',
             });
             const currentShares = getCurrentShares(owner);
+            const isSingle = currentShares.some(s => s.holderType === 'sso' && isSingleBlobSso(s.kdfParams));
             ctx.status = 200;
             ctx.body = {
                 generation: result.generation,
                 provider: result.provider,
                 email: result.email,
                 shareCount: result.shareCount,
-                threshold: TWO_LAYER_THRESHOLD,
+                threshold: isSingle ? 1 : TWO_LAYER_THRESHOLD,
                 keepers: listKeeperTypes(owner),
                 enrolledSso: currentShares.filter(s => s.holderType === 'sso').map(s => s.holderRef),
             };
@@ -491,7 +492,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         // rather than presented as a verdict.
         const unattendedPieces = countOf('sso') + countOf('hub');
         const humanKeepers = countOf('member');
-        const threshold = memberThreshold(keepers.some(k => k.holderType === 'sso'));
+        const isSingle = currentShares.some(s => s.holderType === 'sso' && isSingleBlobSso(s.kdfParams));
+        const threshold = isSingle ? 1 : memberThreshold(keepers.some(k => k.holderType === 'sso'));
 
         ctx.status = 200;
         ctx.body = {

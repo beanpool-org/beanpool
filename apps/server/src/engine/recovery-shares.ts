@@ -22,6 +22,7 @@
 
 
 import { db } from '../db/db.js';
+import { isSingleBlobSso } from '@beanpool/core';
 
 /** Who holds a fragment. Mirrors the CHECK constraint on `recovery_shares.holder_type`. */
 export type KeeperType = 'hub' | 'member' | 'sso';
@@ -108,7 +109,9 @@ export function getCurrentGeneration(ownerPubkey: string): number {
  * @throws {RecoveryShareError} if the batch could not be recombined by its own owner
  */
 export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput[]): number {
-    if (!Array.isArray(shares) || shares.length < 2) {
+    const isSingleSso = Array.isArray(shares) && shares.length === 1 &&
+        shares[0]?.holderType === 'sso' && isSingleBlobSso(shares[0]?.kdfParams);
+    if (!Array.isArray(shares) || (!isSingleSso && shares.length < 2)) {
         // Accepting this would store a set that can never be recombined — a silent, total loss
         // that only surfaces when the member actually needs to recover.
         throw new RecoveryShareError(
@@ -352,7 +355,11 @@ export function findShareBySsoLookup(ssoLookupHash: string): StoredKeeperShare |
  * so the caller can refuse the request before the user believes it worked.
  */
 export function canRemoveKeeper(ownerPubkey: string): boolean {
-    return countCurrentShares(ownerPubkey) > 2;
+    const shares = getCurrentShares(ownerPubkey);
+    if (shares.length === 0) return false;
+    const isSingle = shares.some(s => s.holderType === 'sso' && isSingleBlobSso(s.kdfParams));
+    const threshold = isSingle ? 1 : 2;
+    return shares.length > threshold;
 }
 
 /**

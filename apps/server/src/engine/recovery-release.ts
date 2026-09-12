@@ -43,7 +43,7 @@
 // points at, and the reason the check is here rather than left to the caller.
 
 import crypto from 'node:crypto';
-import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
+import { TWO_LAYER_THRESHOLD, isSingleBlobSso } from '@beanpool/core';
 
 import { db } from '../db/db.js';
 import { getCurrentGeneration, type KeeperType } from './recovery-shares.js';
@@ -581,14 +581,16 @@ export function collectionProgress(collectionId: string): {
         hubReason = e.reason;
     }
 
-    const hasSso = !!db.prepare(`
-        SELECT 1 AS present FROM recovery_shares
+    const ssoRows = db.prepare(`
+        SELECT kdf_params FROM recovery_shares
         WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso'
-    `).get(state.collection.ownerPubkey, state.collection.generation);
+    `).all(state.collection.ownerPubkey, state.collection.generation) as { kdf_params: string | null }[];
+    const hasSso = ssoRows.length > 0;
+    const isSingleBlob = ssoRows.some(r => isSingleBlobSso(r.kdf_params));
 
-    // Layer two threshold is TWO_LAYER_THRESHOLD (= 2). The hub is XOR-mandatory and outside layer two.
-    // Total fragments needed: SSO tier = hub + 1 sso = 2 total. Non-SSO tier = hub + TWO_LAYER_THRESHOLD friends = 3 total.
-    const needed = hasSso ? TWO_LAYER_THRESHOLD : TWO_LAYER_THRESHOLD + 1;
+    // Single-blob SSO has threshold = 1.
+    // Legacy two-layer: SSO tier = hub + 1 sso = 2 total. Non-SSO tier = hub + TWO_LAYER_THRESHOLD friends = 3 total.
+    const needed = isSingleBlob ? 1 : (hasSso ? TWO_LAYER_THRESHOLD : TWO_LAYER_THRESHOLD + 1);
 
     return {
         status: state.collection.status,

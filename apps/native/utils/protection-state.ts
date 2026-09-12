@@ -89,7 +89,9 @@ export const KEEPER_LABELS: Record<string, string> = {
  * Uses TWO_LAYER_THRESHOLD from @beanpool/core — never a hardcoded number.
  */
 function thresholdFor(enrolled: readonly string[]): number {
-    if (enrolled.includes('sso')) return TWO_LAYER_THRESHOLD;
+    if (enrolled.includes('sso')) {
+        return enrolled.includes('hub') ? TWO_LAYER_THRESHOLD : 1;
+    }
     return TWO_LAYER_THRESHOLD + 1;
 }
 

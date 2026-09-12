@@ -8,6 +8,7 @@ import {
     SSO_PROVIDERS,
     type SsoProvider,
 } from '../sso.js';
+import { isSingleBlobSso } from '@beanpool/core';
 import {
     putShareGeneration,
     getCurrentShares,
@@ -169,6 +170,9 @@ export async function depositSsoKeeperGeneration(
     // 1. Hub share
     const hubShare = shares.find(s => s.holderType === 'hub');
 
+    const isNewDepositSingle = isSingleBlobSso(ssoShare.kdfParams);
+    const legacyOtherSso = existingOtherSso.some(s => !isSingleBlobSso(s.kdfParams));
+
     // The invariant that makes 1-of-N redundancy actually redundant.
     //
     // Under the two-layer model `seed = A ⊕ B`. Every sealed fragment B is only meaningful
@@ -176,32 +180,32 @@ export async function depositSsoKeeperGeneration(
     // deposit carries a previous provider's B forward, the A written beside it must be the same
     // A that B was split from — the one already in storage.
     //
-    // A client that splits afresh sends a new random A. Pairing that with a carried-over B gives
-    //   A_new ⊕ B_old = A_new ⊕ (seed ⊕ A_old) = seed ⊕ (A_new ⊕ A_old) ≠ seed
-    // and nothing downstream notices: no checksum is stored, `combineHubAndWhole` is called
-    // without one, and recovery derives a syntactically valid keypair for an account that does
-    // not exist. The member's real account becomes unreachable through the provider they
-    // enrolled FIRST, discovered only when they try to use it.
-    //
-    // Refused rather than repaired, because the node cannot repair it: B is sealed to the
-    // provider's `sub` and only the member's device holds the seed needed to re-derive it. The
-    // caller's fix is to reuse the stored fragment — see `fetchHubFragment` in
-    // apps/native/utils/keeper-enrolment.ts, which is why the hub fragment is readable by its
-    // owner at all.
-    if (existingOtherSso.length > 0) {
+    // For single-blob SSO, each provider's blob is the full seed encrypted directly under
+    // scrypt(provider:sub). No hub share is used or needed.
+    // Only enforce hub matching if existing shares are old format.
+    if (legacyOtherSso) {
         const existingHub = current.find(s => s.holderType === 'hub');
-        if (!hubShare || !existingHub || hubShare.encryptedShare !== existingHub.encryptedShare) {
-            throw new KeeperDepositError(
-                'This deposit would strand the sign-in keepers already protecting this account. '
-                + 'Adding a provider must reuse the hub fragment the existing providers were split '
-                + 'against — fetch it from POST /api/recovery/shares/hub-fragment and split the '
-                + 'seed against that, rather than generating a new one.',
-            );
+        if (hubShare) {
+            if (!existingHub || hubShare.encryptedShare !== existingHub.encryptedShare) {
+                throw new KeeperDepositError(
+                    'This deposit would strand the sign-in keepers already protecting this account. '
+                    + 'Adding a provider must reuse the hub fragment the existing providers were split '
+                    + 'against — fetch it from POST /api/recovery/shares/hub-fragment and split the '
+                    + 'seed against that, rather than generating a new one.',
+                );
+            }
         }
+    } else if (!isNewDepositSingle && !hubShare) {
+        throw new KeeperDepositError('A legacy sign-in split needs a hub fragment.');
     }
 
     if (hubShare) {
         finalShares.push({ ...hubShare, shareIndex: nextIndex++ });
+    } else if (legacyOtherSso) {
+        const existingHub = current.find(s => s.holderType === 'hub');
+        if (existingHub) {
+            finalShares.push({ ...existingHub, shareIndex: nextIndex++ });
+        }
     }
 
     // 2. Newly verified SSO share

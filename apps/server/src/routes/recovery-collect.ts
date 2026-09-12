@@ -191,11 +191,12 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         if (!collection) return notMySession(ctx);
         const releases = listReleases(collection.id);
         const progress = collectionProgress(collection.id);
+        const threshold = progress?.threshold ?? 2;
         ctx.status = 200;
         ctx.body = {
             collected: releases.length,
-            threshold: progress?.threshold ?? 2,
-            enough: progress?.enough ?? (releases.length >= 2),
+            threshold,
+            enough: progress?.enough ?? (releases.length >= threshold),
             fragments: releases.map(r => ({
                 holderType: r.holderType,
                 shareIndex: r.shareIndex,

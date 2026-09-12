@@ -224,7 +224,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setEditingMessage(null);
             setActiveEmojiPickerId(null);
             setDraft('');
-            loadMessages(activeConv.id);
+            // The initial load happens in startPolling() below; calling it here as well fired two
+            // concurrent loads (and two decrypt passes) for the same conversation on open, which
+            // could land out of order and overwrite the newer result with the older one.
             // Mark conversation as read when opened and clear unread count immediately
             markConversationReadApi(identity.publicKey, activeConv.id).then(() => {
                 setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, unreadCount: 0 } : c));

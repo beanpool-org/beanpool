@@ -76,8 +76,10 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
             }
         }
 
-        loadFeed();
-
+        // No standalone loadFeed() here — startPolling() does the initial load, so calling it
+        // here too fetched the feed twice on every mount. If the app is backgrounded at mount,
+        // startPolling is not called and nothing is fetched until it foregrounds, which is the
+        // point of the change.
         let interval: ReturnType<typeof setInterval> | null = null;
 
         const startPolling = () => {

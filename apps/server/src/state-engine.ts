@@ -720,26 +720,11 @@ export function removeWsClient(ws: any): void {
     wsClients.delete(ws);
 }
 
-// In-memory monotonic version counters for cheap ETag revalidation.
-// Seeded from Date.now() at boot so they never collide across restarts.
-let postsVersion = Date.now();
-let membersVersion = Date.now();
-
-export function getPostsVersion(): number {
-    return postsVersion;
-}
-
-export function bumpPostsVersion(): number {
-    return ++postsVersion;
-}
-
-export function getMembersVersion(): number {
-    return membersVersion;
-}
-
-export function bumpMembersVersion(): number {
-    return ++membersVersion;
-}
+// The ETag version counters now live in engine/versions.ts — a dependency-free module, so that
+// low-level engine code (engine/members.ts registerVisitor, for one) can bump them without
+// importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
+import { bumpPostsVersion, bumpMembersVersion } from './engine/versions.js';
+export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion } from './engine/versions.js';
 
 // A2-20: the /ws feed is global — every connected member receives every broadcast.
 // For privacy-sensitive events (a ledger transfer reveals who paid whom + amounts),

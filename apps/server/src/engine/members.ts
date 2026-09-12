@@ -6,6 +6,7 @@ import { db } from '../db/db.js';
 import { ledger } from './ledger.js';
 import { getMember, getProfile, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
+import { bumpMembersVersion } from './versions.js';
 
 /**
  * Record activity timestamp for a member.
@@ -230,12 +231,22 @@ export function registerMember(broadcast: (event: any) => void, publicKey: strin
 export function registerVisitor(publicKey: string, callsign?: string, homeNodeUrl?: string): void {
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     if (existing) {
+        let changed = false;
         if (callsign && existing.callsign.startsWith('Visitor-')) {
             db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
+            changed = true;
         }
         if (homeNodeUrl && !existing.home_node_url) {
             db.prepare("UPDATE members SET home_node_url = ? WHERE public_key = ?").run(homeNodeUrl, publicKey);
+            changed = true;
         }
+        // Bumped HERE rather than at the call sites: this function writes to `members` and is
+        // reached from five federation paths (inbound handshake, settlement exchange, listing
+        // resolution, transfer to a visiting member, messaging a visiting member), none of which
+        // broadcast. Only the federation listing cache remembered to invalidate, so a visitor
+        // arriving by any other route was invisible in the member directory for as long as the
+        // ETag held — which, with no other write, is forever.
+        if (changed) bumpMembersVersion();
         return;
     }
     const generatedCallsign = callsign || `Visitor-${publicKey.substring(0, 8)}`;
@@ -245,6 +256,7 @@ export function registerVisitor(publicKey: string, callsign?: string, homeNodeUr
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
     })();
     ledger.initializeGenesisAccount(publicKey);
+    bumpMembersVersion();
     console.log(`🌐 Visitor registered: ${generatedCallsign} (federation${homeNodeUrl ? ` from ${homeNodeUrl}` : ''})`);
 }
 

@@ -205,15 +205,21 @@ export function App() {
     useEffect(() => {
         if (!identity) return;
         let interval: ReturnType<typeof setInterval> | null = null;
+        // Guards the awaits below: the effect re-runs on identity change, so without this a poll
+        // started by the previous identity can resolve afterwards and write that member's counts
+        // over the new one's — or set state on an unmounted tree.
+        let cancelled = false;
 
         const pollUnread = async () => {
             try {
                 const result = await getConversations(identity.publicKey);
+                if (cancelled) return;
                 setTotalUnread(result.totalUnread || 0);
 
                 // Poll marketplace for active deals + inbound requests (computed from txs alone)
                 const txs = await getMyMarketplaceTransactions(identity.publicKey);
-                
+                if (cancelled) return;
+
                 const activeDeals = txs.filter(t => t.status === 'pending').length;
                 
                 const pendingRequests = txs.filter(t => 
@@ -258,6 +264,7 @@ export function App() {
         });
 
         return () => {
+            cancelled = true;
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             unsubscribe();

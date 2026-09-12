@@ -19,9 +19,11 @@ export function SyncStatus() {
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
+        let cancelled = false;
 
         async function checkSync() {
             const time = await getLastSyncTime();
+            if (cancelled) return; // resolved after unmount
             setLastSync(time);
             setNow(Date.now()); // Force re-render even if time is identical
         }
@@ -55,6 +57,7 @@ export function SyncStatus() {
         const sub = AppState.addEventListener('change', handleAppStateChange);
 
         return () => {
+            cancelled = true;
             stopPolling();
             sub.remove();
         };

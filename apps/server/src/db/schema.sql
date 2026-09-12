@@ -203,6 +203,13 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
+-- The author_trade_count subquery in getPosts counts a member's completed deals per post row,
+-- matching on buyer OR seller. An OR across two columns needs one index per side; `transactions`
+-- already has idx_transactions_from/_to for the same reason. This only mattered a little while
+-- every poll rebuilt the list anyway — now that conditional requests short-circuit the common
+-- case, a cache MISS is the expensive path and is worth making cheap.
+CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status ON marketplace_transactions(buyer_pubkey, status);
+CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status ON marketplace_transactions(seller_pubkey, status);
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (

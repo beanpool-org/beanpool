@@ -836,8 +836,19 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
         currentImportOrigin = null;
     }
 
-    if (newMembers > 0 || newPosts > 0) {
-        cb.broadcast({ type: 'state_synced', newMembers, newPosts, from: remote.nodeId });
+    // Updates and tombstones count, not just inserts. This was guarded on `newMembers > 0 ||
+    // newPosts > 0`, which was fine when the broadcast only woke up sockets — but it now also
+    // bumps the ETag version counters that let the list endpoints answer a conditional request
+    // without reading the database. An import that only MODIFIED listings, or only applied
+    // deletions, left both counters untouched, so every client on this node kept receiving 304
+    // indefinitely and a removed listing stayed visible forever. A 304 never reads the database,
+    // so nothing downstream would ever have noticed.
+    if (newMembers > 0 || newPosts > 0 || updatedMembers > 0 || updatedPosts > 0 || tombstonesApplied > 0) {
+        cb.broadcast({
+            type: 'state_synced',
+            newMembers, newPosts, updatedMembers, updatedPosts, tombstonesApplied,
+            from: remote.nodeId,
+        });
     }
 
     // #134: Permanent audit trail — write one row per import with origin peer identity and change counts.

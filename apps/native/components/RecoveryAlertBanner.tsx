@@ -15,9 +15,10 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, AppState, type AppStateStatus } from 'react-native';
 import { palette } from '../constants/colors';
 import { signedRequest } from '../utils/db';
+import { withJitter } from '../utils/jitter';
 
 interface RecoverySession {
     collectionId: string;
@@ -60,10 +61,40 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
     }, []);
 
     useEffect(() => {
-        fetchSessions();
-        // Re-check every 30 seconds while the component is mounted
-        const interval = setInterval(fetchSessions, 30_000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const startPolling = () => {
+            if (!interval) {
+                fetchSessions();
+                interval = setInterval(fetchSessions, withJitter(30_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleAppStateChange = (nextState: AppStateStatus) => {
+            if (nextState === 'active') {
+                startPolling();
+            } else {
+                stopPolling();
+            }
+        };
+
+        if (AppState.currentState === 'active') {
+            startPolling();
+        }
+
+        const sub = AppState.addEventListener('change', handleAppStateChange);
+
+        return () => {
+            stopPolling();
+            sub.remove();
+        };
     }, [fetchSessions]);
 
     const handleStopIt = useCallback(async () => {

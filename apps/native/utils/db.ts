@@ -608,7 +608,7 @@ export async function getPost(id: string) {
     // server response never deletes local rows — deletion is applyDelta's job
     // (the server tombstones deleted posts with active=0).
     if (anchorUrl) {
-        fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true&_t=${Date.now()}`)
+        fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true`)
             .then(res => res.json())
             .then(async posts => {
                 if (!Array.isArray(posts) || posts.length === 0) return;
@@ -1021,7 +1021,7 @@ export async function refreshBalanceFromServer(pubkey: string) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) return;
     try {
-        const res = await fetch(`${anchorUrl}/api/ledger/balance/${pubkey}?_t=${Date.now()}`);
+        const res = await fetch(`${anchorUrl}/api/ledger/balance/${pubkey}`);
         if (!res.ok) return;
         const balData = await res.json();
         const database = await getDb();
@@ -1178,7 +1178,7 @@ export async function getTransactions(pubkey: string) {
     AsyncStorage.getItem('beanpool_anchor_url').then(async (anchorUrl: string | null) => {
         if (!anchorUrl) return;
         try {
-            const res = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubkey}&limit=20&_t=${Date.now()}`);
+            const res = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubkey}&limit=20`);
             if (res.ok) {
                 const txns = await res.json();
                 if (Array.isArray(txns) && txns.length > 0) {

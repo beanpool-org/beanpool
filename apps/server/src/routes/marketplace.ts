@@ -11,7 +11,7 @@ import {
     acceptPost, completePostTransaction, cancelPostTransaction,
     pausePost, resumePost, getMarketplaceTransactions,
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
-    getMember, getBalance,
+    getMember, getBalance, getPostsVersion,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getPeerOrigins } from '../connector-manager.js';
@@ -89,12 +89,18 @@ router.get('/api/marketplace/posts', async (ctx) => {
     })();
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
-    // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
-    const posts = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: ctx.state.actor as string | undefined, sync, beansOnly });
-    const bodyStr = JSON.stringify(posts);
-    const etag = `"${crypto.createHash('sha256').update(bodyStr).digest('hex').slice(0, 16)}"`;
+    const viewerPubkey = ctx.state.actor as string | undefined;
+
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}`;
+    const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
+    const etag = `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
     ctx.set('ETag', etag);
+    // `private`, not `public`: this response varies by viewer — an author sees their OWN paused
+    // posts and nobody else does (see getPosts below). The viewer is folded into the ETag, so a
+    // shared cache that revalidates would be corrected, but a response keyed only on URL must
+    // never be storable by one, because two members asking for the same URL get different bodies.
+    ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch) {
@@ -105,6 +111,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
             return;
         }
     }
+
+    // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
+    const posts = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly });
+    const bodyStr = JSON.stringify(posts);
 
     ctx.status = 200;
     ctx.type = 'application/json';

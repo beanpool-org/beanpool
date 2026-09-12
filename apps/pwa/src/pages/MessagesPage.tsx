@@ -19,6 +19,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
 import { consumeChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
+import { withJitter } from '../lib/jitter';
 import { ReportModal } from '../components/ReportModal';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
@@ -223,7 +224,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setEditingMessage(null);
             setActiveEmojiPickerId(null);
             setDraft('');
-            loadMessages(activeConv.id);
+            // The initial load happens in startPolling() below; calling it here as well fired two
+            // concurrent loads (and two decrypt passes) for the same conversation on open, which
+            // could land out of order and overwrite the newer result with the older one.
             // Mark conversation as read when opened and clear unread count immediately
             markConversationReadApi(identity.publicKey, activeConv.id).then(() => {
                 setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, unreadCount: 0 } : c));
@@ -234,17 +237,47 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 setDraft(prefill);
                 setTimeout(() => draftRef.current?.focus(), 100);
             }
-            // Poll for new messages every 3 seconds (backstop)
-            pollRef.current = window.setInterval(() => loadMessages(activeConv.id), 3000);
+            // Poll for new messages every 3 seconds (backstop), paused when tab is hidden
+            const startPolling = () => {
+                if (!pollRef.current) {
+                    loadMessages(activeConv.id);
+                    pollRef.current = window.setInterval(() => loadMessages(activeConv.id), withJitter(3000));
+                }
+            };
+
+            const stopPolling = () => {
+                if (pollRef.current) {
+                    clearInterval(pollRef.current);
+                    pollRef.current = null;
+                }
+            };
+
+            const handleVisibilityChange = () => {
+                if (document.hidden) {
+                    stopPolling();
+                } else {
+                    startPolling();
+                }
+            };
+
+            if (!document.hidden) {
+                startPolling();
+            }
+
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+
             // Fast path: the WebSocket doorbell refreshes this conversation
             // immediately, instead of waiting for the next poll tick.
-            const unsubscribe = onSyncActivity(() => loadMessages(activeConv.id));
+            const unsubscribe = onSyncActivity(() => {
+                if (!document.hidden) loadMessages(activeConv.id);
+            });
             return () => {
-                if (pollRef.current) clearInterval(pollRef.current);
+                stopPolling();
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
                 unsubscribe();
             };
         }
-        return () => { if (pollRef.current) clearInterval(pollRef.current); };
+        return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
     }, [activeConv?.id]);
 
     useEffect(() => {

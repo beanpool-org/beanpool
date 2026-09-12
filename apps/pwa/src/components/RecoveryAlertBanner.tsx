@@ -4,6 +4,7 @@ import {
     getMyActiveRecoveryCollections,
     cancelRecoveryCollection,
 } from '../lib/api';
+import { withJitter } from '../lib/jitter';
 
 interface RecoverySession {
     collectionId: string;
@@ -64,7 +65,7 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
         const startPolling = () => {
             if (!interval) {
                 checkAlerts();
-                interval = setInterval(checkAlerts, 30_000);
+                interval = setInterval(checkAlerts, withJitter(30_000));
             }
         };
 

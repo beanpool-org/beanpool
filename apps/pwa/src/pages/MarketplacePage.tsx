@@ -19,6 +19,7 @@ import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
 import { loadEnabledPeers, togglePeer } from '../lib/peer-prefs';
+import { withJitter } from '../lib/jitter';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
@@ -397,9 +398,39 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     }, [identity]);
 
     useEffect(() => {
-        refresh();
-        const interval = setInterval(refresh, 15_000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const startPolling = () => {
+            if (!interval) {
+                refresh();
+                interval = setInterval(refresh, withJitter(15_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [refresh]);
 
     // Fetch ratings for all unique post authors

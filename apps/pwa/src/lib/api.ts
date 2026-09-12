@@ -108,7 +108,7 @@ export async function buildSignedWsParams(path: string): Promise<string> {
 export async function request<T>(method: string, path: string, body?: any): Promise<T> {
     const opts: RequestInit = {
         method,
-        cache: 'no-store',
+        cache: 'no-cache',
         headers: {
             'Content-Type': 'application/json',
         } as Record<string, string>,
@@ -162,7 +162,7 @@ export async function signedRequestWithKey<T>(
 ): Promise<T> {
     const opts: RequestInit = {
         method,
-        cache: 'no-store',
+        cache: 'no-cache',
         headers: {
             'Content-Type': 'application/json',
         } as Record<string, string>,
@@ -250,7 +250,7 @@ export async function getCommunityInfo(): Promise<CommunityInfo> {
 }
 
 export async function getMembers(): Promise<Member[]> {
-    return request('GET', `/api/community/members?_t=${Date.now()}`);
+    return request('GET', '/api/community/members');
 }
 
 export async function registerMember(publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {
@@ -302,7 +302,7 @@ export async function getCommunityHealth(): Promise<any> {
 }
 
 export async function checkMembership(publicKey: string): Promise<{ isMember: boolean; callsign: string | null }> {
-    return request('GET', `/api/community/membership/${encodeURIComponent(publicKey)}?_t=${Date.now()}`);
+    return request('GET', `/api/community/membership/${encodeURIComponent(publicKey)}`);
 }
 
 export async function getMyInvites(publicKey: string): Promise<{ invites: InviteCode[] }> {
@@ -361,8 +361,8 @@ export async function setHolidayModeApi(enabled: boolean): Promise<{ success: bo
 export async function getMemberProfile(publicKey: string, requester?: string): Promise<MemberProfile> {
     const params = new URLSearchParams();
     if (requester) params.set('requester', requester);
-    params.set('_t', Date.now().toString());
-    return request('GET', `/api/profile/${encodeURIComponent(publicKey)}?${params}`);
+    const qs = params.toString();
+    return request('GET', `/api/profile/${encodeURIComponent(publicKey)}${qs ? `?${qs}` : ''}`);
 }
 
 /**
@@ -1064,7 +1064,7 @@ export interface MemberSummary {
 }
 
 export async function getAllMembers(): Promise<MemberSummary[]> {
-    return request('GET', `/api/members?_t=${Date.now()}`);
+    return request('GET', '/api/members');
 }
 
 // ===================== FEDERATION =====================

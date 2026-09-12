@@ -5,7 +5,7 @@
  */
 
 import { db } from './db/db.js';
-import { createTreasury, createPost, getPosts, getNodeRole } from './state-engine.js';
+import { createTreasury, createPost, getPosts, getNodeRole, bumpPostsVersion } from './state-engine.js';
 import { getTodaysPulseEntry, type DailyPulseEntry } from './daily-pulse-entries.js';
 
 export const PULSE_CALLSIGN = 'Daily Pulse';
@@ -137,6 +137,7 @@ export function deactivatePulseMarketplacePost(): void {
     db.prepare(
         "UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey = ? AND active = 1 AND status = 'active'"
     ).run(pulsePubkey);
+    bumpPostsVersion();
 }
 
 /**
@@ -219,6 +220,7 @@ export function rotateDailyPulse(now: Date = new Date()): { post: any; entry: Da
             db.prepare(
                 "UPDATE posts SET active = 1, status = 'active', author_pubkey = ?, title = ?, description = ?, category = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
             ).run(pulsePubkey, entry.headline, entry.body, entry.category || 'general', pulseId);
+            bumpPostsVersion();
             const activePosts = getPosts({ id: pulseId });
             const post = activePosts[0] || existingToday;
             console.log(`[DailyPulse] Retained existing Daily Pulse for ${localDateStr}: "${entry.headline}" (ID: ${post.id})`);
@@ -288,6 +290,7 @@ export function ensurePulseMarketplacePost(now: Date = new Date()): void {
             db.prepare(
                 "UPDATE posts SET active = 1, status = 'active', author_pubkey = ?, title = ?, description = ?, category = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?"
             ).run(pulsePubkey, entry.headline, entry.body, entry.category || 'general', pulseId);
+            bumpPostsVersion();
         }
     } else {
         rotateDailyPulse(now);

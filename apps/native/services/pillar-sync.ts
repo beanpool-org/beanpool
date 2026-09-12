@@ -271,7 +271,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         let postsData: any;
         try {
-            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${postsSyncParam}&_t=${Date.now()}`, {
+            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${postsSyncParam}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: postsController.signal
@@ -333,7 +333,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Fetch balance
         if (pubKey) {
             try {
-                const balanceRes = await fetch(`${anchorUrl}/api/ledger/balance/${pubKey}?_t=${Date.now()}`, {
+                const balanceRes = await fetch(`${anchorUrl}/api/ledger/balance/${pubKey}`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: balanceController.signal
@@ -354,7 +354,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Fetch directory (members)
         if (shouldFetchMembers) {
             try {
-                const directoryRes = await fetch(`${anchorUrl}/api/members?_t=${Date.now()}`, {
+                const directoryRes = await fetch(`${anchorUrl}/api/members`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: postsController.signal
@@ -382,7 +382,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // so we must NOT set membersComplete — otherwise applyDelta would garbage-collect
             // every local member absent from this small delta.
             try {
-                const deltaRes = await fetch(`${anchorUrl}/api/members?updatedAfter=${encodeURIComponent(incrementalSinceIso)}&_t=${Date.now()}`, {
+                const deltaRes = await fetch(`${anchorUrl}/api/members?updatedAfter=${encodeURIComponent(incrementalSinceIso)}`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: postsController.signal
@@ -405,7 +405,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         onProgress?.(3, 5, 'Synchronizing Active Posts & Projects...');
         // Fetch projects
         try {
-            const projectsRes = await fetch(`${anchorUrl}/api/crowdfund/projects?limit=1000${lastSyncParam}&_t=${Date.now()}`, {
+            const projectsRes = await fetch(`${anchorUrl}/api/crowdfund/projects?limit=1000${lastSyncParam}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: postsController.signal
@@ -428,7 +428,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Fetch transactions
         if (pubKey) {
             try {
-                const txRes = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubKey}&limit=1000&_t=${Date.now()}`, {
+                const txRes = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubKey}&limit=1000`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: balanceController.signal
@@ -447,7 +447,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Fetch marketplace transactions
         if (pubKey) {
             try {
-                const mkptxRes = await fetch(`${anchorUrl}/api/marketplace/transactions?publicKey=${pubKey}&limit=50&_t=${Date.now()}`, {
+                const mkptxRes = await fetch(`${anchorUrl}/api/marketplace/transactions?publicKey=${pubKey}&limit=50`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: postsController.signal
@@ -489,8 +489,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         if (pubKey) {
             try {
                 const [receivedRes, givenRes] = await Promise.all([
-                    fetch(`${anchorUrl}/api/ratings/${pubKey}?_t=${Date.now()}`),
-                    fetch(`${anchorUrl}/api/ratings/${pubKey}?direction=given&_t=${Date.now()}`)
+                    fetch(`${anchorUrl}/api/ratings/${pubKey}`),
+                    fetch(`${anchorUrl}/api/ratings/${pubKey}?direction=given`)
                 ]);
                 const rList: any[] = [];
                 if (receivedRes && receivedRes.ok) {

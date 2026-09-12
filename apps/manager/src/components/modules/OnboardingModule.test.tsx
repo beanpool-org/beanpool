@@ -55,7 +55,8 @@ describe('OnboardingModule', () => {
         expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(
             'https://alpha.beanpool.org',
             'secretpassword1',
-            30
+            30,
+            undefined
         );
     });
 
@@ -157,7 +158,8 @@ describe('OnboardingModule', () => {
             expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(
                 'https://alpha.beanpool.org',
                 'secretpassword1',
-                30
+                30,
+                undefined
             );
         });
 
@@ -167,7 +169,8 @@ describe('OnboardingModule', () => {
         expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(
             'https://alpha.beanpool.org',
             'secretpassword1',
-            7
+            7,
+            undefined
         );
 
         const nodeSelect = screen.getByRole('combobox', {
@@ -176,5 +179,32 @@ describe('OnboardingModule', () => {
         await userEvent.selectOptions(nodeSelect, 'node-2');
 
         expect(mockSelectNode).toHaveBeenCalledWith('node-2');
+    });
+
+    it('forwards 2FA session token when available in sessionStorage', async () => {
+        sessionStorage.setItem('bp_tfa_session_node-1', 'tfa-session-token-123');
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
+            days: 30,
+            rows: [],
+        });
+
+        render(
+            <OnboardingModule
+                profiles={mockProfiles}
+                activeProfileId="node-1"
+                onSelectNode={mockSelectNode}
+            />
+        );
+
+        await waitFor(() => {
+            expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(
+                'https://alpha.beanpool.org',
+                'secretpassword1',
+                30,
+                'tfa-session-token-123'
+            );
+        });
+
+        sessionStorage.removeItem('bp_tfa_session_node-1');
     });
 });

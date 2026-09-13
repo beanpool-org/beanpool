@@ -297,8 +297,8 @@ export function ProjectsPage({ identity }: Props) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {treasuries.map(t => (
                             <div key={t.publicKey} className={`bg-nature-900 border rounded-xl p-3 flex items-center gap-3 ${t.link ? 'border-sky-900/60' : 'border-nature-800'}`}>
-                                {t.avatar ? (
-                                    <img src={t.avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
+                                {resolveAvatarUrl(t.avatar) ? (
+                                    <img src={resolveAvatarUrl(t.avatar)!} alt="" className="w-10 h-10 rounded-full object-cover" />
                                 ) : (
                                     <div className="w-10 h-10 rounded-full bg-nature-800 flex items-center justify-center" aria-hidden="true">{t.link ? '🔗' : '🏛️'}</div>
                                 )}

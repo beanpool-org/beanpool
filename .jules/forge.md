@@ -95,3 +95,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/local/admin/users/:pubkey/status` in `apps/server/src/routes/admin.ts` returned `200 OK` with `{ success: true }` when `status` was not `'active'` or `'disabled'`.
 **Learning:** Endpoints that validate input parameters using `if (condition)` blocks without an `else` branch returning a 400 error status can silently succeed without applying requested mutations.
 **Pattern:** Look for route handlers where input validation conditions guard the mutation logic but fall through to a default `200 OK` response.
+
+## 2026-09-12 - [Missing 404 status codes on non-existent pricing guide items and reports]
+**Issue:** `DELETE /api/pricing-guide/admin/item/:id`, `POST /api/pricing-guide/admin/pin`, and `POST /api/pricing-guide/reports/:id/status` in `apps/server/src/routes/pricing-guide.ts` returned `200 OK` with `{ success: false }` when the requested resource did not exist in the database.
+**Learning:** Returning HTTP `200 OK` on missing resource mutations misleads callers and API clients into treating missing items as successful operations.
+**Pattern:** Look for route handlers where DB mutations return boolean success flags (`!ok`) that pass through to `res.body = { success: ok }` without setting `ctx.status = 404` when `!ok`.

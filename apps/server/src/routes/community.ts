@@ -1218,12 +1218,13 @@ router.get('/api/ratings/:publicKey', async (ctx) => {
 
 router.post('/api/reports', async (ctx) => {
     const { reporterPubkey, targetPubkey, reason, targetPostId } = (ctx as any).requestBody || {};
-    if (!reporterPubkey || !targetPubkey || !reason) {
+    const activeReporter = ctx.state.actor || reporterPubkey;
+    if (!activeReporter || !targetPubkey || !reason) {
         ctx.status = 400;
         ctx.body = { error: 'reporterPubkey, targetPubkey, and reason are required' };
         return;
     }
-    const report = submitReport(reporterPubkey, targetPubkey, reason, targetPostId);
+    const report = submitReport(activeReporter, targetPubkey, reason, targetPostId);
     if (!report) {
         ctx.status = 400;
         ctx.body = { error: 'Failed — must be a registered member, cannot report yourself' };

@@ -132,7 +132,7 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
     }
 
     return (
-        <div className="space-y-3 mb-4 w-full" role="region" aria-live="assertive">
+        <div className="space-y-3 mb-4 w-full" role="region" aria-live="assertive" aria-label="Account recovery alert">
             {/* DANGER BANNER: Own account being recovered */}
             {sessions.length > 0 && (
                 <div className="bg-red-50 dark:bg-red-950/60 border-2 border-red-500/70 dark:border-red-600/80 rounded-2xl p-4 sm:p-5 shadow-md">
@@ -155,15 +155,16 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
                                     type="button"
                                     onClick={handleStopIt}
                                     disabled={stopping}
-                                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2"
+                                    aria-busy={stopping}
+                                    className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
                                 >
                                     {stopping ? (
                                         <>
-                                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                                             <span>Stopping Recovery...</span>
                                         </>
                                     ) : (
-                                        <span>🛑 Stop It Now</span>
+                                        <span><span aria-hidden="true">🛑</span> Stop It Now</span>
                                     )}
                                 </button>
                             </div>

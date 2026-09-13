@@ -340,7 +340,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setCadenceSaving(true);
         setCadenceMsg(null);
         try {
-            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, activeNode.adminPassword);
+            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setCadenceMsg('✅ Replication cadence updated!');
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -355,7 +355,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!activeNode || !confirm(`Force full resync for ${activeNode.name}? This discards drifted rows on standby.`)) return;
         setResyncing(true);
         try {
-            await forceNodeResync(activeNode.url, activeNode.adminPassword);
+            await forceNodeResync(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             alert('Replication resync requested.');
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);

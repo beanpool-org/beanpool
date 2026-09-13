@@ -299,7 +299,7 @@ export default function PairDeviceScreen() {
                 };
             }
         } catch (e) {
-            console.warn('[Pairing] Malformed QR barcode:', raw, e);
+            console.warn('[Pairing] Malformed QR barcode:', e);
         }
         return null;
     }

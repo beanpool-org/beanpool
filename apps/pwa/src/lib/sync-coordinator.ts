@@ -68,6 +68,14 @@ export function computeUpdatedAfter(cursor: number | null, localRowCount?: numbe
     if (!cursor || isNaN(cursor) || cursor <= 0) {
         return null;
     }
+    // A cursor in the FUTURE means the device clock was wrong when it was written (or the clock
+    // has since been corrected backwards). Left alone it asks the server for rows updated after a
+    // time that has not happened yet, so the delta is empty forever and the client goes blind
+    // with no error anywhere. Fall back to a full pull instead — the same allowance as the drift
+    // subtraction below, in the other direction.
+    if (cursor > Date.now() + 300_000) {
+        return null;
+    }
     // Incorporate a 5-minute time buffer to account for clock drift between client and server
     const driftAdjusted = Math.max(0, cursor - 300_000);
     return new Date(driftAdjusted).toISOString();
@@ -111,15 +119,29 @@ let pendingResolvers: Array<() => void> = [];
  */
 async function defaultPerformSync(): Promise<void> {
     const listeners = [...activityListeners];
-    await Promise.allSettled(
-        listeners.map(async (cb) => {
-            try {
-                await cb();
-            } catch (err) {
-                console.warn('[Sync Coordinator] Activity listener failed:', err);
-            }
-        })
-    );
+    // The mappers deliberately do NOT swallow their own rejections. They did, which meant
+    // allSettled saw nothing but `fulfilled` and the cursor advanced even when every listener
+    // had failed — an offline drop or a 500 would move the cursor past rows that never arrived,
+    // and once Stage 4 sends `updatedAfter` from it those rows are skipped permanently, with
+    // nothing anywhere reporting a problem. A run only earns the cursor if it actually worked.
+    const results = await Promise.allSettled(listeners.map((cb) => Promise.resolve(cb())));
+
+    const failed = results.filter((r) => r.status === 'rejected');
+    for (const f of failed) {
+        console.warn('[Sync Coordinator] Activity listener failed:', (f as PromiseRejectedResult).reason);
+    }
+    if (failed.length > 0) {
+        // Cursor deliberately left where it was: the next run re-covers this window.
+        return;
+    }
+
+    // NOTE FOR STAGE 4, where this cursor starts gating `updatedAfter`: listener success is a
+    // proxy, not proof. Listeners have heterogeneous error semantics — App's unread poller
+    // deliberately tolerates one endpoint failing (it uses allSettled), so it resolves even
+    // when half its data did not arrive. When a real delta fetch exists, advance the cursor
+    // from THAT fetch's own success and the server's notion of time, not from whether some
+    // side-effecting listener happened to resolve.
+
     const now = Date.now();
     saveSyncCursor(now);
     try {
@@ -143,7 +165,13 @@ export function setPerformSyncImplForTest(fn: (() => Promise<void>) | null): voi
  * and enforces a 2000ms cooldown before the trailing sync executes.
  */
 export function requestSync(): Promise<void> {
-    if (syncPromise) {
+    // A run in flight, OR a cooldown already armed, both mean "a run is coming — join it".
+    // Only `syncPromise` was checked, so a request arriving during the cooldown saw a null
+    // syncPromise, skipped the wait entirely and started its own run ~150ms later. The armed
+    // cooldown was never cancelled either, so it fired into the middle of that run, set
+    // needsAnotherSync, and armed another cooldown on completion — a self-sustaining loop under
+    // continuous events, which is precisely what the cooldown exists to prevent.
+    if (syncPromise || cooldownTimeoutId) {
         needsAnotherSync = true;
         return new Promise<void>((resolve) => {
             pendingResolvers.push(resolve);
@@ -168,6 +196,13 @@ export function requestSync(): Promise<void> {
 
             const currentResolvers = [...pendingResolvers];
             pendingResolvers = [];
+
+            // Cleared as the run STARTS, not only when one is queued at the end: this run
+            // observes server state as of now, so it already covers everything requested before
+            // it began. Anything arriving while it is in flight sets the flag again and still
+            // gets its trailing run — so nothing is missed, and a request that merely waited out
+            // the cooldown no longer buys a second redundant run behind the one it triggered.
+            needsAnotherSync = false;
 
             syncPromise = performSyncImpl()
                 .catch((err) => {

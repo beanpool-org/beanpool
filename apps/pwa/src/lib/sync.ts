@@ -40,6 +40,8 @@ const STORAGE_KEY = 'beanpool-sync-state';
 
 let ws: WebSocket | null = null;
 let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+/** Armed on open; resets the backoff only if the socket is still up 10s later. */
+let stabilityTimeoutId: ReturnType<typeof setTimeout> | null = null;
 let pingIntervalId: ReturnType<typeof setInterval> | null = null;
 let reconnectDelay = 1000;
 let isConnecting = false;
@@ -99,7 +101,18 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
 
     socket.onopen = () => {
         if (ws !== socket) return;
-        reconnectDelay = 1000;
+        // Backoff resets only once the connection has PROVEN stable, not the instant it opens.
+        // A socket that flaps — opening and dropping within milliseconds against a node that is
+        // up but unhealthy — used to reset the delay to 1s on every handshake, so the
+        // exponential backoff never engaged. That was merely wasteful before; now that opening
+        // also triggers a sync, a flapping socket would drive a sync roughly once a second.
+        if (stabilityTimeoutId) clearTimeout(stabilityTimeoutId);
+        stabilityTimeoutId = setTimeout(() => {
+            stabilityTimeoutId = null;
+            if (ws === socket && socket.readyState === WebSocket.OPEN) {
+                reconnectDelay = 1000;
+            }
+        }, 10_000);
         if (reconnectTimeoutId) {
             clearTimeout(reconnectTimeoutId);
             reconnectTimeoutId = null;
@@ -172,6 +185,11 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             if (pingIntervalId) {
                 clearInterval(pingIntervalId);
                 pingIntervalId = null;
+            }
+            // Dropped before it proved stable, so the backoff must keep growing.
+            if (stabilityTimeoutId) {
+                clearTimeout(stabilityTimeoutId);
+                stabilityTimeoutId = null;
             }
             currentState = { ...currentState, connected: false };
             notify();

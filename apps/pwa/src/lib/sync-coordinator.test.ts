@@ -168,6 +168,52 @@ describe('PWA Sync Coordinator', () => {
     });
 
     describe('Delta cursor', () => {
+        // The cursor is the one piece of state that can lose data permanently: advance it past
+        // rows that never arrived and, once Stage 4 sends `updatedAfter` from it, those rows are
+        // never requested again and nothing reports a problem.
+        it('does NOT advance the cursor when a listener fails', async () => {
+            clearSyncCursor();
+            onSyncActivity(() => Promise.reject(new Error('offline')));
+
+            const p = requestSync();
+            await vi.advanceTimersByTimeAsync(500);
+            await p;
+
+            expect(getSyncCursor()).toBeNull();
+        });
+
+        it('does NOT advance the cursor when only ONE of several listeners fails', async () => {
+            clearSyncCursor();
+            onSyncActivity(() => Promise.resolve());
+            onSyncActivity(() => Promise.reject(new Error('500 from node')));
+            onSyncActivity(() => Promise.resolve());
+
+            const p = requestSync();
+            await vi.advanceTimersByTimeAsync(500);
+            await p;
+
+            expect(getSyncCursor()).toBeNull();
+        });
+
+        it('advances the cursor when every listener resolves', async () => {
+            clearSyncCursor();
+            onSyncActivity(() => Promise.resolve());
+            onSyncActivity(() => Promise.resolve());
+
+            const p = requestSync();
+            await vi.advanceTimersByTimeAsync(500);
+            await p;
+
+            expect(getSyncCursor()).not.toBeNull();
+        });
+
+        it('falls back to a full pull when the cursor is in the future', () => {
+            // A device whose clock was wrong when the cursor was written, or corrected backwards
+            // since. Asking for rows updated after a time that has not happened yet returns an
+            // empty delta forever, so the client goes blind with no error anywhere.
+            expect(computeUpdatedAfter(Date.now() + 60 * 60_000)).toBeNull();
+        });
+
         it('the cursor round-trips and survives a localStorage throw', () => {
             const ts = 1700000000000;
             saveSyncCursor(ts);

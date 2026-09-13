@@ -397,6 +397,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
                 setSuccess('Cache cleared. Resynced & reloading application...');
                 setTimeout(() => {
+                    // Cleared AGAIN immediately before the reload. The WebSocket stays open
+                    // during this 1.5s message, so a broadcast arriving in the meantime runs a
+                    // coordinated sync and persists a fresh cursor — quietly undoing the clear
+                    // the member just asked for, and leaving "force a complete resync" doing a
+                    // delta instead.
+                    clearSyncCursor();
                     window.location.reload();
                 }, 1500);
             } catch (e: any) {

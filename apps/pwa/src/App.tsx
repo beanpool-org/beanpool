@@ -239,40 +239,54 @@ export function App() {
         // started by the previous identity can resolve afterwards and write that member's counts
         // over the new one's — or set state on an unmounted tree.
         let cancelled = false;
+        let lastPollTime = 0;
+        let pollPromise: Promise<void> | null = null;
 
         const pollUnread = async () => {
-            // Settled independently, not awaited in sequence. These were chained, so a failing
-            // /api/conversations threw out of the try before transactions were ever fetched —
-            // and since MarketplacePage stopped polling transactions itself and now reads them
-            // from here, one unrelated endpoint erroring starved the whole marketplace view.
-            const [convResult, txResult] = await Promise.allSettled([
-                getConversations(identity.publicKey),
-                getMyMarketplaceTransactions(identity.publicKey),
-            ]);
-            if (cancelled) return;
+            if (pollPromise) return pollPromise;
+            const p = (async () => {
+                try {
+                    // Settled independently, not awaited in sequence. These were chained, so a failing
+                    // /api/conversations threw out of the try before transactions were ever fetched —
+                    // and since MarketplacePage stopped polling transactions itself and now reads them
+                    // from here, one unrelated endpoint erroring starved the whole marketplace view.
+                    const [convResult, txResult] = await Promise.allSettled([
+                        getConversations(identity.publicKey),
+                        getMyMarketplaceTransactions(identity.publicKey),
+                    ]);
+                    if (cancelled) return;
 
-            if (convResult.status === 'fulfilled') {
-                setTotalUnread(convResult.value.totalUnread || 0);
-            }
+                    if (convResult.status === 'fulfilled') {
+                        setTotalUnread(convResult.value.totalUnread || 0);
+                    }
 
-            if (txResult.status === 'fulfilled') {
-                const txs = txResult.value;
-                setMyTransactions(txs);
+                    if (txResult.status === 'fulfilled') {
+                        const txs = txResult.value;
+                        setMyTransactions(txs);
 
-                const activeDeals = txs.filter(t => t.status === 'pending').length;
+                        const activeDeals = txs.filter(t => t.status === 'pending').length;
 
-                const pendingRequests = txs.filter(t =>
-                    t.buyerPublicKey === identity.publicKey && t.status === 'requested'
-                ).length;
+                        const pendingRequests = txs.filter(t =>
+                            t.buyerPublicKey === identity.publicKey && t.status === 'requested'
+                        ).length;
 
-                setPendingDealsCount(activeDeals + pendingRequests);
-            }
+                        setPendingDealsCount(activeDeals + pendingRequests);
+                    }
+                } finally {
+                    pollPromise = null;
+                    lastPollTime = Date.now();
+                }
+            })();
+            pollPromise = p;
+            return p;
         };
 
         const startPolling = () => {
             if (!interval) {
-                pollUnread();
-                interval = setInterval(pollUnread, withJitter(10000));
+                pollUnread().catch(() => {});
+                interval = setInterval(() => {
+                    pollUnread().catch(() => {});
+                }, withJitter(300_000));
             }
         };
 
@@ -302,8 +316,11 @@ export function App() {
         // delta cursor when every listener resolved, so a listener that swallows its own
         // completion makes that check meaningless and lets the cursor move past data that
         // never arrived.
+        // Coalesces with visibilitychange / reconnect sync if already in-flight or polled within 2000ms.
         const unsubscribe = onSyncActivity(() => {
             if (document.hidden) return;
+            if (pollPromise) return pollPromise;
+            if (Date.now() - lastPollTime < 2000) return;
             return pollUnread();
         });
 

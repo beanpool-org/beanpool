@@ -5,7 +5,7 @@
  * Mirrors the native app's Trust Level and Financials tab layout and visualizations.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
     getBalance, getTransactions, sendTransfer, getMembers,
@@ -16,6 +16,7 @@ import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
 import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
+import { onSyncActivity } from '../lib/sync';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -99,22 +100,36 @@ export function LedgerPage({ identity, onNavigate }: Props) {
         return sanitized;
     }
 
+    const lastRefreshTimeRef = useRef<number>(0);
+    const refreshPromiseRef = useRef<Promise<void> | null>(null);
+
     const refresh = useCallback(async () => {
-        try {
-            const [bal, txn, mem] = await Promise.all([
-                getBalance(identity.publicKey).catch(() => null),
-                getTransactions(identity.publicKey).catch(() => []),
-                getMembers().catch(() => []),
-            ]);
-            if (bal) setBalanceInfo(bal);
-            setTxns(txn);
-            setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
-            setError(null);
-        } catch (e: any) {
-            setError(e.message || 'Failed to load');
-        } finally {
-            setLoading(false);
-        }
+        if (refreshPromiseRef.current) return refreshPromiseRef.current;
+        const p = (async () => {
+            try {
+                const [bal, txn, mem] = await Promise.all([
+                    getBalance(identity.publicKey).catch(() => null),
+                    getTransactions(identity.publicKey).catch(() => []),
+                    getMembers().catch(() => []),
+                ]);
+                if (!bal && txn.length === 0 && mem.length === 0) {
+                    throw new Error('Failed to load ledger data');
+                }
+                if (bal) setBalanceInfo(bal);
+                setTxns(txn);
+                setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
+                setError(null);
+            } catch (e: any) {
+                setError(e.message || 'Failed to load');
+                throw e;
+            } finally {
+                setLoading(false);
+                refreshPromiseRef.current = null;
+                lastRefreshTimeRef.current = Date.now();
+            }
+        })();
+        refreshPromiseRef.current = p;
+        return p;
     }, [identity.publicKey]);
 
     useEffect(() => {
@@ -122,8 +137,10 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
         const startPolling = () => {
             if (!interval) {
-                refresh();
-                interval = setInterval(refresh, withJitter(10_000));
+                refresh().catch(() => {});
+                interval = setInterval(() => {
+                    refresh().catch(() => {});
+                }, withJitter(300_000));
             }
         };
 
@@ -147,9 +164,21 @@ export function LedgerPage({ identity, onNavigate }: Props) {
         }
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Fast path: WebSocket broadcasts trigger coordinated sync.
+        // Returns the in-flight or fresh promise to coordinator so delta cursor advances only on success.
+        // Coalesces with visibilitychange / reconnect sync if already in-flight or refreshed within 2000ms.
+        const unsubscribe = onSyncActivity(() => {
+            if (document.hidden) return;
+            if (refreshPromiseRef.current) return refreshPromiseRef.current;
+            if (Date.now() - lastRefreshTimeRef.current < 2000) return;
+            return refresh();
+        });
+
         return () => {
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            unsubscribe();
         };
     }, [refresh]);
 

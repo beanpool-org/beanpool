@@ -25,6 +25,7 @@ import { ProfileGateModal } from '../components/ProfileGateModal';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
+import { onSyncActivity } from '../lib/sync';
 import { ImageLightbox } from '../components/ImageLightbox';
 
 // Simple deterministic hash for consistent pin placement
@@ -327,33 +328,44 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         userMarkerRef.current = L.marker(latlng, { icon, zIndexOffset: 1000 }).addTo(map);
     }
 
+    const lastRefreshTimeRef = useRef<number>(0);
+    const refreshPromiseRef = useRef<Promise<void> | null>(null);
+
     // Load marketplace posts (home + enabled peers from localStorage)
     const refreshPosts = useCallback(async () => {
-        try {
-            const localData = await getMarketplacePosts();
-            let allPosts: MarketplacePost[] = [...localData];
+        if (refreshPromiseRef.current) return refreshPromiseRef.current;
+        const p = (async () => {
+            try {
+                const localData = await getMarketplacePosts();
+                let allPosts: MarketplacePost[] = [...localData];
 
-            // Only fetch from peers the user has toggled on
-            const enabledPeers = loadEnabledPeers();
-            if (enabledPeers.size > 0) {
-                const nodeInfo = await getNodeInfo('');
-                const peersToFetch = (nodeInfo.peerNodes || [])
-                    .filter((n: any) => n.publicUrl && enabledPeers.has(n.publicUrl));
+                // Only fetch from peers the user has toggled on
+                const enabledPeers = loadEnabledPeers();
+                if (enabledPeers.size > 0) {
+                    const nodeInfo = await getNodeInfo('');
+                    const peersToFetch = (nodeInfo.peerNodes || [])
+                        .filter((n: any) => n.publicUrl && enabledPeers.has(n.publicUrl));
 
-                if (peersToFetch.length > 0) {
-                    const remoteResults = await Promise.allSettled(
-                        peersToFetch.map(async (n: any) => {
-                            const remotePosts = await getRemotePosts(n.publicUrl);
-                            return remotePosts.map((p: any) => ({ ...p, _remoteNode: n.publicUrl, _remoteCallsign: n.callsign }));
-                        })
-                    );
-                    for (const result of remoteResults) {
-                        if (result.status === 'fulfilled') allPosts = allPosts.concat(result.value);
+                    if (peersToFetch.length > 0) {
+                        const remoteResults = await Promise.allSettled(
+                            peersToFetch.map(async (n: any) => {
+                                const remotePosts = await getRemotePosts(n.publicUrl);
+                                return remotePosts.map((p: any) => ({ ...p, _remoteNode: n.publicUrl, _remoteCallsign: n.callsign }));
+                            })
+                        );
+                        for (const result of remoteResults) {
+                            if (result.status === 'fulfilled') allPosts = allPosts.concat(result.value);
+                        }
                     }
                 }
+                setPosts(allPosts);
+            } finally {
+                refreshPromiseRef.current = null;
+                lastRefreshTimeRef.current = Date.now();
             }
-            setPosts(allPosts);
-        } catch { /* offline */ }
+        })();
+        refreshPromiseRef.current = p;
+        return p;
     }, []);
 
     useEffect(() => {
@@ -361,8 +373,10 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
 
         const startPolling = () => {
             if (!interval) {
-                refreshPosts();
-                interval = setInterval(refreshPosts, withJitter(30_000));
+                refreshPosts().catch(() => {});
+                interval = setInterval(() => {
+                    refreshPosts().catch(() => {});
+                }, withJitter(300_000));
             }
         };
 
@@ -386,9 +400,21 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         }
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Fast path: WebSocket broadcasts trigger coordinated sync.
+        // Returns the in-flight or fresh promise to coordinator so delta cursor advances only on success.
+        // Coalesces with visibilitychange / reconnect sync if already in-flight or refreshed within 2000ms.
+        const unsubscribe = onSyncActivity(() => {
+            if (document.hidden) return;
+            if (refreshPromiseRef.current) return refreshPromiseRef.current;
+            if (Date.now() - lastRefreshTimeRef.current < 2000) return;
+            return refreshPosts();
+        });
+
         return () => {
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            unsubscribe();
         };
     }, [refreshPosts]);
 

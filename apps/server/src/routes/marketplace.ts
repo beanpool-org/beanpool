@@ -12,6 +12,7 @@ import {
     pausePost, resumePost, getMarketplaceTransactions,
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
     getMember, getBalance, getPostsVersion,
+    closePoll, votePoll,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getPeerOrigins } from '../connector-manager.js';
@@ -122,7 +123,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -142,7 +143,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers }
+            { reach, reachPeers, pollOptions, durationDays }
         );
         if (!post) {
             ctx.status = 400;
@@ -200,6 +201,92 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
     }
 });
 
+// ===================== POLLS API =====================
+
+router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
+    try {
+        const { id } = ctx.params;
+        const { optionId, voterPublicKey, voterPubkey, signature } = (ctx as any).requestBody || {};
+        const voter = (ctx.state.actor as string) || voterPublicKey || voterPubkey;
+        if (!id || !optionId || !voter) {
+            ctx.status = 400;
+            ctx.body = { error: 'id, optionId, and voter are required' };
+            return;
+        }
+        const sig = signature || (ctx.state as any)?.authSig?.signature;
+        const result = votePoll(id, voter, optionId, sig);
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to record vote' };
+    }
+});
+
+router.post('/api/marketplace/polls/vote', async (ctx) => {
+    try {
+        const { postId, id, optionId, voterPublicKey, voterPubkey, signature } = (ctx as any).requestBody || {};
+        const targetId = postId || id;
+        const voter = (ctx.state.actor as string) || voterPublicKey || voterPubkey;
+        if (!targetId || !optionId || !voter) {
+            ctx.status = 400;
+            ctx.body = { error: 'postId, optionId, and voter are required' };
+            return;
+        }
+        const sig = signature || (ctx.state as any)?.authSig?.signature;
+        const result = votePoll(targetId, voter, optionId, sig);
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to record vote' };
+    }
+});
+
+router.post('/api/marketplace/posts/:id/close', async (ctx) => {
+    try {
+        const { id } = ctx.params;
+        const { authorPublicKey, authorPubkey } = (ctx as any).requestBody || {};
+        const author = (ctx.state.actor as string) || authorPublicKey || authorPubkey;
+        if (!id || !author) {
+            ctx.status = 400;
+            ctx.body = { error: 'id and author are required' };
+            return;
+        }
+        const post = closePoll(id, author);
+        if (!post) {
+            ctx.status = 404;
+            ctx.body = { error: 'Poll not found or unauthorized' };
+            return;
+        }
+        ctx.body = { success: true, post };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to close poll' };
+    }
+});
+
+router.post('/api/marketplace/polls/close', async (ctx) => {
+    try {
+        const { postId, id, authorPublicKey, authorPubkey } = (ctx as any).requestBody || {};
+        const targetId = postId || id;
+        const author = (ctx.state.actor as string) || authorPublicKey || authorPubkey;
+        if (!targetId || !author) {
+            ctx.status = 400;
+            ctx.body = { error: 'postId and author are required' };
+            return;
+        }
+        const post = closePoll(targetId, author);
+        if (!post) {
+            ctx.status = 404;
+            ctx.body = { error: 'Poll not found or unauthorized' };
+            return;
+        }
+        ctx.body = { success: true, post };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to close poll' };
+    }
+});
+
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
 router.post('/api/marketplace/posts/accept', async (ctx) => {
@@ -248,6 +335,11 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
             return;
         }
         const tx = approvePostRequest(transactionId, (ctx.state.actor as string) || authorPublicKey);
+        if (!tx) {
+            ctx.status = 400;
+            ctx.body = { error: 'Cannot approve — request not found or unauthorized' };
+            return;
+        }
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         respondSettlementAware(ctx, err, 'Failed to approve request');

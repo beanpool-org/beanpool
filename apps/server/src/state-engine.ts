@@ -117,6 +117,8 @@ import {
     updatePost as updatePostEngine,
     pausePost as pausePostEngine,
     resumePost as resumePostEngine,
+    closePoll as closePollEngine,
+    votePoll as votePollEngine,
     adminDeletePost as adminDeletePostEngine,
     adminBulkDeletePosts as adminBulkDeletePostsEngine
 } from './engine/posts.js';
@@ -602,7 +604,7 @@ export function runMarketplaceHygiene(): void {
     for (const row of stale) {
         db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(row.id);
         const post = db.prepare(`SELECT title, type, author_pubkey FROM posts WHERE id=?`).get(row.post_id) as any;
-        const requesterPubkey = post && post.type !== 'offer' ? row.seller_pubkey : row.buyer_pubkey;
+        const requesterPubkey = post && post.type === 'need' ? row.seller_pubkey : row.buyer_pubkey;
         dispatchPushNotification(
             [requesterPubkey, post?.author_pubkey].filter(Boolean),
             'SYSTEM',
@@ -1875,9 +1877,9 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
 }
 
 export function createPost(
-    type: 'offer' | 'need', category: string, title: string, description: string, credits: number,
+    type: 'offer' | 'need' | 'poll', category: string, title: string, description: string, credits: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string, authorPublicKey: string, lat?: number, lng?: number, photos?: string[], repeatable?: boolean, id?: string, cashAlsoNeeded?: boolean,
-    options?: { reach?: unknown; reachPeers?: unknown }
+    options?: { reach?: unknown; reachPeers?: unknown; pollOptions?: Array<{ id: string; text: string }>; durationDays?: number }
 ): MarketplacePost | null {
     return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
 }
@@ -1890,8 +1892,21 @@ export function removePost(id: string, authorPublicKey: string): boolean {
     return removePostEngine(broadcast, id, authorPublicKey);
 }
 
-export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost>): MarketplacePost | null {
+export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }): MarketplacePost | null {
     return updatePostEngine(broadcast, id, authorPublicKey, updates);
+}
+
+export function closePoll(postId: string, authorPublicKey: string): MarketplacePost | null {
+    return closePollEngine(broadcast, postId, authorPublicKey);
+}
+
+export function votePoll(
+    postId: string,
+    voterPublicKey: string,
+    optionId: string,
+    signature?: string
+): { success: boolean; post: MarketplacePost } {
+    return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature);
 }
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
@@ -2812,6 +2827,7 @@ export function adminPruneUser(publicKey: string) {
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
         setUserStatusRow(publicKey, 'pruned');
+        db.prepare("UPDATE posts SET status='completed', active=0, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey=? AND type='poll' AND status='active'").run(publicKey);
         db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
         // Same scrub as purgeMemberSelf, and it has to happen here rather than being left to the
         // member: a pruned account can no longer sign a request, deleteChannel is owner-scoped, and
@@ -2905,7 +2921,14 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE public_key = ?
         `).run(now, now, publicKey);
 
-        // 5. Cancel active/pending listings
+        // 5. Close active polls immediately, retaining votes; cancel active/pending offers/needs
+        db.prepare(`
+            UPDATE posts 
+            SET status = 'completed', 
+                active = 0, 
+                updated_at = ? 
+            WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'
+        `).run(now, publicKey);
         db.prepare(`
             UPDATE posts 
             SET status = 'cancelled', 

@@ -5,7 +5,7 @@
  * Mirrors the native app's Trust Level and Financials tab layout and visualizations.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
     getBalance, getTransactions, sendTransfer, getMembers,
@@ -16,6 +16,7 @@ import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
 import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
+import { onSyncActivity } from '../lib/sync';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -99,22 +100,52 @@ export function LedgerPage({ identity, onNavigate }: Props) {
         return sanitized;
     }
 
+    const lastRefreshTimeRef = useRef<number>(0);
+    const refreshPromiseRef = useRef<Promise<void> | null>(null);
+    // Guards the state writes below: this refresh is now also triggered by the socket, so it can
+    // easily still be in flight when the member navigates away from the ledger.
+    const isMountedRef = useRef(true);
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => { isMountedRef.current = false; };
+    }, []);
+
     const refresh = useCallback(async () => {
-        try {
-            const [bal, txn, mem] = await Promise.all([
-                getBalance(identity.publicKey).catch(() => null),
-                getTransactions(identity.publicKey).catch(() => []),
-                getMembers().catch(() => []),
-            ]);
-            if (bal) setBalanceInfo(bal);
-            setTxns(txn);
-            setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
-            setError(null);
-        } catch (e: any) {
-            setError(e.message || 'Failed to load');
-        } finally {
-            setLoading(false);
-        }
+        if (refreshPromiseRef.current) return refreshPromiseRef.current;
+        const p = (async () => {
+            try {
+                const [bal, txn, mem] = await Promise.all([
+                    getBalance(identity.publicKey).catch(() => null),
+                    getTransactions(identity.publicKey).catch(() => []),
+                    getMembers().catch(() => []),
+                ]);
+                // The balance is the point of this screen, so a balance that failed to load is a
+                // failed refresh even when the other two calls succeeded. Requiring ALL THREE to
+                // fail meant a blip on getBalance alone left the previous balance on screen,
+                // stamped the refresh as successful, and started the cooldown — so the stale
+                // number could stand until the 300s backstop with no error shown.
+                if (!bal) {
+                    throw new Error('Failed to load balance');
+                }
+                if (!isMountedRef.current) return;
+                setBalanceInfo(bal);
+                setTxns(txn);
+                setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
+                setError(null);
+                // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
+                // so the cooldown then suppressed the retry — a blip could leave the view stale
+                // until the 300s backstop, which is exactly the window this stage widened.
+                lastRefreshTimeRef.current = Date.now();
+            } catch (e: any) {
+                setError(e.message || 'Failed to load');
+                throw e;
+            } finally {
+                setLoading(false);
+                refreshPromiseRef.current = null;
+            }
+        })();
+        refreshPromiseRef.current = p;
+        return p;
     }, [identity.publicKey]);
 
     useEffect(() => {
@@ -122,8 +153,10 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
         const startPolling = () => {
             if (!interval) {
-                refresh();
-                interval = setInterval(refresh, withJitter(10_000));
+                refresh().catch(() => {});
+                interval = setInterval(() => {
+                    refresh().catch(() => {});
+                }, withJitter(300_000));
             }
         };
 
@@ -147,9 +180,21 @@ export function LedgerPage({ identity, onNavigate }: Props) {
         }
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Fast path: WebSocket broadcasts trigger coordinated sync.
+        // Returns the in-flight or fresh promise to coordinator so delta cursor advances only on success.
+        // Coalesces with visibilitychange / reconnect sync if already in-flight or refreshed within 2000ms.
+        const unsubscribe = onSyncActivity(() => {
+            if (document.hidden) return;
+            if (refreshPromiseRef.current) return refreshPromiseRef.current;
+            if (Date.now() - lastRefreshTimeRef.current < 2000) return;
+            return refresh();
+        });
+
         return () => {
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            unsubscribe();
         };
     }, [refresh]);
 

@@ -21,6 +21,7 @@ const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').the
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
 import { loadEnabledPeers, togglePeer } from '../lib/peer-prefs';
 import { withJitter } from '../lib/jitter';
+import { onSyncActivity } from '../lib/sync';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
@@ -337,47 +338,70 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Author avatar cache for tiles
     const [authorAvatarCache, setAuthorAvatarCache] = useState<Record<string, string | null>>({});
 
+    const lastRefreshTimeRef = useRef<number>(0);
+    const refreshPromiseRef = useRef<Promise<void> | null>(null);
+    // The filter the in-flight refresh is actually fetching. Without it, changing a filter while
+    // a refresh was in flight handed the caller the PREVIOUS filter's promise — the list settled
+    // on results for a filter the member had already moved away from, and it counted as a
+    // successful refresh of the new one.
+    const refreshKeyRef = useRef<string>('');
+
     const refresh = useCallback(async () => {
-        try {
-            const filter: any = {};
-            if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
-            if (categoryFilter !== 'all') filter.category = categoryFilter;
-            if (beansOnly) filter.beansOnly = true;
-
-            // Always fetch home node listings and the viewer's OWN posts (to surface & re-activate
-            // paused Offers, which the general feed omits). Transactions are polled by App.tsx
-            // and passed down via props, eliminating the duplicate transactions fetch.
-            const [homeData, myOwnPosts] = await Promise.all([
-                getMarketplacePosts(filter),
-                identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([])
-            ]);
-
-            // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
-            const byId = new Map<string, MarketplacePost>();
-            for (const p of homeData) byId.set(p.id, p);
-            for (const p of (myOwnPosts as MarketplacePost[])) byId.set(p.id, p);
-            let allPosts: MarketplacePost[] = Array.from(byId.values());
-
-            // Fetch from all enabled peer nodes in parallel
-            if (enabledPeers.size > 0) {
-                const peerResults = await Promise.allSettled(
-                    [...enabledPeers].map(async (peerUrl) => {
-                        const data = await getRemotePosts(peerUrl, filter);
-                        return data.map(p => ({ ...p, _remoteNode: peerUrl }));
-                    })
-                );
-                for (const result of peerResults) {
-                    if (result.status === 'fulfilled') allPosts = allPosts.concat(result.value);
-                }
-            }
-
-            setPosts(allPosts);
-            setError(null);
-        } catch (e: any) {
-            setError(e.message || 'Failed to load');
-        } finally {
-            setLoading(false);
+        const refreshKey = `${typeFilter}|${categoryFilter}`;
+        if (refreshPromiseRef.current && refreshKeyRef.current === refreshKey) {
+            return refreshPromiseRef.current;
         }
+        refreshKeyRef.current = refreshKey;
+        const p = (async () => {
+            try {
+                const filter: any = {};
+                if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
+                if (categoryFilter !== 'all') filter.category = categoryFilter;
+                if (beansOnly) filter.beansOnly = true;
+
+                // Always fetch home node listings and the viewer's OWN posts (to surface & re-activate
+                // paused Offers, which the general feed omits). Transactions are polled by App.tsx
+                // and passed down via props, eliminating the duplicate transactions fetch.
+                const [homeData, myOwnPosts] = await Promise.all([
+                    getMarketplacePosts(filter),
+                    identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([])
+                ]);
+
+                // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
+                const byId = new Map<string, MarketplacePost>();
+                for (const p of homeData) byId.set(p.id, p);
+                for (const p of (myOwnPosts as MarketplacePost[])) byId.set(p.id, p);
+                let allPosts: MarketplacePost[] = Array.from(byId.values());
+
+                // Fetch from all enabled peer nodes in parallel
+                if (enabledPeers.size > 0) {
+                    const peerResults = await Promise.allSettled(
+                        [...enabledPeers].map(async (peerUrl) => {
+                            const data = await getRemotePosts(peerUrl, filter);
+                            return data.map(p => ({ ...p, _remoteNode: peerUrl }));
+                        })
+                    );
+                    for (const result of peerResults) {
+                        if (result.status === 'fulfilled') allPosts = allPosts.concat(result.value);
+                    }
+                }
+
+                setPosts(allPosts);
+                setError(null);
+                // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
+                // so the cooldown then suppressed the retry — a blip could leave the view stale
+                // until the 300s backstop, which is exactly the window this stage widened.
+                lastRefreshTimeRef.current = Date.now();
+            } catch (e: any) {
+                setError(e.message || 'Failed to load');
+                throw e;
+            } finally {
+                setLoading(false);
+                refreshPromiseRef.current = null;
+            }
+        })();
+        refreshPromiseRef.current = p;
+        return p;
     }, [typeFilter, categoryFilter, beansOnly, enabledPeers, identity]);
 
     // Fetch peer nodes on mount
@@ -404,8 +428,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
         const startPolling = () => {
             if (!interval) {
-                refresh();
-                interval = setInterval(refresh, withJitter(15_000));
+                refresh().catch(() => {});
+                interval = setInterval(() => {
+                    refresh().catch(() => {});
+                }, withJitter(300_000));
             }
         };
 
@@ -429,9 +455,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         }
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Fast path: WebSocket broadcasts trigger coordinated sync.
+        // Returns the in-flight or fresh promise to coordinator so delta cursor advances only on success.
+        // Coalesces with visibilitychange / reconnect sync if already in-flight or refreshed within 2000ms.
+        const unsubscribe = onSyncActivity(() => {
+            if (document.hidden) return;
+            if (refreshPromiseRef.current) return refreshPromiseRef.current;
+            if (Date.now() - lastRefreshTimeRef.current < 2000) return;
+            return refresh();
+        });
+
         return () => {
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            unsubscribe();
         };
     }, [refresh]);
 

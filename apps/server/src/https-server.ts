@@ -495,12 +495,23 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // Standard Modern Security Headers Middleware
     app.use(async (ctx, next) => {
+        // Global security headers applied to all responses (API and static):
+        // nosniff protects against stored-XSS MIME confusion (e.g. /api/avatar/:pubkey)
+        // HSTS enforces encrypted transport globally.
         ctx.set('X-Content-Type-Options', 'nosniff');
-        ctx.set('X-Frame-Options', 'DENY');
-        ctx.set('X-XSS-Protection', '1; mode=block');
-        // #131: Removed connect-src wildcard; https: permits PWA→peer-node fetch calls, wss: permits encrypted WebSockets only
-        ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'");
         ctx.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+
+        // Document-only security headers (CSP, X-Frame-Options, X-XSS-Protection) are only
+        // evaluated by browsers during HTML document navigation or iframe embedding.
+        // They are omitted on API routes and WebSocket paths to eliminate protocol overhead (~450 bytes)
+        // on JSON fetch and 304 responses, while ensuring HTML documents and static assets retain them.
+        const isApiOrWs = ctx.path === '/api' || ctx.path.startsWith('/api/') || ctx.path === '/ws' || ctx.path.startsWith('/ws/');
+        if (!isApiOrWs) {
+            ctx.set('X-Frame-Options', 'DENY');
+            ctx.set('X-XSS-Protection', '1; mode=block');
+            // #131: Removed connect-src wildcard; https: permits PWA→peer-node fetch calls, wss: permits encrypted WebSockets only
+            ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'");
+        }
         await next();
     });
 

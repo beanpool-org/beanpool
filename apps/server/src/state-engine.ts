@@ -723,8 +723,8 @@ export function removeWsClient(ws: any): void {
 // The ETag version counters now live in engine/versions.ts — a dependency-free module, so that
 // low-level engine code (engine/members.ts registerVisitor, for one) can bump them without
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
-import { bumpPostsVersion, bumpMembersVersion } from './engine/versions.js';
-export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion } from './engine/versions.js';
+import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
+export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
 // A2-20: the /ws feed is global — every connected member receives every broadcast.
 // For privacy-sensitive events (a ledger transfer reveals who paid whom + amounts),
@@ -738,27 +738,38 @@ export function broadcast(event: any, recipients?: string[]): void {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
             case 'new_post':
+                bumpPostsVersion();
+                bumpActivityVersion();
+                break;
             case 'post_updated':
             case 'post_removed':
             case 'post_accepted':
             case 'transaction_requested':
             case 'transaction_rejected':
             case 'transaction_cancelled':
-            case 'transaction_completed':
                 bumpPostsVersion();
                 break;
+            case 'transaction_completed':
+                bumpPostsVersion();
+                bumpActivityVersion();
+                break;
             case 'member_joined':
+                bumpMembersVersion();
+                bumpActivityVersion();
+                break;
             case 'treasury_created':
                 bumpMembersVersion();
                 break;
             case 'profile_updated':
                 bumpMembersVersion();
                 bumpPostsVersion(); // Profiles affect marketplace listings (e.g., holiday mode, callsigns)
+                bumpActivityVersion(); // Profile updates change member callsigns joined in activity feed
                 break;
             case 'state_synced':
             case 'user_pruned':
                 bumpPostsVersion();
                 bumpMembersVersion();
+                bumpActivityVersion();
                 break;
         }
     }

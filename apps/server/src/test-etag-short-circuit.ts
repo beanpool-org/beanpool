@@ -21,10 +21,12 @@ import { db } from './db/db.js';
 import {
     initStateEngine, createPost, updatePost, pausePost, resumePost, removePost,
     generateInvite, redeemInvite, updateProfile, getPostsVersion, getMembersVersion,
-    bumpPostsVersion, bumpMembersVersion
+    bumpPostsVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion
 } from './state-engine.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createCommunityRoutes } from './routes/community.js';
+import { createActivityRouter } from './routes/activity.js';
+import { recordActivity } from './db/activity-feed-db.js';
 import type { RouteDeps } from './routes/types.js';
 
 let run = 0, passed = 0;
@@ -124,6 +126,7 @@ async function main() {
     initStateEngine();
     const marketplaceRouter = createMarketplaceRoutes(deps);
     const communityRouter = createCommunityRoutes(deps);
+    const activityRouter = createActivityRouter(deps);
 
     // Setup a test member author with a fresh random pubkey and unique callsign
     const authorPk = crypto.randomBytes(32).toString('hex');
@@ -132,9 +135,10 @@ async function main() {
         authorPk, authorCallsign, new Date().toISOString(), 'bundled://seed'
     );
 
-    // Intercept db.prepare to track SQL queries on 'posts' and 'members'
+    // Intercept db.prepare to track SQL queries on 'posts', 'members', and 'activity_feed'
     let postsQueries = 0;
     let membersQueries = 0;
+    let activityQueries = 0;
     const realPrepare = db.prepare.bind(db);
     db.prepare = function (sql: string) {
         if (sql.includes('FROM posts') || sql.includes('FROM (SELECT * FROM posts')) {
@@ -142,6 +146,9 @@ async function main() {
         }
         if (sql.includes('FROM members')) {
             membersQueries++;
+        }
+        if (sql.includes('FROM activity_feed')) {
+            activityQueries++;
         }
         return realPrepare(sql);
     } as any;
@@ -299,6 +306,59 @@ async function main() {
     assert(apiMemWithParam.status === 200, 'GET /api/members?updatedAfter=... returns 200');
     const apiMemParamEtag = apiMemWithParam.headers['etag'];
     assert(apiMemParamEtag !== apiMemEtag1, `Query string partitioned ETag (${apiMemEtag1} !== ${apiMemParamEtag})`);
+
+    // =========================================================================
+    // SECTION 4: GET /api/activity/feed
+    // =========================================================================
+    console.log('\n--- Section 4: GET /api/activity/feed ---');
+
+    activityQueries = 0;
+    const actRes1 = await dispatchRoute(activityRouter, 'GET', '/api/activity/feed');
+    assert(actRes1.status === 200, 'Initial GET /api/activity/feed returns 200');
+    assert(activityQueries > 0, `Initial 200 touched SQLite activity_feed table (${activityQueries} query)`);
+    const actEtag1 = actRes1.headers['etag'];
+    assert(!!actEtag1 && actEtag1.startsWith('W/"'), `Returned weak ETag: ${actEtag1}`);
+    assert(actRes1.headers['cache-control'] === 'public, max-age=0, must-revalidate',
+        `Cache-Control header is public, max-age=0, must-revalidate (got: ${actRes1.headers['cache-control']})`);
+
+    // 4.2 Matching ETag -> 304 WITHOUT TOUCHING SQLITE
+    activityQueries = 0;
+    const actRes304 = await dispatchRoute(activityRouter, 'GET', '/api/activity/feed', {
+        headers: { 'if-none-match': actEtag1 },
+    });
+    assert(actRes304.status === 304, 'Conditional GET /api/activity/feed with matching ETag returns 304');
+    assert(actRes304.body === undefined, '304 response has empty body');
+    assert(actRes304.headers['cache-control'] === 'public, max-age=0, must-revalidate',
+        '304 response preserves Cache-Control header');
+    assert(actRes304.headers['etag'] === actEtag1, '304 response preserves ETag header');
+    assert(activityQueries === 0, `304 short-circuit executed ZERO queries on activity_feed table (actual: ${activityQueries})`);
+
+    // 4.3 Mutation: recordActivity bumps activityVersion
+    const vBeforeAct = getActivityVersion();
+    recordActivity('member_joined', authorPk, null, { callsign: authorCallsign });
+    const vAfterAct = getActivityVersion();
+    assert(vAfterAct > vBeforeAct, `recordActivity bumped activityVersion (${vBeforeAct} -> ${vAfterAct})`);
+
+    // 4.4 Stale ETag -> returns 200 with new data
+    activityQueries = 0;
+    const actRes2 = await dispatchRoute(activityRouter, 'GET', '/api/activity/feed', {
+        headers: { 'if-none-match': actEtag1 },
+    });
+    assert(actRes2.status === 200, 'GET /api/activity/feed with stale ETag returns 200');
+    assert(activityQueries > 0, `200 response re-queried SQLite (${activityQueries} query)`);
+    const actEtag2 = actRes2.headers['etag'];
+    assert(actEtag2 !== actEtag1, `New response has distinct ETag (${actEtag1} !== ${actEtag2})`);
+
+    // 4.5 Query parameter variation creates distinct ETag
+    const actWithLimit = await dispatchRoute(activityRouter, 'GET', '/api/activity/feed?limit=10&offset=0');
+    assert(actWithLimit.status === 200, 'GET /api/activity/feed?limit=10&offset=0 returns 200');
+    const actLimitEtag = actWithLimit.headers['etag'];
+    assert(actLimitEtag !== actEtag2, `Limit parameter partitioned ETag (${actEtag2} !== ${actLimitEtag})`);
+
+    const actWithOffset = await dispatchRoute(activityRouter, 'GET', '/api/activity/feed?limit=10&offset=5');
+    assert(actWithOffset.status === 200, 'GET /api/activity/feed?limit=10&offset=5 returns 200');
+    const actOffsetEtag = actWithOffset.headers['etag'];
+    assert(actOffsetEtag !== actLimitEtag, `Offset parameter partitioned ETag (${actLimitEtag} !== ${actOffsetEtag})`);
 
     console.log(`\nETag Short-Circuit Summary: ${passed}/${run} assertions passed.`);
     if (passed < run) {

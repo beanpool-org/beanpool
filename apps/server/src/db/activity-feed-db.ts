@@ -9,6 +9,7 @@
  */
 
 import { db } from './db.js';
+import { bumpActivityVersion } from '../engine/versions.js';
 
 export type ActivityEventType = 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created';
 
@@ -24,6 +25,19 @@ export interface ActivityFeedItem {
 }
 
 /**
+ * The most rows the feed query will ever return, whatever a caller asks for. Exported so the
+ * route can build its ETag from the same bound the query enforces, rather than from the raw
+ * requested limit.
+ */
+export const ACTIVITY_FEED_MAX_LIMIT = 100;
+
+/**
+ * Prepared once. better-sqlite3 compiles the SQL on every `prepare()` call, and this runs on
+ * every recorded event on a 1-CPU node shared with four other containers.
+ */
+let insertActivityStmt: { run: (...args: any[]) => { lastInsertRowid: number | bigint } } | null = null;
+
+/**
  * Records a new community activity event into the feed.
  */
 export function recordActivity(
@@ -35,12 +49,15 @@ export function recordActivity(
     if (!eventType || !actorPubkey) return 0;
 
     const metaStr = metadata ? JSON.stringify(metadata) : null;
-    const stmt = db.prepare(`
-        INSERT INTO activity_feed (event_type, actor_pubkey, target_pubkey, metadata)
-        VALUES (?, ?, ?, ?)
-    `);
+    if (!insertActivityStmt) {
+        insertActivityStmt = db.prepare(`
+            INSERT INTO activity_feed (event_type, actor_pubkey, target_pubkey, metadata)
+            VALUES (?, ?, ?, ?)
+        `);
+    }
 
-    const result = stmt.run(eventType, actorPubkey, targetPubkey || null, metaStr);
+    const result = insertActivityStmt.run(eventType, actorPubkey, targetPubkey || null, metaStr);
+    bumpActivityVersion();
     return Number(result.lastInsertRowid);
 }
 
@@ -48,7 +65,7 @@ export function recordActivity(
  * Retrieves recent community activity events with member callsigns joined.
  */
 export function getActivityFeed(limit: number = 50, offset: number = 0): ActivityFeedItem[] {
-    const safeLimit = Math.max(1, Math.min(100, limit));
+    const safeLimit = Math.max(1, Math.min(ACTIVITY_FEED_MAX_LIMIT, limit));
     const safeOffset = Math.max(0, offset);
 
     const rows = db.prepare(`
@@ -100,6 +117,10 @@ export function pruneOldActivity(days: number = 30): number {
         DELETE FROM activity_feed 
         WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' days')
     `).run(Math.max(1, days));
+
+    if (res.changes > 0) {
+        bumpActivityVersion();
+    }
 
     return res.changes;
 }

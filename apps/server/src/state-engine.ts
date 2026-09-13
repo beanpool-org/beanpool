@@ -2627,7 +2627,7 @@ export function getCommunityHealth(): CommunityHealth {
 // ===================== ADMIN CONTROLS =====================
 
 export function getAdminPubkey(): string {
-    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' LIMIT 1").get() as any;
+    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' ORDER BY rowid ASC LIMIT 1").get() as any;
     return row ? row.public_key : 'system';
 }
 

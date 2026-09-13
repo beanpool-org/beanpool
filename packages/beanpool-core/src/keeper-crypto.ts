@@ -436,6 +436,11 @@ export async function sealShareToSso(
 export async function sealSeedToSso(
     seed: Uint8Array, provider: string, sub: string,
 ): Promise<SealedShare> {
+    if (!(seed instanceof Uint8Array) || seed.length !== KEY_LEN) {
+        throw new KeeperCryptoError(
+            `Single-blob SSO seed must be exactly ${KEY_LEN} bytes, got ${seed instanceof Uint8Array ? seed.length : typeof seed}.`,
+        );
+    }
     return sealShareToSso(seed, provider, sub, { alg: KEEPER_ALG_SSO_SINGLE });
 }
 

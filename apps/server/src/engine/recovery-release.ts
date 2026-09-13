@@ -586,11 +586,17 @@ export function collectionProgress(collectionId: string): {
         WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso'
     `).all(state.collection.ownerPubkey, state.collection.generation) as { kdf_params: string | null }[];
     const hasSso = ssoRows.length > 0;
-    const isSingleBlob = ssoRows.some(r => isSingleBlobSso(r.kdf_params));
-
-    // Single-blob SSO has threshold = 1.
-    // Legacy two-layer: SSO tier = hub + 1 sso = 2 total. Non-SSO tier = hub + TWO_LAYER_THRESHOLD friends = 3 total.
-    const needed = isSingleBlob ? 1 : (hasSso ? TWO_LAYER_THRESHOLD : TWO_LAYER_THRESHOLD + 1);
+    // The threshold must depend on the provider actually being used for this collection,
+    // not on whether any row in the generation happens to be single-blob.
+    const releasedSso = releases.filter(r => r.holderType === 'sso');
+    let needed: number;
+    if (releasedSso.length > 0) {
+        const isReleasedSingleBlob = releasedSso.some(r => isSingleBlobSso(r.kdfParams));
+        needed = isReleasedSingleBlob ? 1 : TWO_LAYER_THRESHOLD;
+    } else {
+        const allSingleBlob = hasSso && ssoRows.every(r => isSingleBlobSso(r.kdf_params));
+        needed = allSingleBlob ? 1 : (hasSso ? TWO_LAYER_THRESHOLD : TWO_LAYER_THRESHOLD + 1);
+    }
 
     return {
         status: state.collection.status,

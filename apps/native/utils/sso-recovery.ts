@@ -286,12 +286,21 @@ export async function recoverAccountWithSso(options: {
         let checksum: Uint8Array | undefined;
         try {
             const parsed = JSON.parse(ssoFrag.kdfParams);
-            if (parsed.checksum) {
-                checksum = decodeBase64(parsed.checksum);
+            if (parsed.checksum && typeof parsed.checksum === 'string') {
+                const decoded = decodeBase64(parsed.checksum);
+                if (decoded.length === 4) {
+                    checksum = decoded;
+                }
             }
         } catch {}
 
-        restoredSeed = combineHubAndWhole(hubShare, otherHalf, checksum);
+        try {
+            restoredSeed = combineHubAndWhole(hubShare, otherHalf, checksum);
+        } catch (e) {
+            throw new Error(
+                (e as Error).message || 'Failed to combine recovery fragments.',
+            );
+        }
     }
 
     const restoredKeypair = await seedToKeypair(restoredSeed);

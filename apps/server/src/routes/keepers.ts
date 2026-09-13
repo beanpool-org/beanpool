@@ -492,8 +492,11 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         // rather than presented as a verdict.
         const unattendedPieces = countOf('sso') + countOf('hub');
         const humanKeepers = countOf('member');
-        const isSingle = currentShares.some(s => s.holderType === 'sso' && isSingleBlobSso(s.kdfParams));
+        const ssoShares = currentShares.filter(s => s.holderType === 'sso');
+        const isSingle = ssoShares.some(s => isSingleBlobSso(s.kdfParams));
+        const legacySso = ssoShares.some(s => !isSingleBlobSso(s.kdfParams));
         const threshold = isSingle ? 1 : memberThreshold(keepers.some(k => k.holderType === 'sso'));
+        const effectiveTotal = (isSingle && !legacySso) ? ssoShares.length : total;
 
         ctx.status = 200;
         ctx.body = {
@@ -502,7 +505,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             enrolledSso,
             total,
             threshold,
-            canAffordToLose: Math.max(0, total - threshold),
+            canAffordToLose: Math.max(0, effectiveTotal - threshold),
             canRemoveKeeper: canRemoveKeeper(owner),
             recoverable: total >= threshold,
             unattendedPieces,

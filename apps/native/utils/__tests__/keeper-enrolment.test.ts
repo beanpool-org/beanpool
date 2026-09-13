@@ -158,6 +158,28 @@ describe('keeper-enrolment.ts', () => {
             expect(result.error).toContain('could not reach the node');
         });
 
+        it('maps multiple enrolled SSO providers so spare counter does not desync', async () => {
+            mockNode({
+                deposit: {
+                    ok: true,
+                    json: async () => ({ generation: 3, enrolledSso: ['google', 'apple'], threshold: 1 }),
+                },
+            });
+
+            const result = await enrolSsoKeeper({
+                identity: IDENTITY,
+                provider: 'apple',
+                sub: 'apple-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
+            });
+
+            expect(result.enrolled).toEqual(['sso', 'sso']);
+            expect(result.available).toBe(2);
+            expect(result.enrolledSso).toEqual(['google', 'apple']);
+            expect(result.threshold).toBe(1);
+        });
+
         it('deposits single-blob SSO share with explicit single-blob algorithm in kdfParams', async () => {
             mockNode();
 

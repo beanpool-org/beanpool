@@ -199,11 +199,45 @@ export function putShareGeneration(ownerPubkey: string, shares: KeeperShareInput
         if (s.holderType === 'sso' && !s.ssoLookupHash) {
             throw new RecoveryShareError('A sign-in fragment needs an sso_lookup_hash to be findable.');
         }
+        if (s.holderType === 'sso' && isSingleBlobSso(s.kdfParams)) {
+            let parsedKdf: Record<string, unknown> | null = null;
+            try {
+                parsedKdf = JSON.parse(s.kdfParams ?? '');
+            } catch {}
+            if (!parsedKdf || typeof parsedKdf.salt !== 'string' || !parsedKdf.salt.trim()) {
+                throw new RecoveryShareError(
+                    `Single-blob sign-in fragment for ${holderKey} must include a valid non-empty salt.`,
+                );
+            }
+            if (!s.shareIv || typeof s.shareIv !== 'string' || Buffer.from(s.shareIv, 'base64').length !== 24) {
+                throw new RecoveryShareError(
+                    `Single-blob sign-in fragment for ${holderKey} has invalid IV length (must be 24 bytes).`,
+                );
+            }
+            if (!s.shareTag || typeof s.shareTag !== 'string' || Buffer.from(s.shareTag, 'base64').length !== 16) {
+                throw new RecoveryShareError(
+                    `Single-blob sign-in fragment for ${holderKey} has invalid tag length (must be 16 bytes).`,
+                );
+            }
+            if (!s.encryptedShare || typeof s.encryptedShare !== 'string' || Buffer.from(s.encryptedShare, 'base64').length !== 32) {
+                throw new RecoveryShareError(
+                    `Single-blob sign-in fragment for ${holderKey} has invalid seed length (must be 32 bytes).`,
+                );
+            }
+        }
         if (s.holderType === 'member' && !s.ephemeralPubkey) {
             throw new RecoveryShareError(
                 `Fragment for member ${s.holderRef} has no ephemeral public key; its keeper could never unwrap it.`
             );
         }
+    }
+
+    const hasLegacySso = shares.some(s => s.holderType === 'sso' && !isSingleBlobSso(s.kdfParams));
+    const hasHub = shares.some(s => s.holderType === 'hub');
+    if (hasLegacySso && !hasHub) {
+        throw new RecoveryShareError(
+            'A recovery generation containing a legacy sign-in fragment must include a hub fragment.',
+        );
     }
 
     // MAX_HUMAN_KEEPERS logic was removed here: retired with the two-layer model; see docs/recovery-model.md.
@@ -357,9 +391,25 @@ export function findShareBySsoLookup(ssoLookupHash: string): StoredKeeperShare |
 export function canRemoveKeeper(ownerPubkey: string): boolean {
     const shares = getCurrentShares(ownerPubkey);
     if (shares.length === 0) return false;
-    const isSingle = shares.some(s => s.holderType === 'sso' && isSingleBlobSso(s.kdfParams));
-    const threshold = isSingle ? 1 : 2;
-    return shares.length > threshold;
+    const ssoShares = shares.filter(s => s.holderType === 'sso');
+    const isSingle = ssoShares.some(s => isSingleBlobSso(s.kdfParams));
+    if (isSingle) {
+        // A single-blob account with an orphaned hub has shares.length = 2, but only ONE
+        // connected provider. The hub cannot recover the account alone, so having 1 provider
+        // means 0 can be removed.
+        const legacySso = ssoShares.some(s => !isSingleBlobSso(s.kdfParams));
+        const hasHub = shares.some(s => s.holderType === 'hub');
+        if (legacySso && hasHub) {
+            // Mixed account: single-blob provider(s) and legacy provider(s) with hub.
+            // Can remove if more than one provider is enrolled.
+            return ssoShares.length > 1;
+        }
+        // Pure single-blob (any hub is orphaned): only count actual single-blob SSO providers.
+        const singleSsoCount = ssoShares.filter(s => isSingleBlobSso(s.kdfParams)).length;
+        return singleSsoCount > 1;
+    }
+    // Legacy account: hub + shares against threshold 2
+    return shares.length > 2;
 }
 
 /**

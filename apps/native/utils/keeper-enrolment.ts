@@ -71,6 +71,10 @@ export interface KeeperEnrolmentResult {
     available: number;
     /** Specific SSO providers currently protecting the account. */
     enrolledSso?: string[];
+    /** Effective threshold required for recovery. */
+    threshold?: number;
+    /** Whether single-blob SSO format is in use. */
+    isSingleBlob?: boolean;
     /** Set when enrolment did not happen at all. For logs, never for a member. */
     error?: string;
 }
@@ -183,14 +187,16 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
             const detail = await res.text().catch(() => '');
             return nothing(`node refused the fragments (${res.status}): ${detail.slice(0, 200)}`);
         }
-        const body = await res.json() as { generation?: number; enrolledSso?: string[] };
+        const body = await res.json() as { generation?: number; enrolledSso?: string[]; threshold?: number };
         const enrolledSso = body.enrolledSso ?? [provider];
         return {
-            enrolled: ['sso'],
+            enrolled: enrolledSso.map(() => 'sso' as const),
             generation: body.generation ?? null,
             skipped,
             available: enrolledSso.length,
             enrolledSso,
+            threshold: body.threshold ?? 1,
+            isSingleBlob: true,
         };
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);

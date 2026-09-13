@@ -15,6 +15,7 @@ import {
     rewrapShareToDevice,
     sealShareToMember,
     sealShareToSso,
+    sealSeedToSso,
     type SealedShare,
 } from '../keeper-crypto.js';
 import { RECOVERY_THRESHOLD, combineRecoveryPhrase, splitRecoveryPhrase } from '../recovery-split.js';
@@ -428,3 +429,24 @@ describe('readHubShare — fragments damaged by the disconnect handler', () => {
         expect(() => readHubShare({ ...sealed, kdfParams: 'not json' })).toThrow();
     });
 });
+
+describe('sealSeedToSso — seed width validation', () => {
+    it('refuses a 48-byte PKCS8 buffer with KeeperCryptoError at seal time', async () => {
+        const pkcs8Key = new Uint8Array(48).fill(42);
+        await expect(sealSeedToSso(pkcs8Key, 'google', 'sub-123')).rejects.toThrow(KeeperCryptoError);
+        await expect(sealSeedToSso(pkcs8Key, 'google', 'sub-123')).rejects.toThrow(/must be exactly 32 bytes/);
+    });
+
+    it('refuses non-Uint8Array inputs with KeeperCryptoError', async () => {
+        await expect(sealSeedToSso('not-bytes' as any, 'google', 'sub-123')).rejects.toThrow(KeeperCryptoError);
+    });
+
+    it('accepts a valid 32-byte seed and round-trips correctly', async () => {
+        const seed32 = new Uint8Array(32).fill(42);
+        const sealed = await sealSeedToSso(seed32, 'google', 'sub-123');
+        expect(sealed).toBeDefined();
+        const opened = await openShareFromSso(sealed, 'google', 'sub-123');
+        expect(opened).toEqual(seed32);
+    });
+});
+

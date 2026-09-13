@@ -29,8 +29,15 @@ import { db } from './db/db.js';
 import { initStateEngine } from './state-engine.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
+import { collectionProgress, listReleases } from './engine/recovery-release.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
-import { getCurrentShares } from './engine/recovery-shares.js';
+import {
+    getCurrentShares,
+    getCurrentGeneration,
+    putShareGeneration,
+    canRemoveKeeper,
+    RecoveryShareError,
+} from './engine/recovery-shares.js';
 
 initStateEngine();
 
@@ -675,6 +682,426 @@ function toSealedShare(frag: any) {
     await test('5.4 member recovers original seed via new single-blob format without hub interaction', () => {
         assert.deepStrictEqual(recNewSeed5, new Uint8Array(m5.seed));
         assert.strictEqual(derivePubHex(recNewSeed5), m5.pubHex);
+    });
+
+    // =========================================================================
+    // 6. Mixed-State Account (Single-Blob + Legacy SSO Provider)
+    // =========================================================================
+    console.log("\n--- 6. Mixed-State Account (Single-Blob + Legacy) ---");
+    const m6 = createTestMember("MixedState");
+
+    // 6.1 Enrol Apple as legacy two-layer split (Hub + Apple)
+    const { hubShare: hs6, otherHalf: oh6 } = await splitHubAndWhole(m6.seed);
+    const ssoApple6 = await sealShareToSso(oh6, "apple", APPLE_SUB, { checksum: seedChecksum(m6.seed) });
+    const nonceApple6 = (await signedCall("/api/recovery/sso-nonce", m6.pubHex, {})).body.nonce;
+    const depApple6 = await signedCall("/api/recovery/shares/sso", m6.pubHex, {
+        provider: "apple",
+        idToken: mintAppleToken(APPLE_SUB, nonceApple6),
+        nonce: nonceApple6,
+        shares: [
+            { holderType: "hub", holderRef: "node", shareIndex: 1, ...recordShareForHub(hs6) },
+            { holderType: "sso", holderRef: "apple", shareIndex: 2, ...ssoApple6 },
+        ],
+    });
+    assert.strictEqual(depApple6.status, 200);
+
+    // 6.2 Enrol Google as new single-blob format onto the legacy account
+    const ssoGoogle6 = await sealSeedToSso(m6.seed, "google", GOOGLE_SUB);
+    const nonceGoogle6 = (await signedCall("/api/recovery/sso-nonce", m6.pubHex, {})).body.nonce;
+    const depGoogle6 = await signedCall("/api/recovery/shares/sso", m6.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, nonceGoogle6),
+        nonce: nonceGoogle6,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...ssoGoogle6 },
+        ],
+    });
+
+    await test("6.1 single-blob deposit onto legacy account succeeds, carrying legacy provider AND hub", () => {
+        assert.strictEqual(depGoogle6.status, 200);
+        assert.strictEqual(depGoogle6.body.generation, 2);
+        assert.strictEqual(depGoogle6.body.threshold, 1);
+        const shares = getCurrentShares(m6.pubHex);
+        assert.strictEqual(shares.length, 3);
+        const hubRow = shares.find(s => s.holderType === "hub");
+        const appleRow = shares.find(s => s.holderRef === "apple");
+        const googleRow = shares.find(s => s.holderRef === "google");
+        assert(hubRow, "hub row must be carried forward for legacy Apple share");
+        assert(appleRow, "legacy Apple share must be carried forward");
+        assert(!isSingleBlobSso(appleRow?.kdfParams), "Apple share is legacy");
+        assert(googleRow, "new Google share must be present");
+        assert(isSingleBlobSso(googleRow?.kdfParams), "Google share is single-blob");
+    });
+
+    // 6.3 Mixed account recovery via Google (single-blob)
+    const eph6Google = crypto.randomBytes(32).toString("hex");
+    const open6Google = await signedCall("/api/recovery/collect", eph6Google, { callsign: m6.callsign });
+    const collId6Google = open6Google.body.collectionId;
+    const n6Google = (await signedCall("/api/recovery/collect/sso-nonce", eph6Google, { collectionId: collId6Google })).body.nonce;
+    const colSso6Google = await signedCall("/api/recovery/collect/sso", eph6Google, {
+        collectionId: collId6Google,
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, n6Google),
+        nonce: n6Google,
+    });
+
+    await test("6.2 recovering via single-blob provider on mixed account reaches enough=true with threshold 1", () => {
+        assert.strictEqual(colSso6Google.body.collected, 1);
+        assert.strictEqual(colSso6Google.body.threshold, 1);
+        assert.strictEqual(colSso6Google.body.enough, true);
+    });
+
+    const frags6Google = (await signedCall("/api/recovery/collect/fragments", eph6Google, { collectionId: collId6Google })).body.fragments;
+    const recSeed6Google = await openShareFromSso(toSealedShare(frags6Google[0]), "google", GOOGLE_SUB);
+
+    await test("6.3 recovers original seed via single-blob provider independently on mixed account", () => {
+        assert.deepStrictEqual(recSeed6Google, new Uint8Array(m6.seed));
+        assert.strictEqual(derivePubHex(recSeed6Google), m6.pubHex);
+    });
+
+    // 6.4 Mixed account recovery via Apple (legacy) - Finding 1 verification
+    const eph6Apple = crypto.randomBytes(32).toString("hex");
+    const open6Apple = await signedCall("/api/recovery/collect", eph6Apple, { callsign: m6.callsign });
+    const collId6Apple = open6Apple.body.collectionId;
+    const n6Apple = (await signedCall("/api/recovery/collect/sso-nonce", eph6Apple, { collectionId: collId6Apple })).body.nonce;
+    const colSso6Apple = await signedCall("/api/recovery/collect/sso", eph6Apple, {
+        collectionId: collId6Apple,
+        provider: "apple",
+        idToken: mintAppleToken(APPLE_SUB, n6Apple),
+        nonce: n6Apple,
+    });
+
+    await test("6.4 recovering via legacy provider on mixed account reports enough=false and threshold 2 (Finding 1 fix)", () => {
+        assert.strictEqual(colSso6Apple.body.collected, 1);
+        assert.strictEqual(colSso6Apple.body.threshold, 2);
+        assert.strictEqual(colSso6Apple.body.enough, false);
+    });
+
+    const colHub6Apple = await signedCall("/api/recovery/collect/hub", eph6Apple, { collectionId: collId6Apple });
+    await test("6.5 releasing hub completes legacy recovery on mixed account with enough=true", () => {
+        assert.strictEqual(colHub6Apple.body.collected, 2);
+        assert.strictEqual(colHub6Apple.body.threshold, 2);
+        assert.strictEqual(colHub6Apple.body.enough, true);
+    });
+
+    const frags6Apple = (await signedCall("/api/recovery/collect/fragments", eph6Apple, { collectionId: collId6Apple })).body.fragments;
+    const ssoF6 = frags6Apple.find((f: any) => f.holderType === "sso");
+    const hubF6 = frags6Apple.find((f: any) => f.holderType === "hub");
+    const recSeed6Apple = combineHubAndWhole(
+        readHubShare({ encryptedShare: hubF6.payload, shareIv: hubF6.payloadIv, shareTag: hubF6.payloadTag, kdfParams: hubF6.kdfParams }),
+        await openShareFromSso({ encryptedShare: ssoF6.payload, shareIv: ssoF6.payloadIv, shareTag: ssoF6.payloadTag, kdfParams: ssoF6.kdfParams }, "apple", APPLE_SUB),
+    );
+
+    await test("6.6 recovers original seed via legacy provider independently on mixed account", () => {
+        assert.deepStrictEqual(recSeed6Apple, new Uint8Array(m6.seed));
+        assert.strictEqual(derivePubHex(recSeed6Apple), m6.pubHex);
+    });
+
+    // =========================================================================
+    // 7. Stranded Legacy Provider Prevention (Finding 2)
+    // =========================================================================
+    console.log("\n--- 7. Stranded Legacy Provider Prevention ---");
+    const m7 = createTestMember("StrandedTest");
+
+    // Deposit legacy Apple share and hub
+    const { hubShare: hs7, otherHalf: oh7 } = await splitHubAndWhole(m7.seed);
+    const ssoApple7 = await sealShareToSso(oh7, "apple", APPLE_SUB);
+    const nonceApple7 = (await signedCall("/api/recovery/sso-nonce", m7.pubHex, {})).body.nonce;
+    await signedCall("/api/recovery/shares/sso", m7.pubHex, {
+        provider: "apple",
+        idToken: mintAppleToken(APPLE_SUB, nonceApple7),
+        nonce: nonceApple7,
+        shares: [
+            { holderType: "hub", holderRef: "node", shareIndex: 1, ...recordShareForHub(hs7) },
+            { holderType: "sso", holderRef: "apple", shareIndex: 2, ...ssoApple7 },
+        ],
+    });
+
+    // Simulate missing/corrupted hub in DB
+    db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ? AND holder_type = 'hub'").run(m7.pubHex);
+
+    // Attempt single-blob deposit with Google
+    const ssoGoogle7 = await sealSeedToSso(m7.seed, "google", GOOGLE_SUB);
+    const nonceGoogle7 = (await signedCall("/api/recovery/sso-nonce", m7.pubHex, {})).body.nonce;
+    const depFail7 = await signedCall("/api/recovery/shares/sso", m7.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, nonceGoogle7),
+        nonce: nonceGoogle7,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...ssoGoogle7 },
+        ],
+    });
+
+    await test("7.1 single-blob deposit is refused when existing hub is missing, preventing stranded legacy share", () => {
+        assert.strictEqual(depFail7.status, 400);
+        assert(depFail7.body.error.includes("hub fragment is missing"));
+    });
+
+    await test("7.2 putShareGeneration directly refuses legacy SSO share without hub fragment", () => {
+        assert.throws(() => {
+            putShareGeneration(m7.pubHex, [
+                { holderType: "sso", holderRef: "google", shareIndex: 1, ssoLookupHash: "dummyHash1", ...ssoGoogle7 },
+                { holderType: "sso", holderRef: "apple", shareIndex: 2, ssoLookupHash: "dummyHash2", ...ssoApple7 },
+            ]);
+        }, (err: any) => err instanceof RecoveryShareError && err.message.includes("must include a hub fragment"));
+    });
+
+    // =========================================================================
+    // 8. Malformed Single-Blob Deposit Rejected (Findings 3 & 7)
+    // =========================================================================
+    console.log("\n--- 8. Malformed Single-Blob Deposit Validation ---");
+    const m8 = createTestMember("MalformedDeposit");
+
+    // Deposit working generation 1
+    const ssoWorking8 = await sealSeedToSso(m8.seed, "google", GOOGLE_SUB);
+    const nonceWork8 = (await signedCall("/api/recovery/sso-nonce", m8.pubHex, {})).body.nonce;
+    const depWork8 = await signedCall("/api/recovery/shares/sso", m8.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, nonceWork8),
+        nonce: nonceWork8,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...ssoWorking8 },
+        ],
+    });
+    assert.strictEqual(depWork8.status, 200);
+    assert.strictEqual(getCurrentGeneration(m8.pubHex), 1);
+
+    // 8.1 Missing salt in kdfParams
+    const parsedKdf8 = JSON.parse(ssoWorking8.kdfParams);
+    delete parsedKdf8.salt;
+    const nonceBadSalt = (await signedCall("/api/recovery/sso-nonce", m8.pubHex, {})).body.nonce;
+    const depBadSalt = await signedCall("/api/recovery/shares/sso", m8.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, nonceBadSalt),
+        nonce: nonceBadSalt,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...ssoWorking8, kdfParams: JSON.stringify(parsedKdf8) },
+        ],
+    });
+    await test("8.1 deposit with missing salt is refused and generation 1 remains intact", () => {
+        assert.strictEqual(depBadSalt.status, 400);
+        assert.strictEqual(getCurrentGeneration(m8.pubHex), 1);
+    });
+
+    // 8.2 Wrong IV length (12 bytes instead of 24)
+    const nonceBadIv = (await signedCall("/api/recovery/sso-nonce", m8.pubHex, {})).body.nonce;
+    const depBadIv = await signedCall("/api/recovery/shares/sso", m8.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, nonceBadIv),
+        nonce: nonceBadIv,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...ssoWorking8, shareIv: Buffer.from(new Uint8Array(12)).toString("base64") },
+        ],
+    });
+    await test("8.2 deposit with wrong IV length is refused and generation 1 remains intact", () => {
+        assert.strictEqual(depBadIv.status, 400);
+        assert.strictEqual(getCurrentGeneration(m8.pubHex), 1);
+    });
+
+    // 8.3 Wrong tag length (8 bytes instead of 16)
+    const nonceBadTag = (await signedCall("/api/recovery/sso-nonce", m8.pubHex, {})).body.nonce;
+    const depBadTag = await signedCall("/api/recovery/shares/sso", m8.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, nonceBadTag),
+        nonce: nonceBadTag,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...ssoWorking8, shareTag: Buffer.from(new Uint8Array(8)).toString("base64") },
+        ],
+    });
+    await test("8.3 deposit with wrong tag length is refused and generation 1 remains intact", () => {
+        assert.strictEqual(depBadTag.status, 400);
+        assert.strictEqual(getCurrentGeneration(m8.pubHex), 1);
+    });
+
+    // 8.4 Wrong seed length (48-byte PKCS8 buffer instead of 32 bytes)
+    await test("8.4 sealSeedToSso throws at seal time when passed 48-byte key", async () => {
+        const pkcs8Key = new Uint8Array(48).fill(99);
+        await assert.rejects(async () => {
+            await sealSeedToSso(pkcs8Key, "google", GOOGLE_SUB);
+        }, /must be exactly 32 bytes/);
+    });
+
+    const nonceBadSeed = (await signedCall("/api/recovery/sso-nonce", m8.pubHex, {})).body.nonce;
+    const depBadSeed = await signedCall("/api/recovery/shares/sso", m8.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, nonceBadSeed),
+        nonce: nonceBadSeed,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...ssoWorking8, encryptedShare: Buffer.from(new Uint8Array(48)).toString("base64") },
+        ],
+    });
+    await test("8.5 deposit with 48-byte encryptedShare is refused and generation 1 remains intact", () => {
+        assert.strictEqual(depBadSeed.status, 400);
+        assert.strictEqual(getCurrentGeneration(m8.pubHex), 1);
+    });
+
+    // Verify member still recovers generation 1 seed
+    const eph8 = crypto.randomBytes(32).toString("hex");
+    const open8 = await signedCall("/api/recovery/collect", eph8, { callsign: m8.callsign });
+    const collId8 = open8.body.collectionId;
+    const n8 = (await signedCall("/api/recovery/collect/sso-nonce", eph8, { collectionId: collId8 })).body.nonce;
+    await signedCall("/api/recovery/collect/sso", eph8, {
+        collectionId: collId8, provider: "google", idToken: mintGoogleToken(GOOGLE_SUB, n8), nonce: n8,
+    });
+    const frags8 = (await signedCall("/api/recovery/collect/fragments", eph8, { collectionId: collId8 })).body.fragments;
+    const recSeed8 = await openShareFromSso(toSealedShare(frags8[0]), "google", GOOGLE_SUB);
+    await test("8.6 member recovers seed from intact generation 1 after all rejected deposits", () => {
+        assert.deepStrictEqual(recSeed8, new Uint8Array(m8.seed));
+    });
+
+    // =========================================================================
+    // 9. Fallback Threshold Deadlock Prevention (Finding 8)
+    // =========================================================================
+    console.log("\n--- 9. Fallback Threshold Deadlock Prevention ---");
+    const m9 = createTestMember("DeadlockTest");
+    const sso9 = await sealSeedToSso(m9.seed, "google", GOOGLE_SUB);
+    const nonce9 = (await signedCall("/api/recovery/sso-nonce", m9.pubHex, {})).body.nonce;
+    await signedCall("/api/recovery/shares/sso", m9.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, nonce9),
+        nonce: nonce9,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...sso9 },
+        ],
+    });
+
+    const eph9 = crypto.randomBytes(32).toString("hex");
+    const open9 = await signedCall("/api/recovery/collect", eph9, { callsign: m9.callsign });
+    const collId9 = open9.body.collectionId;
+    const n9 = (await signedCall("/api/recovery/collect/sso-nonce", eph9, { collectionId: collId9 })).body.nonce;
+    await signedCall("/api/recovery/collect/sso", eph9, {
+        collectionId: collId9, provider: "google", idToken: mintGoogleToken(GOOGLE_SUB, n9), nonce: n9,
+    });
+
+    // Call fragments route: verify threshold 1 and enough=true with 1 collected fragment
+    const fragsRes9 = await signedCall("/api/recovery/collect/fragments", eph9, { collectionId: collId9 });
+    await test("9.1 fragments route reports threshold 1 and enough=true when 1 single-blob fragment collected (no deadlock)", () => {
+        assert.strictEqual(fragsRes9.body.threshold, 1);
+        assert.strictEqual(fragsRes9.body.enough, true);
+        assert.strictEqual(fragsRes9.body.collected, 1);
+    });
+
+    // Verify initial collection threshold for single-blob member is 1
+    await test("9.2 collection opening reports threshold 1 for single-blob member", () => {
+        assert.strictEqual(open9.body.threshold, 1);
+    });
+
+    // Verify fallback calculation logic directly produces threshold 1 and enough=true
+    const releases9 = listReleases(collId9);
+    const isSingleBlob9 = releases9.some((r: any) => r.holderType === "sso" && isSingleBlobSso(r.kdfParams));
+    const defaultThreshold9 = isSingleBlob9 ? 1 : 2;
+    await test("9.3 fallback calculation logic produces threshold 1 and enough=true for single-blob", () => {
+        assert.strictEqual(defaultThreshold9, 1);
+        const fallbackEnough = releases9.length >= defaultThreshold9;
+        assert.strictEqual(fallbackEnough, true);
+    });
+
+    // =========================================================================
+    // 10. Status and Threshold Fields Matrix Verification (Findings 4 & 9)
+    // =========================================================================
+    console.log("\n--- 10. Status and Threshold Fields Matrix ---");
+
+    // 10.1 Legacy-only account
+    const m10Legacy = createTestMember("StatusLegacy");
+    const { hubShare: hs10, otherHalf: oh10 } = await splitHubAndWhole(m10Legacy.seed);
+    const sso10L = await sealShareToSso(oh10, "google", GOOGLE_SUB);
+    const n10L = (await signedCall("/api/recovery/sso-nonce", m10Legacy.pubHex, {})).body.nonce;
+    await signedCall("/api/recovery/shares/sso", m10Legacy.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, n10L),
+        nonce: n10L,
+        shares: [
+            { holderType: "hub", holderRef: "node", shareIndex: 1, ...recordShareForHub(hs10) },
+            { holderType: "sso", holderRef: "google", shareIndex: 2, ...sso10L },
+        ],
+    });
+    const status10L = (await signedCall("/api/recovery/shares/status", m10Legacy.pubHex, {})).body;
+    await test("10.1 legacy-only status: threshold 2, total 2, canRemoveKeeper false, canAffordToLose 0", () => {
+        assert.strictEqual(status10L.threshold, 2);
+        assert.strictEqual(status10L.total, 2);
+        assert.strictEqual(status10L.canRemoveKeeper, false);
+        assert.strictEqual(status10L.canAffordToLose, 0);
+        assert.strictEqual(status10L.recoverable, true);
+    });
+
+    // 10.2 Single-only account (clean, no hub)
+    const m10Single = createTestMember("StatusSingle");
+    const sso10S = await sealSeedToSso(m10Single.seed, "google", GOOGLE_SUB);
+    const n10S = (await signedCall("/api/recovery/sso-nonce", m10Single.pubHex, {})).body.nonce;
+    await signedCall("/api/recovery/shares/sso", m10Single.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, n10S),
+        nonce: n10S,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...sso10S },
+        ],
+    });
+    const status10S = (await signedCall("/api/recovery/shares/status", m10Single.pubHex, {})).body;
+    await test("10.2 single-only status: threshold 1, total 1, canRemoveKeeper false, canAffordToLose 0", () => {
+        assert.strictEqual(status10S.threshold, 1);
+        assert.strictEqual(status10S.total, 1);
+        assert.strictEqual(status10S.canRemoveKeeper, false);
+        assert.strictEqual(status10S.canAffordToLose, 0);
+        assert.strictEqual(status10S.recoverable, true);
+    });
+
+    // 10.3 Single-only account with orphaned hub (Finding 4)
+    const m10Orphan = createTestMember("StatusOrphan");
+    const sso10Orphan = await sealSeedToSso(m10Orphan.seed, "google", GOOGLE_SUB);
+    putShareGeneration(m10Orphan.pubHex, [
+        { holderType: "hub", holderRef: "node", shareIndex: 1, ...recordShareForHub(crypto.randomBytes(32)) },
+        { holderType: "sso", holderRef: "google", shareIndex: 2, ssoLookupHash: "hash-orphan", ssoLookupSalt: "salt-orphan", ...sso10Orphan },
+    ]);
+    const status10Orphan = (await signedCall("/api/recovery/shares/status", m10Orphan.pubHex, {})).body;
+    await test("10.3 single-blob with orphaned hub: threshold 1, total 2, canRemoveKeeper false, canAffordToLose 0 (Finding 4 fix)", () => {
+        assert.strictEqual(status10Orphan.threshold, 1);
+        assert.strictEqual(status10Orphan.total, 2);
+        assert.strictEqual(status10Orphan.canRemoveKeeper, false);
+        assert.strictEqual(status10Orphan.canAffordToLose, 0);
+        assert.strictEqual(canRemoveKeeper(m10Orphan.pubHex), false);
+        assert.strictEqual(status10Orphan.recoverable, true);
+    });
+
+    // 10.4 Multi-provider single-blob account (Google + Apple)
+    const m10Multi = createTestMember("StatusMulti");
+    const sso10M1 = await sealSeedToSso(m10Multi.seed, "google", GOOGLE_SUB);
+    const n10M1 = (await signedCall("/api/recovery/sso-nonce", m10Multi.pubHex, {})).body.nonce;
+    await signedCall("/api/recovery/shares/sso", m10Multi.pubHex, {
+        provider: "google",
+        idToken: mintGoogleToken(GOOGLE_SUB, n10M1),
+        nonce: n10M1,
+        shares: [
+            { holderType: "sso", holderRef: "google", shareIndex: 1, ...sso10M1 },
+        ],
+    });
+    const sso10M2 = await sealSeedToSso(m10Multi.seed, "apple", APPLE_SUB);
+    const n10M2 = (await signedCall("/api/recovery/sso-nonce", m10Multi.pubHex, {})).body.nonce;
+    await signedCall("/api/recovery/shares/sso", m10Multi.pubHex, {
+        provider: "apple",
+        idToken: mintAppleToken(APPLE_SUB, n10M2),
+        nonce: n10M2,
+        shares: [
+            { holderType: "sso", holderRef: "apple", shareIndex: 1, ...sso10M2 },
+        ],
+    });
+    const status10Multi = (await signedCall("/api/recovery/shares/status", m10Multi.pubHex, {})).body;
+    await test("10.4 multi single-blob status: threshold 1, total 2, canRemoveKeeper true, canAffordToLose 1", () => {
+        assert.strictEqual(status10Multi.threshold, 1);
+        assert.strictEqual(status10Multi.total, 2);
+        assert.strictEqual(status10Multi.canRemoveKeeper, true);
+        assert.strictEqual(status10Multi.canAffordToLose, 1);
+        assert.strictEqual(canRemoveKeeper(m10Multi.pubHex), true);
+    });
+
+    // 10.5 Mixed account (Google single-blob + Apple legacy + hub)
+    const status10Mixed = (await signedCall("/api/recovery/shares/status", m6.pubHex, {})).body;
+    await test("10.5 mixed account status: threshold 1, total 3, canRemoveKeeper true, canAffordToLose 2", () => {
+        assert.strictEqual(status10Mixed.threshold, 1);
+        assert.strictEqual(status10Mixed.total, 3);
+        assert.strictEqual(status10Mixed.canRemoveKeeper, true);
+        assert.strictEqual(status10Mixed.canAffordToLose, 2);
+        assert.strictEqual(canRemoveKeeper(m6.pubHex), true);
+        assert.strictEqual(status10Mixed.recoverable, true);
     });
 
     console.log(`\n⭐️ ALL ${passed}/${passed} SSO RECOVERY TESTS PASSED!\n`);

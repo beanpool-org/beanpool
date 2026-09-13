@@ -185,8 +185,13 @@ export async function depositSsoKeeperGeneration(
     // Only enforce hub matching if existing shares are old format.
     if (legacyOtherSso) {
         const existingHub = current.find(s => s.holderType === 'hub');
+        if (!existingHub) {
+            throw new KeeperDepositError(
+                'Cannot carry forward existing legacy sign-in keepers because the hub fragment is missing.',
+            );
+        }
         if (hubShare) {
-            if (!existingHub || hubShare.encryptedShare !== existingHub.encryptedShare) {
+            if (hubShare.encryptedShare !== existingHub.encryptedShare) {
                 throw new KeeperDepositError(
                     'This deposit would strand the sign-in keepers already protecting this account. '
                     + 'Adding a provider must reuse the hub fragment the existing providers were split '

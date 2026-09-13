@@ -116,7 +116,7 @@ export function AiServicesModule({ activeNode, contextData }: AiServicesModulePr
                         <label className="block text-nature-400 mb-1 font-semibold">LLM Provider:</label>
                         <select
                             value={config.provider}
-                            onChange={(e) => setConfig({ ...config, provider: e.target.value as any })}
+                            onChange={(e) => setConfig({ ...config, provider: e.target.value as AiConfig['provider'] })}
                             className="w-full bg-nature-900 border border-nature-800 px-3 py-2 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-terra-500"
                         >
                             <option value="ollama">Ollama (Local Node LLM)</option>

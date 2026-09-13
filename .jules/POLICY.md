@@ -263,3 +263,14 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** MERGE CONFLICT, RECURRING
 - **Claim:** Missing coverage for holiday-mode member behaviour.
 - **Why not to re-file:** The suite landed. Recording the conflict because it is now the third time: `scripts/test-all.sh` keeps its entire suite list on **one line inside a `bash -c '...'` block**, so any two PRs that register a new suite in the same batch conflict with each other. #740 collided with #751. When filing a new suite, expect to rebase that single line, and never introduce an apostrophe anywhere in that block — it breaks the whole script with an error that points at EOF.
+
+### 2026-09-14 — Sentinel: reaction metadata TypeError DoS (#760) — LANDED, CLAIM WAS REAL
+- **Category:** REAL VULNERABILITY
+- **Claim:** `toggleMessageReaction` assumed `metadata` was an object; a primitive or array makes assigning `.reactions` throw.
+- **Why this one was real, unlike #747:** `metadata` is taken straight off the client request body (`apps/server/src/routes/messaging.ts:102`) and passed through to `sendMessage`, so a caller genuinely controls its shape. In an ES module (strict mode) assigning a property to a primitive throws `TypeError`. The guard is at the point of consumption, which is the right place — a peer could also deliver an odd shape through sync.
+- **The distinction worth keeping:** before accepting or rejecting an input-validation finding, trace whether the value is actually **client-authored**. #747's traversal was inert because `nodeSlug()` sanitised first; this one was real because nothing sanitised first. Same shape of claim, opposite verdict.
+
+### 2026-09-14 — Bolt: O(1) lookup rewrites (#745, #766) — BOTH LANDED, ONLY ONE WORTH IT
+- **Category:** MARGINAL / JUDGEMENT
+- **Claim:** replace `array.find()` with a pre-computed `Map`.
+- **Why not to re-file blindly:** #766 was worth it — the lookup sat inside a **recursive tree render**, so it was O(M·(M+P)). #745 replaced a **single** lookup per render, where building the Map costs as much as the scan it saves. Both are harmless and both landed, but a `.find()` → `Map` rewrite is only a win when the lookup is in a loop or recursion. Do not file these against one-shot lookups.

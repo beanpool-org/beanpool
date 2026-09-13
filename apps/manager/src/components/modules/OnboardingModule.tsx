@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { fetchOnboardingFunnel, type FunnelRow } from '../../lib/node-client';
+import { fetchOnboardingFunnel, getTfaSessionToken, type FunnelRow } from '../../lib/node-client';
 
 export interface OnboardingModuleProps {
     profiles: NodeProfile[];
@@ -53,7 +53,7 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
         // leaves the previous node's numbers on screen under an error banner — and worse,
         // shows one community's figures under another community's name.
         setRows(null);
-        fetchOnboardingFunnel(active.url, active.adminPassword, days)
+        fetchOnboardingFunnel(active.url, active.adminPassword, days, active ? getTfaSessionToken(active.id) : undefined)
             .then(res => { if (!cancelled) setRows(res.rows); })
             .catch(e => { if (!cancelled) setError(e.message || 'Could not reach this node'); })
             .finally(() => { if (!cancelled) setLoading(false); });

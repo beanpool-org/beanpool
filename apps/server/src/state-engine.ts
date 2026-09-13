@@ -2628,7 +2628,11 @@ export function getCommunityHealth(): CommunityHealth {
 
 export function getAdminPubkey(): string {
     const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' ORDER BY rowid ASC LIMIT 1").get() as any;
-    return row ? row.public_key : 'system';
+    // Empty string, not 'system', when a node has no human admin. Every override site is
+    // `publicKey === getAdminPubkey()`, so a placeholder return value GRANTS ADMIN to anyone
+    // presenting that same literal as their actor — the old 'system' fallback matched itself.
+    // '' can never equal a public key, and routes reject a missing actor before they get here.
+    return row ? row.public_key : '';
 }
 
 /**

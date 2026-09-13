@@ -24,7 +24,7 @@ import {
     initStateEngine, createTreasury, adminSetOperator,
     canOperateTreasury, keeperOf, treasuryKeepers,
     adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
-    getBalance,
+    getBalance, transfer,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db, seedTreasuryOperatorsFromLegacyFlag } from './db/db.js';
@@ -40,7 +40,7 @@ function assert(cond: boolean, msg: string): void {
 function makeIdentity(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at) VALUES (?, ?, 'data:image/png;base64,iVBORw0KGgo=', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
@@ -87,6 +87,43 @@ async function main() {
     const offer = { title: 'Dozen eggs', category: 'food', credits: 12 };
     const own = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, offer);
     assert(own.status === 200, `keeper posts an Offer on their OWN enterprise (got ${own.status} ${own.error ?? ''})`);
+    const offerRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(own.body.post.id) as any;
+    assert(offerRow?.created_by === doone.pubKeyHex, 'offer post created_by records acting operator');
+
+    // Keeper posts a Need, worker bids, keeper approves and completes — verifying audit trail
+    const needRes = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Tend chickens', category: 'work', credits: 20 });
+    assert(needRes.status === 200, `keeper posts a Need on enterprise (got ${needRes.status})`);
+    const needRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(needRes.body.post.id) as any;
+    assert(needRow?.created_by === doone.pubKeyHex, 'need post created_by records acting operator');
+
+    const reqRes = await signedFetch('POST', `/api/marketplace/posts/request`, river, { postId: needRes.body.post.id, buyerPublicKey: river.pubKeyHex });
+    assert(reqRes.status === 200, `worker bids on enterprise Need (got ${reqRes.status} ${reqRes.error ?? ''})`);
+    const dealTxId = reqRes.body.transaction.id;
+
+    // Verify treasury detail exposes pendingBids and activeDeals
+    const detailBeforeApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(detailBeforeApprove.pendingBids?.some((b: any) => b.id === dealTxId), 'detail exposes pending bid on need');
+
+    const approveRes = await signedFetch('POST', `/api/treasury/${eggs}/approve`, doone, { transactionId: dealTxId });
+    assert(approveRes.status === 200, `keeper approves bid on enterprise Need (got ${approveRes.status})`);
+    const escrowTxRow = db.prepare('SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey=?').get(eggs, `escrow_${dealTxId}`) as any;
+    assert(escrowTxRow?.auth_signer === doone.pubKeyHex, 'escrow hold transaction auth_signer records acting operator');
+
+    const detailAfterApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(detailAfterApprove.activeDeals?.some((d: any) => d.id === dealTxId), 'detail exposes active deal on need');
+
+    const completeRes = await signedFetch('POST', `/api/treasury/${eggs}/complete`, doone, { transactionId: dealTxId });
+    assert(completeRes.status === 200, `keeper completes deal on enterprise Need (got ${completeRes.status})`);
+    const payoutTxRow = db.prepare('SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey=?').get(`escrow_${dealTxId}`, river.pubKeyHex) as any;
+    assert(payoutTxRow?.auth_signer === doone.pubKeyHex, 'escrow payout transaction auth_signer records acting operator');
+
+    // Sweep test with audit trail
+    // Give eggs a positive balance to sweep via genesis transfer
+    transfer('genesis', eggs, 50, 'seed test', 'direct', true);
+    const sweepRes = await signedFetch('POST', `/api/treasury/${eggs}/sweep`, doone, { amount: 15 });
+    assert(sweepRes.status === 200, `keeper sweeps surplus from enterprise (got ${sweepRes.status})`);
+    const sweepTxRow = db.prepare("SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey='COMMONS_POOL' ORDER BY timestamp DESC LIMIT 1").get(eggs) as any;
+    assert(sweepTxRow?.auth_signer === doone.pubKeyHex, 'sweep transaction auth_signer records acting operator');
 
     for (const [route, payload] of [
         ['offer', offer],

@@ -274,11 +274,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Post the treasury's recurring Offer (e.g. "a dozen eggs"). Defaults repeatable=true.
     router.post('/api/treasury/:treasury/offer', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -288,11 +289,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // live Offer (the offer covenant) before it can run the need at a deficit.
     router.post('/api/treasury/:treasury/need', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -301,11 +303,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Approve a bid on the treasury's Need — funds escrow from the treasury (its credit line).
     router.post('/api/treasury/:treasury/approve', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const { transactionId } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
         try {
-            const tx = approvePostRequest(String(transactionId), treasury);
+            const tx = approvePostRequest(String(transactionId), treasury, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not approve (not this treasury’s deal, or already actioned)' }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -315,11 +318,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Egg *sales* are released by the buyer through the normal marketplace route, not here.
     router.post('/api/treasury/:treasury/complete', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
-        const { transactionId } = (ctx as any).requestBody || {};
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
+        const { transactionId, hours } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
         try {
-            const tx = completePostTransaction(String(transactionId), treasury);
+            const tx = completePostTransaction(String(transactionId), treasury, typeof hours === 'number' ? hours : undefined, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -328,7 +332,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Reject a bid on the treasury's Need
     router.post('/api/treasury/:treasury/reject', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const { transactionId } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
         try {
@@ -341,7 +346,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Sweep surplus from the treasury into the shared Commons pool.
     router.post('/api/treasury/:treasury/sweep', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const amt = Number((ctx as any).requestBody?.amount);
         if (!amt || amt <= 0) { ctx.status = 400; ctx.body = { error: 'amount must be positive' }; return; }
         if (amt > getBalance(treasury).balance) { ctx.status = 400; ctx.body = { error: 'Cannot sweep more than the treasury holds' }; return; }
@@ -363,7 +369,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         let ok;
         try {
             ok = conservingTransaction(() =>
-                moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`));
+                moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`, { authSigner: actor }));
         } catch (e: any) {
             const invariant = /moveToCommons is for/.test(e?.message || '');
             console.error(`[Treasury] Sweep from ${treasury.slice(0, 8)} failed:`, e?.message || e);

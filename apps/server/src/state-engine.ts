@@ -1246,7 +1246,7 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
-export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature: string; payload: string }): Transaction | null {
+export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string }): Transaction | null {
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
     if (amount < 0) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
@@ -1526,7 +1526,7 @@ export function moveToCommons(
     // becoming a back door around `transfer()`'s send gate and floor policy. A prune is different in kind —
     // an admin action on a member being removed, taking a positive balance to exactly zero — so the gate is
     // moot rather than bypassed. Anything else moving a member's value belongs in `transfer()`.
-    opts?: { allowMemberDebit?: boolean },
+    opts?: { allowMemberDebit?: boolean; authSigner?: string },
 ): Transaction | null {
     const synthetic = isSyntheticAccount(from);
     const treasury = !synthetic
@@ -1544,8 +1544,8 @@ export function moveToCommons(
         from, to: 'COMMONS_POOL', amount, taxFee: 0,
         memo: memo || '', timestamp: new Date().toISOString(),
     };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp);
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null);
 
     const fromAcc = ledger.getAccount(from);
     db.prepare(`
@@ -1877,7 +1877,7 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
 export function createPost(
     type: 'offer' | 'need', category: string, title: string, description: string, credits: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string, authorPublicKey: string, lat?: number, lng?: number, photos?: string[], repeatable?: boolean, id?: string, cashAlsoNeeded?: boolean,
-    options?: { reach?: unknown; reachPeers?: unknown }
+    options?: { reach?: unknown; reachPeers?: unknown; createdBy?: string }
 ): MarketplacePost | null {
     return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
 }
@@ -1913,8 +1913,8 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
     return requestPostEngine(getEscrowCb(), postId, requesterPublicKey, hours);
 }
 
-export function approvePostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
-    return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey);
+export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string }): MarketplaceTransaction | null {
+    return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey, opts);
 }
 
 export function rejectPostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
@@ -1929,8 +1929,8 @@ export function acceptPost(postId: string, buyerPublicKey: string, hours?: numbe
     return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours);
 }
 
-export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
-    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours);
+export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, opts?: { authSigner?: string }): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
+    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
 }
 
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {

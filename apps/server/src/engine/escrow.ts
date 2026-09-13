@@ -17,7 +17,7 @@ import {
 } from '@beanpool/engine';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
-type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean) => any;
+type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean, auth?: { signer: string; signature?: string; payload?: string }) => any;
 type EnsureConvFn = (postId: string, buyerPubkey: string, sellerPubkey: string) => string;
 type SystemMsgFn = (postId: string, type: any, payload: any, senderPubkey: string, recipientPubkey: string) => any;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow') => void;
@@ -150,7 +150,8 @@ export function requestPost(
 export function approvePostRequest(
     cb: EscrowCallbacks,
     transactionId: string,
-    authorPublicKey: string
+    authorPublicKey: string,
+    opts?: { authSigner?: string }
 ): MarketplaceTransaction | null {
     const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='requested'").get(transactionId) as any;
     if (!row) return null;
@@ -185,7 +186,7 @@ export function approvePostRequest(
     db.transaction(() => {
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${row.id}`);
 
-        const escrowResult = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, row.credits, `Escrow hold for approved deal ${row.post_id}`, 'escrow', true);
+        const escrowResult = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, row.credits, `Escrow hold for approved deal ${row.post_id}`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
         if (!escrowResult) throw new Error('Failed to lock funds in escrow');
 
         db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=?`).run(transactionId);
@@ -387,7 +388,8 @@ export function completePostTransaction(
     cb: EscrowCallbacks,
     transactionId: string,
     confirmerPublicKey: string,
-    finalHours?: number
+    finalHours?: number,
+    opts?: { authSigner?: string }
 ): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
     const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='pending'").get(transactionId) as any;
     
@@ -420,9 +422,9 @@ export function completePostTransaction(
                 const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
                 if (balance - diff < floor) throw new Error('Insufficient balance to cover extra hours');
                 if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
-                cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true);
+                cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
             } else if (diff < 0) {
-                cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true);
+                cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
             }
             db.prepare(`UPDATE marketplace_transactions SET credits=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
         }
@@ -431,7 +433,7 @@ export function completePostTransaction(
         // the Commons. Holds, adjustments and refunds stay exempt; this is the one transfer where value
         // settles to a real member's account. Cross-node settlement handles its own fee separately
         // (federation-settlement-exchange.ts § commitOutboundSettlement → moveToCommons).
-        releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false);
+        releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts?.authSigner ? { signer: opts.authSigner } : undefined);
         if (!releaseResult) throw new Error('Failed to release escrow funds');
 
         db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?`).run(completedAt, transactionId);

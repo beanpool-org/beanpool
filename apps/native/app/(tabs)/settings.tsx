@@ -389,6 +389,8 @@ export default function SettingsScreen() {
                 skipped: [],
                 available: body.total,
                 enrolledSso: body.enrolledSso ?? [],
+                threshold: body.threshold,
+                isSingleBlob: body.threshold === 1,
             });
         } catch (e) {
             console.warn('[Protection] fetch failed:', e);

@@ -74,6 +74,19 @@ const KEY_LEN = 32;
 /** Scheme identifiers, written into `kdfParams` so a future change is detectable, not silent. */
 export const KEEPER_ALG_MEMBER = 'x25519-xc20p-v1';
 export const KEEPER_ALG_SSO = 'scrypt-xc20p-v1';
+/** New-format single device-encrypted blob containing the whole seed. */
+export const KEEPER_ALG_SSO_SINGLE = 'scrypt-xc20p-single-v1';
+
+/** Checks whether a kdfParams string explicitly specifies the single-blob SSO algorithm. */
+export function isSingleBlobSso(kdfParams: string | null | undefined): boolean {
+    if (!kdfParams) return false;
+    try {
+        const parsed = JSON.parse(kdfParams);
+        return parsed?.alg === KEEPER_ALG_SSO_SINGLE;
+    } catch {
+        return false;
+    }
+}
 
 /**
  * scrypt cost for the sign-in fragment. Matches `ssoLookupHash` in `apps/server/src/sso.ts`
@@ -111,6 +124,7 @@ export const KEEPER_ALG_REWRAP = 'x25519-xc20p-rewrap-v1';
 
 const AAD_MEMBER = utf8ToBytes('beanpool-keeper-member-v1');
 const AAD_SSO = utf8ToBytes('beanpool-keeper-sso-v1');
+const AAD_SSO_SINGLE = utf8ToBytes('beanpool-keeper-sso-single-v1');
 const AAD_REWRAP = utf8ToBytes('beanpool-keeper-rewrap-v1');
 
 const HKDF_INFO_MEMBER = utf8ToBytes('beanpool-keeper-share');
@@ -226,7 +240,7 @@ function open(key: Uint8Array, sealed: SealedShare, aad: Uint8Array): Uint8Array
     }
 }
 
-function parseAlg(kdfParams: string | undefined, expected: string): Record<string, unknown> {
+function parseAlg(kdfParams: string | undefined, expected: string | readonly string[]): Record<string, unknown> {
     let parsed: unknown;
     try {
         parsed = JSON.parse(kdfParams ?? '');
@@ -237,11 +251,15 @@ function parseAlg(kdfParams: string | undefined, expected: string): Record<strin
         throw new KeeperCryptoError('A recovery fragment has unreadable kdfParams.');
     }
     const obj = parsed as Record<string, unknown>;
-    if (obj.alg !== expected) {
+    const matches = Array.isArray(expected)
+        ? expected.includes(String(obj.alg))
+        : obj.alg === expected;
+    if (!matches) {
         // A newer client wrote this, or the fragment is of a different keeper type. Refused
         // rather than attempted: guessing the scheme is how a wrong answer gets returned.
+        const expStr = Array.isArray(expected) ? expected.join("' or '") : expected;
         throw new KeeperCryptoError(
-            `A recovery fragment uses scheme '${String(obj.alg)}', but '${expected}' was expected.`,
+            `A recovery fragment uses scheme '${String(obj.alg)}', but '${expStr}' was expected.`,
         );
     }
     return obj;
@@ -377,24 +395,53 @@ export function openShareAsMember(sealed: SealedShare, privateKey: string | Uint
  * 21-digit number — a plain hash of that is brute-forceable in the small space, salt or no salt."*
  * The lookup hash was hardened and the key that opens the box was not; this makes them agree.
  */
+export interface SealSsoOptions {
+    alg?: string;
+    checksum?: Uint8Array | string;
+}
+
 export async function sealShareToSso(
     share: Uint8Array, provider: string, sub: string,
+    options?: SealSsoOptions,
 ): Promise<SealedShare> {
     if (!provider || !sub) {
         throw new KeeperCryptoError('A sign-in fragment needs both a provider and a subject claim.');
     }
     assertRecoveryCsprngAvailable();
+    const alg = options?.alg ?? KEEPER_ALG_SSO;
     const salt = randomBytes(KEY_LEN);
     const key = await deriveSsoKey(provider, sub, salt, SSO_SCRYPT.N);
+    const aad = alg === KEEPER_ALG_SSO_SINGLE ? AAD_SSO_SINGLE : AAD_SSO;
+    const kdfParamsObj: Record<string, unknown> = {
+        alg, salt: b64(salt),
+        N: SSO_SCRYPT.N, r: SSO_SCRYPT.r, p: SSO_SCRYPT.p,
+    };
+    if (options?.checksum) {
+        kdfParamsObj.checksum = typeof options.checksum === 'string'
+            ? options.checksum
+            : b64(options.checksum);
+    }
     return {
-        ...seal(key, share, AAD_SSO),
+        ...seal(key, share, aad),
         // N/r/p travel with the fragment so raising the cost later does not strand what is already
         // deposited. The opener checks them against a floor rather than trusting them.
-        kdfParams: JSON.stringify({
-            alg: KEEPER_ALG_SSO, salt: b64(salt),
-            N: SSO_SCRYPT.N, r: SSO_SCRYPT.r, p: SSO_SCRYPT.p,
-        }),
+        kdfParams: JSON.stringify(kdfParamsObj),
     };
+}
+
+/**
+ * Seal the entire 32-byte Ed25519 seed into a single device-encrypted AEAD blob under
+ * scrypt(provider:sub). New-format single-blob SSO recovery.
+ */
+export async function sealSeedToSso(
+    seed: Uint8Array, provider: string, sub: string,
+): Promise<SealedShare> {
+    if (!(seed instanceof Uint8Array) || seed.length !== KEY_LEN) {
+        throw new KeeperCryptoError(
+            `Single-blob SSO seed must be exactly ${KEY_LEN} bytes, got ${seed instanceof Uint8Array ? seed.length : typeof seed}.`,
+        );
+    }
+    return sealShareToSso(seed, provider, sub, { alg: KEEPER_ALG_SSO_SINGLE });
 }
 
 /** Re-derive the sign-in key from a freshly obtained `sub` and open the fragment. */
@@ -407,7 +454,7 @@ export async function openShareFromSso(
     if (!provider || !sub) {
         throw new KeeperCryptoError('A sign-in fragment needs both a provider and a subject claim.');
     }
-    const params = parseAlg(sealed.kdfParams, KEEPER_ALG_SSO);
+    const params = parseAlg(sealed.kdfParams, [KEEPER_ALG_SSO, KEEPER_ALG_SSO_SINGLE]);
     if (typeof params.salt !== 'string') {
         throw new KeeperCryptoError('A sign-in fragment is missing the salt its key derives from.');
     }
@@ -429,7 +476,8 @@ export async function openShareFromSso(
         );
     }
     const key = await deriveSsoKey(provider, sub, unb64(params.salt, 'salt'), N);
-    return open(key, sealed, AAD_SSO);
+    const aad = params.alg === KEEPER_ALG_SSO_SINGLE ? AAD_SSO_SINGLE : AAD_SSO;
+    return open(key, sealed, aad);
 }
 
 /**

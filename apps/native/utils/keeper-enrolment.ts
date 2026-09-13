@@ -35,10 +35,7 @@
  */
 
 import {
-    readHubShare,
-    recordShareForHub,
-    sealShareToSso,
-    splitHubAndWhole,
+    sealSeedToSso,
     toEd25519Seed,
     type SealedShare,
 } from '@beanpool/core';
@@ -74,6 +71,10 @@ export interface KeeperEnrolmentResult {
     available: number;
     /** Specific SSO providers currently protecting the account. */
     enrolledSso?: string[];
+    /** Effective threshold required for recovery. */
+    threshold?: number;
+    /** Whether single-blob SSO format is in use. */
+    isSingleBlob?: boolean;
     /** Set when enrolment did not happen at all. For logs, never for a member. */
     error?: string;
 }
@@ -121,70 +122,9 @@ export interface SsoEnrolmentInput {
 }
 
 /**
- * `a ⊕ b`, for deriving `B = seed ⊕ A` against a hub fragment that already exists.
- *
- * Local rather than imported: core keeps its own `xorBytes` private, and widening a package's
- * public surface for one caller is a worse trade than four lines that cannot drift.
- */
-function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
-    const out = new Uint8Array(a.length);
-    for (let i = 0; i < a.length; i++) out[i] = a[i] ^ b[i];
-    return out;
-}
-
-/**
- * The hub fragment this account was already split against, or null if it has none yet.
- *
- * A null answer is the normal first-enrolment case, not a failure — so is a node too old to know
- * the route. Both fall through to a fresh split, which is correct precisely when there is no
- * earlier fragment to stay consistent with.
- *
- * "I could not ask" is NOT one of those cases, and conflating the two is why adding a second
- * provider failed at random. Returning null after a network blink mints a fresh `A`, which the
- * node then refuses because the existing providers were split against the old one — so a dropped
- * request surfaced as an unexplained enrolment failure, and the only reliable way out was to
- * disconnect every provider so that a fresh split became legitimate again. MEASURED 2026-08-28:
- * the anchor node was failing every WebSocket connect throughout the session, so this call
- * intermittently not answering is the expected condition, not a rare one.
- */
-async function fetchHubFragment(
-    url: string, identity: BeanPoolIdentity,
-): Promise<Uint8Array | null> {
-    let res: Response;
-    try {
-        res = await signedPost(url, '/api/recovery/shares/hub-fragment', {}, identity);
-    } catch (e) {
-        throw new Error(`could not reach the node to read the existing hub fragment: ${(e as Error).message}`);
-    }
-    // A node too old to know the route has no fragment to stay consistent with, so 404 really is
-    // the first-enrolment case. Any other refusal is a live node declining to answer, and guessing
-    // past it is what breaks the pairing.
-    console.log(`[KEEPER] hub-fragment endpoint responded ${res.status}`);
-    if (res.status === 404) return null;
-    if (!res.ok) {
-        throw new Error(`the node would not return the existing hub fragment (HTTP ${res.status})`);
-    }
-    const body = await res.json().catch(() => null) as {
-        hubFragment?: unknown; shareIv?: unknown; shareTag?: unknown; kdfParams?: unknown;
-    } | null;
-    if (!body || typeof body.hubFragment !== 'string' || body.hubFragment.length === 0) return null;
-    try {
-        return readHubShare({
-            encryptedShare: body.hubFragment,
-            shareIv: String(body.shareIv ?? ''),
-            shareTag: String(body.shareTag ?? ''),
-            kdfParams: typeof body.kdfParams === 'string' ? body.kdfParams : undefined,
-        } as SealedShare);
-    } catch {
-        // A fragment this client cannot read must not be silently replaced with a fresh one —
-        // that is the desync this whole path exists to prevent. Let the deposit be refused.
-        throw new Error('the existing hub fragment could not be read');
-    }
-}
-
-/**
- * Split the member's seed into hub + SSO using `splitHubAndWhole`, then deposit
- * through `POST /api/recovery/shares/sso` which verifies the token server-side.
+ * Seal the member's entire seed into a single device-encrypted AEAD blob under
+ * scrypt(provider:sub), then deposit through `POST /api/recovery/shares/sso`
+ * which verifies the token server-side.
  *
  * This is NOT called at signup. It is called when the member signs in with Google or
  * Apple for the first time, which is a separate user-initiated flow.
@@ -219,58 +159,18 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
         return nothing(`could not read the private key: ${(e as Error).message}`);
     }
 
-    // Reuse the hub fragment if this account already has one, and only mint a fresh one for a
-    // first split.
-    //
-    // Every sealed fragment `B` is only meaningful against the exact `A` it was split from, and
-    // the node stores ONE `A` per generation. Splitting afresh here while the node carries a
-    // previous provider's `B` forward pairs `A_new` with `B_old`, and
-    //   A_new ⊕ B_old = seed ⊕ (A_new ⊕ A_old) ≠ seed
-    // — recovery through the FIRST provider then rebuilds a keypair for an account that does not
-    // exist. Nothing catches it: no checksum is stored and `combineHubAndWhole` is called without
-    // one, so the member simply arrives in an empty account.
-    //
-    // Splitting against the stored `A` instead makes every provider's fragment agree, which is
-    // what 1-of-N redundancy was supposed to mean. The node enforces this independently and
-    // refuses a deposit that would break it, so a stale client fails loudly instead of quietly.
-    let hubShare: Uint8Array;
-    let otherHalf: Uint8Array;
-    try {
-        const existingHub = await fetchHubFragment(url, identity);
-        if (existingHub) {
-            hubShare = existingHub;
-            otherHalf = xorBytes(seed, existingHub);
-            console.log(`[KEEPER] ${provider}: reusing stored hub fragment (${existingHub.length}B)`);
-        } else {
-            const result = await splitHubAndWhole(seed);
-            hubShare = result.hubShare;
-            otherHalf = result.otherHalf;
-            // Logged because its ABSENCE was previously the only signal that a fresh fragment had
-            // been minted, which made "correctly starting from nothing" and "silently replacing the
-            // fragment other providers depend on" indistinguishable in a capture.
-            console.log(`[KEEPER] ${provider}: no stored hub fragment — minting a fresh split`);
-        }
-    } catch (e) {
-        return nothing(`could not split the seed: ${(e as Error).message}`);
-    }
-
-    // Seal B to the SSO provider. The scrypt key is derived from `provider:sub`,
-    // where `sub` is the subject claim the client read from the id_token. The server
-    // will independently verify the token and derive the same key.
+    // Seal the entire 32-byte Ed25519 seed to the SSO provider under scrypt(provider:sub).
+    // The server will independently verify the token and derive the same key during recovery.
     let ssoSealed: SealedShare;
     try {
-        ssoSealed = await sealShareToSso(otherHalf, provider, sub);
+        ssoSealed = await sealSeedToSso(seed, provider, sub);
     } catch (e) {
         return nothing(`could not seal the SSO fragment: ${(e as Error).message}`);
     }
 
     const shares = [
         {
-            holderType: 'hub' as const, holderRef: 'node', shareIndex: 1,
-            ...recordShareForHub(hubShare),
-        },
-        {
-            holderType: 'sso' as const, holderRef: provider, shareIndex: 2,
+            holderType: 'sso' as const, holderRef: provider, shareIndex: 1,
             ...ssoSealed,
         },
     ];
@@ -287,13 +187,16 @@ export async function enrolSsoKeeper(input: SsoEnrolmentInput): Promise<KeeperEn
             const detail = await res.text().catch(() => '');
             return nothing(`node refused the fragments (${res.status}): ${detail.slice(0, 200)}`);
         }
-        const body = await res.json() as { generation?: number; enrolledSso?: string[] };
+        const body = await res.json() as { generation?: number; enrolledSso?: string[]; threshold?: number };
+        const enrolledSso = body.enrolledSso ?? [provider];
         return {
-            enrolled: ['hub', 'sso'],
+            enrolled: enrolledSso.map(() => 'sso' as const),
             generation: body.generation ?? null,
             skipped,
-            available: 2,
-            enrolledSso: body.enrolledSso ?? [provider],
+            available: enrolledSso.length,
+            enrolledSso,
+            threshold: body.threshold ?? 1,
+            isSingleBlob: true,
         };
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);

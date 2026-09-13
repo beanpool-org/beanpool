@@ -21,6 +21,7 @@ import {
     openShareFromSso,
     readHubShare,
     combineHubAndWhole,
+    isSingleBlobSso,
 } from '@beanpool/core';
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
@@ -195,20 +196,9 @@ export async function recoverAccountWithSso(options: {
         throw new Error(err.error || `Sign-in verification failed (${ssoRes.status})`);
     }
 
-    // 6. Request Hub Fragment Release (instant under SSO tier)
-    options.onProgress?.({ step: 'releasing-hub', message: 'Collecting node fragment...' });
-    const hubRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/hub', {
-        collectionId,
-    }, ephIdentity);
-
-    if (!hubRes.ok) {
-        const err = await hubRes.json().catch(() => ({}));
-        throw new Error(err.error || `Hub release failed (${hubRes.status})`);
-    }
-
-    // 7. Retrieve Released Fragments
+    // 6. Retrieve Released Fragments
     options.onProgress?.({ step: 'fetching-fragments', message: 'Downloading recovery fragments...' });
-    const fragsRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/fragments', {
+    let fragsRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/fragments', {
         collectionId,
     }, ephIdentity);
 
@@ -217,42 +207,102 @@ export async function recoverAccountWithSso(options: {
         throw new Error(err.error || `Failed to fetch fragments (${fragsRes.status})`);
     }
 
-    const fragsBody = await fragsRes.json();
-    const fragments: any[] = fragsBody.fragments || [];
+    let fragsBody = await fragsRes.json();
+    let fragments: any[] = fragsBody.fragments || [];
     const ssoFrag = fragments.find(f => f.holderType === 'sso');
-    const hubFrag = fragments.find(f => f.holderType === 'hub');
 
     if (!ssoFrag) {
         throw new Error('Sign-in recovery piece was not returned by the node.');
-    }
-    if (!hubFrag) {
-        throw new Error('Hub recovery piece was not returned by the node.');
     }
     if (!ssoFrag.kdfParams) {
         throw new Error('Sign-in piece is missing derivation parameters (kdfParams).');
     }
 
-    // 8. Reconstruct Seed (A ⊕ B)
-    options.onProgress?.({ step: 'reconstructing', message: 'Reconstructing account identity...' });
-    const otherHalf = await openShareFromSso(
-        {
-            encryptedShare: ssoFrag.payload,
-            shareIv: ssoFrag.payloadIv,
-            shareTag: ssoFrag.payloadTag,
-            kdfParams: ssoFrag.kdfParams,
-        },
-        options.provider,
-        sub,
-    );
+    let restoredSeed: Uint8Array;
 
-    const hubShare = readHubShare({
-        encryptedShare: hubFrag.payload,
-        shareIv: hubFrag.payloadIv,
-        shareTag: hubFrag.payloadTag,
-        kdfParams: hubFrag.kdfParams,
-    });
+    if (isSingleBlobSso(ssoFrag.kdfParams)) {
+        // New-format single-blob SSO: entire seed is sealed in this one fragment.
+        options.onProgress?.({ step: 'reconstructing', message: 'Reconstructing account identity...' });
+        restoredSeed = await openShareFromSso(
+            {
+                encryptedShare: ssoFrag.payload,
+                shareIv: ssoFrag.payloadIv,
+                shareTag: ssoFrag.payloadTag,
+                kdfParams: ssoFrag.kdfParams,
+            },
+            options.provider,
+            sub,
+        );
+        if (restoredSeed.length !== 32) {
+            throw new Error('Decrypted recovery seed has invalid length.');
+        }
+    } else {
+        // Old-format two-layer split (seed = A ⊕ B): request hub fragment (A), then combine with B.
+        options.onProgress?.({ step: 'releasing-hub', message: 'Collecting node fragment...' });
+        const hubRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/hub', {
+            collectionId,
+        }, ephIdentity);
 
-    const restoredSeed = combineHubAndWhole(hubShare, otherHalf);
+        if (!hubRes.ok) {
+            const err = await hubRes.json().catch(() => ({}));
+            throw new Error(err.error || `Hub release failed (${hubRes.status})`);
+        }
+
+        fragsRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/fragments', {
+            collectionId,
+        }, ephIdentity);
+
+        if (!fragsRes.ok) {
+            const err = await fragsRes.json().catch(() => ({}));
+            throw new Error(err.error || `Failed to fetch fragments (${fragsRes.status})`);
+        }
+
+        fragsBody = await fragsRes.json();
+        fragments = fragsBody.fragments || [];
+        const hubFrag = fragments.find(f => f.holderType === 'hub');
+        if (!hubFrag) {
+            throw new Error('Hub recovery piece was not returned by the node.');
+        }
+
+        options.onProgress?.({ step: 'reconstructing', message: 'Reconstructing account identity...' });
+        const otherHalf = await openShareFromSso(
+            {
+                encryptedShare: ssoFrag.payload,
+                shareIv: ssoFrag.payloadIv,
+                shareTag: ssoFrag.payloadTag,
+                kdfParams: ssoFrag.kdfParams,
+            },
+            options.provider,
+            sub,
+        );
+
+        const hubShare = readHubShare({
+            encryptedShare: hubFrag.payload,
+            shareIv: hubFrag.payloadIv,
+            shareTag: hubFrag.payloadTag,
+            kdfParams: hubFrag.kdfParams,
+        });
+
+        let checksum: Uint8Array | undefined;
+        try {
+            const parsed = JSON.parse(ssoFrag.kdfParams);
+            if (parsed.checksum && typeof parsed.checksum === 'string') {
+                const decoded = decodeBase64(parsed.checksum);
+                if (decoded.length === 4) {
+                    checksum = decoded;
+                }
+            }
+        } catch {}
+
+        try {
+            restoredSeed = combineHubAndWhole(hubShare, otherHalf, checksum);
+        } catch (e) {
+            throw new Error(
+                (e as Error).message || 'Failed to combine recovery fragments.',
+            );
+        }
+    }
+
     const restoredKeypair = await seedToKeypair(restoredSeed);
 
     const restoredIdentity: BeanPoolIdentity = {

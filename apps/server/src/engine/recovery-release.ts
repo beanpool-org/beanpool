@@ -43,7 +43,7 @@
 // points at, and the reason the check is here rather than left to the caller.
 
 import crypto from 'node:crypto';
-import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
+import { TWO_LAYER_THRESHOLD, isSingleBlobSso } from '@beanpool/core';
 
 import { db } from '../db/db.js';
 import { getCurrentGeneration, type KeeperType } from './recovery-shares.js';
@@ -581,14 +581,22 @@ export function collectionProgress(collectionId: string): {
         hubReason = e.reason;
     }
 
-    const hasSso = !!db.prepare(`
-        SELECT 1 AS present FROM recovery_shares
+    const ssoRows = db.prepare(`
+        SELECT kdf_params FROM recovery_shares
         WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso'
-    `).get(state.collection.ownerPubkey, state.collection.generation);
-
-    // Layer two threshold is TWO_LAYER_THRESHOLD (= 2). The hub is XOR-mandatory and outside layer two.
-    // Total fragments needed: SSO tier = hub + 1 sso = 2 total. Non-SSO tier = hub + TWO_LAYER_THRESHOLD friends = 3 total.
-    const needed = hasSso ? TWO_LAYER_THRESHOLD : TWO_LAYER_THRESHOLD + 1;
+    `).all(state.collection.ownerPubkey, state.collection.generation) as { kdf_params: string | null }[];
+    const hasSso = ssoRows.length > 0;
+    // The threshold must depend on the provider actually being used for this collection,
+    // not on whether any row in the generation happens to be single-blob.
+    const releasedSso = releases.filter(r => r.holderType === 'sso');
+    let needed: number;
+    if (releasedSso.length > 0) {
+        const isReleasedSingleBlob = releasedSso.some(r => isSingleBlobSso(r.kdfParams));
+        needed = isReleasedSingleBlob ? 1 : TWO_LAYER_THRESHOLD;
+    } else {
+        const allSingleBlob = hasSso && ssoRows.every(r => isSingleBlobSso(r.kdf_params));
+        needed = allSingleBlob ? 1 : (hasSso ? TWO_LAYER_THRESHOLD : TWO_LAYER_THRESHOLD + 1);
+    }
 
     return {
         status: state.collection.status,

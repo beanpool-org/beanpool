@@ -34,6 +34,7 @@
 import Router from '@koa/router';
 
 import { db } from '../db/db.js';
+import { isSingleBlobSso } from '@beanpool/core';
 import { getMember, dispatchPushNotification } from '../state-engine.js';
 import {
     openCollection,
@@ -162,12 +163,19 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         }
 
         const progress = collectionProgress(collection.id);
+        const ssoRows = db.prepare(`
+            SELECT kdf_params FROM recovery_shares
+            WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso'
+        `).all(pubkey, collection.generation) as { kdf_params: string | null }[];
+        const isSingleBlob = ssoRows.length > 0 && ssoRows.every(r => isSingleBlobSso(r.kdf_params));
+        const defaultThreshold = isSingleBlob ? 1 : 2;
+        const threshold = progress?.threshold ?? defaultThreshold;
         ctx.status = 200;
         ctx.body = {
             collectionId: collection.id,
             generation: collection.generation,
             expiresAt: collection.expiresAt,
-            threshold: progress?.threshold ?? 2,
+            threshold,
             progress,
         };
     });
@@ -191,11 +199,14 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         if (!collection) return notMySession(ctx);
         const releases = listReleases(collection.id);
         const progress = collectionProgress(collection.id);
+        const isSingleBlob = releases.some(r => r.holderType === 'sso' && isSingleBlobSso(r.kdfParams));
+        const defaultThreshold = isSingleBlob ? 1 : 2;
+        const threshold = progress?.threshold ?? defaultThreshold;
         ctx.status = 200;
         ctx.body = {
             collected: releases.length,
-            threshold: progress?.threshold ?? 2,
-            enough: progress?.enough ?? (releases.length >= 2),
+            threshold,
+            enough: progress?.enough ?? (releases.length >= threshold),
             fragments: releases.map(r => ({
                 holderType: r.holderType,
                 shareIndex: r.shareIndex,

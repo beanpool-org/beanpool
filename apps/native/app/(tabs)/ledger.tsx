@@ -439,7 +439,9 @@ export default function LedgerScreen() {
     // Which level the Levels shelf is inspecting (defaults to your current tier until you tap another).
     const selLevel = selectedLevel ?? tierIdx;
 
-    const selectedMember = members.find(m => m.publicKey === sendTo);
+    // ⚡ Bolt: Pre-compute Map to convert O(M) member lookups on render cycles into O(1) constant-time retrievals
+    const membersMap = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
+    const selectedMember = sendTo ? membersMap.get(sendTo) : undefined;
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
 
     // Credit position is now the reusable <CreditBar> component (zero-centred, anchored scale).

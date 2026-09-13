@@ -162,3 +162,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-25 - Grouping Active Transactions in Native MyDealsSheet
 **Learning:** In `apps/native/components/MyDealsSheet.tsx`, deriving `myPosts`, `pendingDeals`, `usePendingDealsCount`, and rendering deal items previously executed `transactions.some(...)` and `transactions.find(...)` scans inside `posts.filter` loops and list renders, leading to $O(P \times T)$ nested array iterations per render.
 **Action:** Grouped active (`pending` / `requested`) transactions by `postId` into a `Map<string, Transaction[]>` via `useMemo`. This turns `myPosts` and `pendingDeals` filter checks and `renderDealItem` related-transaction lookups into $O(1)$ retrievals ($O(P + T)$ overall).
+
+## 2026-09-26 - O(1) Selected Member Lookup in Native Ledger Tab
+**Learning:** In `apps/native/app/(tabs)/ledger.tsx`, resolving selected recipient member details via `members.find(m => m.publicKey === sendTo)` performed an $O(M)$ linear array scan on every render cycle.
+**Action:** Pre-computed `membersMap` using `useMemo` indexed by `publicKey` to convert selected recipient member resolution into an $O(1)$ Map retrieval.

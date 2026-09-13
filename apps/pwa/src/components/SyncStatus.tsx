@@ -21,7 +21,11 @@ function formatTimeAgo(timestamp: number): string {
     return `${hours}h ago`;
 }
 
-export function SyncStatus() {
+interface SyncStatusProps {
+    isMember?: boolean | null;
+}
+
+export function SyncStatus({ isMember: propIsMember }: SyncStatusProps = {}) {
     const [sync, setSync] = useState<SyncState>({
         connected: false,
         lastSyncTime: null,
@@ -36,7 +40,17 @@ export function SyncStatus() {
         return unsub;
     }, []);
 
-    // Membership probe — backed off to 30s + jitter, suspended when WS is connected, paused when hidden
+    // Membership probe — frequent when the WebSocket is closed, slow when it is open.
+    //
+    // This deliberately does NOT suppress the probe entirely while connected. A browser
+    // WebSocket whose NAT mapping has expired, or whose server vanished, accepts `send()` into
+    // the OS buffer without throwing: `readyState` stays OPEN and `sync.connected` stays true.
+    // There is no pong watchdog, so a dead socket reads as healthy indefinitely — and skipping
+    // the probe would leave the indicator falsely green next to a "last synced 45m ago" that
+    // contradicts it. A slow probe keeps it honest and still removes most of the requests:
+    // one per two minutes instead of one per thirty seconds.
+    const probeIntervalMs = sync.connected ? 120_000 : 30_000;
+
     useEffect(() => {
         let cancelled = false;
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -58,10 +72,7 @@ export function SyncStatus() {
         const startPolling = () => {
             if (interval) return;
             probe();
-            // Suspend recurring HTTP probe while the WebSocket is connected
-            if (!sync.connected) {
-                interval = setInterval(probe, withJitter(30_000));
-            }
+            interval = setInterval(probe, withJitter(probeIntervalMs));
         };
 
         const stopPolling = () => {
@@ -89,7 +100,7 @@ export function SyncStatus() {
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [sync.connected]);
+    }, [probeIntervalMs]);
 
     // Auto-update the "time ago" label (pauses when hidden)
     const [, setTick] = useState(0);
@@ -130,13 +141,15 @@ export function SyncStatus() {
     }, []);
 
     // Resolve display state
-    // Online if either WebSocket or HTTP probe confirms connectivity and membership
-    const isMemberConfirmed = isMember === true;
-    const isReachable = sync.connected || isHttpOnline === true;
+    // If the WebSocket is OPEN, derive statusMode directly from socket state.
+    // Fall back to HTTP probe state only when the socket is closed.
+    const effectiveIsMember = propIsMember !== undefined ? propIsMember : isMember;
 
-    const statusMode = (isReachable && isMemberConfirmed)
+    const statusMode = sync.connected
+        ? (effectiveIsMember === false ? 'guest' : 'online')
+        : (isHttpOnline && effectiveIsMember === true)
         ? 'online'
-        : (isReachable && isMember === false)
+        : (isHttpOnline && effectiveIsMember === false)
         ? 'guest'
         : 'offline';
 

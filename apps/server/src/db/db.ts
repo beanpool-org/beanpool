@@ -272,6 +272,10 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE sync_audit_log ADD COLUMN recovery_shares_imported INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN kdf_params TEXT`).run(); } catch { }
 
+    // Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_options TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME`).run(); } catch { }
+
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
 

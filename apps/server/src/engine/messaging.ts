@@ -215,8 +215,11 @@ export function toggleMessageReaction(
             metadata = {};
         }
     }
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        metadata = {};
+    }
 
-    if (!metadata.reactions) {
+    if (!Array.isArray(metadata.reactions)) {
         metadata.reactions = [];
     }
 

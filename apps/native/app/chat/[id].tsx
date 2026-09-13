@@ -98,7 +98,7 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
 
 export default function ChatScreen() {
     const { theme, colors } = useTheme();
-    const { id, triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ id: string; triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
+    const { id, triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ id?: string; triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
     const { identity } = useIdentity();
     const [messages, setMessages] = useState<any[]>([]);
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);

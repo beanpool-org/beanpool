@@ -9,6 +9,7 @@
  */
 
 import { db } from './db.js';
+import { bumpActivityVersion } from '../engine/versions.js';
 
 export type ActivityEventType = 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created';
 
@@ -41,6 +42,7 @@ export function recordActivity(
     `);
 
     const result = stmt.run(eventType, actorPubkey, targetPubkey || null, metaStr);
+    bumpActivityVersion();
     return Number(result.lastInsertRowid);
 }
 
@@ -100,6 +102,10 @@ export function pruneOldActivity(days: number = 30): number {
         DELETE FROM activity_feed 
         WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' days')
     `).run(Math.max(1, days));
+
+    if (res.changes > 0) {
+        bumpActivityVersion();
+    }
 
     return res.changes;
 }

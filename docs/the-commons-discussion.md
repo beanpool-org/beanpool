@@ -1040,3 +1040,283 @@ Claude’s suggestion to link an enterprise to a working group and share join-re
    Marty asked for Owner/Admin badges to be displayed next to names in People and the Marketplace. While transparent, in small intentional communities (especially off-grid or counter-cultural nodes like Mullumbimby/Nimbin), publicly flagging the exact human who pays for the server makes them the target of offline harassment for every automated ban or system failure. Make the badge visible in the **Node Info / Governance** view, but keep marketplace listings focused on trade reputations, not who runs the server box.
 3. **`/settings` Monolith Debt:**
    `apps/server/static/settings.js` is already a large, un-typed, vanilla JavaScript file. Folding the entire fleet manager into it without a component framework or build step will turn `/settings` into an unmaintainable legacy quagmire. Keep the web `/settings` minimal and clean.
+
+---
+
+## Round 6 — settings information architecture
+
+```
+DESIGN TASK — OUTPUT PROSE ONLY. Do NOT modify any file, do not create branches, do not commit.
+Another agent is building in this repo right now. Read only. Answer in your reply.
+
+CONTEXT
+BeanPool nodes are self-hosted community servers. Design ONLY for a STANDALONE node operator —
+a non-technical person running one node for one community (an off-grid intentional community in
+northern NSW is the real driver). Multi-node/fleet needs are explicitly OUT OF SCOPE and must not
+shape anything: every node is an island.
+
+Two admin UIs exist today and one must win:
+A) `apps/server/static/settings.html` + `settings.js` — served by the node at /settings, behind IP
+   allowlist + password + TOTP. **231 KB of untyped vanilla JS, no build step, no component model.**
+   12 tabs: backup, commons, comms, connections, diagnostics, identity, invites, members,
+   moderation, network, pulse, system.
+B) `apps/manager` — React 19 + Vite + Tailwind, typed, unit-tested. Modules: Members, MemberDetail,
+   Invites, Logs, Gateway, Onboarding, Telemetry, Analytics, Topology, ThreatReview, AiServices.
+   Built as a multi-node control plane; `node-client.ts` already takes a nodeUrl per call so it
+   retargets to a single node trivially.
+
+DECIDED ALREADY (do not relitigate):
+- /settings must be COMPLETE for a standalone operator: backups, promote a voucher (can_vouch),
+  tier badges, elder, suspend/freeze/prune, invites, reports, enterprises + keepers, DNS/TLS,
+  peering, logs, ledger audit, Pulse channels, node identity, password/2FA/IP allowlist.
+- Split by REACTIVE vs CONFIGURATIONAL: reactive work (a report to dismiss, a keeper to approve)
+  lives in an in-app mobile drawer; configuration lives on the web. Some things appear in both at
+  different depth.
+- Deploying/restarting the node's own container stays OUT of any web UI (RCE surface). Web shows
+  read-only version / update-available / last-backup-succeeded instead.
+- Auth becomes the operator's member key + TOTP; the password demotes to break-glass that can ONLY
+  enrol a new admin key.
+
+QUESTIONS — answer each with a decision, not a menu.
+
+Q1. LOOK AND CODEBASE. Keep settings.html's look, adopt the manager's look, hybrid, or design fresh?
+    Separate the two axes explicitly: which CODEBASE survives, and which VISUAL LANGUAGE/IA survives.
+    Note the manager's IA was designed around a fleet (node list, topology, cross-node compare) which
+    is now irrelevant. Be concrete about what a single-node operator's home screen should show the
+    second they log in.
+
+Q2. THE TAB RESHUFFLE. Everything is on the table. Propose the definitive top-level navigation for a
+    standalone operator — how many sections, what each is called in PLAIN ENGLISH (the audience is a
+    community member who volunteered, not a sysadmin), and what lives under each. Say explicitly
+    which of the current 12 tabs you are merging, renaming, splitting or deleting, and why. Optimise
+    for "I know where to go" over "everything has its own tab".
+
+Q3. WHAT IS MISSING. Known gaps: there is NO UI anywhere to assign a keeper to an enterprise (it is
+    literally curl-only today); no UI to create/manage enterprises beyond a bare create form; nothing
+    for the node_roles owner/admin model being built now; nothing for the Decisions/Polls governance
+    being built now; backup RESTORE and scheduling are unclear; no version/update-available display;
+    no break-glass key-enrolment screen. What else is missing that a real community operator will
+    need in their first month? Think about what actually goes wrong: someone can't sign in, someone
+    is abusive, the disk fills, a trade dispute, an invite that didn't arrive, a member who left.
+
+Q4. FIRST-RUN. A brand new node has one person, no members, no enterprises, no data. What does
+    /settings show them, in what order, so they end up with a working community rather than an empty
+    dashboard? Be specific — this is where most self-hosted software loses people.
+
+Q5. MOBILE DRAWER. What exactly is in the in-app reactive queue? Keep it to the smallest set that is
+    genuinely time-sensitive. What does a notification for each one say?
+
+Q6. What in the above is wrong, and what would you cut. Blunt.
+
+Tight prose. No code. Answer by question ID.
+```
+
+## Round 6 — Antigravity
+
+### Q1. LOOK AND CODEBASE
+
+**Codebase Decision:** [`apps/manager`](file:///Users/marty/projects/beanpool/apps/manager) survives. [`apps/server/static/settings.html`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html) and [`settings.js`](file:///Users/marty/projects/beanpool/apps/server/static/settings.js) are deleted.
+- **Why:** 231 KB of untyped imperative string-soup with zero component boundaries, no tests, and manual DOM manipulation cannot safely support complex workflows like multi-operator assignment, snapshot restoration wizards, or the new `node_roles` model. The manager's React 19 + Vite + Tailwind + TypeScript stack provides unit-tested state handling, accessible UI primitives, and clean compile targets. The Vite build output compiles directly into static assets served at `/settings` by the node's HTTP server.
+- **Retargeting:** Strip the multi-node registry, fleet switcher, and remote target selector from [`apps/manager/src/lib/node-client.ts`](file:///Users/marty/projects/beanpool/apps/manager/src/lib/node-client.ts); all client calls point directly to relative endpoints on `window.location.origin`.
+
+**Visual Language and IA Decision:** The Manager's *design system* survives; its *fleet IA* dies.
+- **Visual System:** Slate/dark-mode palette, clean typography, badge hierarchy, and structured modals survive. The cramped table dumps and nested raw HTML borders of [`settings.html`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html) are discarded.
+- **IA Overhaul:** Every fleet artifact—the multi-node selector, cluster topology graph ([`TopologyModule.tsx`](file:///Users/marty/projects/beanpool/apps/manager/src/components/modules/TopologyModule.tsx)), cross-node metrics comparison, and AI summary modules ([`AiServicesModule.tsx`](file:///Users/marty/projects/beanpool/apps/manager/src/components/modules/AiServicesModule.tsx))—is removed.
+
+**The Operator Home Screen:** The second an operator logs into `/settings`, they see a clean, single-screen **Community Pulse & Appliance Status**:
+1. **Community Header:** Community callsign and name (e.g., *Bindarrabi Community · Northern NSW*), node public domain, and overall appliance status: `🟢 Online · Ledger Balanced (0 Drift) · Backed Up 3h Ago · v1.4.2`.
+2. **Action Required Banner (Zero or Highlighted):** A prominent banner that either reads `All Clear: No pending member reports, stalled trades, or system alerts` or highlights immediate tasks: `⚠️ 1 report pending review`, `🎟️ 2 invites awaiting activation`, or `💾 Storage at 82%`.
+3. **Four Vital Metric Cards:**
+   - **Members:** `28 Active · 3 Onboarded this week · 4 Appointed Vouchers`
+   - **Commons Pool:** `1,420 Beans · 1 active voting round ending in 2 days`
+   - **Shared Enterprises:** `2 Active (🥚 Community Eggs, 🛠️ Tool Shed) · 4 Stewards`
+   - **Circulation & Trade:** `14 trades this week · 380 Beans circulated · 0 stalled escrows`
+4. **Primary Quick Actions:** `Invite New Member`, `Create Enterprise`, `Run Ledger Audit`, and `Download Backup Snapshot`.
+
+---
+
+### Q2. THE TAB RESHUFFLE
+
+Navigation is consolidated from 12 disconnected technical tabs into **4 plain-English sections**. A volunteer running an off-grid community needs mental clarity around purpose, not infrastructure partitions.
+
+```
++------------------------------------------------------------------------------------+
+|  [Bindarrabi Node]   1. People & Safety   2. Shared Projects   3. Bulletin & News  |
+|                      4. Appliance & Data                                           |
++------------------------------------------------------------------------------------+
+```
+
+#### The 4 Plain-English Sections
+
+1. **People & Safety**
+   - *What lives here:* The living community directory, invitation engine, trust-tier assignments, role appointments, and moderation center.
+   - *Specific controls:*
+     - Member directory table: filter by Active, Voucher, Suspended, or Pruned.
+     - Member inspection drawer: adjust trust badges (Newcomer → Active → Elder), toggle voucher authority ([`can_vouch`](file:///Users/marty/projects/beanpool/apps/server/src/state-engine.ts#L1654)), promote/demote node roles (`owner` / `admin`), or freeze/suspend/prune an account.
+     - Invites pane: generate invite codes, generate printable/scannable QR cards, and monitor pending or expired invites.
+     - Safety & reports: report triage inbox, post removal, and flag logs.
+   - *Tabs absorbed:* Merges [`members`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1271), [`invites`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L955), and [`moderation`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1281).
+
+2. **Shared Projects & Economy**
+   - *What lives here:* The community's collective economic assets—the shared Commons pool, community-owned trading enterprises, and collective decisions.
+   - *Specific controls:*
+     - Commons Pool: liquid balance display, demurrage circulation rate slider (with explanation: *"How quickly idle credit returns to the community pool"*), and manual pool injection/sweep.
+     - Enterprises & Stewards: create an enterprise with name, credit line, and avatar; inspect balance and live listings; and **assign/revoke enterprise stewards** ([`adminAssignTreasuryOperator`](file:///Users/marty/projects/beanpool/apps/server/src/state-engine.ts#L1739-L1753)).
+     - Decisions & Polls: create binding funding rounds, launch non-binding community polls, and view passed decisions awaiting administrative execution.
+   - *Tabs absorbed:* Merges [`commons`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1452) with enterprise and governance controls.
+
+3. **Bulletin & News**
+   - *What lives here:* Outbound announcements to member devices and curation of external educational feeds.
+   - *Specific controls:*
+     - Emergency & Community Broadcasts: push announcements directly to member mobile devices with severity styling (Info, Warning, Emergency).
+     - Pulse Channels: curate RSS and YouTube channel links (farming, making, repair, solar maintenance) for the in-app Pulse discovery feed.
+   - *Tabs absorbed:* Merges [`pulse`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1496) and the broadcast half of [`comms`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1538).
+
+4. **Appliance & Data**
+   - *What lives here:* The physical host's operational health, off-site replication, network routing, and security keys.
+   - *Specific controls:*
+     - Backups & Recovery: scheduled automated snapshots, one-click manual backup download, live offsite replica status, and the **Backup Restore Wizard**.
+     - System Vitals: storage/disk gauge, CPU/memory indicators, connected mobile WebSocket count, and searchable live node logs.
+     - Integrity & Ledger: one-click execution of [`runLedgerAudit`](file:///Users/marty/projects/beanpool/apps/server/src/state-engine.ts#L3650) (conservation guard, drift check, stranded escrow audit).
+     - Network & Identity: node callsign, domain name / DNS status, TLS certificate validity, and federation peering links to neighboring communities.
+     - Access & Break-Glass: enroll operator member keypair, configure TOTP 2FA, IP allowlist, and break-glass password reset.
+   - *Tabs absorbed:* Merges [`backup`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1722), [`system`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1201), [`diagnostics`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1596), [`connections`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1951), [`identity`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L737), and [`network`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1014).
+
+#### Explicit Accounting of the 12 Original Tabs
+- **`backup`**: Merged into **Appliance & Data**.
+- **`commons`**: Merged into **Shared Projects & Economy**.
+- **`comms`**: Split. Broadcast announcements move to **Bulletin & News**; the raw web-based member chat inbox is **deleted** (operators chat via the mobile app, not a web console).
+- **`connections`**: Deleted as a tab. Reduced to a simple integer counter (`Active Connections: 14`) on the **Appliance & Data** health card.
+- **`diagnostics`**: Merged into **Appliance & Data** (logs, hardware usage, and ledger audit).
+- **`identity`**: Merged into **Appliance & Data** under "Node Profile & Public Address".
+- **`invites`**: Merged into **People & Safety**.
+- **`members`**: Merged into **People & Safety**.
+- **`moderation`**: Merged into **People & Safety**.
+- **`network`**: Merged into **Appliance & Data** under "Internet Address & Peering".
+- **`pulse`**: Merged into **Bulletin & News**.
+- **`system`**: Merged into **Appliance & Data**.
+
+---
+
+### Q3. WHAT IS MISSING
+
+Beyond the known gaps, a non-technical volunteer running an off-grid community node will encounter six practical operational crises in their first 30 days:
+
+1. **Lost Phone / Identity Re-Keying Assistance:**
+   - *The Reality:* A member drops their phone in a creek, breaks their screen, or buys a new phone without writing down their 12 words.
+   - *Missing UI:* An **Account Re-Keying Wizard**. The operator needs a tool to inspect the member's public key, verify their identity in person, invalidate the old lost device key, issue an atomic re-enrollment code, and bind their existing balance, vouchers, and trade history to the replacement device's public key.
+2. **Stalled Trade & Escrow Dispute Resolution:**
+   - *The Reality:* A member pledges 50 Beans for firewood or fencing. The buyer claims the wood wasn't delivered; the seller claims it was stacked at the front gate. Escrow is locked in `status = 'pending'`. The beans are stranded indefinitely, eroding trust in the currency.
+   - *Missing UI:* An **Escrow Dispute Arbitrator**. An operator screen listing transactions locked in escrow for >7 days, displaying the post details and chat transcript, with three explicit resolution buttons: `Release to Seller`, `Refund to Buyer`, or `Split 50/50`.
+3. **Storage Runaway & Media Cache Pruner:**
+   - *The Reality:* Off-grid nodes run on compact hardware (e.g., Raspberry Pi, mini-PC) with small SSDs or SD cards. Members post high-resolution photos of machinery, animals, and produce. Within weeks, the media directory fills the disk, crashing SQLite.
+   - *Missing UI:* A **Disk Health & Storage Maintenance Tool**. It shows disk usage breakdown (Database vs. Media vs. Logs) with an automated warning at 80% capacity and a one-click button: `Clean Orphaned Media & Compress Logs`.
+4. **Member Offboarding / Debt & Credit Settlement:**
+   - *The Reality:* A member moves away from the community. They might hold a surplus balance of +300 Beans or an overdraft debt of -150 Beans.
+   - *Missing UI:* An **Offboarding Wizard**. For positive balances: offers to donate the remaining beans to the Commons Pool or gift them to another member. For negative balances (debt): allows the community admin to record a formal debt-forgiveness write-off (balancing against the Commons Pool) before archiving the account to `status = 'pruned'`.
+5. **In-Person QR Invite Generator & Print Sheet:**
+   - *The Reality:* SMS and email invites fail constantly in low-reception rural areas. Community onboarding happens face-to-face at weekly dinners or work bees.
+   - *Missing UI:* A **Printable Invite Card Generator**. Creates a printable PDF or high-contrast screen modal with a single large QR code containing the node URL, bootstrap token, and pre-assigned voucher context, allowing newcomers to scan and join instantly without manual typing.
+6. **Sudden Power Outage Recovery Status:**
+   - *The Reality:* Intentional off-grid communities experience battery depletion and solar inverter dropouts. The node loses power abruptly.
+   - *Missing UI:* An **Unclean Shutdown Diagnostic Banner**. On reboot, the UI executes SQLite `PRAGMA integrity_check` and displays an explicit card: `Node recovered from sudden power loss at 04:12 AM. Database integrity 100% verified; zero corrupted blocks.` This reassures a nervous volunteer operator that their community's currency is safe.
+
+---
+
+### Q4. FIRST-RUN
+
+When an operator boots a fresh node with zero members, zero enterprises, and zero transactions, `/settings` replaces the dashboard with a sequential, 5-step onboarding wizard: **"Community Cold-Start"**.
+
+```
+[ Step 1: Identity ] ──> [ Step 2: Admin Key ] ──> [ Step 3: First Enterprise ] ──> [ Step 4: Commons Seed ] ──> [ Step 5: First 3 Invites ]
+```
+
+1. **Step 1: Name & Locate Your Community (2 minutes)**
+   - Inputs: Community Name (e.g., *Bindarrabi Community*), Short Callsign (e.g., *BIND*), and Community Avatar.
+   - Node checks its public reachability and renders an immediate green indicator: `Public address verified: https://bindarrabi.beanpool.net`.
+2. **Step 2: Enroll Your Admin Keypair & Secure Access (2 minutes)**
+   - Instead of leaving the node gated by a shared plaintext password, the screen displays a pairing QR code.
+   - The operator scans the code with their BeanPool mobile app. The server binds the operator's personal Ed25519 identity key as the node `owner`.
+   - The operator sets up TOTP 2FA.
+   - The screen generates a single-use **Break-Glass Emergency Recovery Kit** (a downloadable text file containing a 24-word emergency recovery seed and break-glass token) with an explicit checkbox: *"I have saved this file off-node."*
+3. **Step 3: Seed Your First Community Enterprise (3 minutes)**
+   - An empty economy cannot function. The wizard guides the creation of the community's first shared enterprise using guided presets:
+     - 🥚 **Community Food & Produce** (e.g., *Community Eggs / Flock*)
+     - 🛠️ **Shared Infrastructure** (e.g., *Tool Shed / Workshop*)
+     - 🚜 **Shared Machinery & Fuel** (e.g., *Tractor / Firewood*)
+   - Selecting a preset automatically calls [`createTreasury`](file:///Users/marty/projects/beanpool/apps/server/src/state-engine.ts#L2893-L2938) with a 200-Bean credit floor and appoints the operator as its initial steward.
+   - Prompts the creation of its first live marketplace offer (e.g., *"Weekly Egg Allocation · 5 Beans"*), satisfying the Offer Covenant so the enterprise can immediately post paid tenders.
+4. **Step 4: Seed the Commons Circulation (1 minute)**
+   - Sets the base demurrage circulation rate (default: 1.0%/month, pre-filled with explanation).
+   - Allows an optional initial bootstrap grant from the genesis pool into the Commons Pool (e.g., 500 Beans) to fund initial community work needs.
+5. **Step 5: Generate Founding Invitations (2 minutes)**
+   - Generates 3 founding member invite links and QR codes.
+   - Explains the founding trust structure: *"Founding members will enter at the Active tier. Once joined, you can grant them Voucher privileges so they can onboard their households."*
+   - Provides a `Print Welcome Cards` button.
+
+**Exit Condition:** Once Step 5 is acknowledged, the wizard dismisses, and the operator is placed into the primary Home Screen with the progress badge: `1/3 Founding Invites Claimed · Node Ready for Trade`.
+
+---
+
+### Q5. MOBILE DRAWER
+
+The in-app mobile drawer is strictly reserved for **synchronous, human-blocking events**. Any task that does not halt someone's day-to-day life or physical community trade belongs on the web.
+
+The reactive queue contains exactly **5 items**:
+
+1. **Abuse or Harassment Report**
+   - *Trigger:* A member flags a post, comment, or message as abusive or fraudulent.
+   - *Why urgent:* Harassment or toxic conflict in a small intentional community spreads within hours if unaddressed.
+   - *Notification Copy:* `🚩 Safety Report: [Reporter] flagged a post by [Author] in [Category] — tap to review and take action.`
+   - *In-Drawer Actions:* `Dismiss Report` | `Remove Post` | `Freeze Member (24h)`.
+2. **Enterprise Worker Bid Approval**
+   - *Trigger:* A community member bids to perform a task posted by an enterprise (e.g., tending the flock or clearing a fire break).
+   - *Why urgent:* The member is ready to do physical work now; they cannot start until the enterprise locks the agreed beans in escrow.
+   - *Notification Copy:* `🤝 Worker Bid: [Worker] offered to fulfill '[Need Title]' on [Enterprise Name] (for [Amount] Beans) — tap to accept.`
+   - *In-Drawer Actions:* `Accept Bid & Lock Escrow` | `Decline Bid`.
+3. **Enterprise Task Completion & Payout**
+   - *Trigger:* The worker has marked the enterprise task as finished.
+   - *Why urgent:* Withholding payment for completed physical community labor causes immediate social friction.
+   - *Notification Copy:* `✅ Task Finished: [Worker] completed '[Need Title]' for [Enterprise Name] — tap to release [Amount] Beans.`
+   - *In-Drawer Actions:* `Release Escrow Payout` | `Message Worker`.
+4. **New Member Vouch Request**
+   - *Trigger:* A newly arrived resident has joined via an invite link and needs their credit floor activated to buy groceries or trade.
+   - *Why urgent:* A newcomer locked at a 0-Bean limit cannot participate in the local economy.
+   - *Notification Copy:* `🌱 Newcomer Arrival: [Callsign] joined via [Inviter] — tap to verify and assign their credit floor.`
+   - *In-Drawer Actions:* `Assign Newcomer Floor (50 Beans)` | `Assign Active Floor (200 Beans)` | `Dismiss`.
+5. **Node Hardware Emergency Alert**
+   - *Trigger:* Host disk space exceeds 90%, or the local node has failed offsite backup replication for >24 hours.
+   - *Why urgent:* The host appliance is facing imminent crash or unrecoverable data loss.
+   - *Notification Copy:* `🚨 Node Appliance Alert: Host storage is at 92% capacity (1.2 GB left) — tap to run emergency cleanup.`
+   - *In-Drawer Actions:* `Run Storage Prune` | `Acknowledge (Snooze 4h)`.
+
+---
+
+### Q6. WHAT IS WRONG AND WHAT TO CUT (BLUNT)
+
+1. **The 231 KB Untyped Vanilla JS Monolith Is Technical Suicide:**
+   Attempting to patch, refactor, or preserve [`settings.js`](file:///Users/marty/projects/beanpool/apps/server/static/settings.js) is a trap. It has no build step, no types, no lint guards, and no component model. Any attempt to layer modern cryptographic auth, role management, and multi-step wizards onto this file will cause endless regression bugs. **Cut it completely.** Compile [`apps/manager`](file:///Users/marty/projects/beanpool/apps/manager) into static distribution files and serve them at `/settings`.
+
+2. **The Fleet Manager Baggage Must Be Ruthlessly Purged:**
+   Half of [`apps/manager`](file:///Users/marty/projects/beanpool/apps/manager) is multi-node bloat built for a cloud SaaS operator.
+   - **Cut [`TopologyModule.tsx`](file:///Users/marty/projects/beanpool/apps/manager/src/components/modules/TopologyModule.tsx):** 84 KB of canvas physics simulating multi-node P2P clusters. A standalone community server running on solar in the bush does not care about cross-node topology.
+   - **Cut [`AiServicesModule.tsx`](file:///Users/marty/projects/beanpool/apps/manager/src/components/modules/AiServicesModule.tsx):** Third-party LLM log summarization has zero place on an off-grid sovereign server. It violates the core privacy contract of self-hosted community infrastructure.
+   - **Cut Multi-Node Switchers:** Purge active profile selectors, target URL pickers, and node-registration forms. The appliance UI must know only itself.
+
+3. **Delete the Web-Based Chat Client:**
+   [`settings.html#L1538-L1570`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1538-L1570) embeds a 400-pixel split-pane direct messaging console into the web admin panel. This is absurd. Community operators carry phones running the native BeanPool app with real-time push and encrypted chat. They will never sit at a desktop browser to reply to a member's direct message. **Delete the admin inbox from the web.** Retain only the one-way emergency announcement broadcast tool.
+
+4. **Delete the Live Connection Monitor:**
+   [`settings.html#L1951`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1951) exposes a live list of raw IP addresses, WebSocket file descriptors, and user-agent strings. This is sysadmin voyeurism that provides zero operational utility to a community volunteer. **Cut the tab.** Reduce it to a single status badge: `Connections: 18 active`.
+
+5. **Kill the Algorithmic Threshold Sliders:**
+   [`settings.html#L1360-L1413`](file:///Users/marty/projects/beanpool/apps/server/static/settings.html#L1360-L1413) presents 8 raw numeric integer inputs for Sybil funnel windows, wash trading hours, and isolated branch transaction counts. Handing an off-grid community elder a field labeled *"Sybil Funnel Window (days)"* or *"Isolated Branch Min Txns"* is peak engineering disconnect. They do not know what values to enter and will break fraud detection. **Hardcode sensible defaults in the ledger engine and remove threshold tuning from the primary UI entirely.**
+
+6. **End the "Keeper" Terminology Disaster:**
+   The codebase uses "Keeper" for two conflicting things:
+   - A friend holding an encrypted disaster-recovery key slice ([`recovery_shares`](file:///Users/marty/projects/beanpool/apps/server/src/db/db.ts#L162)).
+   - A member stewarding a community enterprise ([`treasury_operators`](file:///Users/marty/projects/beanpool/apps/server/src/db/db.ts#L381)).
+   This creates severe confusion among developers and operators alike. **Eliminate the word "Keeper" from all enterprise and admin UI.** Enterprise operators are **"Stewards"**; key-fragment holders are **"Recovery Friends"**.
+
+7. **Stop Trying to Put Reactive Work on the Desktop Web:**
+   Any plan that expects an operator to sit at a desktop computer to approve worker bids, resolve disputes, or review emergency reports will fail. In an intentional community, disputes happen at the community garden or kitchen. If reactive actions do not land on the operator's phone via the in-app drawer, they will sit un-actioned for weeks. Ensure all reactive approvals live exclusively in the mobile drawer, leaving `/settings` purely for intentional configuration.

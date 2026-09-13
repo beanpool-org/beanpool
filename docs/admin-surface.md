@@ -114,8 +114,13 @@ the work arrives.
 | **In-app admin drawer** | `moderation` · `members` · `invites` · `commons` | reactive and daily: reports, a single invite, a pending keeper, pool health |
 | **Web `/settings`** | `backup` · `system` · `network` · `connections` · `diagnostics` · `identity` · `comms` · `pulse` | configurational and heavy: certificates, gateways, logs, feeds, maintenance |
 
+**Some things live in both, at different depth.** `members` is the clearest case: the in-app drawer
+shows the *queue* — a pending keeper, someone to suspend right now — while the web tab holds the full
+member table with every lever on it (voucher, tier, elder, freeze, prune). That is not duplication;
+it is the same data at two depths, and the in-app view always links out to the full tab.
+
 The in-app drawer is **not** a port of those tabs. It is the *queue* — the handful of things waiting
-for a decision — with a link out to the full tab for anything more.
+for a decision — with a link out for anything more.
 
 ---
 
@@ -160,17 +165,40 @@ loops over several. So:
 This keeps the typed, tested, component-based code and deletes the untyped monolith — rather than the
 reverse.
 
-### 4.3 Machine operations are not community administration
+### 4.3 The line is single-node versus multi-node — not "machine" versus "community"
 
-The fleet manager conflates two jobs, and only one of them belongs to a community:
+*(An earlier draft split this as machine-operations versus community-administration and said the
+machine half stayed Marty's problem. **That was wrong**, and Marty corrected it: every person running
+their own node **is** the machine half. They need their own backups, their own DNS, their own logs,
+their own ability to promote a voucher. There is no half that belongs to someone else.)*
 
-- **Operating the machine** — deploy, containers, image tags, cross-node topology, host-level
-  backups. Sysadmin work. It stays where it is and remains only Marty's problem.
-- **Administering the community** — members, invites, moderation, enterprises, decisions, pool
-  health. This belongs at `/settings` and in the app, reachable by any admin from their phone.
+**`/settings` must be complete for a standalone operator.** It is not a subset of the fleet manager
+and it is not "the easy bits". A community running its own node must be able to do everything for
+that node without opening another tool, without ssh, and without asking us.
 
-A self-hosted community node's host does the first with ssh and docker, as they already do. Do not
-build a web UI for deployment into a community's settings page.
+Explicitly including: **take, restore, schedule and verify their own backups**; promote a member to
+**voucher** (`can_vouch`), grant a tier badge, grant elder; suspend, freeze, prune; generate and
+revoke invites; action reports; create enterprises and assign keepers; configure public address, DNS
+and TLS; manage peering and connectors; read their own logs and ledger audits; curate Pulse channels;
+set node identity; manage their own password, 2FA and IP allowlist.
+
+**Only genuinely multi-node features stay in a separate app:**
+
+- the node switcher and saved node profiles
+- comparing nodes side by side; aggregate cross-fleet analytics
+- the cross-node topology view
+- deploying or updating several nodes in one action
+
+That app stays Marty's — and it should be the *same* React codebase with fleet features behind a
+build flag, not a fork. One code path, two audiences.
+
+**One deliberate carve-out, on security grounds rather than convenience.** Deploying, replacing or
+restarting the node's own container stays **out of any web UI**. A settings page that can swap the
+running image is a remote-code-execution surface on a box in someone's house, reachable by anyone
+holding an admin session. A self-hosting operator does that over ssh, as they already do. What
+`/settings` *should* carry is the read-only half — current version, whether a newer release exists,
+when the last backup succeeded — so the operator knows they need to act without the page being able
+to act for them.
 
 ---
 
@@ -183,7 +211,9 @@ build a web UI for deployment into a community's settings page.
    listings — [`the-commons.md` §9.3](./the-commons.md)).
 3. **Key-based auth alongside the password**, then enrol, verify, demote (§2.4).
 4. **In-app admin drawer** — the reactive queue only.
-5. **Manager retargeted to a single node** and served as `/settings`; retire `settings.js`.
+5. **Manager retargeted to a single node** and served as `/settings`; retire `settings.js`. Fleet
+   features (node switcher, cross-node compare, topology, multi-node deploy) sit behind a build flag
+   in the same codebase rather than a fork.
 6. **Multi-owner rules** and the owner-removal grace window.
 
 ---

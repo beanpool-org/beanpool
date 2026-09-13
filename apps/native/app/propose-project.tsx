@@ -161,6 +161,7 @@ export default function ProposeProjectModal() {
                             style={[styles.input, { justifyContent: 'center' }, fieldBorder('deadline')]}
                             onPress={() => setShowPicker(true)}
                             accessibilityRole="button"
+                            accessibilityLabel={deadlineDate ? `Funding deadline: ${deadlineDate.toISOString().split('T')[0]}` : "Select funding deadline date"}
                         >
                             <Text style={{ color: deadlineDate ? colors.text.heading : colors.text.muted, fontSize: 16 }}>
                                 {deadlineDate ? deadlineDate.toISOString().split('T')[0] : "Select Deadline Date"}

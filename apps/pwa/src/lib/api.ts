@@ -1271,6 +1271,9 @@ export async function treasuryPostNeed(treasury: string, body: { category: strin
 export async function treasuryApprove(treasury: string, transactionId: string): Promise<{ success: boolean }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/approve`, { transactionId });
 }
+export async function treasuryReject(treasury: string, transactionId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
+}
 export async function treasuryComplete(treasury: string, transactionId: string): Promise<{ success: boolean }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId });
 }

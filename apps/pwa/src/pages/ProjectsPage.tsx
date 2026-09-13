@@ -10,9 +10,10 @@ import { ImageLightbox } from '../components/ImageLightbox';
 
 interface Props {
     identity: BeanPoolIdentity | null;
+    onOpenTreasury?: (publicKey: string) => void;
 }
 
-export function ProjectsPage({ identity }: Props) {
+export function ProjectsPage({ identity, onOpenTreasury }: Props) {
     const [projects, setProjects] = useState<CrowdfundProject[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -296,7 +297,19 @@ export function ProjectsPage({ identity }: Props) {
                     <h2 className="text-white font-bold text-sm mb-2 flex items-center gap-2"><span>🏛️</span> Community Treasuries</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {treasuries.map(t => (
-                            <div key={t.publicKey} className={`bg-nature-900 border rounded-xl p-3 flex items-center gap-3 ${t.link ? 'border-sky-900/60' : 'border-nature-800'}`}>
+                            <div
+                                key={t.publicKey}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => onOpenTreasury?.(t.publicKey)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        onOpenTreasury?.(t.publicKey);
+                                    }
+                                }}
+                                className={`bg-nature-900 border rounded-xl p-3 flex items-center gap-3 cursor-pointer hover:border-emerald-500/60 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${t.link ? 'border-sky-900/60' : 'border-nature-800'}`}
+                            >
                                 {resolveAvatarUrl(t.avatar) ? (
                                     <img src={resolveAvatarUrl(t.avatar)!} alt="" className="w-10 h-10 rounded-full object-cover" />
                                 ) : (

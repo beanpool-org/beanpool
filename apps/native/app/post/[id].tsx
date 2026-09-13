@@ -11,7 +11,8 @@ import {
     getPost, updatePost, deletePost, pausePost, resumePost,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
-    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, getUnreadCountForPost, getBalance
+    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, getUnreadCountForPost, getBalance,
+    treasuryApprove, treasuryComplete, treasuryReject
 } from '../../utils/db';
 import { useIdentity } from '../IdentityContext';
 import { loadIdentity } from '../../utils/identity';
@@ -402,6 +403,7 @@ export default function PostDetailModal() {
 
     const [unreadCount, setUnreadCount] = useState<number>(0);
     const [reqUnreadCounts, setReqUnreadCounts] = useState<Record<string, number>>({});
+    const [operatedTreasuries, setOperatedTreasuries] = useState<string[]>([]);
 
     useFocusEffect(
         useCallback(() => {
@@ -457,13 +459,33 @@ export default function PostDetailModal() {
                             WHERE t.id = ?
                         `, [singleTxId]).then(updateActiveTx);
                     } else if (activeIdentity) {
-                        database.getFirstAsync(`
-                            SELECT t.*, m.callsign as buyer_callsign, m.avatar_url as buyer_avatar, s.callsign as seller_callsign, s.avatar_url as seller_avatar 
-                            FROM marketplace_transactions t 
-                            LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
-                            LEFT JOIN members s ON t.seller_pubkey = s.public_key 
-                            WHERE t.post_id=? AND t.status='pending' AND (t.buyer_pubkey=? OR t.seller_pubkey=?) ORDER BY t.created_at DESC LIMIT 1
-                        `, [singleId, activeIdentity.publicKey, activeIdentity.publicKey]).then(updateActiveTx);
+                        const currentPost = await getPost(singleId);
+                        let isKeeper = false;
+                        try {
+                            const b = await getBalance(activeIdentity.publicKey);
+                            const mine: string[] = Array.isArray((b as any)?.keeperOf) ? (b as any).keeperOf : [];
+                            if (currentPost?.author_pubkey && mine.includes(currentPost.author_pubkey)) {
+                                isKeeper = true;
+                            }
+                        } catch {}
+
+                        if (isKeeper || currentPost?.author_pubkey === activeIdentity.publicKey) {
+                            database.getFirstAsync(`
+                                SELECT t.*, m.callsign as buyer_callsign, m.avatar_url as buyer_avatar, s.callsign as seller_callsign, s.avatar_url as seller_avatar 
+                                FROM marketplace_transactions t 
+                                LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
+                                LEFT JOIN members s ON t.seller_pubkey = s.public_key 
+                                WHERE t.post_id=? AND t.status='pending' ORDER BY t.created_at DESC LIMIT 1
+                            `, [singleId]).then(updateActiveTx);
+                        } else {
+                            database.getFirstAsync(`
+                                SELECT t.*, m.callsign as buyer_callsign, m.avatar_url as buyer_avatar, s.callsign as seller_callsign, s.avatar_url as seller_avatar 
+                                FROM marketplace_transactions t 
+                                LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
+                                LEFT JOIN members s ON t.seller_pubkey = s.public_key 
+                                WHERE t.post_id=? AND t.status='pending' AND (t.buyer_pubkey=? OR t.seller_pubkey=?) ORDER BY t.created_at DESC LIMIT 1
+                            `, [singleId, activeIdentity.publicKey, activeIdentity.publicKey]).then(updateActiveTx);
+                        }
                     }
 
                     database.getAllAsync(`
@@ -584,12 +606,18 @@ export default function PostDetailModal() {
         }
     }, [activeTx?.id, post?.pending_transaction_id, identity?.publicKey]);
 
-    // Track whether the viewer still needs to list an Offer (Gate 1).
+    // Track whether the viewer still needs to list an Offer (Gate 1) and enterprises they operate.
     useEffect(() => {
         if (!identity?.publicKey) return;
         let cancelled = false;
         getBalance(identity.publicKey)
-            .then(b => { if (!cancelled) setBlockedFromTrading(!!(b as any).isBlockedFromTrading); })
+            .then(b => {
+                if (!cancelled) {
+                    setBlockedFromTrading(!!(b as any).isBlockedFromTrading);
+                    const mine: string[] = Array.isArray((b as any).keeperOf) ? (b as any).keeperOf : [];
+                    setOperatedTreasuries(mine);
+                }
+            })
             .catch(() => {});
         return () => { cancelled = true; };
     }, [identity?.publicKey]);
@@ -612,7 +640,8 @@ export default function PostDetailModal() {
         );
     }
 
-    const isOwnPost = identity?.publicKey === post.author_pubkey;
+    const isOperatorOfAuthor = !!(post.author_pubkey && operatedTreasuries.includes(post.author_pubkey));
+    const isOwnPost = identity?.publicKey === post.author_pubkey || isOperatorOfAuthor;
     const isPulsePost = (post.author_callsign || post.authorCallsign) === 'Daily Pulse';
     
     // --- Escrow Roles ---
@@ -620,10 +649,10 @@ export default function PostDetailModal() {
         ? (activeTx.buyer_pubkey === identity?.publicKey || activeTx.seller_pubkey === identity?.publicKey) && !isOwnPost
         : (identity?.publicKey === post.accepted_by);
     const isPayer = activeTx
-        ? activeTx.buyer_pubkey === identity?.publicKey
+        ? (activeTx.buyer_pubkey === identity?.publicKey || (isOperatorOfAuthor && activeTx.buyer_pubkey === post.author_pubkey))
         : ((post.type === 'offer' && isAcceptedByMe) || (post.type === 'need' && isOwnPost));
     const isPayee = activeTx
-        ? activeTx.seller_pubkey === identity?.publicKey
+        ? (activeTx.seller_pubkey === identity?.publicKey || (isOperatorOfAuthor && activeTx.seller_pubkey === post.author_pubkey))
         : ((post.type === 'offer' && isOwnPost) || (post.type === 'need' && isAcceptedByMe));
     const targetPeerCallsign = activeTx 
         ? (isPayer ? activeTx.seller_callsign || 'Peer' : activeTx.buyer_callsign || 'Peer')
@@ -721,7 +750,11 @@ export default function PostDetailModal() {
         if (!identity) return;
         setAccepting(true);
         try {
-            await approveMarketplaceRequest(transactionId, identity.publicKey);
+            if (isOperatorOfAuthor) {
+                await treasuryApprove(post.author_pubkey, transactionId);
+            } else {
+                await approveMarketplaceRequest(transactionId, identity.publicKey);
+            }
             const updated = await getPost(post.id);
             setPost(updated);
             hapticSuccess();
@@ -755,7 +788,11 @@ export default function PostDetailModal() {
             const req = requests.find(r => r.id === rejectModalTxId);
             const peerPubkey = req ? (post.type === 'need' ? req.seller_pubkey : req.buyer_pubkey) : null;
             
-            await rejectMarketplaceRequest(rejectModalTxId, identity.publicKey);
+            if (isOperatorOfAuthor) {
+                await treasuryReject(post.author_pubkey, rejectModalTxId);
+            } else {
+                await rejectMarketplaceRequest(rejectModalTxId, identity.publicKey);
+            }
             
             // Optionally send the reject message if provided
             if (rejectMessage.trim() && peerPubkey) {
@@ -972,7 +1009,11 @@ export default function PostDetailModal() {
                                                 if (!identity) return;
                                                 setAccepting(true);
                                                 try {
-                                                    await completeMarketplaceTransaction(txToComplete, identity.publicKey, post.price_type !== 'fixed' ? Number(completeHours) : undefined);
+                                                    if (isOperatorOfAuthor) {
+                                                        await treasuryComplete(post.author_pubkey, txToComplete);
+                                                    } else {
+                                                        await completeMarketplaceTransaction(txToComplete, identity.publicKey, post.price_type !== 'fixed' ? Number(completeHours) : undefined);
+                                                    }
                                                     setShowCompleteConfirm(false);
                                                     
                                                     const targetPubkey = isPayer ? (activeTx?.seller_pubkey || post.accepted_by) : (activeTx?.buyer_pubkey || post.author_pubkey);

@@ -14,7 +14,7 @@ import Router from '@koa/router';
 import {
     createTreasury, adminSetOperator, canOperateTreasury,
     treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
-    createPost, approvePostRequest, completePostTransaction,
+    createPost, approvePostRequest, completePostTransaction, rejectPostRequest,
     getBalance, moveToCommons, conservingTransaction,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
@@ -150,6 +150,26 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ).all(treasury, treasury) as any[]).map(f => ({
             amount: f.amount, memo: f.memo, timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
         }));
+        const pendingBids = db.prepare(`
+            SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
+                   p.title as post_title, p.type as post_type, p.price_type,
+                   m.callsign as peer_callsign, m.avatar_url as peer_avatar
+            FROM marketplace_transactions t
+            JOIN posts p ON t.post_id = p.id
+            LEFT JOIN members m ON t.seller_pubkey = m.public_key
+            WHERE t.buyer_pubkey = ? AND t.status = 'requested'
+            ORDER BY t.created_at DESC
+        `).all(treasury) as any[];
+        const activeDeals = db.prepare(`
+            SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
+                   p.title as post_title, p.type as post_type, p.price_type,
+                   m.callsign as peer_callsign, m.avatar_url as peer_avatar
+            FROM marketplace_transactions t
+            JOIN posts p ON t.post_id = p.id
+            LEFT JOIN members m ON t.seller_pubkey = m.public_key
+            WHERE t.buyer_pubkey = ? AND t.status = 'pending'
+            ORDER BY t.created_at DESC
+        `).all(treasury) as any[];
         ctx.body = {
             publicKey: treasury, name: m.callsign,
             avatar: m.avatar_url
@@ -158,7 +178,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     : `/api/avatar/${treasury}?size=thumb`)
                 : null,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
-            liveOffers: b.liveOffers, posts, flow,
+            liveOffers: b.liveOffers, posts, flow, pendingBids, activeDeals,
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
             keepers: treasuryKeepers(treasury),
@@ -301,6 +321,19 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             const tx = completePostTransaction(String(transactionId), treasury);
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
+            ctx.body = { success: true, transaction: tx };
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+    });
+
+    // Reject a bid on the treasury's Need
+    router.post('/api/treasury/:treasury/reject', async (ctx) => {
+        const { treasury } = ctx.params;
+        if (!requireOperator(ctx, treasury)) return;
+        const { transactionId } = (ctx as any).requestBody || {};
+        if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
+        try {
+            const tx = rejectPostRequest(String(transactionId), treasury);
+            if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not reject (not this treasury’s deal, or already actioned)' }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
     });

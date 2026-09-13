@@ -1838,6 +1838,9 @@ export async function treasuryApprove(treasury: string, transactionId: string) {
 export async function treasuryComplete(treasury: string, transactionId: string) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId });
 }
+export async function treasuryReject(treasury: string, transactionId: string) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
+}
 export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }

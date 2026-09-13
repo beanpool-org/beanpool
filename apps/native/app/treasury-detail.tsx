@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { getTreasuryDetail, getBalance, treasurySweep } from '../utils/db';
+import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject } from '../utils/db';
 import { loadIdentity } from '../utils/identity';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -22,6 +22,7 @@ export default function TreasuryDetailScreen() {
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
+    const [actioningTxId, setActioningTxId] = useState<string | null>(null);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.app },
@@ -132,6 +133,48 @@ export default function TreasuryDetailScreen() {
         }
     };
 
+    const handleApproveBid = async (txId: string) => {
+        if (!params.publicKey) return;
+        setActioningTxId(txId);
+        try {
+            await treasuryApprove(params.publicKey, txId);
+            Alert.alert('Bid Approved ✅', 'Funds locked in trust successfully.');
+            load();
+        } catch (e: any) {
+            Alert.alert('Approve Failed', e.message || 'Could not approve bid.');
+        } finally {
+            setActioningTxId(null);
+        }
+    };
+
+    const handleRejectBid = async (txId: string) => {
+        if (!params.publicKey) return;
+        setActioningTxId(txId);
+        try {
+            await treasuryReject(params.publicKey, txId);
+            Alert.alert('Bid Declined', 'The request has been declined.');
+            load();
+        } catch (e: any) {
+            Alert.alert('Decline Failed', e.message || 'Could not decline bid.');
+        } finally {
+            setActioningTxId(null);
+        }
+    };
+
+    const handleCompleteDeal = async (txId: string) => {
+        if (!params.publicKey) return;
+        setActioningTxId(txId);
+        try {
+            await treasuryComplete(params.publicKey, txId);
+            Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
+            load();
+        } catch (e: any) {
+            Alert.alert('Release Failed', e.message || 'Could not release payment.');
+        } finally {
+            setActioningTxId(null);
+        }
+    };
+
     const formatTime = (t: any) => {
         try {
             const d = new Date(typeof t === 'number' ? t : String(t));
@@ -142,6 +185,8 @@ export default function TreasuryDetailScreen() {
 
     const posts: any[] = detail?.posts || [];
     const flow: any[] = detail?.flow || [];
+    const pendingBids: any[] = detail?.pendingBids || [];
+    const activeDeals: any[] = detail?.activeDeals || [];
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -240,6 +285,67 @@ export default function TreasuryDetailScreen() {
                                         )}
                                     </Pressable>
                                 </View>
+
+                                {pendingBids.length > 0 && (
+                                    <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.brand.primary, paddingTop: 12 }}>
+                                        <Text style={[styles.opTitle, { marginBottom: 8 }]}>PENDING BIDS ON NEEDS ({pendingBids.length})</Text>
+                                        {pendingBids.map((b) => (
+                                            <View key={b.id} style={{ backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default }}>
+                                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{b.post_title}</Text>
+                                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
+                                                    Bid by <Text style={{ fontWeight: '700', color: colors.text.body }}>{b.peer_callsign || 'Member'}</Text> · {b.credits} 🫘
+                                                </Text>
+                                                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                                                    <Pressable
+                                                        style={[styles.opBtn, { paddingVertical: 8 }]}
+                                                        disabled={actioningTxId === b.id}
+                                                        onPress={() => handleApproveBid(b.id)}
+                                                        accessibilityRole="button"
+                                                    >
+                                                        {actioningTxId === b.id ? <ActivityIndicator size="small" color={colors.text.inverse} /> : (
+                                                            <Text style={styles.opBtnText}>Approve Bid ({b.credits} 🫘)</Text>
+                                                        )}
+                                                    </Pressable>
+                                                    <Pressable
+                                                        style={[styles.sweepBtn, { height: 38 }]}
+                                                        disabled={actioningTxId === b.id}
+                                                        onPress={() => handleRejectBid(b.id)}
+                                                        accessibilityRole="button"
+                                                    >
+                                                        <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.solid }]}>Decline</Text>
+                                                    </Pressable>
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+
+                                {activeDeals.length > 0 && (
+                                    <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.brand.primary, paddingTop: 12 }}>
+                                        <Text style={[styles.opTitle, { marginBottom: 8 }]}>DEALS TO PAY / COMPLETE ({activeDeals.length})</Text>
+                                        {activeDeals.map((d) => (
+                                            <View key={d.id} style={{ backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default }}>
+                                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{d.post_title}</Text>
+                                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
+                                                    Worker: <Text style={{ fontWeight: '700', color: colors.text.body }}>{d.peer_callsign || 'Member'}</Text> · {d.credits} 🫘 in escrow
+                                                </Text>
+                                                <View style={{ marginTop: 10 }}>
+                                                    <Pressable
+                                                        style={[styles.opBtn, { backgroundColor: colors.feedback.success.solid, paddingVertical: 8 }]}
+                                                        disabled={actioningTxId === d.id}
+                                                        onPress={() => handleCompleteDeal(d.id)}
+                                                        accessibilityRole="button"
+                                                    >
+                                                        {actioningTxId === d.id ? <ActivityIndicator size="small" color={colors.text.inverse} /> : (
+                                                            <Text style={styles.opBtnText}>Release Payment ({d.credits} 🫘)</Text>
+                                                        )}
+                                                    </Pressable>
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+
                                 <Text style={styles.opHint}>
                                     Post the treasury's recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
                                 </Text>
@@ -251,7 +357,7 @@ export default function TreasuryDetailScreen() {
                         {posts.length === 0 ? (
                             <Text style={styles.emptyNote}>No live listings yet.</Text>
                         ) : posts.map((p) => (
-                            <View key={p.id} style={styles.listingCard}>
+                            <Pressable key={p.id} style={styles.listingCard} onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })} accessibilityRole="button">
                                 <View style={styles.listingTopRow}>
                                     <View style={[styles.typeBadge, p.type === 'offer' ? styles.typeBadgeOffer : styles.typeBadgeNeed]}>
                                         <Text style={[styles.typeBadgeText, { color: p.type === 'offer' ? colors.brand.primary : colors.text.secondary }]}>{p.type}</Text>
@@ -266,7 +372,7 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.listingPrice}>{p.credits} 🫘</Text>
                                 </View>
                                 {!!p.description && <Text style={styles.listingDesc} numberOfLines={2}>{p.description}</Text>}
-                            </View>
+                            </Pressable>
                         ))}
 
                         {/* Recent activity */}

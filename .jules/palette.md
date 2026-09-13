@@ -136,3 +136,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-09 - ChannelChips Focus Ring Styling
 **Learning:** `ChannelChips.tsx` rendered interactive external profile links and channel chips without explicit `focus-visible` ring indicators, making keyboard focus highlights invisible or inconsistent.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:focus-visible:ring-emerald-400 focus-visible:ring-offset-1` to channel chips in `ChannelChips.tsx`.
+
+## 2026-09-13 - RecoveryAlertBanner Region Label, Focus Rings, and Touch Targets
+**Learning:** `RecoveryAlertBanner.tsx` rendered an urgent security alert region (`role="region"`) without an `aria-label`, raw decorative emojis (`🚨`, `🛑`) were exposed to screen readers, and the action button lacked minimum touch target height (`min-h-[44px]`), dynamic `aria-busy` state, and focus-visible outline rings.
+**Action:** Added `aria-label="Account recovery alert"` to `role="region"`, wrapped decorative emojis with `aria-hidden="true"`, added `aria-busy={stopping}`, `min-h-[44px]`, and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2` styling to the action button.

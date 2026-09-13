@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
+import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
@@ -775,10 +776,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         {/* Avatar */}
                         {loadingProfile ? (
                             <div className="w-14 h-14 rounded-full bg-nature-100 animate-pulse shrink-0" />
-                        ) : authorProfile?.avatar ? (
+                        ) : resolveAvatarUrl(authorProfile?.avatar) ? (
                             <img
-                                src={authorProfile.avatar}
-                                alt="avatar"
+                                src={resolveAvatarUrl(authorProfile?.avatar)!}
+                                alt={selectedPost.authorCallsign}
                                 className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm shrink-0"
                             />
                         ) : (

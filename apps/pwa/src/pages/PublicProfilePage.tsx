@@ -873,8 +873,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                 <div key={r.id || i} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-sm">
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                            {r.target_avatar ? (
-                                                                <img src={resolveAvatarUrl(r.target_avatar)!} alt="avatar" className="w-7 h-7 rounded-full object-cover border" />
+                                                            {resolveAvatarUrl(r.target_avatar) ? (
+                                                                <img src={resolveAvatarUrl(r.target_avatar)!} alt={r.target_callsign || 'avatar'} className="w-7 h-7 rounded-full object-cover border" />
                                                             ) : (
                                                                 <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-oat-105 border">
                                                                     {r.target_callsign?.charAt(0).toUpperCase() || '?'}

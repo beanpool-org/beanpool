@@ -18,6 +18,7 @@ import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
 import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
+import { clearSyncCursor } from '../lib/sync';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -387,6 +388,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
             setSuccess(null);
             try {
                 sessionStorage.clear();
+                clearSyncCursor();
                 localStorage.removeItem('beanpool-sync-state');
                 localStorage.removeItem(`bp_offline_invites_${identity.publicKey}`);
                 localStorage.removeItem('bp_geo_settings');

@@ -7,6 +7,25 @@
 
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
+import {
+    requestSync,
+    registerSyncActivityListener,
+    setOnSyncCompletedCallback,
+    getSyncCursor,
+    saveSyncCursor,
+    clearSyncCursor,
+    computeUpdatedAfter,
+    SYNC_CURSOR_KEY,
+} from './sync-coordinator';
+
+export {
+    requestSync,
+    getSyncCursor,
+    saveSyncCursor,
+    clearSyncCursor,
+    computeUpdatedAfter,
+    SYNC_CURSOR_KEY,
+};
 
 export interface SyncState {
     connected: boolean;
@@ -28,8 +47,19 @@ let currentUrl: string | null = null;
 
 let listeners: SyncCallback[] = [];
 let announcementListeners: ((a: any) => void)[] = [];
-let activityListeners: (() => void)[] = [];
 let currentState: SyncState = loadCachedState();
+
+function updateLastSyncTime(time: number): void {
+    currentState = {
+        ...currentState,
+        lastSyncTime: time,
+    };
+    cacheState(currentState);
+    notify();
+}
+
+// Keep SyncStatus and UI updated whenever coordinator completes a sync run
+setOnSyncCompletedCallback(updateLastSyncTime);
 
 function loadCachedState(): SyncState {
     try {
@@ -40,7 +70,9 @@ function loadCachedState(): SyncState {
 }
 
 function cacheState(state: SyncState): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch { /* ignore */ }
 }
 
 function notify(): void {
@@ -75,6 +107,11 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
         currentState = { ...currentState, connected: true };
         notify();
 
+        // Fix sync-on-reconnect: trigger coordinated sync immediately
+        requestSync().catch(err => {
+            console.warn('[WS Sync] Reconnect sync error:', err);
+        });
+
         // Start 30s heartbeat keep-alive to prevent reverse proxy/Cloudflare idle timeout drops
         if (pingIntervalId) clearInterval(pingIntervalId);
         pingIntervalId = setInterval(() => {
@@ -107,11 +144,24 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             cacheState(currentState);
             notify();
 
-            // Doorbell: any non-snapshot broadcast means something changed.
-            // Let open screens (e.g. the active chat) refresh immediately
-            // instead of waiting for their polling interval.
+            // Doorbell: non-snapshot broadcasts signal data changed. Routed through the
+            // coordinator rather than firing every listener directly, so bursts coalesce
+            // (150ms debounce), only one run is ever in flight, and a request arriving
+            // mid-run queues exactly one trailing run.
+            //
+            // `new_message` is deliberately NOT excluded, which departs from native. Native
+            // skips requestSync() on new_message because THERE performSync is a heavy
+            // multi-endpoint delta pull, and running one per received message hammered the
+            // node and churned the sync lock. The PWA coordinator is not that: its work is
+            // firing the registered listeners, which on a new message are exactly the right
+            // things to run — loadConversations, and the open chat's loadMessages.
+            // Excluding it would kill the fast path MessagesPage documents at its
+            // onSyncActivity subscription: the open conversation would stop updating on
+            // arrival and fall back to its poll tick, which Stage 5 relaxes to a backstop.
             if (data.type !== 'state_snapshot') {
-                activityListeners.forEach(cb => cb());
+                requestSync().catch(err => {
+                    console.warn('[WS Sync] Broadcast sync error:', err);
+                });
             }
         } catch { /* ignore malformed messages */ }
     };
@@ -222,14 +272,12 @@ export function getSyncState(): SyncState {
 }
 
 /**
- * Subscribe to WebSocket "activity" — fires on every non-snapshot broadcast,
- * signalling that data changed and an open view should refresh now.
+ * Subscribe to WebSocket "activity" — routed through the sync coordinator.
+ * Fires during coordinated sync runs (e.g. on reconnect and on non-chat broadcasts)
+ * to let open views refresh in a debounced, single-flight manner.
  */
-export function onSyncActivity(cb: () => void): () => void {
-    activityListeners.push(cb);
-    return () => {
-        activityListeners = activityListeners.filter(l => l !== cb);
-    };
+export function onSyncActivity(cb: () => void | Promise<void>): () => void {
+    return registerSyncActivityListener(cb);
 }
 
 /**
@@ -240,4 +288,28 @@ export function onSystemAnnouncement(cb: (a: any) => void): () => void {
     return () => {
         announcementListeners = announcementListeners.filter(l => l !== cb);
     };
+}
+
+/**
+ * Reset sync module state for isolated unit testing.
+ */
+export function resetSyncForTest(): void {
+    if (ws) {
+        try { ws.close(); } catch {}
+        ws = null;
+    }
+    if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+    }
+    if (pingIntervalId) {
+        clearInterval(pingIntervalId);
+        pingIntervalId = null;
+    }
+    reconnectDelay = 1000;
+    isConnecting = false;
+    currentUrl = null;
+    listeners = [];
+    announcementListeners = [];
+    currentState = { connected: false, lastSyncTime: null, merkleRoot: null, accountCount: 0 };
 }

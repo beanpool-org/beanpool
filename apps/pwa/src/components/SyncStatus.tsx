@@ -21,7 +21,11 @@ function formatTimeAgo(timestamp: number): string {
     return `${hours}h ago`;
 }
 
-export function SyncStatus() {
+interface SyncStatusProps {
+    isMember?: boolean | null;
+}
+
+export function SyncStatus({ isMember: propIsMember }: SyncStatusProps = {}) {
     const [sync, setSync] = useState<SyncState>({
         connected: false,
         lastSyncTime: null,
@@ -36,8 +40,13 @@ export function SyncStatus() {
         return unsub;
     }, []);
 
-    // Membership probe — backed off to 30s + jitter, suspended when WS is connected, paused when hidden
+    // Membership probe — fallback when WebSocket is closed, paused when hidden
     useEffect(() => {
+        // If the WebSocket is OPEN the node is demonstrably reachable: skip HTTP probe entirely
+        if (sync.connected) {
+            return;
+        }
+
         let cancelled = false;
         let interval: ReturnType<typeof setInterval> | null = null;
 
@@ -58,10 +67,7 @@ export function SyncStatus() {
         const startPolling = () => {
             if (interval) return;
             probe();
-            // Suspend recurring HTTP probe while the WebSocket is connected
-            if (!sync.connected) {
-                interval = setInterval(probe, withJitter(30_000));
-            }
+            interval = setInterval(probe, withJitter(30_000));
         };
 
         const stopPolling = () => {
@@ -130,13 +136,15 @@ export function SyncStatus() {
     }, []);
 
     // Resolve display state
-    // Online if either WebSocket or HTTP probe confirms connectivity and membership
-    const isMemberConfirmed = isMember === true;
-    const isReachable = sync.connected || isHttpOnline === true;
+    // If the WebSocket is OPEN, derive statusMode directly from socket state.
+    // Fall back to HTTP probe state only when the socket is closed.
+    const effectiveIsMember = propIsMember !== undefined ? propIsMember : isMember;
 
-    const statusMode = (isReachable && isMemberConfirmed)
+    const statusMode = sync.connected
+        ? (effectiveIsMember === false ? 'guest' : 'online')
+        : (isHttpOnline && effectiveIsMember === true)
         ? 'online'
-        : (isReachable && isMember === false)
+        : (isHttpOnline && effectiveIsMember === false)
         ? 'guest'
         : 'offline';
 

@@ -7,10 +7,10 @@
  * - Persistent header with SyncStatus
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
 import { connectToAnchor, onSystemAnnouncement, onSyncActivity } from './lib/sync';
-import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth } from './lib/api';
+import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth, type MarketplaceTransaction } from './lib/api';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
@@ -108,6 +108,7 @@ export function App() {
     const [sysAnnouncement, setSysAnnouncement] = useState<{ title: string, body: string, severity: string } | null>(null);
     const [totalUnread, setTotalUnread] = useState(0);
     const [pendingDealsCount, setPendingDealsCount] = useState(0);
+    const [myTransactions, setMyTransactions] = useState<MarketplaceTransaction[]>([]);
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [isGuest, setIsGuest] = useState(false);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
@@ -201,6 +202,21 @@ export function App() {
         return unsub;
     }, [identity]);
 
+    const refreshTransactions = useCallback(async () => {
+        if (!identity) return;
+        const currentPubkey = identity.publicKey;
+        try {
+            const txs = await getMyMarketplaceTransactions(currentPubkey);
+            if (identity.publicKey !== currentPubkey) return;
+            setMyTransactions(txs);
+            const activeDeals = txs.filter(t => t.status === 'pending').length;
+            const pendingRequests = txs.filter(t => 
+                t.buyerPublicKey === currentPubkey && t.status === 'requested'
+            ).length;
+            setPendingDealsCount(activeDeals + pendingRequests);
+        } catch { /* offline */ }
+    }, [identity?.publicKey]);
+
     // Poll unread message count and active deals
     useEffect(() => {
         if (!identity) return;
@@ -219,6 +235,7 @@ export function App() {
                 // Poll marketplace for active deals + inbound requests (computed from txs alone)
                 const txs = await getMyMarketplaceTransactions(identity.publicKey);
                 if (cancelled) return;
+                setMyTransactions(txs);
 
                 const activeDeals = txs.filter(t => t.status === 'pending').length;
                 
@@ -368,7 +385,7 @@ export function App() {
                 {/* Sidebar Footer Controls */}
                 <div className="p-3 border-t border-nature-200 dark:border-nature-800 space-y-2 bg-nature-100/50 dark:bg-nature-900/50">
                     <div className="flex items-center justify-between px-2 py-1">
-                        <SyncStatus />
+                        <SyncStatus isMember={!isGuest} />
                         <button
                             onClick={() => setShowSettings(!showSettings)}
                             aria-label="Settings"
@@ -449,7 +466,7 @@ export function App() {
                     <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
 
                     <div className="relative z-10" style={{ marginTop: '12px' }}>
-                        <SyncStatus />
+                        <SyncStatus isMember={!isGuest} />
                     </div>
 
                     <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
@@ -560,9 +577,18 @@ export function App() {
                                     <RecoveryAlertBanner identity={identity} />
                                 </div>
                             )}
-                            {activeTab === 'map' && <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}><MapPage identity={identity} openNewPost={openNewPost} onOpenNewPostHandled={() => setOpenNewPost(false)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} /></Suspense>}
-                            {activeTab === 'marketplace' && <MarketplacePage identity={identity} marketClickCount={marketClickCount} openPostId={openMarketPostId} onPostOpened={() => setOpenMarketPostId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
-                            {activeTab === 'pulse' && <PulsePage identity={identity} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab === 'marketplace' && (
+                                <MarketplacePage
+                                    identity={identity}
+                                    marketClickCount={marketClickCount}
+                                    openPostId={openMarketPostId}
+                                    onPostOpened={() => setOpenMarketPostId(null)}
+                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                                    transactions={myTransactions}
+                                    onRefreshTransactions={refreshTransactions}
+                                />
+                            )}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
                             {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} />}

@@ -6,7 +6,7 @@
  * Tapping a post opens a full detail view.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
@@ -47,6 +47,8 @@ interface Props {
     onPostOpened?: () => void;
     onNavigate?: (tab: string, conversationId?: string) => void;
     onOpenProfile?: (pubkey: string) => void;
+    transactions?: MarketplaceTransaction[];
+    onRefreshTransactions?: () => void;
 }
 
 // Turn a server trade-gate rejection into a friendly message. The covenant / contribution /
@@ -87,7 +89,7 @@ function remoteOriginLabel(post: any): string {
     return name.startsWith('peer (') ? ` from ${name}` : ` (from ${name})`;
 }
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions }: Props) {
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>('all');
     // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,
@@ -290,9 +292,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Active Deals Segment Toggle
     const [activeTab, setActiveTab] = useState<'feed' | 'deals'>('feed');
-    // Global requests waiting for the current user's approval
-    const [globalRequests, setGlobalRequests] = useState<MarketplaceTransaction[]>([]);
-    const [myTransactions, setMyTransactions] = useState<MarketplaceTransaction[]>([]);
+    // Transactions consumed from App.tsx (single poller owner)
+    const myTransactions = externalTransactions ?? [];
+    const globalRequests = myTransactions.filter(t => t.buyerPublicKey === identity?.publicKey && t.status === 'requested');
     const [blocklistVersion, setBlocklistVersion] = useState(0);
 
     useEffect(() => {
@@ -325,8 +327,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     const pendingDealsCount = globalRequests.length + myTransactions.filter(t => t.status === 'pending').length;
 
-    // Author ratings cache for tiles
+    // Author ratings cache for tiles — cached by author in ref to prevent fan-out on every 15s poll
+    const RATINGS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL ensures ratings updates eventually appear
     const [authorRatingsCache, setAuthorRatingsCache] = useState<Record<string, { average: number; count: number }>>({}); 
+    const ratingsCacheRef = useRef<Map<string, { rating: { average: number; count: number }; fetchedAt: number }>>(new Map());
+    const ratingsInFlightRef = useRef<Set<string>>(new Set());
 
     // Author avatar cache for tiles
     const [authorAvatarCache, setAuthorAvatarCache] = useState<Record<string, string | null>>({});
@@ -338,17 +343,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             if (categoryFilter !== 'all') filter.category = categoryFilter;
             if (beansOnly) filter.beansOnly = true;
 
-            // Always fetch home node + global requests. Also fetch the viewer's OWN posts — the server
-            // returns the author's paused posts only to the authenticated author, so this is how "My
-            // Posts" can surface & re-activate a paused Offer (the general feed omits paused).
-            const [homeData, myTxs, myOwnPosts] = await Promise.all([
+            // Always fetch home node listings and the viewer's OWN posts (to surface & re-activate
+            // paused Offers, which the general feed omits). Transactions are polled by App.tsx
+            // and passed down via props, eliminating the duplicate transactions fetch.
+            const [homeData, myOwnPosts] = await Promise.all([
                 getMarketplacePosts(filter),
-                identity ? getMyMarketplaceTransactions(identity.publicKey).catch(() => []) : Promise.resolve([]),
                 identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([])
             ]);
-
-            setMyTransactions(myTxs);
-            setGlobalRequests(myTxs.filter(t => t.buyerPublicKey === identity?.publicKey && t.status === 'requested'));
 
             // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
             const byId = new Map<string, MarketplacePost>();
@@ -433,20 +434,39 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         };
     }, [refresh]);
 
-    // Fetch ratings for all unique post authors
+    // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll
     useEffect(() => {
         if (posts.length === 0) return;
+        const now = Date.now();
         const uniqueAuthors = [...new Set(posts.map(p => p.authorPublicKey))];
+        const uncachedAuthors = uniqueAuthors.filter(pk => {
+            if (ratingsInFlightRef.current.has(pk)) return false;
+            const cached = ratingsCacheRef.current.get(pk);
+            return !cached || (now - cached.fetchedAt > RATINGS_CACHE_TTL_MS);
+        });
+
+        if (uncachedAuthors.length === 0) return;
+
+        uncachedAuthors.forEach(pk => ratingsInFlightRef.current.add(pk));
+
         Promise.all(
-            uniqueAuthors.map(pk =>
+            uncachedAuthors.map(pk =>
                 getMemberRatings(pk)
                     .then(r => [pk, { average: r.average, count: r.count }] as const)
                     .catch(() => [pk, { average: 0, count: 0 }] as const)
             )
         ).then(results => {
-            const cache: Record<string, { average: number; count: number }> = {};
-            for (const [pk, rating] of results) cache[pk] = rating;
-            setAuthorRatingsCache(cache);
+            const fetchedAt = Date.now();
+            setAuthorRatingsCache(prev => {
+                const next = { ...prev };
+                for (const [pk, rating] of results) {
+                    ratingsCacheRef.current.set(pk, { rating, fetchedAt });
+                    next[pk] = rating;
+                }
+                return next;
+            });
+        }).finally(() => {
+            uncachedAuthors.forEach(pk => ratingsInFlightRef.current.delete(pk));
         });
     }, [posts]);
 
@@ -479,7 +499,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             .catch(() => setAuthorProfile(null))
             .finally(() => setLoadingProfile(false));
         getMemberRatings(selectedPost.authorPublicKey)
-            .then(r => setAuthorAvgRating({ average: r.average, count: r.count, asProvider: r.asProvider, asReceiver: r.asReceiver }))
+            .then(r => {
+                const rating = { average: r.average, count: r.count };
+                ratingsCacheRef.current.set(selectedPost.authorPublicKey, { rating, fetchedAt: Date.now() });
+                setAuthorRatingsCache(prev => ({ ...prev, [selectedPost.authorPublicKey]: rating }));
+                setAuthorAvgRating({ average: r.average, count: r.count, asProvider: r.asProvider, asReceiver: r.asReceiver });
+            })
             .catch(() => {});
         
         setHasExistingRating(false);
@@ -498,13 +523,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         
         // Fetch requests if this is a Need
         if (selectedPost.type === 'need') {
-            getMyMarketplaceTransactions(identity?.publicKey || '')
+            const txPromise = myTransactions.length > 0
+                ? Promise.resolve(myTransactions)
+                : (identity ? getMyMarketplaceTransactions(identity.publicKey).catch(() => []) : Promise.resolve([]));
+            txPromise
                 .then(async txs => {
                     const filtered = txs.filter(t => t.postId === selectedPost.id && t.status === 'requested');
                     const enriched = await Promise.all(filtered.map(async req => {
                         try {
                             // For needs, the author is the buyer, so the requester is the seller
-                            const r = await getMemberRatings(req.sellerPublicKey);
+                            const cached = ratingsCacheRef.current.get(req.sellerPublicKey);
+                            const r = (cached && Date.now() - cached.fetchedAt <= RATINGS_CACHE_TTL_MS)
+                                ? cached.rating
+                                : await getMemberRatings(req.sellerPublicKey);
                             return { ...req, bidderRating: r };
                         } catch(e) { return { ...req, bidderRating: { average: 0, count: 0 } }; }
                     }));
@@ -841,6 +872,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                          setSelectedTxId(null);
                                                          setShowCompleteConfirm(false);
                                                          refresh();
+                                                         onRefreshTransactions?.();
 
                                                          // Trigger Review Modal immediately
                                                          setReviewStars(5);
@@ -903,6 +935,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                      setSelectedPost(null);
                                      setSelectedTxId(null);
                                      refresh();
+                                     onRefreshTransactions?.();
                                  } catch (e: any) {
                                      setError(e.message || 'Failed to cancel transaction');
                                  } finally {
@@ -970,6 +1003,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     const updated = await getMarketplacePosts({ id: selectedPost.id });
                                                     if (updated.length > 0) setSelectedPost(updated[0]);
                                                     refresh();
+                                                    onRefreshTransactions?.();
                                                 } catch (e: any) {
                                                     setError(e.message || 'Failed to approve offer. Check your balance.');
                                                 } finally {
@@ -1139,6 +1173,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     }
                                                     handleMessageAuthor();
                                                     refresh();
+                                                    onRefreshTransactions?.();
                                                 }
                                                 setShowAcceptConfirm(false);
                                             } catch (err) {
@@ -1401,7 +1436,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     try {
                                                         await submitRating(identity.publicKey, targetPubkey, myRating, ratingComment, selectedPost.pendingTransactionId);
                                                         const fresh = await getMemberRatings(targetPubkey);
-                                                        setAuthorAvgRating({ average: fresh.average, count: fresh.count });
+                                                        const freshRating = { average: fresh.average, count: fresh.count };
+                                                        ratingsCacheRef.current.set(targetPubkey, { rating: freshRating, fetchedAt: Date.now() });
+                                                        setAuthorRatingsCache(prev => ({ ...prev, [targetPubkey]: freshRating }));
+                                                        setAuthorAvgRating(freshRating);
                                                         setHasExistingRating(true);
                                                         setShowRatingForm(false);
                                                     } catch (e: any) {
@@ -2326,6 +2364,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         if (!identity) return;
                                         setSubmittingReview(true);
                                         try {
+                                            const ratedPubkey = promptReviewForTx.targetPubkey;
                                             await submitRating(
                                                 identity.publicKey, 
                                                 promptReviewForTx.targetPubkey, 
@@ -2335,6 +2374,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             );
                                             setPromptReviewForTx(null);
                                             refresh();
+                                            onRefreshTransactions?.();
+                                            getMemberRatings(ratedPubkey).then(fresh => {
+                                                const freshRating = { average: fresh.average, count: fresh.count };
+                                                ratingsCacheRef.current.set(ratedPubkey, { rating: freshRating, fetchedAt: Date.now() });
+                                                setAuthorRatingsCache(prev => ({ ...prev, [ratedPubkey]: freshRating }));
+                                            }).catch(() => {});
                                         } catch (e: any) {
                                             alert(e.message || 'Failed to submit review');
                                         } finally {

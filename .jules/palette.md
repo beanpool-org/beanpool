@@ -132,3 +132,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-08 - ArchetypeQuizModal Dialog Title Linking, Emojis, and Focus Rings
 **Learning:** `ArchetypeQuizModal.tsx` modal header lacked title ID linking (`id="quiz-modal-title"` with `aria-labelledby="quiz-modal-title"`), decorative emojis (`🌱`, `⚡`, `🧭`, `🛡️`, `🌟`, `👥`) were unhidden from screen readers, and interactive controls (back/close buttons, quiz mode cards, radio options, save, and deepen buttons) lacked visible keyboard focus ring indicators (`focus-visible:ring-2`).
 **Action:** Linked modal header title via `id="quiz-modal-title"` and `aria-labelledby="quiz-modal-title"`, added `aria-hidden="true"` to decorative emojis, and added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` styling across all modal buttons.
+
+## 2026-09-09 - ChannelChips Focus Ring Styling
+**Learning:** `ChannelChips.tsx` rendered interactive external profile links and channel chips without explicit `focus-visible` ring indicators, making keyboard focus highlights invisible or inconsistent.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:focus-visible:ring-emerald-400 focus-visible:ring-offset-1` to channel chips in `ChannelChips.tsx`.

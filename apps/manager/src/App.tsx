@@ -181,8 +181,8 @@ export function App() {
             } else {
                 setTotpError('Server did not issue a session token');
             }
-        } catch (e: any) {
-            setTotpError(e.message || 'Verification failed');
+        } catch (e: unknown) {
+            setTotpError(e instanceof Error ? e.message : 'Verification failed');
         }
     };
 
@@ -427,8 +427,8 @@ export function App() {
                 }
                 const data = await diagRes.json();
                 diagSuccess(p, data);
-            } catch (e: any) {
-                const errMsg = e.message || 'Failed to connect';
+            } catch (e: unknown) {
+                const errMsg = e instanceof Error ? e.message : 'Failed to connect';
                 if (!errMsg.includes('429') && errMsg !== '2FA_PROMPT_BUSY') {
                     const authFailed = isAuthFailure(errMsg) || errMsg === '2FA_CANCELLED';
                     if (authFailed && errMsg !== '2FA_CANCELLED') {
@@ -463,8 +463,8 @@ export function App() {
                 ...prev,
                 [activeNode.id]: { diag: data, loading: false, error: null },
             }));
-        } catch (e: any) {
-            const errMsg = e.message || 'Failed to connect to node';
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : 'Failed to connect to node';
             if (!errMsg.includes('429')) {
                 setDiagError(errMsg);
             }
@@ -480,8 +480,8 @@ export function App() {
         try {
             const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setGateway(data);
-        } catch (e: any) {
-            const errMsg = e.message || '';
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : '';
             // Only set gateway to null on explicit auth error, NOT on 429 rate limiting
             if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
                 setGateway(null);
@@ -526,7 +526,7 @@ export function App() {
             // yields undefined and silently empties the panel.
             const logs = await fetchNodeLogs(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setNodeLogs(logs);
-        } catch (e: any) {
+        } catch (e: unknown) {
             // Keep existing logs on error
         }
     };
@@ -581,8 +581,8 @@ export function App() {
             setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');
             setTimeout(() => setGatewaySuccess(null), 3000);
-        } catch (e: any) {
-            alert('Failed to update gateway: ' + e.message);
+        } catch (e: unknown) {
+            alert('Failed to update gateway: ' + (e instanceof Error ? e.message : String(e)));
         } finally {
             setGatewaySaving(false);
         }

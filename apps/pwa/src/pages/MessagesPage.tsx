@@ -164,6 +164,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const draftRef = useRef<HTMLTextAreaElement>(null);
     const activeConvIdRef = useRef<string | null>(null);
+    const messageRequestIdRef = useRef<number>(0);
 
     // ⚡ Bolt: O(1) Map lookups for member details and completed transactions in conversation list and chat views
     const membersByPublicKey = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
@@ -218,6 +219,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => {
         activeConvIdRef.current = activeConv?.id ?? null;
         if (activeConv) {
+            messageRequestIdRef.current++;
             setReplyToMessage(null);
             setEditingMessage(null);
             setActiveEmojiPickerId(null);
@@ -235,11 +237,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 setDraft(prefill);
                 setTimeout(() => draftRef.current?.focus(), 100);
             }
-            // Poll for new messages every 3 seconds (backstop), paused when tab is hidden
+            // Poll for new messages every 30 seconds (backstop), paused when tab is hidden
             const startPolling = () => {
                 if (!pollRef.current) {
                     loadMessages(activeConv.id);
-                    pollRef.current = window.setInterval(() => loadMessages(activeConv.id), withJitter(3000));
+                    pollRef.current = window.setInterval(() => loadMessages(activeConv.id), withJitter(30000));
                 }
             };
 
@@ -325,6 +327,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     if (peer && blocked.has(peer)) return false;
                 }
                 return true;
+            }).map((c: Conversation) => {
+                if (activeConvIdRef.current && c.id === activeConvIdRef.current) {
+                    return { ...c, unreadCount: 0 };
+                }
+                return c;
             });
             setConversations(filtered);
             const txs = await getMyMarketplaceTransactions(identity.publicKey);
@@ -368,10 +375,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }, [openConversationId]);
 
     async function loadMessages(convId: string) {
+        const requestId = ++messageRequestIdRef.current;
         try {
             const result = await getConversationMessages(convId);
-            if (activeConvIdRef.current !== convId) return;
-            setMessages(result.messages);
+            if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+            // Deduplicate by message ID so the same message can never render twice
+            const seen = new Set<string>();
+            const uniqueMessages = (result.messages || []).filter((m: ApiMessage) => {
+                if (!m.id || seen.has(m.id)) return false;
+                seen.add(m.id);
+                return true;
+            });
+            setMessages(uniqueMessages);
             if (identity?.publicKey) {
                 markConversationReadApi(identity.publicKey, convId).catch(() => {});
                 setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));

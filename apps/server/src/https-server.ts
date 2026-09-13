@@ -460,7 +460,11 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
             // a bare 'pong' matched any message that merely CONTAINED the word and forced a
             // JSON.parse of it — on a 1-CPU node shared with four other containers, per client,
             // per message. Accepting a second alias bought nothing but another way to be wrong.
-            if (type === 'sync' && dataStr.includes('wantPong')) {
+            // Length-bounded before the substring scan, let alone the parse. Without it a
+            // client could stream multi-megabyte frames containing "wantPong" and force a
+            // synchronous JSON.parse of each on the main thread of a 1-CPU container shared with
+            // four other nodes. A legitimate opt-in ping is well under 256 bytes.
+            if (type === 'sync' && dataStr.length < 256 && dataStr.includes('wantPong')) {
                 try {
                     const msg = JSON.parse(dataStr);
                     if (msg && msg.type === 'ping' && msg.wantPong === true) {

@@ -340,6 +340,13 @@ if (typeof document !== 'undefined') {
                     try { ws.close(); } catch {}
                     ws = null;
                 }
+                // Unlinking `ws` above means the old socket's onclose never runs its cleanup, so
+                // the armed flag would survive onto the REPLACEMENT connection and let the
+                // watchdog fire before that connection has ever produced a pong — the exact
+                // invariant the arm-on-first-pong rule exists to hold. Reset it here too.
+                watchdogArmed = false;
+                lastPongAt = null;
+                stopHeartbeat();
                 if (reconnectTimeoutId) {
                     clearTimeout(reconnectTimeoutId);
                     reconnectTimeoutId = null;

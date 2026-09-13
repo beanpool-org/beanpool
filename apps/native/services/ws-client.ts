@@ -123,6 +123,17 @@ class WebSocketSyncClient {
                 return;
             }
 
+            // Re-checked AFTER the awaits above. Loading the identity and signing the WS params
+            // are async, so the app can be backgrounded midway: handleAppStateChange calls
+            // disconnect(), then this continues and opens a socket anyway. onopen would then skip
+            // startHeartbeat() because the app is backgrounded, and on returning to foreground
+            // connect() early-returns on `this.ws` already being set — leaving a live socket that
+            // never pings and never arms the watchdog, which is the opposite of this PR's point.
+            if (!this.isStarted || AppState.currentState !== 'active') {
+                console.log('[WS Sync] Backgrounded during connection setup — abandoning connect');
+                return;
+            }
+
             console.log(`[WS Sync] Connecting to: ${wsUrl.split('?')[0]}`);
 
             // Scope the instance locally to capture it safely in closures

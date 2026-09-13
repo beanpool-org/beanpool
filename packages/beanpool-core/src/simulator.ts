@@ -1,7 +1,6 @@
 import { PassportManager } from './passport.js';
 import { LedgerManager } from './ledger.js';
 import { RouterManager, ResourcePin, Location } from './router.js';
-import { GovernanceManager } from './governance.js';
 import { GlobalConfig, BeanPoolMode } from './config.js';
 
 export interface MockNeighbor {
@@ -128,43 +127,3 @@ export function simulateGossip(
     }
 }
 
-/**
- * Seeds the Grand Bounties (SYSTEM origin) representing the local North Stars.
- */
-export function seedGrandBounties(govManager: GovernanceManager): void {
-    // SECURITY SHIELD
-    if (GlobalConfig.MODE !== BeanPoolMode.SIMULATION) {
-        return;
-    }
-
-    // Creating a mock SYSTEM passport to author the proposals
-    const systemManager = new PassportManager('did:beanpool:system');
-    const systemPassport = systemManager.getPassport();
-    systemPassport.standing = 100; // Max standing for system
-
-    // 1. Solar Array
-    const prop1 = govManager.createProposal(systemPassport, 'Solar Array for Billinudgel Hall', 5000, 1000, 'Infrastructure', 'SYSTEM');
-    if (prop1) prop1.currentVotes = 450;
-
-    // 2. Community Seed Library
-    const prop2 = govManager.createProposal(systemPassport, 'Community Seed Library', 200, 50, 'Community', 'SYSTEM');
-    if (prop2) {
-        prop2.category = 'Community';
-        prop2.currentVotes = 10;
-    }
-
-    // 3. Flood Resilience Mesh-Kit
-    const prop3 = govManager.createProposal(systemPassport, 'Flood Resilience Mesh-Kit', 1500, 300, 'Emergency', 'SYSTEM');
-    if (prop3) prop3.currentVotes = 120;
-
-    // 4. Local Tool Sharing Library
-    const prop4 = govManager.createProposal(systemPassport, 'Local Tool Sharing Library', 800, 150, 'Infrastructure', 'SYSTEM');
-    if (prop4) prop4.currentVotes = 40;
-
-    // 5. Bush Regeneration Project
-    const prop5 = govManager.createProposal(systemPassport, 'Bush Regeneration Project', 1000, 200, 'Community' as any, 'SYSTEM');
-    if (prop5) {
-        prop5.category = 'Community' as any;
-        prop5.currentVotes = 60;
-    }
-}

@@ -166,3 +166,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-26 - O(1) Selected Member Lookup in Native Ledger Tab
 **Learning:** In `apps/native/app/(tabs)/ledger.tsx`, resolving selected recipient member details via `members.find(m => m.publicKey === sendTo)` performed an $O(M)$ linear array scan on every render cycle.
 **Action:** Pre-computed `membersMap` using `useMemo` indexed by `publicKey` to convert selected recipient member resolution into an $O(1)$ Map retrieval.
+
+## 2026-09-27 - O(1) Member and Profile Lookups in Server Admin Settings Audit Tree Rendering
+**Learning:** In `apps/server/static/settings.js`, rendering the admin member audit tree invoked `members.find(...)` and `profiles.find(...)` inside the recursive `buildNode` function for every member node in the hierarchy, resulting in an $O(M \times (M + P))$ nested linear scan.
+**Action:** Pre-computed `membersMap` and `profilesMap` indexed by `publicKey` in `renderAdminMembers` prior to executing `buildNode`, reducing member and profile resolution to $O(1)$ constant-time Map retrievals ($O(M + P)$ overall).

@@ -2204,6 +2204,10 @@
                 });
             });
 
+            // ⚡ Bolt: Pre-compute O(1) lookup Maps for members and profiles to eliminate O(M*(M+P)) scans during recursive tree rendering.
+            const membersMap = new Map((members || []).map(m => [m.publicKey, m]));
+            const profilesMap = new Map((profiles || []).filter(Boolean).map(p => [p.publicKey, p]));
+
             // Map members by invitedBy to build tree
             const tree = {};
             members.forEach(m => {
@@ -2255,9 +2259,10 @@
             }
 
             function buildNode(pubkey, depth = 0) {
-                const member = members.find(m => m.publicKey === pubkey);
+                // ⚡ Bolt: Constant-time O(1) Map retrievals instead of linear array scans
+                const member = membersMap.get(pubkey);
                 if (!member) return '';
-                const profile = profiles.find(p => p && p.publicKey === pubkey);
+                const profile = profilesMap.get(pubkey);
                 const children = tree[pubkey] || [];
                 const isPruned = profile?.status === 'pruned';
                 const isActive = !profile || profile.status === 'active' || profile.status === undefined;

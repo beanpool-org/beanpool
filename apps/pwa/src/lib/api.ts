@@ -813,13 +813,14 @@ export interface MarketplaceTransaction {
     ratedBySeller?: boolean;
 }
 
-export async function getMarketplacePosts(filter?: { id?: string; type?: string; category?: string; author?: string; beansOnly?: boolean }): Promise<MarketplacePost[]> {
+export async function getMarketplacePosts(filter?: { id?: string; type?: string; category?: string; author?: string; beansOnly?: boolean; updatedAfter?: string }): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
     if (filter?.type) params.set('type', filter.type);
     if (filter?.category) params.set('category', filter.category);
     if (filter?.author) params.set('author', filter.author);
     if (filter?.beansOnly) params.set('beansOnly', 'true');
+    if (filter?.updatedAfter) params.set('updatedAfter', filter.updatedAfter);
     return request('GET', `/api/marketplace/posts?${params}`);
 }
 

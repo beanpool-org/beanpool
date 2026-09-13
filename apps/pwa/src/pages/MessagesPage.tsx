@@ -202,9 +202,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => {
         loadConversations();
         loadMembers();
-        const unsubscribe = onSyncActivity(() => {
-            loadConversations();
-        });
+        const unsubscribe = onSyncActivity(() => loadConversations());
         const unsubBlocklist = onBlocklistUpdated(() => {
             setBlocklistVersion(v => v + 1);
             loadConversations();
@@ -269,7 +267,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // Fast path: the WebSocket doorbell refreshes this conversation
             // immediately, instead of waiting for the next poll tick.
             const unsubscribe = onSyncActivity(() => {
-                if (!document.hidden) loadMessages(activeConv.id);
+                if (document.hidden) return;
+                return loadMessages(activeConv.id);
             });
             return () => {
                 stopPolling();

@@ -297,9 +297,14 @@ export function App() {
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
-        // Fast path: update unread counts immediately on WebSocket activity
+        // Fast path: update unread counts immediately on WebSocket activity.
+        // The promise is RETURNED, not fired and forgotten: the coordinator only advances the
+        // delta cursor when every listener resolved, so a listener that swallows its own
+        // completion makes that check meaningless and lets the cursor move past data that
+        // never arrived.
         const unsubscribe = onSyncActivity(() => {
-            if (!document.hidden) pollUnread();
+            if (document.hidden) return;
+            return pollUnread();
         });
 
         return () => {

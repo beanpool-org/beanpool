@@ -18,6 +18,7 @@ import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
 import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
+import { clearSyncCursor } from '../lib/sync';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -387,6 +388,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
             setSuccess(null);
             try {
                 sessionStorage.clear();
+                clearSyncCursor();
                 localStorage.removeItem('beanpool-sync-state');
                 localStorage.removeItem(`bp_offline_invites_${identity.publicKey}`);
                 localStorage.removeItem('bp_geo_settings');
@@ -395,6 +397,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
                 setSuccess('Cache cleared. Resynced & reloading application...');
                 setTimeout(() => {
+                    // Cleared AGAIN immediately before the reload. The WebSocket stays open
+                    // during this 1.5s message, so a broadcast arriving in the meantime runs a
+                    // coordinated sync and persists a fresh cursor — quietly undoing the clear
+                    // the member just asked for, and leaving "force a complete resync" doing a
+                    // delta instead.
+                    clearSyncCursor();
                     window.location.reload();
                 }, 1500);
             } catch (e: any) {

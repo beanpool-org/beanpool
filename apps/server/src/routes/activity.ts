@@ -6,8 +6,8 @@
  */
 
 import Router from '@koa/router';
-import { getActivityFeed } from '../db/activity-feed-db.js';
-import { getActivityVersion } from '../engine/versions.js';
+import { getActivityFeed, ACTIVITY_FEED_MAX_LIMIT } from '../db/activity-feed-db.js';
+import { getActivityVersion, getMembersVersion } from '../engine/versions.js';
 import type { RouteDeps } from './types.js';
 
 export function createActivityRouter(deps: RouteDeps): Router {
@@ -18,12 +18,21 @@ export function createActivityRouter(deps: RouteDeps): Router {
      * Public endpoint to fetch recent community pulse activity.
      */
     router.get('/api/activity/feed', async (ctx) => {
-        const limit = deps.clampLimit(ctx.query.limit, 50);
+        // Clamped to the SAME bound the query applies. deps.clampLimit allows up to 200 while
+        // getActivityFeed caps at 100, so limits 101-200 produced distinct ETags for byte-identical
+        // bodies — never wrong content, but a cache entry per requested limit for no reason.
+        const limit = Math.min(deps.clampLimit(ctx.query.limit, 50), ACTIVITY_FEED_MAX_LIMIT);
         const offset = deps.clampOffset(ctx.query.offset);
 
-        // Weak ETag partitioned by version and query parameters (limit, offset).
-        // Evaluated before hitting SQLite to return 0-byte 304s for idle pollers.
-        const etag = `W/"activity-feed-${getActivityVersion()}-${limit}-${offset}"`;
+        // Partitioned by BOTH counters, and the members one is not decoration: getActivityFeed
+        // LEFT JOINs members twice and selects actor.callsign and target.callsign, so the feed's
+        // body changes whenever a member is renamed — including a federation visitor whose
+        // placeholder `Visitor-xxxx` is replaced by their real callsign. Gating only on
+        // activityVersion meant a rename left every client's feed showing the OLD callsign
+        // indefinitely, since a 304 never reads the database to notice. Reusing membersVersion
+        // rather than adding more bump sites also means any future member column added to that
+        // join is invalidated automatically instead of silently going stale.
+        const etag = `W/"activity-feed-${getActivityVersion()}-${getMembersVersion()}-${limit}-${offset}"`;
         ctx.set('ETag', etag);
 
         // `public`, not `private`: the ambient community activity waterfall does NOT vary

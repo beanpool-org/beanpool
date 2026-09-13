@@ -359,9 +359,12 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                     }
                 }
                 setPosts(allPosts);
+                // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
+                // so the cooldown then suppressed the retry — a blip could leave the view stale
+                // until the 300s backstop, which is exactly the window this stage widened.
+                lastRefreshTimeRef.current = Date.now();
             } finally {
                 refreshPromiseRef.current = null;
-                lastRefreshTimeRef.current = Date.now();
             }
         })();
         refreshPromiseRef.current = p;

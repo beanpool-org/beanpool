@@ -102,6 +102,13 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
     const lastRefreshTimeRef = useRef<number>(0);
     const refreshPromiseRef = useRef<Promise<void> | null>(null);
+    // Guards the state writes below: this refresh is now also triggered by the socket, so it can
+    // easily still be in flight when the member navigates away from the ledger.
+    const isMountedRef = useRef(true);
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => { isMountedRef.current = false; };
+    }, []);
 
     const refresh = useCallback(async () => {
         if (refreshPromiseRef.current) return refreshPromiseRef.current;
@@ -112,20 +119,29 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                     getTransactions(identity.publicKey).catch(() => []),
                     getMembers().catch(() => []),
                 ]);
-                if (!bal && txn.length === 0 && mem.length === 0) {
-                    throw new Error('Failed to load ledger data');
+                // The balance is the point of this screen, so a balance that failed to load is a
+                // failed refresh even when the other two calls succeeded. Requiring ALL THREE to
+                // fail meant a blip on getBalance alone left the previous balance on screen,
+                // stamped the refresh as successful, and started the cooldown — so the stale
+                // number could stand until the 300s backstop with no error shown.
+                if (!bal) {
+                    throw new Error('Failed to load balance');
                 }
-                if (bal) setBalanceInfo(bal);
+                if (!isMountedRef.current) return;
+                setBalanceInfo(bal);
                 setTxns(txn);
                 setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
                 setError(null);
+                // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
+                // so the cooldown then suppressed the retry — a blip could leave the view stale
+                // until the 300s backstop, which is exactly the window this stage widened.
+                lastRefreshTimeRef.current = Date.now();
             } catch (e: any) {
                 setError(e.message || 'Failed to load');
                 throw e;
             } finally {
                 setLoading(false);
                 refreshPromiseRef.current = null;
-                lastRefreshTimeRef.current = Date.now();
             }
         })();
         refreshPromiseRef.current = p;

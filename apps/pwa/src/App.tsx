@@ -272,9 +272,18 @@ export function App() {
 
                         setPendingDealsCount(activeDeals + pendingRequests);
                     }
+
+                    // Both failing means nothing was refreshed, so this must NOT count as a
+                    // poll: stamping it would start the cooldown and suppress the retry, and it
+                    // must reject so the coordinator does not advance the delta cursor past data
+                    // that never arrived. One of the two failing is tolerated on purpose — that
+                    // is why they are settled independently rather than chained.
+                    if (convResult.status === 'rejected' && txResult.status === 'rejected') {
+                        throw convResult.reason;
+                    }
+                    lastPollTime = Date.now();
                 } finally {
                     pollPromise = null;
-                    lastPollTime = Date.now();
                 }
             })();
             pollPromise = p;

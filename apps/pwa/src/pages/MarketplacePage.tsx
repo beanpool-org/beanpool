@@ -340,11 +340,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     const lastRefreshTimeRef = useRef<number>(0);
     const refreshPromiseRef = useRef<Promise<void> | null>(null);
+    // The filter the in-flight refresh is actually fetching. Without it, changing a filter while
+    // a refresh was in flight handed the caller the PREVIOUS filter's promise — the list settled
+    // on results for a filter the member had already moved away from, and it counted as a
+    // successful refresh of the new one.
+    const refreshKeyRef = useRef<string>('');
 
     const refresh = useCallback(async () => {
-        if (refreshPromiseRef.current) {
+        const refreshKey = `${typeFilter}|${categoryFilter}`;
+        if (refreshPromiseRef.current && refreshKeyRef.current === refreshKey) {
             return refreshPromiseRef.current;
         }
+        refreshKeyRef.current = refreshKey;
         const p = (async () => {
             try {
                 const filter: any = {};
@@ -381,13 +388,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 setPosts(allPosts);
                 setError(null);
+                // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
+                // so the cooldown then suppressed the retry — a blip could leave the view stale
+                // until the 300s backstop, which is exactly the window this stage widened.
+                lastRefreshTimeRef.current = Date.now();
             } catch (e: any) {
                 setError(e.message || 'Failed to load');
                 throw e;
             } finally {
                 setLoading(false);
                 refreshPromiseRef.current = null;
-                lastRefreshTimeRef.current = Date.now();
             }
         })();
         refreshPromiseRef.current = p;

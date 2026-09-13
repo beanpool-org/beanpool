@@ -43,13 +43,15 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
                     if (isMounted && res?.feed) {
                         setFeed(res.feed);
                     }
+                    // Stamped on SUCCESS only — see the note in MapPage. A failed fetch in
+                    // `finally` counted as a refresh and the cooldown suppressed the retry.
+                    lastFetchTime = Date.now();
                 } catch (e) {
                     console.warn('[ActivityWaterfall] Could not fetch activity feed:', e);
                     throw e;
                 } finally {
                     if (isMounted) setLoading(false);
                     fetchPromise = null;
-                    lastFetchTime = Date.now();
                 }
             })();
             fetchPromise = p;

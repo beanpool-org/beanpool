@@ -453,13 +453,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             uncachedAuthors.map(pk =>
                 getMemberRatings(pk)
                     .then(r => [pk, { average: r.average, count: r.count }] as const)
-                    .catch(() => [pk, { average: 0, count: 0 }] as const)
+                    // A failed fetch yields null, NOT a zero rating. Caching {average: 0, count: 0}
+                    // would show an established member as unrated for the full cache TTL because
+                    // of one transient blip — in a marketplace where the rating is the trust
+                    // signal, that is worse than showing nothing. Leaving it uncached lets the
+                    // next cycle retry; the in-flight set and the poll cadence bound the retries.
+                    .catch(() => [pk, null] as const)
             )
         ).then(results => {
             const fetchedAt = Date.now();
             setAuthorRatingsCache(prev => {
                 const next = { ...prev };
                 for (const [pk, rating] of results) {
+                    if (!rating) continue;
                     ratingsCacheRef.current.set(pk, { rating, fetchedAt });
                     next[pk] = rating;
                 }
@@ -482,6 +488,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             })
             .catch(() => {});
     }, []);
+
+    // The ids of the open Need's outstanding bids, as a plain string so it compares by VALUE in the
+    // dependency array below. This page no longer polls transactions itself — App.tsx owns that —
+    // so without a dependency on them the detail effect captured `myTransactions` at open time and
+    // a bid arriving while the post was open never appeared until it was closed and reopened.
+    // Depending on `myTransactions` directly would re-run this effect on every poll even when
+    // nothing relevant changed, re-rendering an open post every 10s; this only changes when the
+    // set of outstanding bids for THIS post actually changes.
+    const openNeedBidIds = selectedPost?.type === 'need'
+        ? myTransactions
+            .filter(t => t.postId === selectedPost.id && t.status === 'requested')
+            .map(t => t.id)
+            .sort()
+            .join(',')
+        : '';
 
     // Load author profile + ratings when detail view opens
     useEffect(() => {
@@ -533,9 +554,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         try {
                             // For needs, the author is the buyer, so the requester is the seller
                             const cached = ratingsCacheRef.current.get(req.sellerPublicKey);
-                            const r = (cached && Date.now() - cached.fetchedAt <= RATINGS_CACHE_TTL_MS)
-                                ? cached.rating
-                                : await getMemberRatings(req.sellerPublicKey);
+                            let r: { average: number; count: number };
+                            if (cached && Date.now() - cached.fetchedAt <= RATINGS_CACHE_TTL_MS) {
+                                r = cached.rating;
+                            } else {
+                                r = await getMemberRatings(req.sellerPublicKey);
+                                // Written back so a re-run (a new bid arriving) does not refetch
+                                // every existing bidder's rating again.
+                                ratingsCacheRef.current.set(req.sellerPublicKey, { rating: r, fetchedAt: Date.now() });
+                            }
                             return { ...req, bidderRating: r };
                         } catch(e) { return { ...req, bidderRating: { average: 0, count: 0 } }; }
                     }));
@@ -545,7 +572,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         } else {
             setRequests([]);
         }
-    }, [selectedPost?.id, identity?.publicKey]);
+    }, [selectedPost?.id, identity?.publicKey, openNeedBidIds]);
 
     async function handleMessageAuthor() {
         if (!identity || !selectedPost) return;
@@ -983,6 +1010,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 try {
                                                     await rejectMarketplaceRequest(req.id, identity.publicKey);
                                                     setRequests(prev => prev.filter(r => r.id !== req.id));
+                                                    // This page no longer polls transactions itself,
+                                                    // so App's pending-deals badge would otherwise
+                                                    // stay stale until its next tick.
+                                                    onRefreshTransactions?.();
                                                 } catch (e: any) {
                                                     setError(e.message || 'Failed to reject offer');
                                                 } finally {
@@ -1067,6 +1098,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 try {
                                                     await cancelMarketplaceRequest(myRequest.id, identity.publicKey);
                                                     setRequests(prev => prev.filter(r => r.id !== myRequest.id));
+                                                    onRefreshTransactions?.();
                                                 } catch (e: any) {
                                                     setError(e.message || 'Failed to cancel request');
                                                 } finally {

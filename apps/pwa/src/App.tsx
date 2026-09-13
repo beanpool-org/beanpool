@@ -7,7 +7,7 @@
  * - Persistent header with SyncStatus
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
 import { connectToAnchor, onSystemAnnouncement, onSyncActivity } from './lib/sync';
 import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth, type MarketplaceTransaction } from './lib/api';
@@ -202,12 +202,26 @@ export function App() {
         return unsub;
     }, [identity]);
 
+    // The identity in flight, read at await-resolution time rather than captured. The previous
+    // guard compared `identity.publicKey !== currentPubkey` — both sides come from the same
+    // closure, so it was always false and guarded nothing: a fetch resolving after a logout or an
+    // account switch wrote the OLD account's transactions into the new one's view.
+    const identityPubkeyRef = useRef<string | null>(null);
+    useEffect(() => {
+        identityPubkeyRef.current = identity?.publicKey ?? null;
+        // Clear on switch or logout, so the next account never briefly renders the last one's
+        // deals while its first fetch is still in flight.
+        setMyTransactions([]);
+        setPendingDealsCount(0);
+        setTotalUnread(0);
+    }, [identity?.publicKey]);
+
     const refreshTransactions = useCallback(async () => {
         if (!identity) return;
         const currentPubkey = identity.publicKey;
         try {
             const txs = await getMyMarketplaceTransactions(currentPubkey);
-            if (identity.publicKey !== currentPubkey) return;
+            if (identityPubkeyRef.current !== currentPubkey) return;
             setMyTransactions(txs);
             const activeDeals = txs.filter(t => t.status === 'pending').length;
             const pendingRequests = txs.filter(t => 
@@ -227,24 +241,32 @@ export function App() {
         let cancelled = false;
 
         const pollUnread = async () => {
-            try {
-                const result = await getConversations(identity.publicKey);
-                if (cancelled) return;
-                setTotalUnread(result.totalUnread || 0);
+            // Settled independently, not awaited in sequence. These were chained, so a failing
+            // /api/conversations threw out of the try before transactions were ever fetched —
+            // and since MarketplacePage stopped polling transactions itself and now reads them
+            // from here, one unrelated endpoint erroring starved the whole marketplace view.
+            const [convResult, txResult] = await Promise.allSettled([
+                getConversations(identity.publicKey),
+                getMyMarketplaceTransactions(identity.publicKey),
+            ]);
+            if (cancelled) return;
 
-                // Poll marketplace for active deals + inbound requests (computed from txs alone)
-                const txs = await getMyMarketplaceTransactions(identity.publicKey);
-                if (cancelled) return;
+            if (convResult.status === 'fulfilled') {
+                setTotalUnread(convResult.value.totalUnread || 0);
+            }
+
+            if (txResult.status === 'fulfilled') {
+                const txs = txResult.value;
                 setMyTransactions(txs);
 
                 const activeDeals = txs.filter(t => t.status === 'pending').length;
-                
-                const pendingRequests = txs.filter(t => 
+
+                const pendingRequests = txs.filter(t =>
                     t.buyerPublicKey === identity.publicKey && t.status === 'requested'
                 ).length;
 
                 setPendingDealsCount(activeDeals + pendingRequests);
-            } catch { /* offline */ }
+            }
         };
 
         const startPolling = () => {

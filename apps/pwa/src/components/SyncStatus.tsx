@@ -40,13 +40,18 @@ export function SyncStatus({ isMember: propIsMember }: SyncStatusProps = {}) {
         return unsub;
     }, []);
 
-    // Membership probe — fallback when WebSocket is closed, paused when hidden
-    useEffect(() => {
-        // If the WebSocket is OPEN the node is demonstrably reachable: skip HTTP probe entirely
-        if (sync.connected) {
-            return;
-        }
+    // Membership probe — frequent when the WebSocket is closed, slow when it is open.
+    //
+    // This deliberately does NOT suppress the probe entirely while connected. A browser
+    // WebSocket whose NAT mapping has expired, or whose server vanished, accepts `send()` into
+    // the OS buffer without throwing: `readyState` stays OPEN and `sync.connected` stays true.
+    // There is no pong watchdog, so a dead socket reads as healthy indefinitely — and skipping
+    // the probe would leave the indicator falsely green next to a "last synced 45m ago" that
+    // contradicts it. A slow probe keeps it honest and still removes most of the requests:
+    // one per two minutes instead of one per thirty seconds.
+    const probeIntervalMs = sync.connected ? 120_000 : 30_000;
 
+    useEffect(() => {
         let cancelled = false;
         let interval: ReturnType<typeof setInterval> | null = null;
 
@@ -67,7 +72,7 @@ export function SyncStatus({ isMember: propIsMember }: SyncStatusProps = {}) {
         const startPolling = () => {
             if (interval) return;
             probe();
-            interval = setInterval(probe, withJitter(30_000));
+            interval = setInterval(probe, withJitter(probeIntervalMs));
         };
 
         const stopPolling = () => {
@@ -95,7 +100,7 @@ export function SyncStatus({ isMember: propIsMember }: SyncStatusProps = {}) {
             stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [sync.connected]);
+    }, [probeIntervalMs]);
 
     // Auto-update the "time ago" label (pauses when hidden)
     const [, setTick] = useState(0);

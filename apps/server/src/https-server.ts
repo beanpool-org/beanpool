@@ -357,6 +357,8 @@ function broadcastWsAnalytics() {
     }
 }
 
+const PONG_PAYLOAD = JSON.stringify({ type: 'pong' });
+
 function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http').IncomingMessage) {
     const id = 'ws_' + crypto.randomBytes(8).toString('hex');
     const ip = getIpAddress(req);
@@ -448,6 +450,25 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
                 if (client.readyState === 1 && client !== ws) { // OPEN
                     try { client.send(trafficPayload); } catch {}
                 }
+            }
+
+            // Reply to opt-in application-level ping on the sync WebSocket.
+            // Tiny & fast: skips JSON parsing unless an opt-in key is present in dataStr.
+            // Old clients send {"type":"ping"} and receive no reply, preventing
+            // unexpected doorbell-driven sync loops on un-upgraded clients.
+            // One opt-in key, and the cheap substring check is for that key only. Prefiltering on
+            // a bare 'pong' matched any message that merely CONTAINED the word and forced a
+            // JSON.parse of it — on a 1-CPU node shared with four other containers, per client,
+            // per message. Accepting a second alias bought nothing but another way to be wrong.
+            if (type === 'sync' && dataStr.includes('wantPong')) {
+                try {
+                    const msg = JSON.parse(dataStr);
+                    if (msg && msg.type === 'ping' && msg.wantPong === true) {
+                        if (ws.readyState === 1) { // OPEN
+                            try { ws.send(PONG_PAYLOAD); } catch {}
+                        }
+                    }
+                } catch { /* ignore malformed messages */ }
             }
         }
     });

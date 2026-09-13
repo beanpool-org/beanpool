@@ -15,6 +15,19 @@ class WebSocketSyncClient {
     private isConnecting = false; // Fixes the AsyncStorage race condition
     private appStateSubscription: NativeEventSubscription | null = null;
 
+    public static readonly PING_INTERVAL_MS = 30_000;
+    /**
+     * Pong watchdog timeout (75s = 2.5x ping interval).
+     * Allows 2 consecutive missed pings plus a 15-second grace period for mobile RTT/retransmission.
+     * Tighter (e.g. 30-45s) risks false disconnects on temporary packet loss / cell handover;
+     * looser (>90s) leaves clients sitting on stale data too long.
+     */
+    public static readonly PONG_TIMEOUT_MS = 75_000;
+
+    private lastPongAt: number | null = null;
+    private watchdogArmed = false;
+    private watchdogTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
     public start() {
         if (this.isStarted) return;
         this.isStarted = true;
@@ -120,25 +133,30 @@ class WebSocketSyncClient {
                 if (this.ws !== socket) return; // Stale socket guard
                 console.log(`[WS Sync] ✅ Connected to WebSocket: ${wsUrl.split('?')[0]}`);
                 this.reconnectDelay = 1000; 
+                this.watchdogArmed = false;
+                this.lastPongAt = null;
+                if (this.watchdogTimeoutId) {
+                    clearTimeout(this.watchdogTimeoutId);
+                    this.watchdogTimeoutId = null;
+                }
                 requestSync();
 
-                // Start 30s heartbeat keep-alive to prevent reverse proxy/Cloudflare idle timeout drops
-                if (this.pingIntervalId) clearInterval(this.pingIntervalId);
-                this.pingIntervalId = setInterval(() => {
-                    if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
-                        try {
-                            socket.send(JSON.stringify({ type: 'ping' }));
-                        } catch (err) {
-                            console.warn('[WS Sync] Failed to send heartbeat', err);
-                        }
-                    }
-                }, 30000);
+                // Start 30s heartbeat keep-alive with opt-in pong
+                this.startHeartbeat(socket);
             };
 
             socket.onmessage = (event) => {
                 if (this.ws !== socket) return;
                 try {
                     const data = JSON.parse(event.data);
+
+                    // Trap 1: Exclude pong from the doorbell so watchdog's own keepalive
+                    // does not drive a sync every 30s.
+                    if (data.type === 'pong') {
+                        this.handlePong(socket);
+                        return;
+                    }
+
                     console.log(`[WS Sync] 📥 Received broadcast message type: ${data.type}`);
                     
                     if (data.type !== 'state_snapshot') {
@@ -161,10 +179,9 @@ class WebSocketSyncClient {
                 if (this.ws === socket) {
                     console.log(`[WS Sync] WebSocket closed: code=${e.code}, reason=${e.reason}`);
                     this.ws = null;
-                    if (this.pingIntervalId) {
-                        clearInterval(this.pingIntervalId);
-                        this.pingIntervalId = null;
-                    }
+                    this.stopHeartbeat();
+                    this.watchdogArmed = false;
+                    this.lastPongAt = null;
                     this.scheduleReconnect();
                 }
             };
@@ -188,10 +205,9 @@ class WebSocketSyncClient {
             this.reconnectTimeoutId = null;
         }
 
-        if (this.pingIntervalId) {
-            clearInterval(this.pingIntervalId);
-            this.pingIntervalId = null;
-        }
+        this.stopHeartbeat();
+        this.watchdogArmed = false;
+        this.lastPongAt = null;
         
         if (this.ws) {
             const socket = this.ws;
@@ -206,6 +222,72 @@ class WebSocketSyncClient {
             }
         }
         this.currentUrl = null;
+    }
+
+    private sendPing(socket: WebSocket) {
+        if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
+            try {
+                socket.send(JSON.stringify({ type: 'ping', wantPong: true }));
+            } catch (err) {
+                console.warn('[WS Sync] Failed to send heartbeat', err);
+            }
+        }
+    }
+
+    private handlePong(socket: WebSocket) {
+        if (this.ws !== socket) return;
+        this.lastPongAt = Date.now();
+        // Trap 2: Only arms after seeing at least one pong on this connection
+        this.watchdogArmed = true;
+        this.resetWatchdogTimer(socket);
+    }
+
+    private resetWatchdogTimer(socket: WebSocket) {
+        if (this.watchdogTimeoutId) {
+            clearTimeout(this.watchdogTimeoutId);
+            this.watchdogTimeoutId = null;
+        }
+        if (!this.watchdogArmed || AppState.currentState !== 'active') return;
+
+        this.watchdogTimeoutId = setTimeout(() => {
+            if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
+                console.warn('[WS Sync] Watchdog timeout: no pong received within limit. Closing dead socket.');
+                try { socket.close(); } catch {}
+            }
+        }, WebSocketSyncClient.PONG_TIMEOUT_MS);
+    }
+
+    private stopHeartbeat() {
+        if (this.pingIntervalId) {
+            clearInterval(this.pingIntervalId);
+            this.pingIntervalId = null;
+        }
+        if (this.watchdogTimeoutId) {
+            clearTimeout(this.watchdogTimeoutId);
+            this.watchdogTimeoutId = null;
+        }
+    }
+
+    private startHeartbeat(socket: WebSocket) {
+        this.stopHeartbeat();
+        if (AppState.currentState !== 'active') return;
+
+        this.sendPing(socket);
+        this.pingIntervalId = setInterval(() => {
+            this.sendPing(socket);
+        }, WebSocketSyncClient.PING_INTERVAL_MS);
+
+        if (this.watchdogArmed) {
+            this.resetWatchdogTimer(socket);
+        }
+    }
+
+    public getWatchdogArmedForTest(): boolean {
+        return this.watchdogArmed;
+    }
+
+    public getLastPongAtForTest(): number | null {
+        return this.lastPongAt;
     }
 
     private scheduleReconnect() {
@@ -227,3 +309,4 @@ class WebSocketSyncClient {
 const clientInstance = new WebSocketSyncClient();
 export function startWebSocketSync() { clientInstance.start(); }
 export function stopWebSocketSync() { clientInstance.stop(); }
+export { WebSocketSyncClient };

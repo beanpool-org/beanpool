@@ -72,17 +72,21 @@ async function main() {
     assert(adminAfterBob === alicePubkey, 'getAdminPubkey() deterministically picks first-seeded genesis member (Alice) via ORDER BY rowid ASC');
 
     // 4. Admin override checks
-    createTreasury('treasury_community_farm', 'Community Farm', 'pubkey_random_creator', 500);
+    // createTreasury(name, avatar, creditLine) — the callsign is NOT the account id. It returns a
+    // freshly generated pubkey, and canOperateTreasury() is keyed on that. Asserting against the
+    // callsign string made the two negative cases vacuous: they would have passed against any
+    // treasury that did not exist.
+    const farmPubkey = createTreasury('CommunityFarm', 'data:image/png;base64,iVBORw0KGgo=', 500).publicKey;
 
     assert(canOperate(alicePubkey) === true, 'real genesis admin has canOperate override');
-    assert(canOperateTreasury(alicePubkey, 'treasury_community_farm') === true, 'real genesis admin has canOperateTreasury override');
+    assert(canOperateTreasury(alicePubkey, farmPubkey) === true, 'real genesis admin has canOperateTreasury override');
 
     assert(canOperate('SYSTEM') === false, 'SYSTEM does not hold canOperate override');
-    assert(canOperateTreasury('SYSTEM', 'treasury_community_farm') === false, 'SYSTEM does not hold canOperateTreasury override');
+    assert(canOperateTreasury('SYSTEM', farmPubkey) === false, 'SYSTEM does not hold canOperateTreasury override');
 
     const nonAdminPubkey = 'pubkey_plain_member_0003';
     assert(canOperate(nonAdminPubkey) === false, 'regular member does not hold admin canOperate override');
-    assert(canOperateTreasury(nonAdminPubkey, 'treasury_community_farm') === false, 'regular member does not hold admin canOperateTreasury override');
+    assert(canOperateTreasury(nonAdminPubkey, farmPubkey) === false, 'regular member does not hold admin canOperateTreasury override');
 
     // 5. Query plan check
     const plan = db.prepare("EXPLAIN QUERY PLAN SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' ORDER BY rowid ASC LIMIT 1").all();
@@ -94,7 +98,9 @@ async function main() {
     }
 }
 
-main().catch(err => {
+// Explicit exit: initStateEngine() installs periodic timers, and a suite that merely stops asserting
+// still holds the event loop open — which the CI harness records as a TIMEOUT rather than a pass.
+main().then(() => process.exit(process.exitCode ?? 0)).catch(err => {
     console.error('Test threw unexpected exception:', err);
     process.exit(1);
 });

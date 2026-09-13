@@ -7,7 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { updateCrowdfundProjectApi, getProjectById, deleteCrowdfundProjectApi } from '../utils/db';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { CurrencyDisplay } from '../components/CurrencyDisplay';
 import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
@@ -215,7 +215,7 @@ export default function EditProjectModal() {
                                     display="default"
                                     minimumDate={new Date()}
                                     maximumDate={maxDate}
-                                    onChange={(event: any, selectedDate?: Date) => {
+                                    onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
                                         if (selectedDate) setDeadlineDate(selectedDate);
                                     }}
                                 />
@@ -238,7 +238,7 @@ export default function EditProjectModal() {
                                         display="default"
                                         minimumDate={new Date()}
                                         maximumDate={maxDate}
-                                        onChange={(event: any, selectedDate?: Date) => {
+                                        onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
                                             setShowPicker(false);
                                             if (event.type === 'set' && selectedDate) {
                                                 setDeadlineDate(selectedDate);

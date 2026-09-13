@@ -71,3 +71,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `people.tsx` typed `useLocalSearchParams<{ view: string }>()` as a non-optional string parameter.
 **Learning:** When entering the People screen without route params, `view` is `undefined` at runtime. Updating to `{ view?: string }` ensures accurate parameter typing.
 **Pattern:** Always type search parameters as optional (`param?: string`) unless guaranteed by route definition.
+
+## 2026-09-12 - [Fix DateTimePicker event type in edit-project]
+**Issue:** `edit-project.tsx` used `any` for DateTimePicker `onChange` event callback parameters.
+**Learning:** Replaced `any` with `DateTimePickerEvent` from `@react-native-community/datetimepicker`.
+**Pattern:** Search for `DateTimePicker` event handlers using `any` and replace with `DateTimePickerEvent`.

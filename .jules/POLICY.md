@@ -252,3 +252,14 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Claim:** Replace untyped `catch (e: any)` with `catch (e: unknown)` in `apps/manager/src/components/modules/MembersModule.tsx`.
 - **Why not to re-file:** Landed in commit `ac888a3`. Six catch blocks safely converted using `e instanceof Error ? e.message : String(e)` without type assertions. Resolved on `main`.
 
+
+### 2026-09-13 — Sentinel: path traversal in fleet manager backup routes (#747) — LANDED, BUT THE CLAIM WAS FALSE
+- **Category:** PHANTOM VULNERABILITY (fix merged anyway, as a regression guard)
+- **Claim:** `nodeId` on `/api/manager/backups/download-db` and `/download-identity` allows path traversal via `../../`.
+- **Why not to re-file:** The traversal was **already impossible**. Every `nodeId` passes through `nodeSlug()` (`apps/server/src/services/harvester.ts`), which either returns a known node name or falls back to `id.replace(/[^a-zA-Z0-9_-]/g, '_')` — slashes, dots and backslashes are stripped before the path is ever built, so `../../secret` became `______secret`. The PR was merged because the traversal **test** it adds is worth having as a guard on `nodeSlug`'s sanitisation, not because it closed a hole. Do not re-file traversal findings against any route whose input goes through `nodeSlug` without first showing that `nodeSlug` itself lets the character through.
+- **Related trap:** the guard it added rejects any `nodeId` containing `/`. That is safe only because callers pass an already-slugified value (`TopologyModule.tsx` sends `{ nodeId: slug }`). A future caller passing a node URL would be rejected. Check call sites before tightening input validation on this family of routes.
+
+### 2026-09-13 — Scout: members-holiday test coverage (#740) — LANDED AFTER REBASE
+- **Category:** MERGE CONFLICT, RECURRING
+- **Claim:** Missing coverage for holiday-mode member behaviour.
+- **Why not to re-file:** The suite landed. Recording the conflict because it is now the third time: `scripts/test-all.sh` keeps its entire suite list on **one line inside a `bash -c '...'` block**, so any two PRs that register a new suite in the same batch conflict with each other. #740 collided with #751. When filing a new suite, expect to rebase that single line, and never introduce an apostrophe anywhere in that block — it breaks the whole script with an error that points at EOF.

@@ -47,6 +47,78 @@ let reconnectDelay = 1000;
 let isConnecting = false;
 let currentUrl: string | null = null;
 
+export const HEARTBEAT_INTERVAL_MS = 30_000;
+/**
+ * Pong watchdog timeout (75s = 2.5x ping interval).
+ * Allows 2 consecutive missed pings plus a 15-second grace period for mobile RTT/retransmission.
+ * Tighter (e.g. 30-45s) risks false disconnects on temporary packet loss / cell handover;
+ * looser (>90s) leaves clients sitting on stale data too long.
+ */
+export const PONG_TIMEOUT_MS = 75_000;
+
+let lastPongAt: number | null = null;
+let watchdogArmed = false;
+let watchdogTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+function sendPing(socket: WebSocket): void {
+    if (ws === socket && socket.readyState === WebSocket.OPEN) {
+        try {
+            socket.send(JSON.stringify({ type: 'ping', wantPong: true }));
+        } catch (err) {
+            console.warn('[WS Sync] Failed to send heartbeat', err);
+        }
+    }
+}
+
+function handlePong(socket: WebSocket): void {
+    if (ws !== socket) return;
+    lastPongAt = Date.now();
+    // Trap 2: Only arms after seeing at least one pong on this connection
+    watchdogArmed = true;
+    resetWatchdogTimer(socket);
+}
+
+function resetWatchdogTimer(socket: WebSocket): void {
+    if (watchdogTimeoutId) {
+        clearTimeout(watchdogTimeoutId);
+        watchdogTimeoutId = null;
+    }
+    if (!watchdogArmed) return;
+    if (typeof document !== 'undefined' && (document.hidden || document.visibilityState === 'hidden')) return;
+
+    watchdogTimeoutId = setTimeout(() => {
+        if (ws === socket && socket.readyState === WebSocket.OPEN) {
+            console.warn('[WS Sync] Watchdog timeout: no pong received within limit. Closing dead socket.');
+            try { socket.close(); } catch {}
+        }
+    }, PONG_TIMEOUT_MS);
+}
+
+function stopHeartbeat(): void {
+    if (pingIntervalId) {
+        clearInterval(pingIntervalId);
+        pingIntervalId = null;
+    }
+    if (watchdogTimeoutId) {
+        clearTimeout(watchdogTimeoutId);
+        watchdogTimeoutId = null;
+    }
+}
+
+function startHeartbeat(socket: WebSocket): void {
+    stopHeartbeat();
+    if (typeof document !== 'undefined' && (document.hidden || document.visibilityState === 'hidden')) return;
+
+    sendPing(socket);
+    pingIntervalId = setInterval(() => {
+        sendPing(socket);
+    }, HEARTBEAT_INTERVAL_MS);
+
+    if (watchdogArmed) {
+        resetWatchdogTimer(socket);
+    }
+}
+
 let listeners: SyncCallback[] = [];
 let announcementListeners: ((a: any) => void)[] = [];
 let currentState: SyncState = loadCachedState();
@@ -117,6 +189,13 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             clearTimeout(reconnectTimeoutId);
             reconnectTimeoutId = null;
         }
+        watchdogArmed = false;
+        lastPongAt = null;
+        if (watchdogTimeoutId) {
+            clearTimeout(watchdogTimeoutId);
+            watchdogTimeoutId = null;
+        }
+
         currentState = { ...currentState, connected: true };
         notify();
 
@@ -125,23 +204,21 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             console.warn('[WS Sync] Reconnect sync error:', err);
         });
 
-        // Start 30s heartbeat keep-alive to prevent reverse proxy/Cloudflare idle timeout drops
-        if (pingIntervalId) clearInterval(pingIntervalId);
-        pingIntervalId = setInterval(() => {
-            if (ws === socket && socket.readyState === WebSocket.OPEN) {
-                try {
-                    socket.send(JSON.stringify({ type: 'ping' }));
-                } catch (err) {
-                    console.warn('[WS Sync] Failed to send heartbeat', err);
-                }
-            }
-        }, 30000);
+        // Start 30s heartbeat keep-alive with opt-in pong
+        startHeartbeat(socket);
     };
 
     socket.onmessage = (event) => {
         if (ws !== socket) return;
         try {
             const data = JSON.parse(event.data);
+
+            // Trap 1: Exclude pong from the doorbell so watchdog's own keepalive
+            // does not drive a sync every 30s.
+            if (data.type === 'pong') {
+                handlePong(socket);
+                return;
+            }
             
             if (data.type === 'system_announcement') {
                 announcementListeners.forEach(cb => cb(data));
@@ -182,10 +259,9 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
     socket.onclose = () => {
         if (ws === socket) {
             ws = null;
-            if (pingIntervalId) {
-                clearInterval(pingIntervalId);
-                pingIntervalId = null;
-            }
+            stopHeartbeat();
+            watchdogArmed = false;
+            lastPongAt = null;
             // Dropped before it proved stable, so the backoff must keep growing.
             if (stabilityTimeoutId) {
                 clearTimeout(stabilityTimeoutId);
@@ -250,22 +326,35 @@ function scheduleReconnect(url: string): void {
     }, delay);
 }
 
-// Page visibility listener — reconnects immediately when tab returns to foreground
+// Page visibility listener — reconnects immediately when tab returns to foreground,
+// and pauses heartbeat / watchdog while hidden so a hidden tab is not kept awake.
 if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
+        const isHidden = document.hidden || document.visibilityState === 'hidden';
+        if (isHidden) {
+            stopHeartbeat();
+        } else {
             const isDead = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
             if (isDead) {
                 if (ws) {
                     try { ws.close(); } catch {}
                     ws = null;
                 }
+                // Unlinking `ws` above means the old socket's onclose never runs its cleanup, so
+                // the armed flag would survive onto the REPLACEMENT connection and let the
+                // watchdog fire before that connection has ever produced a pong — the exact
+                // invariant the arm-on-first-pong rule exists to hold. Reset it here too.
+                watchdogArmed = false;
+                lastPongAt = null;
+                stopHeartbeat();
                 if (reconnectTimeoutId) {
                     clearTimeout(reconnectTimeoutId);
                     reconnectTimeoutId = null;
                 }
                 reconnectDelay = 1000;
                 connectToAnchor(currentUrl ?? undefined);
+            } else if (ws) {
+                startHeartbeat(ws);
             }
         }
     });
@@ -320,14 +409,25 @@ export function resetSyncForTest(): void {
         clearTimeout(reconnectTimeoutId);
         reconnectTimeoutId = null;
     }
-    if (pingIntervalId) {
-        clearInterval(pingIntervalId);
-        pingIntervalId = null;
+    stopHeartbeat();
+    if (stabilityTimeoutId) {
+        clearTimeout(stabilityTimeoutId);
+        stabilityTimeoutId = null;
     }
+    watchdogArmed = false;
+    lastPongAt = null;
     reconnectDelay = 1000;
     isConnecting = false;
     currentUrl = null;
     listeners = [];
     announcementListeners = [];
     currentState = { connected: false, lastSyncTime: null, merkleRoot: null, accountCount: 0 };
+}
+
+export function getWatchdogArmedForTest(): boolean {
+    return watchdogArmed;
+}
+
+export function getLastPongAtForTest(): number | null {
+    return lastPongAt;
 }

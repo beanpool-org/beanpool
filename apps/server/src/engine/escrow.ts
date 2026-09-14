@@ -361,7 +361,8 @@ export function rejectPostRequest(
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
     if (expectedAuthorRole !== authorPublicKey) return null;
 
-    db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(transactionId);
+    const res = db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(transactionId);
+    if (res.changes === 0) return null;
     
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_rejected', transaction: tx });

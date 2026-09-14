@@ -694,16 +694,17 @@ CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(m
 -- (positive balance AND sufficient earned surplus).
 CREATE TABLE IF NOT EXISTS deferred_wage_claims (
     id                TEXT PRIMARY KEY,
-    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key),
-    keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key),
-    post_id           TEXT REFERENCES posts(id),
-    transaction_id    TEXT,
+    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    post_id           TEXT REFERENCES posts(id) ON DELETE SET NULL,
+    transaction_id    TEXT UNIQUE,
     amount            REAL NOT NULL,
     status            TEXT NOT NULL DEFAULT 'pending',
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     paid_at           DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_deferred_claims_enterprise ON deferred_wage_claims(enterprise_pubkey, status);
+CREATE INDEX IF NOT EXISTS idx_deferred_claims_lookup ON deferred_wage_claims(enterprise_pubkey, keeper_pubkey, post_id, status);
 
 -- 21. Cross-node settlements (#104) — the durable state machine behind charge-home settlement.
 --

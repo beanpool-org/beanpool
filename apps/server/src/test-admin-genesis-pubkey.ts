@@ -54,7 +54,9 @@ async function main() {
 
     const adminBeforeHuman = getAdminPubkey();
     assert(adminBeforeHuman !== 'SYSTEM', 'getAdminPubkey() must NEVER return SYSTEM placeholder');
-    assert(adminBeforeHuman === 'system', 'getAdminPubkey() returns fallback system when no human genesis member exists');
+    // '' rather than a placeholder: every override site compares `publicKey === getAdminPubkey()`,
+    // so any non-empty sentinel grants admin to whoever presents that same literal as their actor.
+    assert(adminBeforeHuman === '', 'getAdminPubkey() returns an empty string — not a self-matching sentinel — when no human genesis member exists');
 
     // 2. Seed first human genesis member
     const alicePubkey = 'pubkey_alice_genesis_0001';

@@ -146,9 +146,11 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
 
             {/* Author Row */}
             <div className="flex items-center gap-2 mb-2">
-                <div
+                <button
+                    type="button"
                     onClick={() => onOpenProfile?.(livePost.authorPublicKey)}
-                    className="flex items-center gap-2 cursor-pointer group"
+                    aria-label={`View ${authorName}'s profile`}
+                    className="flex items-center gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left focus:outline-none focus:ring-2 focus:ring-purple-400 rounded-lg"
                 >
                     {avatarSrc ? (
                         <img
@@ -164,7 +166,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                     <span className="text-xs font-bold text-nature-600 dark:text-nature-300 group-hover:text-nature-900 dark:group-hover:text-white transition-colors">
                         {authorName} {isAuthor && <span className="text-blue-600 dark:text-blue-400 font-extrabold">(You)</span>}
                     </span>
-                </div>
+                </button>
             </div>
 
             {/* Question Title */}
@@ -191,6 +193,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                         <button
                             key={opt.id || String(idx)}
                             type="button"
+                            aria-pressed={isVoted}
                             disabled={isClosed || Boolean(votingOptionId)}
                             onClick={() => handleVote(opt.id)}
                             className={`w-full relative overflow-hidden rounded-xl border text-left transition-all p-3 cursor-pointer group ${
@@ -201,6 +204,11 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                         >
                             {/* Live Progress Bar Fill */}
                             <div
+                                role="progressbar"
+                                aria-valuenow={pct}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-label={`${opt.text}: ${pct}% of votes`}
                                 className={`absolute top-0 bottom-0 left-0 transition-all duration-500 rounded-l-xl ${
                                     isVoted
                                         ? 'bg-purple-200/70 dark:bg-purple-800/50'
@@ -213,13 +221,14 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                             <div className="relative z-10 flex items-center justify-between gap-3 text-xs">
                                 <div className="flex items-center gap-2 min-w-0">
                                     <div
+                                        aria-hidden="true"
                                         className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 border text-[9px] font-black ${
                                             isVoted
                                                 ? 'bg-purple-600 border-purple-600 text-white'
-                                                : 'border-nature-300 dark:border-nature-600 text-transparent group-hover:border-purple-400'
+                                                : 'border-nature-300 dark:border-nature-600 group-hover:border-purple-400'
                                         }`}
                                     >
-                                        ✓
+                                        {isVoted ? '✓' : null}
                                     </div>
                                     <span className={`font-bold truncate ${isVoted ? 'text-purple-950 dark:text-purple-200' : 'text-nature-900 dark:text-white'}`}>
                                         {opt.text}
@@ -257,7 +266,9 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                     <button
                         type="button"
                         onClick={() => setShowVoters(v => !v)}
-                        className="text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                        aria-expanded={showVoters}
+                        aria-controls="poll-voters-list"
+                        className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer py-2 px-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40 min-h-[44px] flex items-center"
                     >
                         {showVoters ? 'Hide Voters ▲' : `Show Voters (${votesList.length}) ▼`}
                     </button>
@@ -266,7 +277,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
 
             {/* Collapsible Open Ballot Public Voter List */}
             {showVoters && votesList.length > 0 && (
-                <div className="mt-2.5 pt-2 border-t border-purple-100 dark:border-purple-900/40 max-h-36 overflow-y-auto space-y-1 text-xs">
+                <div id="poll-voters-list" className="mt-2.5 pt-2 border-t border-purple-100 dark:border-purple-900/40 max-h-36 overflow-y-auto space-y-1 text-xs">
                     <p className="text-[10px] uppercase tracking-wider font-extrabold text-nature-400 mb-1">
                         Public Village Ballot
                     </p>

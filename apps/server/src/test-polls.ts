@@ -352,6 +352,7 @@ async function main() {
     // Searching specifically for polls returns it
     const searchPolls = getPosts({ query: 'Timber', type: 'poll' });
     const pollFound = searchPolls.some(p => p.id === poll1!.id);
+    assert(pollFound, 'Poll search specifically returns matching poll');
     console.log('\n--- 10. Route Security & Extended Validation ---');
     // Option text length limit
     errThrew = false;

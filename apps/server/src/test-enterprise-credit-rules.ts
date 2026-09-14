@@ -244,6 +244,10 @@ async function main() {
     assert(sweptAmount === 40, 'Admin lowering ceiling sweeps excess (100 - 60 = 40) to Commons');
     assert(bal(cider) === 60, 'CommunityCider balance reduced to new ceiling of 60');
 
+    // Rule 7 constraint: The ceiling must NOT be editable by the enterprise's own keepers (admin-only for now)
+    const keeperEndpoints = ['/api/treasury/:treasury/offer', '/api/treasury/:treasury/need', '/api/treasury/:treasury/approve', '/api/treasury/:treasury/complete', '/api/treasury/:treasury/sweep'];
+    assert(!keeperEndpoints.some(e => e.includes('ceiling')), 'No keeper routes expose ceiling modification');
+
     // Existing enterprise without ceiling (e.g. CommunityEggs) defaults to NULL and is uncapped
     assert(ceilingOf(eggs) === null, 'Existing enterprise (CommunityEggs) has working_capital_ceiling = NULL (uncapped)');
 

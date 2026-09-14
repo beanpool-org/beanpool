@@ -100,17 +100,21 @@ async function main() {
     assert(reqRes.status === 200, `worker bids on enterprise Need (got ${reqRes.status} ${reqRes.error ?? ''})`);
     const dealTxId = reqRes.body.transaction.id;
 
-    // Verify treasury detail exposes pendingBids and activeDeals
-    const detailBeforeApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
-    assert(detailBeforeApprove.pendingBids?.some((b: any) => b.id === dealTxId), 'detail exposes pending bid on need');
+    // Verify treasury detail exposes pendingBids and activeDeals to operator, but hides them on unauthenticated read
+    const unauthBeforeApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(Array.isArray(unauthBeforeApprove.pendingBids) && unauthBeforeApprove.pendingBids.length === 0, 'public read hides pending bids');
+    const detailBeforeApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    assert(detailBeforeApprove.pendingBids?.some((b: any) => b.id === dealTxId), 'detail exposes pending bid on need to keeper');
 
     const approveRes = await signedFetch('POST', `/api/treasury/${eggs}/approve`, doone, { transactionId: dealTxId });
     assert(approveRes.status === 200, `keeper approves bid on enterprise Need (got ${approveRes.status})`);
     const escrowTxRow = db.prepare('SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey=?').get(eggs, `escrow_${dealTxId}`) as any;
     assert(escrowTxRow?.auth_signer === doone.pubKeyHex, 'escrow hold transaction auth_signer records acting operator');
 
-    const detailAfterApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
-    assert(detailAfterApprove.activeDeals?.some((d: any) => d.id === dealTxId), 'detail exposes active deal on need');
+    const unauthAfterApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(Array.isArray(unauthAfterApprove.activeDeals) && unauthAfterApprove.activeDeals.length === 0, 'public read hides active deals');
+    const detailAfterApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    assert(detailAfterApprove.activeDeals?.some((d: any) => d.id === dealTxId), 'detail exposes active deal on need to keeper');
 
     const completeRes = await signedFetch('POST', `/api/treasury/${eggs}/complete`, doone, { transactionId: dealTxId });
     assert(completeRes.status === 200, `keeper completes deal on enterprise Need (got ${completeRes.status})`);

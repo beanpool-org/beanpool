@@ -150,7 +150,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ).all(treasury, treasury) as any[]).map(f => ({
             amount: f.amount, memo: f.memo, timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
         }));
-        const pendingBids = db.prepare(`
+        // Gate pending bids and active deals so only verified operators of this treasury receive them
+        const actor = ctx.state?.actor;
+        const isOperator = !!(actor && canOperateTreasury(actor, treasury));
+
+        const pendingBids = isOperator ? (db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
                    p.title as post_title, p.type as post_type, p.price_type,
                    m.callsign as peer_callsign, m.avatar_url as peer_avatar
@@ -159,8 +163,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             LEFT JOIN members m ON t.seller_pubkey = m.public_key
             WHERE t.buyer_pubkey = ? AND t.status = 'requested'
             ORDER BY t.created_at DESC
-        `).all(treasury) as any[];
-        const activeDeals = db.prepare(`
+        `).all(treasury) as any[]) : [];
+        const activeDeals = isOperator ? (db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
                    p.title as post_title, p.type as post_type, p.price_type,
                    m.callsign as peer_callsign, m.avatar_url as peer_avatar
@@ -169,7 +173,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             LEFT JOIN members m ON t.seller_pubkey = m.public_key
             WHERE t.buyer_pubkey = ? AND t.status = 'pending'
             ORDER BY t.created_at DESC
-        `).all(treasury) as any[];
+        `).all(treasury) as any[]) : [];
         ctx.body = {
             publicKey: treasury, name: m.callsign,
             avatar: m.avatar_url

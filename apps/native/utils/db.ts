@@ -1814,11 +1814,8 @@ export async function getTreasuries(): Promise<TreasurySummary[]> {
 }
 
 export async function getTreasuryDetail(publicKey: string): Promise<any | null> {
-    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!rawUrl) return null;
-    const anchorUrl = rawUrl.replace(/\/$/, '');
     try {
-        const res = await fetch(`${anchorUrl}/api/treasury/${encodeURIComponent(publicKey)}`);
+        const res = await signedGet(`/api/treasury/${encodeURIComponent(publicKey)}`);
         if (!res.ok) return null;
         return await res.json();
     } catch { return null; }

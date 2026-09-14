@@ -1741,10 +1741,14 @@ export function canOperate(publicKey: string): boolean {
  * per-enterprise assignments. adminAssignTreasuryOperator sets the flag automatically, so a row can
  * never be silently inert.
  *
- * The system admin retains a node-wide override — they create the enterprises in the first place.
+ * Gated for SPENDING operations: post offer, post need, approve a bid, complete and pay, sweep the balance,
+ * and fund a federation commission.
+ * NO admin bypass: requires a real treasury_operators row, exactly as for anyone else.
+ *
+ * An admin can rescue an abandoned enterprise by explicitly appointing themselves via
+ * adminAssignTreasuryOperator, which creates a public, recorded, revocable binding.
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
     if (!canOperate(publicKey)) return false;
     const row = db.prepare(
         "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
@@ -1753,16 +1757,25 @@ export function canOperateTreasury(publicKey: string, treasuryPubkey: string): b
 }
 
 /**
+ * May this actor perform REPAIR AND MODERATION actions on this enterprise?
+ * Covers non-spending administrative actions: pausing an enterprise, unbinding a keeper,
+ * archiving an abandoned enterprise, taking down a listing.
+ *
+ * The node admin IS allowed here (break-glass repair / moderation authority), as is any
+ * legitimate keeper of the enterprise.
+ */
+export function canAdministerTreasury(publicKey: string, treasuryPubkey: string): boolean {
+    if (publicKey === getAdminPubkey()) return true;
+    return canOperateTreasury(publicKey, treasuryPubkey);
+}
+
+/**
  * Which enterprises does this member keep? Drives the Commons tab's per-enterprise controls —
  * the client needs the list, not a boolean, to know which cards get an operate panel.
  *
- * The admin holds a node-wide override, so they get every treasury.
+ * No admin bypass: an admin sees only the enterprises they have explicitly been appointed to keep.
  */
 export function keeperOf(publicKey: string): string[] {
-    if (publicKey === getAdminPubkey()) {
-        return (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as any[])
-            .map(r => r.public_key);
-    }
     if (!canOperate(publicKey)) return [];
     return (db.prepare(
         "SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ?"
@@ -2627,8 +2640,8 @@ export function getCommunityHealth(): CommunityHealth {
 // ===================== ADMIN CONTROLS =====================
 
 export function getAdminPubkey(): string {
-    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' LIMIT 1").get() as any;
-    return row ? row.public_key : 'system';
+    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' ORDER BY rowid ASC LIMIT 1").get() as any;
+    return row ? row.public_key : '';
 }
 
 /**

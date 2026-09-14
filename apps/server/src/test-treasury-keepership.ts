@@ -22,9 +22,9 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, adminSetOperator,
-    canOperateTreasury, keeperOf, treasuryKeepers,
+    canOperateTreasury, canAdministerTreasury, keeperOf, treasuryKeepers,
     adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
-    getBalance,
+    getBalance, adminSetUserStatus, adminDeletePost, getAdminPubkey,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db, seedTreasuryOperatorsFromLegacyFlag } from './db/db.js';
@@ -166,6 +166,59 @@ async function main() {
     const again = seedTreasuryOperatorsFromLegacyFlag();
     assert(again === 0, `migration is a no-op once the table is non-empty (wrote ${again})`);
     assert(canOperateTreasury(doone.pubKeyHex, wood) === false, 'a pruned binding STAYS pruned across re-runs');
+
+    // ── 8. Admin cannot SPEND an enterprise's money; administration/moderation preserved ──
+    const admin = makeIdentity('genesis-admin');
+    db.prepare("UPDATE members SET invited_by = 'genesis' WHERE public_key = ?").run(admin.pubKeyHex);
+    assert(getAdminPubkey() === admin.pubKeyHex, 'genesis-admin is recognized as node admin');
+
+    // Admin without binding cannot spend:
+    assert(canOperateTreasury(admin.pubKeyHex, eggs) === false, 'admin without binding cannot operate Eggs treasury');
+    assert(canAdministerTreasury(admin.pubKeyHex, eggs) === true, 'admin CAN administer Eggs treasury (repair / moderation)');
+    assert(keeperOf(admin.pubKeyHex).length === 0, 'admin without binding keeps no enterprises');
+
+    // Refused on all 5 spending routes on live server:
+    for (const [route, payload] of [
+        ['offer', { title: 'Admin eggs', category: 'food', credits: 10 }],
+        ['need', { title: 'Admin need', category: 'food', credits: 20 }],
+        ['approve', { transactionId: 'any-id' }],
+        ['complete', { transactionId: 'any-id' }],
+        ['sweep', { amount: 1 }],
+    ] as Array<[string, any]>) {
+        const r = await signedFetch('POST', `/api/treasury/${eggs}/${route}`, admin, payload);
+        assert(r.status === 403, `admin without keeper binding is REFUSED on /api/treasury/:treasury/${route} (got ${r.status} ${r.error ?? ''})`);
+    }
+
+    // Repair and moderation actions succeed for admin:
+    adminSetUserStatus(eggs, 'disabled');
+    const pausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Paused eggs', category: 'food', credits: 10 });
+    assert(pausedOffer.status === 403 && pausedOffer.error?.startsWith('This enterprise has been closed'), `pausing enterprise blocks route operations (got ${pausedOffer.status} "${pausedOffer.error}")`);
+    adminSetUserStatus(eggs, 'active');
+    const unpausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Unpaused eggs', category: 'food', credits: 10 });
+    assert(unpausedOffer.status === 200, 'unpausing enterprise restores keeper operations');
+
+    // Admin legitimately appointed to keep an enterprise:
+    adminAssignTreasuryOperator(eggs, admin.pubKeyHex, 'admin');
+    const bindingRow = db.prepare('SELECT granted_by FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?').get(admin.pubKeyHex, eggs) as any;
+    assert(bindingRow?.granted_by === 'admin', 'admin appointment recorded with granted_by = admin in treasury_operators');
+    assert(canOperateTreasury(admin.pubKeyHex, eggs) === true, 'appointed admin can now operate Eggs');
+    assert(keeperOf(admin.pubKeyHex).includes(eggs), 'appointed admin lists Eggs in keeperOf');
+
+    // Appointed admin can now spend:
+    const adminOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin posted offer', category: 'food', credits: 15 });
+    assert(adminOffer.status === 200, `appointed admin can post offer (got ${adminOffer.status})`);
+    if (adminOffer.body?.post?.id) {
+        const deleted = adminDeletePost(adminOffer.body.post.id);
+        assert(deleted === true, 'admin can take down / delete listing');
+        const postRow = db.prepare('SELECT status, active FROM posts WHERE id = ?').get(adminOffer.body.post.id) as any;
+        assert(postRow?.status === 'cancelled' && postRow?.active === 0, 'listing is cancelled after admin takedown');
+    }
+
+    // Revoking removes spending again:
+    adminRevokeTreasuryOperator(eggs, admin.pubKeyHex);
+    assert(canOperateTreasury(admin.pubKeyHex, eggs) === false, 'revoking admin appointment removes spending authority');
+    const afterRevokeOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin post after revoke', category: 'food', credits: 15 });
+    assert(afterRevokeOffer.status === 403, `revoked admin is REFUSED again on spend route (got ${afterRevokeOffer.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

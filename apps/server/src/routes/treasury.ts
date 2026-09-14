@@ -391,10 +391,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         const actor = requireOperator(ctx, treasury);
         if (!actor) return;
-        const { transactionId, hours } = (ctx as any).requestBody || {};
+        const { transactionId, finalHours, hours } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
+        const rawHours = finalHours !== undefined ? finalHours : hours;
+        const parsedHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
         try {
-            const tx = completePostTransaction(String(transactionId), treasury, typeof hours === 'number' ? hours : undefined, { authSigner: actor });
+            const tx = completePostTransaction(String(transactionId), treasury, parsedHours, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {

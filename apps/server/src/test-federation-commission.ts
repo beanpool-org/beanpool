@@ -45,7 +45,7 @@ import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { setCommonsBalance } from '@beanpool/core';
 import {
     initStateEngine, reconcileLedgerFromDb, getCommonsBalanceExact,
-    createTreasury, createPost, adminAssignTreasuryOperator, getAdminPubkey,
+    createTreasury, createPost, adminAssignTreasuryOperator, getAdminPubkey, seedGenesisMember,
 } from './state-engine.js';
 import { ledger } from './engine/ledger.js';
 import { db } from './db/db.js';
@@ -258,6 +258,10 @@ async function main() {
     const remotePost = createPost('offer', 'other', 'A performance in Byron', 'd', 60, 'fixed', remoteSeller)!;
     db.prepare("UPDATE posts SET origin_node = ? WHERE id = ?").run(PEER_URL, remotePost.id);
 
+    // §10 below asserts the admin's node-wide override reaches a link. makeMember() leaves
+    // invited_by NULL, so without this there is no human admin at all and the assertion tested
+    // nothing — it passed only while getAdminPubkey() returned the self-matching 'SYSTEM' row.
+    seedGenesisMember('NodeAdmin', 'NodeAdmin');
     const keeper = makeMember('Keeper', 50);
     const bystander = makeMember('Bystander', 50);
     adminAssignTreasuryOperator(link.treasuryPubkey, keeper);

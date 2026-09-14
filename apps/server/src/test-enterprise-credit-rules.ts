@@ -337,6 +337,34 @@ async function main() {
     // Existing enterprise without ceiling (e.g. CommunityEggs) defaults to NULL and is uncapped
     assert(ceilingOf(eggs) === null, 'Existing enterprise (CommunityEggs) has working_capital_ceiling = NULL (uncapped)');
 
+    // Validate ceiling input in createTreasury
+    let caughtNegativeCeiling = false;
+    try {
+        createTreasury('BadCeiling1', AVATAR, 100, { workingCapitalCeiling: -50 });
+    } catch (e: any) {
+        caughtNegativeCeiling = true;
+        assert(e.message.includes('Working capital ceiling must be a non-negative finite number or null'), 'Negative ceiling rejected in createTreasury');
+    }
+    assert(caughtNegativeCeiling, 'createTreasury threw error on negative ceiling');
+
+    let caughtNanCeiling = false;
+    try {
+        createTreasury('BadCeiling2', AVATAR, 100, { workingCapitalCeiling: NaN });
+    } catch (e: any) {
+        caughtNanCeiling = true;
+        assert(e.message.includes('Working capital ceiling must be a non-negative finite number or null'), 'NaN ceiling rejected in createTreasury');
+    }
+    assert(caughtNanCeiling, 'createTreasury threw error on NaN ceiling');
+
+    let caughtInfCeiling = false;
+    try {
+        createTreasury('BadCeiling3', AVATAR, 100, { workingCapitalCeiling: Infinity });
+    } catch (e: any) {
+        caughtInfCeiling = true;
+        assert(e.message.includes('Working capital ceiling must be a non-negative finite number or null'), 'Infinity ceiling rejected in createTreasury');
+    }
+    assert(caughtInfCeiling, 'createTreasury threw error on Infinity ceiling');
+
     // ─────────────────────────────────────────────────────────────────────────────
     // REGRESSION TEST 2: Community Eggs backfill from historical sales
     // ─────────────────────────────────────────────────────────────────────────────

@@ -2970,9 +2970,14 @@ export function createTreasury(
         throw new Error('That name is already taken');
     }
     const line = Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.round(creditLine)));
-    const ceiling = opts.workingCapitalCeiling !== undefined && opts.workingCapitalCeiling !== null
-        ? Math.max(0, Number(opts.workingCapitalCeiling))
-        : null;
+    let ceiling: number | null = null;
+    if (opts.workingCapitalCeiling !== undefined && opts.workingCapitalCeiling !== null) {
+        const num = Number(opts.workingCapitalCeiling);
+        if (!Number.isFinite(num) || num < 0) {
+            throw new Error('Working capital ceiling must be a non-negative finite number or null');
+        }
+        ceiling = num;
+    }
 
     const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
         publicKeyEncoding: { type: 'spki', format: 'pem' },

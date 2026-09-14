@@ -250,9 +250,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const { ceiling } = (ctx as any).requestBody || {};
         const parsedCeiling = ceiling === null || ceiling === undefined || ceiling === '' ? null : Number(ceiling);
-        if (parsedCeiling !== null && (isNaN(parsedCeiling) || parsedCeiling < 0)) {
+        if (parsedCeiling !== null && (!Number.isFinite(parsedCeiling) || parsedCeiling < 0)) {
             ctx.status = 400;
-            ctx.body = { error: 'Ceiling must be a non-negative number or null' };
+            ctx.body = { error: 'Ceiling must be a non-negative finite number or null' };
             return;
         }
         db.prepare('UPDATE members SET working_capital_ceiling = ? WHERE public_key = ?').run(parsedCeiling, treasury);

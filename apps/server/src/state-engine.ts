@@ -1919,7 +1919,9 @@ function getEscrowCb() {
         dispatchPushNotification,
         getBalance,
         floorLockedError,
-        SystemMessageType
+        SystemMessageType,
+        canOperateTreasury,
+        conservingTransaction,
     };
 }
 

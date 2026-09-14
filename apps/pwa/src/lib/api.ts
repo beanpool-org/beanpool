@@ -1241,12 +1241,22 @@ export async function getGovernanceCredits(pubkey: string): Promise<{ totalCredi
 export interface Treasury {
     publicKey: string;
     name: string;
+    callsign?: string;
     avatar?: string | null;
+    avatarUrl?: string | null;
     balance: number;
     creditLine: number;
     liveOffers: number;
     earnedSurplus?: number;
     workingCapitalCeiling?: number | null;
+    purpose?: string | null;
+    goalAmount?: number | null;
+    currentAmount?: number | null;
+    deadlineAt?: string | null;
+    lifecycle?: string;
+    status?: string;
+    paused?: boolean;
+    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role: string }>;
     /**
      * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
      *
@@ -1275,6 +1285,25 @@ export async function getTreasuries(): Promise<{ treasuries: Treasury[] }> {
 
 export async function getTreasury(publicKey: string): Promise<any> {
     return request('GET', `/api/treasury/${encodeURIComponent(publicKey)}`);
+}
+
+export async function treasuryPledge(treasury: string, amount: number, memo?: string): Promise<{ success: boolean; txId: string }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
+}
+
+export async function createEnterprise(data: {
+    name: string;
+    avatar?: string;
+    photos?: string[];
+    purpose?: string;
+    description?: string;
+    goalAmount?: number | null;
+    deadlineAt?: string | null;
+    lifecycle?: 'ongoing' | 'bounded';
+    creditLine?: number;
+    workingCapitalCeiling?: number | null;
+}): Promise<any> {
+    return request('POST', '/api/treasury', data);
 }
 
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the

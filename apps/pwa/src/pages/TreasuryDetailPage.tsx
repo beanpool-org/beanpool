@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import {
     getTreasury, getBalance, treasurySweep,
     treasuryApprove, treasuryReject, treasuryComplete,
-    treasuryPostOffer, treasuryPostNeed,
+    treasuryPostOffer, treasuryPostNeed, treasuryPledge,
     type BalanceInfo
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
+import { ReportModal } from '../components/ReportModal';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -28,6 +29,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
     const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+    // Pledge States
+    const [pledgeAmount, setPledgeAmount] = useState('');
+    const [pledgeMemo, setPledgeMemo] = useState('');
+    const [pledging, setPledging] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+
     // Post Modal State
     const [postModalMode, setPostModalMode] = useState<'offer' | 'need' | null>(null);
     const [postTitle, setPostTitle] = useState('');
@@ -38,6 +45,37 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const [postRepeatable, setPostRepeatable] = useState(true);
     const [posting, setPosting] = useState(false);
     const [postError, setPostError] = useState<string | null>(null);
+
+    const handlePledge = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const amt = Number(pledgeAmount);
+        if (isNaN(amt) || amt <= 0) {
+            setActionFeedback({ type: 'error', message: 'Please enter a positive amount of Beans to pledge.' });
+            return;
+        }
+        try {
+            setPledging(true);
+            setActionFeedback(null);
+            await treasuryPledge(pubkey, amt, pledgeMemo.trim() || undefined);
+            setPledgeAmount('');
+            setPledgeMemo('');
+            setActionFeedback({ type: 'success', message: `Successfully pledged ${amt} 🫘 to ${detail?.name || 'enterprise'}!` });
+            await load();
+        } catch (err: any) {
+            setActionFeedback({ type: 'error', message: err.message || 'Failed to complete pledge.' });
+        } finally {
+            setPledging(false);
+        }
+    };
+
+    const getDaysRemaining = (deadline: string | null | undefined) => {
+        if (!deadline) return null;
+        const diff = new Date(deadline).getTime() - new Date().getTime();
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        if (days < 0) return 'Expired';
+        if (days === 0) return 'Ends today';
+        return `${days} days left`;
+    };
 
     const load = useCallback(async () => {
         try {
@@ -281,7 +319,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 />
                             ) : (
                                 <div className="w-16 h-16 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-3xl border border-nature-200 dark:border-nature-700">
-                                    🏛️
+                                    {detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}
                                 </div>
                             )}
                             <div className="flex-1 min-w-0">
@@ -289,10 +327,100 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                     {name}
                                 </h1>
                                 <p className="text-xs sm:text-sm text-nature-500 dark:text-nature-400 mt-0.5">
-                                    Community enterprise · run by the Commons
+                                    {detail?.lifecycle === 'bounded' ? 'Bounded enterprise · Community project' : 'Community enterprise · Run by the Commons'}
                                 </p>
                             </div>
                         </div>
+
+                        {/* Purpose Statement (docs/the-commons.md §2.1) */}
+                        {detail?.purpose && (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-2">
+                                <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
+                                    Purpose
+                                </div>
+                                <p className="text-sm text-nature-800 dark:text-nature-200 leading-relaxed">
+                                    {detail.purpose}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Funding Progress (for Bounded Enterprises with a goal) */}
+                        {detail.goalAmount != null && detail.goalAmount > 0 && (() => {
+                            const current = detail.currentAmount != null ? detail.currentAmount : Math.max(0, balance);
+                            const goal = detail.goalAmount;
+                            const progress = Math.min(100, (current / goal) * 100);
+                            const isFunded = current >= goal;
+                            const daysRemaining = getDaysRemaining(detail.deadlineAt);
+
+                            return (
+                                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm space-y-4">
+                                    <div className="flex justify-between items-end">
+                                        <div>
+                                            <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
+                                                Funding Progress
+                                            </div>
+                                            <div className={`text-2xl font-black mt-1 ${isFunded ? 'text-emerald-600 dark:text-emerald-400' : 'text-nature-900 dark:text-white'}`}>
+                                                {current} 🫘 <span className="text-xs font-semibold text-nature-500">raised of {goal} 🫘 goal</span>
+                                            </div>
+                                        </div>
+                                        {daysRemaining && (
+                                            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                                                daysRemaining === 'Expired'
+                                                    ? 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-400'
+                                                    : 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
+                                            }`}>
+                                                ⏳ {daysRemaining}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="w-full bg-nature-100 dark:bg-nature-800 h-2.5 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full rounded-full transition-all ${isFunded ? 'bg-emerald-500' : 'bg-emerald-600'}`}
+                                            style={{ width: `${progress}%` }}
+                                        />
+                                    </div>
+
+                                    <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">
+                                        {isFunded
+                                            ? "🎉 This enterprise reached its funding goal! Pledged funds are held securely in the enterprise account."
+                                            : "🔒 Pledges are held securely in the enterprise account, spendable only on transparent offers and needs that the whole community can see."}
+                                    </p>
+
+                                    {/* Inline Pledge Form */}
+                                    <form onSubmit={handlePledge} className="pt-2 border-t border-nature-100 dark:border-nature-800 space-y-3">
+                                        <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                                            Back this initiative
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                placeholder="Amount (🫘)"
+                                                value={pledgeAmount}
+                                                onChange={(e) => setPledgeAmount(e.target.value)}
+                                                className="w-32 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="Memo (optional)"
+                                                value={pledgeMemo}
+                                                onChange={(e) => setPledgeMemo(e.target.value)}
+                                                className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                            />
+                                            <button
+                                                type="submit"
+                                                disabled={pledging || !pledgeAmount}
+                                                className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
+                                            >
+                                                {pledging ? 'Pledging…' : 'Pledge Beans 🌱'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            );
+                        })()}
 
                         {/* Balance Card */}
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm">
@@ -625,6 +753,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 </div>
                             )}
                         </div>
+
+                        {/* Report Enterprise Action */}
+                        <div className="pt-4 border-t border-nature-200 dark:border-nature-800 flex justify-center">
+                            <button
+                                type="button"
+                                onClick={() => setShowReportModal(true)}
+                                className="text-xs text-red-600 dark:text-red-400 font-semibold hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
+                            >
+                                <span aria-hidden="true">🛡️</span> Report Enterprise
+                            </button>
+                        </div>
                     </>
                 )}
             </div>
@@ -771,6 +910,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                         </form>
                     </div>
                 </div>
+            )}
+
+            {showReportModal && identity && (
+                <ReportModal
+                    isOpen={showReportModal}
+                    onClose={() => setShowReportModal(false)}
+                    reporterPubkey={identity.publicKey}
+                    targetPubkey={pubkey}
+                    targetName={name}
+                />
             )}
         </div>
     );

@@ -25,6 +25,7 @@ import {
     canOperate,
     canOperateTreasury,
     createTreasury,
+    adminSetUserStatus,
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -90,9 +91,27 @@ async function main() {
     assert(canOperate(nonAdminPubkey) === false, 'regular member does not hold admin canOperate override');
     assert(canOperateTreasury(nonAdminPubkey, farmPubkey) === false, 'regular member does not hold admin canOperateTreasury override');
 
-    // 5. Query plan check
-    const plan = db.prepare("EXPLAIN QUERY PLAN SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' ORDER BY rowid ASC LIMIT 1").all();
+    // 5. Admin lifecycle and status rotation (active vs pruned/disabled)
+    // When founding admin Alice is disabled, getAdminPubkey() advances to Bob:
+    adminSetUserStatus(alicePubkey, 'disabled');
+    assert(getAdminPubkey() === bobPubkey, 'getAdminPubkey() advances to Bob when Alice is disabled');
+
+    // When Bob is pruned as well, getAdminPubkey() returns '' (no active genesis member):
+    adminSetUserStatus(bobPubkey, 'pruned');
+    assert(getAdminPubkey() === '', 'getAdminPubkey() returns empty string when all genesis members are inactive');
+
+    // When Bob is re-activated, getAdminPubkey() returns Bob:
+    adminSetUserStatus(bobPubkey, 'active');
+    assert(getAdminPubkey() === bobPubkey, 'getAdminPubkey() returns Bob when reactivated');
+
+    // When Alice is also re-activated, Alice becomes admin again (deterministic rowid ordering):
+    adminSetUserStatus(alicePubkey, 'active');
+    assert(getAdminPubkey() === alicePubkey, 'getAdminPubkey() returns Alice again after reactivation due to rowid ordering');
+
+    // 6. Query plan check
+    const plan = db.prepare("EXPLAIN QUERY PLAN SELECT public_key FROM members WHERE invited_by = 'genesis' AND UPPER(public_key) != 'SYSTEM' AND status = 'active' ORDER BY rowid ASC LIMIT 1").all() as any[];
     assert(plan.length > 0, 'EXPLAIN QUERY PLAN succeeds for the deterministic query');
+    assert(plan.some(p => (p.detail || '').includes('members')), 'EXPLAIN QUERY PLAN confirms scan across members table');
 
     console.log(`\nResults: ${passed}/${total} assertions passed.`);
     if (passed !== total) {

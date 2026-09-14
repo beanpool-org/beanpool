@@ -2627,7 +2627,7 @@ export function getCommunityHealth(): CommunityHealth {
 // ===================== ADMIN CONTROLS =====================
 
 export function getAdminPubkey(): string {
-    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' ORDER BY rowid ASC LIMIT 1").get() as any;
+    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND UPPER(public_key) != 'SYSTEM' AND status = 'active' ORDER BY rowid ASC LIMIT 1").get() as { public_key: string } | undefined;
     // Empty string, not 'system', when a node has no human admin. Every override site is
     // `publicKey === getAdminPubkey()`, so a placeholder return value GRANTS ADMIN to anyone
     // presenting that same literal as their actor — the old 'system' fallback matched itself.

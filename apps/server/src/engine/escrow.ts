@@ -31,6 +31,28 @@ export interface EscrowCallbacks {
     getBalance: (publicKey: string) => any;
     floorLockedError: (publicKey: string, postBalance: number) => Error;
     SystemMessageType: any;
+    conservingTransaction?: <T>(fn: () => T) => T;
+    processDeferredWageClaims?: (enterprisePubkey: string) => number;
+    sweepEnterpriseCeiling?: (enterprisePubkey: string) => number;
+}
+
+export function recordDeferredWageClaim(
+    enterprisePubkey: string,
+    keeperPubkey: string,
+    amount: number,
+    postId?: string,
+    transactionId?: string
+): string {
+    const existing = transactionId
+        ? db.prepare("SELECT id FROM deferred_wage_claims WHERE transaction_id = ? AND status = 'pending'").get(transactionId) as any
+        : null;
+    if (existing) return existing.id;
+    const id = crypto.randomUUID();
+    db.prepare(`
+        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    `).run(id, enterprisePubkey, keeperPubkey, postId || null, transactionId || null, amount);
+    return id;
 }
 
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
@@ -186,15 +208,31 @@ export function approvePostRequest(
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
 
     if (isPayeeKeeper) {
+        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
+        const earnedSurplus = Number(trow?.earned_surplus) || 0;
+        const name = buyerMember?.callsign || 'This enterprise';
+
         // Rule 5: credit buys inputs, profit pays people (docs/the-commons.md §2.4).
         // An enterprise may borrow from the community to buy things. It may NOT borrow
         // from the community to pay itself. Keepers eat last: paid only while
         // balance - amount >= 0. NEVER into credit.
         if (balance - row.credits < 0) {
-            const name = buyerMember?.callsign || 'This enterprise';
+            recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, row.credits, row.post_id, transactionId);
             const msg = balance <= 0
                 ? `${name} is in deficit and cannot borrow to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`
                 : `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
+            const err: any = new Error(msg);
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+        }
+
+        // Rule 6: keeper pay is capped by EARNED SURPLUS (docs/the-commons.md §2.4).
+        // A positive balance is not profit: grants, pledges and gifts raise balance
+        // but cannot become wages.
+        if (row.credits > earnedSurplus) {
+            recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, row.credits, row.post_id, transactionId);
+            const msg = `${name} has insufficient earned surplus (${earnedSurplus} Beans) to pay keeper wages (${row.credits} Beans) — grants and pledges cannot become wages, only genuine trading profit.`;
             const err: any = new Error(msg);
             err.status = 403;
             err.statusCode = 403;
@@ -212,6 +250,11 @@ export function approvePostRequest(
 
         const escrowResult = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, row.credits, `Escrow hold for approved deal ${row.post_id}`, 'escrow', true);
         if (!escrowResult) throw new Error('Failed to lock funds in escrow');
+
+        if (isPayeeKeeper) {
+            db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
+                .run(Math.round(row.credits), row.buyer_pubkey);
+        }
 
         db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=?`).run(transactionId);
 
@@ -345,9 +388,43 @@ export function acceptPost(
     // payee is always the post's author — a visitor, on a pulled listing.
     assertTradableHere(post, post.authorPublicKey);
 
+    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(buyerPublicKey) as any;
+    const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
+    const isPayeeKeeper = isEnterprisePayer && Boolean(
+        db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+            .get(buyerPublicKey, post.authorPublicKey)
+    );
+
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(buyerPublicKey);
-    if (balance - finalCredits < floor) throw new Error('Insufficient balance to accept this offer');
-    if (balance - finalCredits < uFloor) throw cb.floorLockedError(buyerPublicKey, balance - finalCredits);
+
+    if (isPayeeKeeper) {
+        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(buyerPublicKey) as any;
+        const earnedSurplus = Number(trow?.earned_surplus) || 0;
+        const name = buyerMember?.callsign || 'This enterprise';
+
+        if (balance - finalCredits < 0) {
+            recordDeferredWageClaim(buyerPublicKey, post.authorPublicKey, finalCredits, post.id);
+            const msg = balance <= 0
+                ? `${name} is in deficit and cannot borrow to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`
+                : `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
+            const err: any = new Error(msg);
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+        }
+
+        if (finalCredits > earnedSurplus) {
+            recordDeferredWageClaim(buyerPublicKey, post.authorPublicKey, finalCredits, post.id);
+            const msg = `${name} has insufficient earned surplus (${earnedSurplus} Beans) to pay keeper wages (${finalCredits} Beans) — grants and pledges cannot become wages, only genuine trading profit.`;
+            const err: any = new Error(msg);
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+        }
+    } else {
+        if (balance - finalCredits < floor) throw new Error('Insufficient balance to accept this offer');
+        if (balance - finalCredits < uFloor) throw cb.floorLockedError(buyerPublicKey, balance - finalCredits);
+    }
 
     const tx: MarketplaceTransaction = {
         id: crypto.randomUUID(),
@@ -370,6 +447,11 @@ export function acceptPost(
 
         const escrowResult = cb.transfer(buyerPublicKey, `escrow_${tx.id}`, finalCredits, `Escrow hold for offer ${post.id}`, 'escrow', true);
         if (!escrowResult) throw new Error('Failed to lock funds in escrow — insufficient balance or ledger error');
+
+        if (isPayeeKeeper) {
+            db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
+                .run(Math.round(finalCredits), buyerPublicKey);
+        }
 
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
         
@@ -449,18 +531,43 @@ export function completePostTransaction(
                         .get(row.buyer_pubkey, row.seller_pubkey)
                 );
                 const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
-                if (isPayeeKeeper && balance - diff < 0) {
+                if (isPayeeKeeper) {
+                    const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
+                    const earnedSurplus = Number(trow?.earned_surplus) || 0;
                     const name = buyerMember?.callsign || 'This enterprise';
-                    const msg = `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
-                    const err: any = new Error(msg);
-                    err.status = 403;
-                    err.statusCode = 403;
-                    throw err;
+                    if (balance - diff < 0) {
+                        recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, diff, row.post_id, transactionId);
+                        const msg = `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
+                        const err: any = new Error(msg);
+                        err.status = 403;
+                        err.statusCode = 403;
+                        throw err;
+                    }
+                    if (diff > earnedSurplus) {
+                        recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, diff, row.post_id, transactionId);
+                        const msg = `${name} has insufficient earned surplus (${earnedSurplus} Beans) to pay additional keeper wages (${diff} Beans) — grants and pledges cannot become wages, only genuine trading profit.`;
+                        const err: any = new Error(msg);
+                        err.status = 403;
+                        err.statusCode = 403;
+                        throw err;
+                    }
+                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
+                        .run(Math.round(diff), row.buyer_pubkey);
                 }
                 if (balance - diff < floor) throw new Error('Insufficient balance to cover extra hours');
                 if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
                 cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true);
             } else if (diff < 0) {
+                const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+                const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
+                const isPayeeKeeper = isEnterprisePayer && Boolean(
+                    db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                        .get(row.buyer_pubkey, row.seller_pubkey)
+                );
+                if (isPayeeKeeper) {
+                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                        .run(Math.round(Math.abs(diff)), row.buyer_pubkey);
+                }
                 cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true);
             }
             db.prepare(`UPDATE marketplace_transactions SET credits=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
@@ -481,6 +588,22 @@ export function completePostTransaction(
             db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
         }
     })();
+
+    // Rule 6 & 7: Earned surplus tracking, deferred wage claims, and working capital ceiling sweep (docs/the-commons.md §2.4).
+    const sellerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(row.seller_pubkey) as any;
+    if (sellerMember?.is_treasury === 1) {
+        // Increment on completed marketplace income
+        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+            .run(Math.round(releaseCredits), row.seller_pubkey);
+        // Process any deferred wage claims now that the enterprise has earned surplus and balance
+        if (cb.processDeferredWageClaims) {
+            cb.processDeferredWageClaims(row.seller_pubkey);
+        }
+        // Sweep any surplus above the working capital ceiling to Commons
+        if (cb.sweepEnterpriseCeiling) {
+            cb.sweepEnterpriseCeiling(row.seller_pubkey);
+        }
+    }
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_completed', transaction: tx });
@@ -537,6 +660,18 @@ export function cancelPostTransaction(
     db.transaction(() => {
         const refundResult = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, row.credits, `Escrow refund for cancelled post ${row.post_id}`, 'escrow', true);
         if (!refundResult) throw new Error('Failed to refund escrow funds');
+
+        const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+        if (buyerMember?.is_treasury === 1) {
+            const isPayeeKeeper = Boolean(
+                db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                    .get(row.buyer_pubkey, row.seller_pubkey)
+            );
+            if (isPayeeKeeper) {
+                db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                    .run(Math.round(row.credits), row.buyer_pubkey);
+            }
+        }
 
         db.prepare(`UPDATE marketplace_transactions SET status = 'cancelled', completed_at = ? WHERE id = ?`).run(completedAt, transactionId);
 

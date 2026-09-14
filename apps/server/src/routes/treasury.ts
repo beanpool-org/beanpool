@@ -16,6 +16,7 @@ import {
     treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     createPost, approvePostRequest, completePostTransaction,
     getBalance, moveToCommons, conservingTransaction,
+    sweepEnterpriseCeiling,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
@@ -104,7 +105,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // ---- Public transparency reads ------------------------------------------------------
     router.get('/api/treasuries', async (ctx) => {
         const rows = db.prepare(
-            "SELECT public_key, callsign, avatar_url, earned_credit FROM members WHERE is_treasury=1 ORDER BY callsign COLLATE NOCASE"
+            "SELECT public_key, callsign, avatar_url, earned_credit, earned_surplus, working_capital_ceiling FROM members WHERE is_treasury=1 ORDER BY callsign COLLATE NOCASE"
         ).all() as any[];
         // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
@@ -128,6 +129,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                             : `/api/avatar/${r.public_key}?size=thumb`)
                         : null,
                     balance: b.balance, creditLine: r.earned_credit, liveOffers: b.liveOffers,
+                    earnedSurplus: r.earned_surplus ?? 0,
+                    workingCapitalCeiling: r.working_capital_ceiling ?? null,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
                     keepers: treasuryKeepers(r.public_key),
@@ -139,11 +142,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     router.get('/api/treasury/:treasury', async (ctx) => {
         const { treasury } = ctx.params;
-        const m = db.prepare('SELECT callsign, avatar_url FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
+        const m = db.prepare('SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
         const posts = db.prepare(
             "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') ORDER BY created_at DESC"
+        ).all(treasury) as any[];
+        const deferredClaims = db.prepare(
+            "SELECT id, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at FROM deferred_wage_claims WHERE enterprise_pubkey=? ORDER BY created_at ASC"
         ).all(treasury) as any[];
         const flow = (db.prepare(
             'SELECT from_pubkey, to_pubkey, amount, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
@@ -159,6 +165,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 : null,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
             liveOffers: b.liveOffers, posts, flow,
+            earnedSurplus: m.earned_surplus ?? 0,
+            workingCapitalCeiling: m.working_capital_ceiling ?? null,
+            deferredClaims,
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
             keepers: treasuryKeepers(treasury),
@@ -170,11 +179,38 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // ---- Admin (password-gated) ---------------------------------------------------------
     router.post('/api/local/admin/treasury', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
-        const { name, avatar, creditLine } = (ctx as any).requestBody || {};
+        const { name, avatar, creditLine, workingCapitalCeiling } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
         try {
-            ctx.body = { success: true, ...createTreasury(String(name), String(avatar), Number(creditLine) || 0) };
+            ctx.body = {
+                success: true,
+                ...createTreasury(
+                    String(name),
+                    String(avatar),
+                    Number(creditLine) || 0,
+                    { workingCapitalCeiling: workingCapitalCeiling !== undefined && workingCapitalCeiling !== null ? Number(workingCapitalCeiling) : null }
+                ),
+            };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to create treasury' }; }
+    });
+
+    // docs/the-commons.md §2.4 Rule 7: Working capital ceiling is set at creation and
+    // changed only by Decision (§3.6 — admin-only editable for now, with a code comment explaining
+    // that it moves by community Decision once that engine exists).
+    router.post('/api/local/admin/treasury/:treasury/ceiling', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        const { ceiling } = (ctx as any).requestBody || {};
+        const parsedCeiling = ceiling === null || ceiling === undefined || ceiling === '' ? null : Number(ceiling);
+        if (parsedCeiling !== null && (isNaN(parsedCeiling) || parsedCeiling < 0)) {
+            ctx.status = 400;
+            ctx.body = { error: 'Ceiling must be a non-negative number or null' };
+            return;
+        }
+        db.prepare('UPDATE members SET working_capital_ceiling = ? WHERE public_key = ?').run(parsedCeiling, treasury);
+        sweepEnterpriseCeiling(treasury);
+        ctx.body = { success: true, workingCapitalCeiling: parsedCeiling };
     });
 
     // Master switch per member: may they steward anything at all. Retained for the fleet manager,

@@ -195,6 +195,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
     // Protocol v1: pre-seeded earned credit for the dynamic floor formula.
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
+    // Enterprise Credit Model (Rules 6 & 7)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus INTEGER DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN working_capital_ceiling REAL DEFAULT NULL`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // Community Working Style / Archetype signature

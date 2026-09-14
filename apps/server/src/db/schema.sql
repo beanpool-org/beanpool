@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS members (
     -- installs a table missing the column, which is caught by test-schema-upgrade.ts.
     -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
     earned_credit REAL DEFAULT 0,
+    -- Enterprise Credit Model (Rules 6 & 7)
+    earned_surplus INTEGER DEFAULT 0,
+    working_capital_ceiling REAL DEFAULT NULL,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,
     -- Community working style / archetype signature (JSON or archetype key)
@@ -684,6 +687,23 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
 -- Covers "which enterprises does this member steward?" — the stewardOf() lookup that
 -- drives the Commons tab's per-enterprise controls.
 CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(member_pubkey);
+
+-- 20b. Deferred Wage Claims (docs/the-commons.md §2.4 Rule 6)
+-- A keeper payment refused by Rule 5 (in deficit) or Rule 6 (capped by earned surplus)
+-- is recorded here and paid automatically the moment the enterprise can legitimately pay
+-- (positive balance AND sufficient earned surplus).
+CREATE TABLE IF NOT EXISTS deferred_wage_claims (
+    id                TEXT PRIMARY KEY,
+    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key),
+    keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key),
+    post_id           TEXT REFERENCES posts(id),
+    transaction_id    TEXT,
+    amount            REAL NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'pending',
+    created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    paid_at           DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_deferred_claims_enterprise ON deferred_wage_claims(enterprise_pubkey, status);
 
 -- 21. Cross-node settlements (#104) — the durable state machine behind charge-home settlement.
 --

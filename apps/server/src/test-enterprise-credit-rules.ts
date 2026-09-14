@@ -122,25 +122,139 @@ async function main() {
         `Sole keeper gets exact friendly refusal copy: "${soloMsg}"`
     );
 
-    // Test 4: A keeper CAN be paid from positive balance (when balance - amount >= 0)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // RULE 6: Keeper pay capped by earned surplus & deferred wage claims
+    // ─────────────────────────────────────────────────────────────────────────────
+    console.log('\n── Rule 6: Keeper pay capped by earned surplus & deferred claims ──');
+
     const { publicKey: solventTreasury } = createTreasury('SolventBakery', AVATAR, 100);
     const bakerKeeper = 'baker-keeper-000000000000000000000000000004';
+    const customerCharlie = 'customer-charlie-000000000000000000000005';
     seedMember(bakerKeeper, 'BakerKeeper');
+    seedMember(customerCharlie, 'CustomerCharlie');
     assignKeeper(solventTreasury, bakerKeeper);
 
-    // Seed positive balance for SolventBakery (e.g. 50 beans from genesis)
-    transfer('genesis', solventTreasury, 50, 'Seed working capital', 'direct', true);
-    assert(bal(solventTreasury) === 50, 'SolventBakery has positive balance of 50');
+    // Initial state: SolventBakery has 0 balance and 0 earned surplus
+    const surplusOf = (pk: string) => Number((db.prepare('SELECT earned_surplus FROM members WHERE public_key=?').get(pk) as any)?.earned_surplus) || 0;
+    assert(surplusOf(solventTreasury) === 0, 'SolventBakery starts with 0 earned surplus');
 
-    createPost('offer', 'food', 'Sourdough', 'Fresh loaf', 10, 'fixed', solventTreasury, undefined, undefined, undefined, true);
+    // Seed positive balance for SolventBakery (e.g. 50 beans from genesis or grant)
+    transfer('genesis', solventTreasury, 50, 'Seed grant / gift', 'direct', true);
+    assert(bal(solventTreasury) === 50, 'SolventBakery has positive balance of 50 from grant');
+    assert(surplusOf(solventTreasury) === 0, 'Grants and gifts do NOT increment earned surplus (Rule 6)');
+
+    // Offer: Sourdough bread for customers
+    createPost('offer', 'food', 'Sourdough loaf', 'Fresh sourdough', 40, 'fixed', solventTreasury, undefined, undefined, undefined, true);
+
+    // Need: Keeper labor for baking (20 beans)
     const bakingNeed = createPost('need', 'work', 'Bake shift', 'Early morning bake', 20, 'fixed', solventTreasury);
     const bakerBid = requestPost(bakingNeed!.id, bakerKeeper);
-    const approveBaker = approvePostRequest(bakerBid.id, solventTreasury);
-    assert(approveBaker !== null, 'Keeper CAN be paid when enterprise has positive balance (50 - 20 = 30 >= 0)');
-    assert(bal(solventTreasury) === 30, 'SolventBakery balance dropped to 30 (stayed positive, never into credit)');
+
+    // Test 4: Positive balance without earned surplus REFUSES keeper payment and records deferred claim
+    let rule6Refused = false;
+    let rule6Msg = '';
+    try {
+        approvePostRequest(bakerBid.id, solventTreasury);
+    } catch (err: any) {
+        rule6Refused = true;
+        rule6Msg = err.message;
+    }
+    assert(rule6Refused, 'Keeper payment refused when earned surplus is 0 despite positive balance (Rule 6)');
+    assert(
+        rule6Msg.includes('has insufficient earned surplus (0 Beans) to pay keeper wages (20 Beans)'),
+        `Refusal copy explains grant cannot become wages: "${rule6Msg}"`
+    );
+
+    // Verify deferred wage claim recorded in DB
+    const claimRow = db.prepare('SELECT * FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND keeper_pubkey = ?').get(solventTreasury, bakerKeeper) as any;
+    assert(!!claimRow && claimRow.status === 'pending' && claimRow.amount === 20, 'Deferred wage claim recorded with pending status for 20 beans');
+
+    // Customer Charlie buys bread from SolventBakery for 40 beans
+    transfer('genesis', customerCharlie, 100, 'Seed Charlie', 'direct', true);
+    createPost('offer', 'skills', 'Gardening help', 'Weeding and pruning', 15, 'fixed', customerCharlie, undefined, undefined, undefined, true);
+    const breadOffer = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'offer'").get(solventTreasury) as any;
+    const charlieBid = requestPost(breadOffer.id, customerCharlie);
+    const approveCharlie = approvePostRequest(charlieBid.id, solventTreasury);
+    assert(approveCharlie !== null, 'Customer Charlie deal approved');
+
+    // Complete customer purchase
+    const charlieComplete = completePostTransaction(charlieBid.id, customerCharlie);
+    assert(charlieComplete !== null, 'Customer Charlie deal completed');
+    // Sale of 40 beans increments earned surplus by 40 (Math.round(releaseCredits))
+    // And automatically triggers processDeferredWageClaims(solventTreasury)!
+    // The pending 20 bean claim is automatically paid:
+    // - Baker receives 20 - 1.5% fee = 19.70 beans
+    // - Surplus becomes 40 - 20 = 20 beans
+    // - Bakery balance: 50 (initial grant) + 39.40 (net sale) - 20 (claim payout) = 69.40 beans
+    const updatedClaim = db.prepare('SELECT * FROM deferred_wage_claims WHERE id = ?').get(claimRow.id) as any;
+    assert(updatedClaim.status === 'paid', 'Deferred wage claim automatically paid upon incoming marketplace sale');
+    assert(!!updatedClaim.paid_at, 'Deferred wage claim has paid_at timestamp recorded');
+    assert(bal(bakerKeeper) === 19.70, 'Baker keeper received deferred payout minus 1.5% fee (19.70)');
+    assert(surplusOf(solventTreasury) === 20, 'SolventBakery earned surplus is now 20 (40 earned - 20 paid)');
+    assert(bal(solventTreasury) === 69.40, 'SolventBakery balance is 69.40 (50 grant + 39.40 sale - 20 payout)');
+
+    // Test 5: With positive balance AND earned surplus (20), keeper wage of 15 CAN be approved directly
+    const shift2Need = createPost('need', 'work', 'Evening shift', 'Close bakery', 15, 'fixed', solventTreasury);
+    const bakerBid2 = requestPost(shift2Need!.id, bakerKeeper);
+    const approveBaker2 = approvePostRequest(bakerBid2.id, solventTreasury);
+    assert(approveBaker2 !== null, 'Keeper payment succeeds directly when balance and earned surplus suffice');
+    assert(surplusOf(solventTreasury) === 5, 'Earned surplus decremented to 5 (20 - 15) upon keeper escrow approval');
+    assert(bal(solventTreasury) === 54.40, 'SolventBakery balance held 15 in escrow (69.40 - 15 = 54.40)');
+
+    // Complete shift 2
+    completePostTransaction(bakerBid2.id, solventTreasury);
+    assert(bal(bakerKeeper) === Math.round((19.70 + 14.775) * 100) / 100, 'Baker received second payment minus fee (34.48)');
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // RULE 7: Automatic sweep to Commons pool above working capital ceiling
+    // ─────────────────────────────────────────────────────────────────────────────
+    console.log('\n── Rule 7: Automatic sweep to Commons above working capital ceiling ──');
+
+    const { publicKey: cider } = createTreasury('CommunityCider', AVATAR, 100, { workingCapitalCeiling: 100 });
+    const daveKeeper = 'dave-keeper-000000000000000000000000000006';
+    seedMember(daveKeeper, 'DaveKeeper');
+    assignKeeper(cider, daveKeeper);
+
+    const ceilingOf = (pk: string) => (db.prepare('SELECT working_capital_ceiling FROM members WHERE public_key=?').get(pk) as any)?.working_capital_ceiling;
+    assert(ceilingOf(cider) === 100, 'CommunityCider initialized with working_capital_ceiling = 100');
+    assert(bal(cider) === 0, 'CommunityCider starts at 0 balance');
+
+    // Transfer 80 beans to Cider (under ceiling 100) -> no sweep
+    transfer('genesis', cider, 80, 'Seed cider coop', 'direct', true);
+    assert(bal(cider) === 80, 'CommunityCider holds 80 beans (below 100 ceiling, no sweep)');
+
+    // Transfer another 50 beans to Cider (80 + 50 = 130 > 100) -> excess 30 sweeps automatically!
+    transfer('genesis', cider, 50, 'Additional capital', 'direct', true);
+    assert(bal(cider) === 100, 'CommunityCider balance automatically capped at ceiling 100 (30 swept to Commons)');
+
+    // Complete a sale on Cider: sells cider for 40 beans
+    createPost('offer', 'drinks', 'Apple cider 6-pack', 'Fresh pressed', 40, 'fixed', cider, undefined, undefined, undefined, true);
+    const ciderOffer = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'offer'").get(cider) as any;
+    const charlieCiderBid = requestPost(ciderOffer.id, customerCharlie);
+    approvePostRequest(charlieCiderBid.id, cider);
+    completePostTransaction(charlieCiderBid.id, customerCharlie);
+
+    // Sale of 40 beans nets 39.40. Since balance was at 100, the full net proceeds of 39.40 sweep to Commons!
+    assert(bal(cider) === 100, 'After sale, balance above ceiling immediately sweeps to Commons, leaving balance at 100');
+
+    // Admin updates ceiling: lowers ceiling to 60
+    db.prepare('UPDATE members SET working_capital_ceiling = ? WHERE public_key = ?').run(60, cider);
+    const { sweepEnterpriseCeiling } = await import('./state-engine.js');
+    const sweptAmount = sweepEnterpriseCeiling(cider);
+    assert(sweptAmount === 40, 'Admin lowering ceiling sweeps excess (100 - 60 = 40) to Commons');
+    assert(bal(cider) === 60, 'CommunityCider balance reduced to new ceiling of 60');
+
+    // Existing enterprise without ceiling (e.g. CommunityEggs) defaults to NULL and is uncapped
+    assert(ceilingOf(eggs) === null, 'Existing enterprise (CommunityEggs) has working_capital_ceiling = NULL (uncapped)');
+
+    // Conservation check
+    const { runLedgerAudit } = await import('./state-engine.js');
+    const audit = runLedgerAudit();
+    assert(audit.ok, `Ledger audit passed: sum(balances)=${audit.sumBalances}, drift=${audit.drift}`);
+    assert(Math.abs(audit.drift) < 0.0001, 'Ledger conservation strictly preserved (SUM(balances) + COMMONS_POOL = 0)');
 
     console.log(`\n${passed}/${run} checks passed.`);
-    console.log('⭐️ Enterprise credit model Rule 5 checks PASSED.');
+    console.log('⭐️ Enterprise credit model Rules 5, 6, and 7 checks PASSED.');
     process.exit(0);
 }
 

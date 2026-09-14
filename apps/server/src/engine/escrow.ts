@@ -186,10 +186,21 @@ export function approvePostRequest(
     db.transaction(() => {
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${row.id}`);
 
-        const escrowResult = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, row.credits, `Escrow hold for approved deal ${row.post_id}`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
+        // Only attribute authSigner when the debited account is the author/treasury itself (Need listings)
+        const isEnterprisePayer = row.buyer_pubkey === authorPublicKey;
+        const escrowResult = cb.transfer(
+            row.buyer_pubkey,
+            `escrow_${row.id}`,
+            row.credits,
+            `Escrow hold for approved deal ${row.post_id}`,
+            'escrow',
+            true,
+            (isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined
+        );
         if (!escrowResult) throw new Error('Failed to lock funds in escrow');
 
-        db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=?`).run(transactionId);
+        const res = db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=? AND status='requested'`).run(transactionId);
+        if (res.changes === 0) throw new Error('Transaction is no longer in requested state');
 
         if (!post.repeatable) {
             const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(row.buyer_pubkey, new Date().toISOString(), row.id, post.id);

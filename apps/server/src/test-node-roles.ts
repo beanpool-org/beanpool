@@ -348,21 +348,37 @@ async function main() {
         assert(getBody.roles.some((r: any) => r.member_pubkey === 'gen_alice' && r.role === 'owner'), 'Alice listed as owner');
         assert(getBody.roles.some((r: any) => r.member_pubkey === 'dave' && r.role === 'admin'), 'Dave listed as admin');
 
-        // Regression (Finding 2): Spoofing actorPubkey in request body is rejected
-        const postSpoofedBody = await fetch(`${base}/api/local/admin/node-roles`, {
+        // Under controller design decision (2026-09-14): password-authenticated admin calls without signed actor
+        // succeed as owner, ignoring any spoofed actor in body/header and attributing to 'owner:password'.
+        const postPasswordAuth = await fetch(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pubkey: 'charlie', role: 'owner', actorPubkey: 'gen_alice', actor: 'gen_alice' }),
+            body: JSON.stringify({ pubkey: 'charlie', role: 'owner', actorPubkey: 'spoofed_key', actor: 'spoofed_key' }),
         });
-        assert(postSpoofedBody.status === 403, 'POST /api/local/admin/node-roles with spoofed actor in body without verified actor returns 403');
+        const postPasswordBody: any = await postPasswordAuth.json();
+        assert(postPasswordAuth.status === 200 && postPasswordBody.success === true, 'POST /api/local/admin/node-roles without signed actor succeeds under password auth as owner');
+        assert(isNodeOwner('charlie') === true, 'Charlie is now owner via password auth');
+        const rolesAfterCharlie = listNodeRoles();
+        const charlieRole = rolesAfterCharlie.find(r => r.member_pubkey === 'charlie');
+        assert(charlieRole?.granted_by === 'owner:password', "Charlie granted_by is recorded as 'owner:password', ignoring body actorPubkey");
 
-        // Regression (Finding 2): Spoofing x-admin-caller-pubkey header is rejected
-        const postSpoofedHeader = await fetch(`${base}/api/local/admin/node-roles`, {
+        // Parameter aliases: publicKey and member_pubkey
+        seedMember('eve', 'Eve');
+        const postAlias = await fetch(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-admin-caller-pubkey': 'gen_alice' },
-            body: JSON.stringify({ pubkey: 'charlie', role: 'owner' }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ publicKey: 'eve', role: 'admin' }),
         });
-        assert(postSpoofedHeader.status === 403, 'POST /api/local/admin/node-roles with spoofed x-admin-caller-pubkey header without verified actor returns 403');
+        assert(postAlias.status === 200, 'POST /api/local/admin/node-roles accepts publicKey alias');
+        assert(isNodeAdmin('eve') === true, 'Eve is now admin via publicKey alias');
+
+        // Member not found returns 404
+        const postNonExistent = await fetch(`${base}/api/local/admin/node-roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pubkey: 'nonexistent_key', role: 'admin' }),
+        });
+        assert(postNonExistent.status === 404, 'POST /api/local/admin/node-roles for non-existent member returns 404');
 
         // POST /api/local/admin/node-roles: verified non-owner actor attempting to grant owner -> 403
         const postNonOwner = await fetch(`${base}/api/local/admin/node-roles`, {
@@ -380,46 +396,50 @@ async function main() {
         });
         assert(postTreasury.status === 400, 'POST /api/local/admin/node-roles for treasury returns 400');
 
-        // POST /api/local/admin/node-roles: verified owner actor granting owner -> 200
-        const postOwner = await fetch(`${base}/api/local/admin/node-roles`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'gen_alice' },
-            body: JSON.stringify({ pubkey: 'charlie', role: 'owner' }),
-        });
-        const postOwnerBody: any = await postOwner.json();
-        assert(postOwner.status === 200 && postOwnerBody.success === true, 'POST /api/local/admin/node-roles granting owner returns 200');
-        assert(isNodeOwner('charlie') === true, 'Charlie is now owner via HTTP endpoint');
-
-        // Regression (Finding 2): DELETE with spoofed actorPubkey in body without verified actor is rejected
-        const delSpoofedBody = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
+        // DELETE /api/local/admin/node-roles: password-authenticated call without signed actor succeeds as owner
+        const delPasswordAuth = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actorPubkey: 'gen_alice' }),
+            body: JSON.stringify({ actorPubkey: 'spoofed_key' }),
         });
-        assert(delSpoofedBody.status === 403, 'DELETE /api/local/admin/node-roles with spoofed actorPubkey in body returns 403');
-
-        // Regression (Finding 2): DELETE with spoofed header without verified actor is rejected
-        const delSpoofedHeader = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json', 'x-admin-caller-pubkey': 'gen_alice' },
-        });
-        assert(delSpoofedHeader.status === 403, 'DELETE /api/local/admin/node-roles with spoofed x-admin-caller-pubkey header returns 403');
+        const delPasswordBody: any = await delPasswordAuth.json();
+        assert(delPasswordAuth.status === 200 && delPasswordBody.success === true, 'DELETE /api/local/admin/node-roles without signed actor succeeds under password auth as owner');
+        assert(isNodeOwner('charlie') === false, 'Charlie revoked via password auth');
 
         // DELETE /api/local/admin/node-roles/:pubkey/:role: verified non-owner actor -> 403
-        const delNonOwner = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
+        seedMember('frank', 'Frank');
+        grantNodeRole('frank', 'admin', 'gen_alice');
+        const delNonOwner = await fetch(`${base}/api/local/admin/node-roles/frank/admin`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'dave' },
         });
         assert(delNonOwner.status === 403, 'DELETE /api/local/admin/node-roles with non-owner actor returns 403');
 
         // DELETE /api/local/admin/node-roles/:pubkey/:role: verified owner actor -> 200
-        const delOwner = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
+        const delOwner = await fetch(`${base}/api/local/admin/node-roles/frank/admin`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'gen_alice' },
         });
         const delOwnerBody: any = await delOwner.json();
         assert(delOwner.status === 200 && delOwnerBody.success === true, 'DELETE /api/local/admin/node-roles with owner actor returns 200');
-        assert(isNodeOwner('charlie') === false, 'Charlie revoked via HTTP endpoint');
+        assert(isNodeAdmin('frank') === false, 'Frank revoked via HTTP endpoint');
+
+        // POST /api/local/admin/commons/round: voting round creation with signed non-admin -> 403
+        const roundSignedNonAdmin = await fetch(`${base}/api/local/admin/commons/round`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'plain_user' },
+            body: JSON.stringify({ action: 'create', projectIds: [proj1.id], closesAt: new Date(Date.now() + 3600_000).toISOString() }),
+        });
+        assert(roundSignedNonAdmin.status === 403, 'POST /api/local/admin/commons/round with signed non-admin returns 403');
+
+        // POST /api/local/admin/commons/round: voting round creation under password auth ignores body adminPubkey and attributes to active admin
+        const roundPasswordAuth = await fetch(`${base}/api/local/admin/commons/round`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create', projectIds: [proj1.id], closesAt: new Date(Date.now() + 3600_000).toISOString(), adminPubkey: 'spoofed_key' }),
+        });
+        const roundBody: any = await roundPasswordAuth.json();
+        assert(roundPasswordAuth.status === 200 && roundBody.round?.createdBy === 'gen_alice', 'POST /api/local/admin/commons/round under password auth creates round attributed to active admin, ignoring body adminPubkey');
 
         // DELETE last owner -> 400
         const delLastOwner = await fetch(`${base}/api/local/admin/node-roles/gen_alice/owner`, {
@@ -456,6 +476,15 @@ async function main() {
         assert(isNodeAdmin('pruned_target') === false, 'Pruned member has isNodeAdmin = false');
         assert(isNodeOwner('pruned_target') === false, 'Pruned member has isNodeOwner = false');
         throws(() => grantNodeRole('pruned_target', 'admin', 'gen_alice'), 'Pruned accounts cannot hold a node role', 'Cannot grant role to pruned account');
+
+        // SYSTEM account cannot hold a role
+        throws(() => grantNodeRole('SYSTEM', 'admin', 'gen_alice'), 'SYSTEM placeholder account cannot hold a node role', 'Cannot grant role to SYSTEM');
+        throws(() => grantNodeRole('SYSTEM', 'owner', 'gen_alice'), 'SYSTEM placeholder account cannot hold a node role', 'Cannot grant owner role to SYSTEM');
+
+        // Disabled account cannot hold a role
+        seedMember('disabled_user', 'DisabledUser');
+        db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = 'disabled_user'").run();
+        throws(() => grantNodeRole('disabled_user', 'admin', 'gen_alice'), 'Only active accounts can hold a node role', 'Cannot grant role to disabled account');
 
     } finally {
         server.close();

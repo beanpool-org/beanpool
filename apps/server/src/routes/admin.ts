@@ -15,7 +15,7 @@ import {
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
-    getFirstNodeAdminPubkey, getAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, type MemberNodeRole,
+    getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, type MemberNodeRole,
     canVouch,
     getMemberStats,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
@@ -626,14 +626,20 @@ router.post('/api/local/admin/inbox/send', async (ctx) => {
 
 router.post('/api/local/admin/commons/round', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { action, projectIds, closesAt, roundId, adminPubkey } = (ctx as any).requestBody || {};
+    const { action, projectIds, closesAt, roundId } = (ctx as any).requestBody || {};
     if (action === 'create') {
         if (!projectIds?.length || !closesAt) {
             ctx.status = 400;
             ctx.body = { error: 'projectIds and closesAt required' };
             return;
         }
-        const creatorKey = adminPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+        const signedActor = (ctx.state as any)?.actor;
+        if (signedActor && !isAdminPubkey(signedActor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only an active node admin may create a voting round' };
+            return;
+        }
+        const creatorKey = signedActor || getFirstNodeAdminPubkey() || getAdminPubkey();
         if (!creatorKey) {
             ctx.status = 400;
             ctx.body = { error: 'No genesis admin configured' };
@@ -646,6 +652,7 @@ router.post('/api/local/admin/commons/round', async (ctx) => {
             return;
         }
         ctx.body = { success: true, round };
+        return;
     } else if (action === 'close') {
         if (!roundId) {
             ctx.status = 400;
@@ -887,10 +894,16 @@ router.get('/api/local/admin/node-roles', async (ctx) => {
 
 router.post('/api/local/admin/node-roles', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { pubkey, role } = (ctx as any).requestBody || {};
-    const effectiveActor = (ctx.state as any)?.actor;
+    const body = (ctx as any).requestBody || {};
+    const targetPubkey = body.pubkey || body.publicKey || body.member_pubkey;
+    const role = body.role;
 
-    if (!pubkey || !role) {
+    // Never read actor from request body or headers (interim rule: docs/admin-surface.md §2).
+    // If ctx.state.actor is absent under password auth, treat caller as owner ('owner:password').
+    const signedActor = (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    if (!targetPubkey || !role) {
         ctx.status = 400;
         ctx.body = { error: 'pubkey and role are required' };
         return;
@@ -902,11 +915,11 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
     }
 
     try {
-        grantNodeRole(pubkey, role, effectiveActor);
-        ctx.body = { success: true, message: `Granted ${role} role to ${pubkey}` };
+        grantNodeRole(targetPubkey, role, effectiveActor);
+        ctx.body = { success: true, message: `Granted ${role} role to ${targetPubkey}` };
     } catch (e: any) {
         const msg = e?.message || 'Failed to grant node role';
-        ctx.status = msg.includes('Only an owner') ? 403 : 400;
+        ctx.status = msg.includes('Only an owner') ? 403 : (msg === 'Member not found' ? 404 : 400);
         ctx.body = { error: msg };
     }
 });
@@ -914,7 +927,8 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
 router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { pubkey, role } = ctx.params;
-    const effectiveActor = (ctx.state as any)?.actor;
+    const signedActor = (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
 
     if (role !== 'owner' && role !== 'admin') {
         ctx.status = 400;

@@ -21,7 +21,7 @@ export function nodeRoleOf(pubkey: string): NodeRole | null {
     const row = db.prepare(
         `SELECT nr.role FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.member_pubkey = ? AND m.status != 'pruned'`
+         WHERE nr.member_pubkey = ? AND m.status = 'active'`
     ).get(pubkey) as { role: NodeRole } | undefined;
     return row?.role || null;
 }
@@ -34,7 +34,7 @@ export function isNodeOwner(pubkey: string): boolean {
     const row = db.prepare(
         `SELECT 1 FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.member_pubkey = ? AND nr.role = 'owner' AND m.status != 'pruned'`
+         WHERE nr.member_pubkey = ? AND nr.role = 'owner' AND m.status = 'active'`
     ).get(pubkey);
     return !!row;
 }
@@ -49,14 +49,14 @@ export function isNodeAdmin(pubkey: string, includeOwner: boolean = true): boole
         const row = db.prepare(
             `SELECT 1 FROM node_roles nr
              JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.member_pubkey = ? AND (nr.role = 'admin' OR nr.role = 'owner') AND m.status != 'pruned'`
+             WHERE nr.member_pubkey = ? AND (nr.role = 'admin' OR nr.role = 'owner') AND m.status = 'active'`
         ).get(pubkey);
         return !!row;
     }
     const row = db.prepare(
         `SELECT 1 FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE nr.member_pubkey = ? AND nr.role = 'admin' AND m.status != 'pruned'`
+         WHERE nr.member_pubkey = ? AND nr.role = 'admin' AND m.status = 'active'`
     ).get(pubkey);
     return !!row;
 }
@@ -69,7 +69,7 @@ export function getFirstNodeAdminPubkey(): string {
     const row = db.prepare(
         `SELECT nr.member_pubkey FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE m.status != 'pruned'
+         WHERE m.status = 'active'
          ORDER BY (nr.role = 'owner') DESC, nr.rowid ASC LIMIT 1`
     ).get() as { member_pubkey: string } | undefined;
     return row ? row.member_pubkey : '';
@@ -83,7 +83,7 @@ export function listNodeRoles(): NodeRoleRecord[] {
         `SELECT nr.member_pubkey, nr.role, nr.granted_at, nr.granted_by, m.callsign
          FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
-         WHERE m.status != 'pruned'
+         WHERE m.status = 'active'
          ORDER BY (nr.role = 'owner') DESC, nr.granted_at ASC`
     ).all() as NodeRoleRecord[];
 }
@@ -93,7 +93,8 @@ export function listNodeRoles(): NodeRoleRecord[] {
  * Each member holds at most ONE node role.
  *
  * Enforces:
- * - Target member must exist in members table and not be pruned
+ * - Target member must exist in members table and be active
+ * - SYSTEM placeholder account can NEVER hold a node role
  * - A treasury (is_treasury=1) can NEVER hold a node role
  * - Only an owner may grant 'owner' (unless bootstrapping on a node with 0 owners)
  * - Only an owner may grant 'admin'
@@ -104,9 +105,17 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         throw new Error("Role must be 'owner' or 'admin'");
     }
 
+    if (targetPubkey === 'SYSTEM' || targetPubkey.toUpperCase() === 'SYSTEM') {
+        throw new Error('SYSTEM placeholder account cannot hold a node role');
+    }
+
     const member = getMember(db, targetPubkey);
     if (!member) {
         throw new Error('Member not found');
+    }
+
+    if (member.callsign?.toUpperCase() === 'SYSTEM') {
+        throw new Error('SYSTEM placeholder account cannot hold a node role');
     }
 
     if (member.isTreasury) {
@@ -117,19 +126,25 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         throw new Error('Pruned accounts cannot hold a node role');
     }
 
+    if (member.status !== 'active') {
+        throw new Error('Only active accounts can hold a node role');
+    }
+
     db.transaction(() => {
         const ownerCount = (db.prepare(
             `SELECT COUNT(*) as c FROM node_roles nr
              JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.role = 'owner' AND m.status != 'pruned'`
+             WHERE nr.role = 'owner' AND m.status = 'active'`
         ).get() as any)?.c || 0;
 
+        const isOwner = actorPubkey === 'owner:password' || (!!actorPubkey && isNodeOwner(actorPubkey));
+
         if (role === 'owner') {
-            if (ownerCount > 0 && (!actorPubkey || !isNodeOwner(actorPubkey))) {
+            if (ownerCount > 0 && !isOwner) {
                 throw new Error('Only an owner may grant the owner role');
             }
         } else if (role === 'admin') {
-            if (!actorPubkey || !isNodeOwner(actorPubkey)) {
+            if (!isOwner) {
                 throw new Error('Only an owner may grant the admin role');
             }
             if (isNodeOwner(targetPubkey) && ownerCount <= 1) {
@@ -159,8 +174,10 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
     }
 
     db.transaction(() => {
+        const isOwner = actorPubkey === 'owner:password' || (!!actorPubkey && isNodeOwner(actorPubkey));
+
         if (role === 'owner') {
-            if (!actorPubkey || !isNodeOwner(actorPubkey)) {
+            if (!isOwner) {
                 throw new Error('Only an owner may revoke the owner role');
             }
             if (!isNodeOwner(targetPubkey)) {
@@ -170,13 +187,13 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
             const ownerCount = (db.prepare(
                 `SELECT COUNT(*) as c FROM node_roles nr
                  JOIN members m ON nr.member_pubkey = m.public_key
-                 WHERE nr.role = 'owner' AND m.status != 'pruned'`
+                 WHERE nr.role = 'owner' AND m.status = 'active'`
             ).get() as any)?.c || 0;
             if (ownerCount <= 1) {
                 throw new Error('Cannot remove the last owner');
             }
         } else if (role === 'admin') {
-            if (!actorPubkey || !isNodeOwner(actorPubkey)) {
+            if (!isOwner) {
                 throw new Error('Only an owner may revoke the admin role');
             }
         }

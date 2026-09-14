@@ -18,7 +18,7 @@ import {
     getBalance, moveToCommons, conservingTransaction,
     sweepEnterpriseCeiling,
 } from '../state-engine.js';
-import { db } from '../db/db.js';
+import { db, pledgeToProject, getCrowdfundProject } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import type { RouteDeps } from './types.js';
@@ -119,18 +119,27 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 // enterprise, which serialises to an absent field — same thing to a client as the null the
                 // detail read returns.
                 const link = linksByTreasury.get(r.public_key);
+                let currentAmount: number | null = null;
+                if (r.goal_amount != null) {
+                    const pRow = db.prepare("SELECT current_amount FROM projects WHERE id = ?").get(r.public_key) as any;
+                    const escBal = (db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(`escrow_${r.public_key}`) as any)?.balance || 0;
+                    currentAmount = Math.max(b.balance, Number(pRow?.current_amount || 0), Number(escBal));
+                }
                 return {
                     publicKey: r.public_key, name: r.callsign,
+                    callsign: r.callsign,
                     avatar: r.avatar_url
                         ? (r.avatar_url.startsWith('bundled://')
                             ? r.avatar_url
                             : `/api/avatar/${r.public_key}?size=thumb`)
                         : null,
+                    avatarUrl: r.avatar_url,
                     balance: b.balance, creditLine: r.earned_credit, liveOffers: b.liveOffers,
                     earnedSurplus: r.earned_surplus ?? 0,
                     workingCapitalCeiling: r.working_capital_ceiling ?? null,
                     purpose: r.purpose ?? null,
                     goalAmount: r.goal_amount != null ? Number(r.goal_amount) : null,
+                    currentAmount,
                     deadlineAt: r.deadline_at ?? null,
                     lifecycle: r.lifecycle ?? 'ongoing',
                     status: r.status ?? 'active',
@@ -194,19 +203,29 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ORDER BY t.created_at DESC
             LIMIT 50
         `).all(treasury, treasury, treasury, treasury) as any[]) : [];
+        let currentAmount: number | null = null;
+        if (m.goal_amount != null) {
+            const pRow = db.prepare("SELECT current_amount FROM projects WHERE id = ?").get(treasury) as any;
+            const escBal = (db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(`escrow_${treasury}`) as any)?.balance || 0;
+            currentAmount = Math.max(b.balance, Number(pRow?.current_amount || 0), Number(escBal));
+        }
+
         ctx.body = {
             publicKey: treasury, name: m.callsign,
+            callsign: m.callsign,
             avatar: m.avatar_url
                 ? (m.avatar_url.startsWith('bundled://')
                     ? m.avatar_url
                     : `/api/avatar/${treasury}?size=thumb`)
                 : null,
+            avatarUrl: m.avatar_url,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
             liveOffers: b.liveOffers, posts, flow, pendingBids, activeDeals,
             earnedSurplus: m.earned_surplus ?? 0,
             workingCapitalCeiling: m.working_capital_ceiling ?? null,
             purpose: m.purpose ?? null,
             goalAmount: m.goal_amount != null ? Number(m.goal_amount) : null,
+            currentAmount,
             deadlineAt: m.deadline_at ?? null,
             lifecycle: m.lifecycle ?? 'ongoing',
             status: m.status ?? 'active',
@@ -221,6 +240,30 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     };
     router.get('/api/treasury/:treasury', getTreasuryHandler);
     router.get('/api/enterprise/:treasury', getTreasuryHandler);
+
+    const pledgeHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const body = (ctx as any).requestBody || {};
+        const { fromPubkey, amount, memo } = body;
+        const actor = (ctx.state?.actor as string) || fromPubkey;
+        const parsedAmount = Number(amount);
+        if (!actor || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            ctx.status = 400;
+            ctx.body = { error: 'fromPubkey and a positive amount are required' };
+            return;
+        }
+        try {
+            const txId = crypto.randomUUID();
+            pledgeToProject(txId, treasury, actor, parsedAmount, memo || 'Enterprise Pledge', (ctx.state as any)?.authSig);
+            deps.broadcast?.({ type: 'project_updated', project: getCrowdfundProject(treasury) });
+            ctx.body = { success: true, txId };
+        } catch (err: any) {
+            ctx.status = 400;
+            ctx.body = { error: err.message };
+        }
+    };
+    router.post('/api/treasury/:treasury/pledge', pledgeHandler);
+    router.post('/api/enterprise/:treasury/pledge', pledgeHandler);
 
     // ---- Authenticated Enterprise Creation (docs/the-commons.md §2.1) -------------------
     const createEnterpriseHandler = async (ctx: any) => {

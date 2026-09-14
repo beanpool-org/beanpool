@@ -168,17 +168,22 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const posts = db.prepare(
             "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') ORDER BY created_at DESC"
         ).all(treasury) as any[];
-        const deferredClaims = db.prepare(
-            "SELECT id, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at FROM deferred_wage_claims WHERE enterprise_pubkey=? ORDER BY created_at ASC"
-        ).all(treasury) as any[];
         const flow = (db.prepare(
             'SELECT from_pubkey, to_pubkey, amount, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
         ).all(treasury, treasury) as any[]).map(f => ({
             amount: f.amount, memo: f.memo, timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
         }));
-        // Gate pending bids and active deals so only verified operators of this treasury receive them
+        // Gate pending bids, active deals, and worker wage details so only verified operators of this treasury receive sensitive operational data
         const actor = ctx.state?.actor;
         const isOperator = !!(actor && canOperateTreasury(actor, treasury));
+
+        // PR #775 review: Sensitive worker wage history (keeper_pubkey, transaction_id, historical payouts)
+        // must not leak to unauthenticated / non-operator clients. Public view only sees pending claims without worker identifiers.
+        const deferredClaims = isOperator ? (db.prepare(
+            "SELECT id, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at FROM deferred_wage_claims WHERE enterprise_pubkey=? ORDER BY created_at ASC LIMIT 50"
+        ).all(treasury) as any[]) : (db.prepare(
+            "SELECT id, amount, status, created_at FROM deferred_wage_claims WHERE enterprise_pubkey=? AND status='pending' ORDER BY created_at ASC LIMIT 50"
+        ).all(treasury) as any[]);
 
         const pendingBids = isOperator ? (db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,

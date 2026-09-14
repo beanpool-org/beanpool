@@ -130,6 +130,32 @@ async function main() {
     const sweepTxRow = db.prepare("SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey='COMMONS_POOL' ORDER BY timestamp DESC LIMIT 1").get(eggs) as any;
     assert(sweepTxRow?.auth_signer === doone.pubKeyHex, 'sweep transaction auth_signer records acting operator');
 
+    // Privacy gating on deferred wage claims:
+    // Insert 1 pending claim and 1 paid claim with sensitive keeper details
+    db.prepare(`
+        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at)
+        VALUES ('claim-priv-pending', ?, ?, 'post-priv-1', 'tx-priv-1', 25.0, 'pending', '2026-09-14T00:00:00Z', NULL),
+               ('claim-priv-paid', ?, ?, 'post-priv-2', 'tx-priv-2', 50.0, 'paid', '2026-09-13T00:00:00Z', '2026-09-14T00:00:00Z')
+    `).run(eggs, doone.pubKeyHex, eggs, doone.pubKeyHex);
+
+    const pubDetail = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(Array.isArray(pubDetail.deferredClaims), 'public read returns deferredClaims array');
+    assert(pubDetail.deferredClaims.length === 1, 'public read only sees pending claims, NOT historical paid claims');
+    assert(pubDetail.deferredClaims[0].id === 'claim-priv-pending', 'public read sees pending claim id');
+    assert(pubDetail.deferredClaims[0].amount === 25.0, 'public read sees pending claim amount');
+    assert(pubDetail.deferredClaims[0].status === 'pending', 'public read sees pending claim status');
+    assert(pubDetail.deferredClaims[0].created_at !== undefined, 'public read sees pending claim created_at');
+    assert(pubDetail.deferredClaims[0].keeper_pubkey === undefined, 'public read hides sensitive keeper_pubkey');
+    assert(pubDetail.deferredClaims[0].transaction_id === undefined, 'public read hides sensitive transaction_id');
+    assert(pubDetail.deferredClaims[0].post_id === undefined, 'public read hides post_id');
+
+    // Operator read sees all claims including sensitive keeper details and historical payouts
+    const opDetail = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    assert(Array.isArray(opDetail.deferredClaims) && opDetail.deferredClaims.length === 2, 'operator sees all claims including paid');
+    const opPending = opDetail.deferredClaims.find((c: any) => c.id === 'claim-priv-pending');
+    assert(opPending?.keeper_pubkey === doone.pubKeyHex, 'operator sees keeper_pubkey on claims');
+    assert(opPending?.transaction_id === 'tx-priv-1', 'operator sees transaction_id on claims');
+
     for (const [route, payload] of [
         ['offer', offer],
         ['need', { title: 'Tend the chickens', category: 'food', credits: 40 }],

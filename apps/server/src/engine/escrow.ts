@@ -362,6 +362,7 @@ export function rejectPostRequest(
 
     const res = db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(transactionId);
     if (res.changes === 0) return null;
+    db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'").run(transactionId);
     
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_rejected', transaction: tx });
@@ -395,6 +396,7 @@ export function cancelPostRequest(
     if (expectedRequesterRole !== requesterPublicKey) return null;
 
     db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(transactionId);
+    db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'").run(transactionId);
     
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_cancelled', transaction: tx });
@@ -756,8 +758,8 @@ export function cancelPostTransaction(
         const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
         if (buyerMember?.is_treasury === 1) {
             // Cancel any pending deferred wage claim associated with this transaction
-            db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE (transaction_id = ? OR (post_id = ? AND enterprise_pubkey = ? AND keeper_pubkey = ?)) AND status = 'pending'")
-                .run(transactionId, row.post_id, row.buyer_pubkey, row.seller_pubkey);
+            db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'")
+                .run(transactionId);
             const isPayeeKeeper = Boolean(
                 db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
                     .get(row.buyer_pubkey, row.seller_pubkey)

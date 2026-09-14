@@ -1967,6 +1967,14 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
     `).all(enterprisePubkey) as any[];
 
     for (const claim of claims) {
+        if (claim.transaction_id) {
+            const tx = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(claim.transaction_id) as any;
+            if (!tx || tx.status === 'cancelled' || tx.status === 'rejected') {
+                db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE id = ?").run(claim.id);
+                continue;
+            }
+        }
+
         const { balance } = getBalance(enterprisePubkey);
         const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
         const earnedSurplus = Number(trow?.earned_surplus) || 0;
@@ -1986,8 +1994,15 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         .run(claim.id);
 
                     if (claim.transaction_id) {
-                        db.prepare("UPDATE marketplace_transactions SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status != 'completed'")
-                            .run(claim.transaction_id);
+                        const tx = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(claim.transaction_id) as any;
+                        if (tx?.status === 'completed') {
+                            // Extra hours adjustment: base hold was already completed, increment credits by deferred diff
+                            db.prepare("UPDATE marketplace_transactions SET credits = credits + ?, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+                                .run(claim.amount, claim.transaction_id);
+                        } else {
+                            db.prepare("UPDATE marketplace_transactions SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status != 'completed'")
+                                .run(claim.transaction_id);
+                        }
                     }
                     if (claim.post_id) {
                         db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND status != 'completed'")

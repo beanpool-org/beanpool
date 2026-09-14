@@ -16,6 +16,7 @@ import {
     initStateEngine, createTreasury, createPost, completePostTransaction,
     requestPost, approvePostRequest, transfer, getBalance,
     recordDeferredWageClaim, acceptPost, cancelPostTransaction,
+    rejectPostRequest, cancelPostRequest,
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -452,6 +453,10 @@ async function main() {
     const updatedGardenClaim = db.prepare('SELECT * FROM deferred_wage_claims WHERE id = ?').get(gardenClaim.id) as any;
     assert(updatedGardenClaim.status === 'paid', 'Deferred claim for extra hours paid automatically on sales income');
     assert(bal(gardenKeeper) === Math.round((19.70 + 9.85) * 100) / 100, 'Keeper received both payments minus fee (29.55 total)');
+    const finalWeedTx = db.prepare('SELECT credits, hours, status FROM marketplace_transactions WHERE id = ?').get(weedBid.id) as any;
+    assert(finalWeedTx.credits === 30, 'marketplace_transactions.credits updated to 30 (20 base + 10 diff) upon paying extra hours claim');
+    assert(finalWeedTx.hours === 3, 'marketplace_transactions.hours reflects actual 3 hours worked');
+    assert(finalWeedTx.status === 'completed', 'marketplace_transactions.status is completed');
 
     // ─────────────────────────────────────────────────────────────────────────────
     // REGRESSION TEST 5: Deferred claim deduplication & replay prevention
@@ -559,6 +564,43 @@ async function main() {
     const finalClaim = db.prepare('SELECT status, paid_at FROM deferred_wage_claims WHERE id = ?').get(cancelClaimId) as any;
     assert(finalClaim.status === 'cancelled', 'Cancelled claim remained cancelled and was NOT paid by processDeferredWageClaims');
     assert(finalClaim.paid_at === null, 'Cancelled claim has null paid_at');
+
+    // Test rejectPostRequest cancels pending claim
+    const rejectNeed = createPost('need', 'work', 'Muffins', 'Bake muffins', 15, 'fixed', cancelTreasury);
+    const rejectBid = requestPost(rejectNeed!.id, cancelKeeper);
+    const rejectClaimId = recordDeferredWageClaim(cancelTreasury, cancelKeeper, 15, rejectNeed!.id, rejectBid.id);
+    assert((db.prepare('SELECT status FROM deferred_wage_claims WHERE id = ?').get(rejectClaimId) as any).status === 'pending', 'Reject test claim initially pending');
+    rejectPostRequest(rejectBid.id, cancelTreasury);
+    assert((db.prepare('SELECT status FROM deferred_wage_claims WHERE id = ?').get(rejectClaimId) as any).status === 'cancelled', 'Pending claim transitioned to cancelled upon rejectPostRequest');
+
+    // Test cancelPostRequest cancels pending claim
+    const cancelReqNeed = createPost('need', 'work', 'Cookies', 'Bake cookies', 12, 'fixed', cancelTreasury);
+    const cancelReqBid = requestPost(cancelReqNeed!.id, cancelKeeper);
+    const cancelReqClaimId = recordDeferredWageClaim(cancelTreasury, cancelKeeper, 12, cancelReqNeed!.id, cancelReqBid.id);
+    assert((db.prepare('SELECT status FROM deferred_wage_claims WHERE id = ?').get(cancelReqClaimId) as any).status === 'pending', 'CancelReq test claim initially pending');
+    cancelPostRequest(cancelReqBid.id, cancelKeeper);
+    assert((db.prepare('SELECT status FROM deferred_wage_claims WHERE id = ?').get(cancelReqClaimId) as any).status === 'cancelled', 'Pending claim transitioned to cancelled upon cancelPostRequest');
+
+    // Test resurrection prevention: if a pending claim somehow pointed to a cancelled tx, processDeferredWageClaims cancels it without resurrecting tx
+    const resurrectNeed = createPost('need', 'work', 'Croissants', 'Roll croissants', 10, 'fixed', cancelTreasury);
+    const resurrectBid = requestPost(resurrectNeed!.id, cancelKeeper);
+    cancelPostRequest(resurrectBid.id, cancelKeeper);
+    assert((db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(resurrectBid.id) as any).status === 'cancelled', 'Transaction is cancelled');
+    // Force a pending claim referencing this cancelled transaction
+    const zombieClaimId = 'claim-zombie-test-1';
+    db.prepare(`
+        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status)
+        VALUES (?, ?, ?, ?, ?, 10, 'pending')
+    `).run(zombieClaimId, cancelTreasury, cancelKeeper, resurrectNeed!.id, resurrectBid.id);
+    const keeperBalBefore = bal(cancelKeeper);
+    const { processDeferredWageClaims } = await import('./state-engine.js');
+    processDeferredWageClaims(cancelTreasury);
+    const zombieClaim = db.prepare('SELECT status, paid_at FROM deferred_wage_claims WHERE id = ?').get(zombieClaimId) as any;
+    assert(zombieClaim.status === 'cancelled', 'Zombie claim on cancelled tx was cancelled by processDeferredWageClaims');
+    assert(zombieClaim.paid_at === null, 'Zombie claim was not paid');
+    const resurrectTx = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(resurrectBid.id) as any;
+    assert(resurrectTx.status === 'cancelled', 'Cancelled transaction was NOT resurrected to completed');
+    assert(bal(cancelKeeper) === keeperBalBefore, 'Keeper balance unchanged after zombie claim check');
 
     // Conservation check
     const { runLedgerAudit } = await import('./state-engine.js');

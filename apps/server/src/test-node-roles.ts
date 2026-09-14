@@ -129,6 +129,23 @@ async function main() {
     assert(reseedCount === 0, 'seedNodeRolesFromGenesis() is idempotent and writes 0 rows on re-run');
     assert(db.prepare("SELECT COUNT(*) AS c FROM node_roles").pluck().get() === 2, 'node_roles row count unchanged after reseed');
 
+    // Regression: Pruned ghost genesis member is NEVER resurrected
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES ('gen_ghost', 'Ghost', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis', 'pruned')`).run();
+    seedNodeRolesFromGenesis();
+    assert(isNodeOwner('gen_ghost') === false, 'Pruned genesis member is NEVER resurrected as owner');
+    assert(nodeRoleOf('gen_ghost') === null, 'Pruned genesis member has nodeRoleOf = null');
+
+    // Regression: Late genesis member IS seeded even when node_roles already has rows (no short-circuit)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES ('gen_late', 'LateGenesis', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis', 'active')`).run();
+    const lateSeeded = seedNodeRolesFromGenesis();
+    assert(lateSeeded === 1, 'seedNodeRolesFromGenesis() seeds late genesis member without short-circuiting');
+    assert(isNodeOwner('gen_late') === true, 'Late genesis member is now owner');
+    // clean up gen_late so subsequent tests keep expected owner count
+    db.prepare("DELETE FROM node_roles WHERE member_pubkey = 'gen_late'").run();
+    db.prepare("DELETE FROM members WHERE public_key = 'gen_late'").run();
+
     // ── 3. Role predicates and role hierarchy ──
     assert(nodeRoleOf('gen_alice') === 'owner', "nodeRoleOf(Alice) === 'owner'");
     assert(isNodeAdmin('gen_alice') === true, 'isNodeAdmin(Alice) is true (owners have admin rights)');

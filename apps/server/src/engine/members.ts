@@ -23,11 +23,11 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
     if (existing) {
         db.prepare("UPDATE members SET invited_by = 'genesis', invite_code = 'genesis' WHERE public_key = ?").run(adminPublicKey);
         if (adminPublicKey !== 'SYSTEM') {
+            seedNodeRolesFromGenesis();
             db.prepare(
                 `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
                  VALUES (?, 'owner', 'genesis')`
             ).run(adminPublicKey);
-            seedNodeRolesFromGenesis();
         }
         return getMember(db, adminPublicKey)!;
     }
@@ -41,11 +41,11 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
 
     ledger.initializeGenesisAccount(adminPublicKey);
     if (adminPublicKey !== 'SYSTEM') {
+        seedNodeRolesFromGenesis();
         db.prepare(
             `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
              VALUES (?, 'owner', 'genesis')`
         ).run(adminPublicKey);
-        seedNodeRolesFromGenesis();
     }
     console.log(`⛰️ Genesis member seeded: ${callsign}`);
     return getMember(db, adminPublicKey)!;

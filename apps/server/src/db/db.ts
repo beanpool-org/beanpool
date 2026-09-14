@@ -519,15 +519,18 @@ export function seedTreasuryOperatorsFromLegacyFlag(): number {
  */
 export function seedNodeRolesFromGenesis(): number {
     try {
-        const already = db.prepare(`SELECT COUNT(*) AS c FROM node_roles`).get() as any;
-        if (already?.c) return 0;
-
         const genesisMembers = db.prepare(
-            `SELECT public_key, callsign FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' ORDER BY rowid ASC`
+            `SELECT public_key, callsign FROM members
+             WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' AND status = 'active'
+               AND public_key NOT IN (SELECT member_pubkey FROM node_roles)
+             ORDER BY rowid ASC`
         ).all() as { public_key: string; callsign: string }[];
 
         if (!genesisMembers.length) {
-            console.warn('[DB] ⚠️  No genesis member found to seed node_roles! node_roles left empty. Node has no owner until one is enrolled.');
+            const currentRoles = (db.prepare(`SELECT COUNT(*) as c FROM node_roles`).get() as any)?.c || 0;
+            if (currentRoles === 0) {
+                console.warn('[DB] ⚠️  No genesis member found to seed node_roles! node_roles left empty. Node has no owner until one is enrolled.');
+            }
             return 0;
         }
 

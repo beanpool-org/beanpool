@@ -1274,8 +1274,8 @@ export async function treasuryApprove(treasury: string, transactionId: string): 
 export async function treasuryReject(treasury: string, transactionId: string): Promise<{ success: boolean }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
 }
-export async function treasuryComplete(treasury: string, transactionId: string): Promise<{ success: boolean }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId });
+export async function treasuryComplete(treasury: string, transactionId: string, hours?: number): Promise<{ success: boolean }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId, hours });
 }
 export async function treasurySweep(treasury: string, amount: number): Promise<{ success: boolean; swept: number; balance: number }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });

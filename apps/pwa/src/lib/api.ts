@@ -769,7 +769,7 @@ export async function getTransactions(publicKey?: string, limit = 50): Promise<T
 
 export interface MarketplacePost {
     id: string;
-    type: 'offer' | 'need';
+    type: 'offer' | 'need' | 'poll';
     category: string;
     title: string;
     description: string;
@@ -794,6 +794,11 @@ export interface MarketplacePost {
     photos?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
+    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number }>;
+    pollClosesAt?: string;
+    totalVotes?: number;
+    userVotedOptionId?: string;
+    pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
 }
 
 export interface MarketplaceTransaction {
@@ -825,7 +830,7 @@ export async function getMarketplacePosts(filter?: { id?: string; type?: string;
 }
 
 export async function createMarketplacePost(post: {
-    type: 'offer' | 'need';
+    type: 'offer' | 'need' | 'poll';
     category: string;
     title: string;
     description: string;
@@ -841,8 +846,18 @@ export async function createMarketplacePost(post: {
     reach?: PostReach;
     /** Peer ids, only meaningful with reach 'peers'. An empty list makes the server keep it local. */
     reachPeers?: string[];
+    pollOptions?: Array<{ id: string; text: string }>;
+    durationDays?: number;
 }): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', '/api/marketplace/posts', post);
+}
+
+export async function votePoll(postId: string, optionId: string): Promise<{ success: boolean; post: MarketplacePost }> {
+    return request('POST', `/api/marketplace/posts/${postId}/vote`, { optionId });
+}
+
+export async function closePoll(postId: string): Promise<{ success: boolean; post: MarketplacePost }> {
+    return request('POST', `/api/marketplace/posts/${postId}/close`, {});
 }
 
 /** How far a listing travels (#143 step 4). Mirrors PostReach in @beanpool/core. */

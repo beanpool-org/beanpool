@@ -134,10 +134,11 @@ export default function TreasuryDetailScreen() {
     };
 
     const handleApproveBid = async (txId: string) => {
-        if (!params.publicKey) return;
+        const treasuryKey = params.publicKey;
+        if (!treasuryKey) return;
         setActionState({ id: txId, type: 'approve' });
         try {
-            await treasuryApprove(params.publicKey, txId);
+            await treasuryApprove(treasuryKey, txId);
             Alert.alert('Bid Approved ✅', 'Funds locked in trust successfully.');
             load();
         } catch (e: any) {
@@ -148,10 +149,11 @@ export default function TreasuryDetailScreen() {
     };
 
     const handleRejectBid = async (txId: string) => {
-        if (!params.publicKey) return;
+        const treasuryKey = params.publicKey;
+        if (!treasuryKey) return;
         setActionState({ id: txId, type: 'reject' });
         try {
-            await treasuryReject(params.publicKey, txId);
+            await treasuryReject(treasuryKey, txId);
             Alert.alert('Bid Declined', 'The request has been declined.');
             load();
         } catch (e: any) {
@@ -162,7 +164,8 @@ export default function TreasuryDetailScreen() {
     };
 
     const handleCompleteDeal = (txId: string) => {
-        if (!params.publicKey) return;
+        const treasuryKey = params.publicKey;
+        if (!treasuryKey) return;
         Alert.alert(
             'Release Payment?',
             'Are you sure you want to release the escrow payment to the member? This cannot be undone.',
@@ -173,7 +176,7 @@ export default function TreasuryDetailScreen() {
                     onPress: async () => {
                         setActionState({ id: txId, type: 'complete' });
                         try {
-                            await treasuryComplete(params.publicKey, txId);
+                            await treasuryComplete(treasuryKey, txId);
                             Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
                             load();
                         } catch (e: any) {
@@ -314,7 +317,7 @@ export default function TreasuryDetailScreen() {
                                                         onPress={() => handleApproveBid(b.id)}
                                                         accessibilityRole="button"
                                                     >
-                                                        {actionState?.id === b.id && actionState.type === 'approve' ? (
+                                                        {actionState?.id === b.id && actionState?.type === 'approve' ? (
                                                             <ActivityIndicator size="small" color={colors.text.inverse} />
                                                         ) : (
                                                             <Text style={styles.opBtnText}>Approve Bid ({b.credits} 🫘)</Text>
@@ -326,7 +329,7 @@ export default function TreasuryDetailScreen() {
                                                         onPress={() => handleRejectBid(b.id)}
                                                         accessibilityRole="button"
                                                     >
-                                                        {actionState?.id === b.id && actionState.type === 'reject' ? (
+                                                        {actionState?.id === b.id && actionState?.type === 'reject' ? (
                                                             <ActivityIndicator size="small" color={colors.feedback.warning.solid} />
                                                         ) : (
                                                             <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.solid }]}>Decline</Text>
@@ -354,7 +357,7 @@ export default function TreasuryDetailScreen() {
                                                         onPress={() => handleCompleteDeal(d.id)}
                                                         accessibilityRole="button"
                                                     >
-                                                        {actionState?.id === d.id && actionState.type === 'complete' ? (
+                                                        {actionState?.id === d.id && actionState?.type === 'complete' ? (
                                                             <ActivityIndicator size="small" color={colors.text.inverse} />
                                                         ) : (
                                                             <Text style={styles.opBtnText}>Release Payment ({d.credits} 🫘)</Text>

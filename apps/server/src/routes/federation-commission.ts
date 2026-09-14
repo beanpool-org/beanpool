@@ -160,10 +160,9 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         }
 
         // 4. THE AUTHORISATION. A link is an enterprise (§7), so its keeper is whoever #106 says it is —
-        //    `members.can_operate` plus an explicit `treasury_operators` binding, with the admin holding a
-        //    node-wide override. Deliberately NOT a new permission: a second answer to "who may act for this
-        //    enterprise" is how the two drift apart, and open decision 4 (appointed vs nominated) is still
-        //    open — whatever settles it will change `canOperateTreasury`, and this inherits the answer.
+        //    `members.can_operate` plus an explicit `treasury_operators` binding. Commissioning spends the
+        //    community's Commons pot within the link ceiling, so it is gated behind `canOperateTreasury`
+        //    with NO admin bypass: an admin must be explicitly appointed to treasury_operators to commission.
         const link = getFederationLink(peerId);
         if (!link) {
             ctx.status = 404;

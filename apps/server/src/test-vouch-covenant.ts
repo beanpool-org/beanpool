@@ -48,7 +48,7 @@ function main() {
     console.log('Running Elder-vouch + covenant test...\n');
     initStateEngine();
     seedGenesisMember('genesis_admin', 'Admin');
-    const admin = getAdminPubkey();
+    const admin = getFirstNodeAdminPubkey() || getAdminPubkey();
 
     // ── 1. canVouch capability (admin-granted, never tier-derived) ──
     seedMember('elderA'); seedMember('plain');

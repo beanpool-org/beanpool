@@ -15,7 +15,7 @@ import {
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
-    getFirstNodeAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, type MemberNodeRole,
+    getFirstNodeAdminPubkey, getAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, type MemberNodeRole,
     canVouch,
     getMemberStats,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
@@ -587,7 +587,11 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
 
 router.post('/api/local/admin/inbox', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const adminPubkey = getFirstNodeAdminPubkey();
+    const adminPubkey = getFirstNodeAdminPubkey() || getAdminPubkey();
+    if (!adminPubkey) {
+        ctx.body = { conversations: [], adminPubkey: '' };
+        return;
+    }
     const convs = getConversationsByMember(adminPubkey);
     // Also grab any legacy 'system' conversations.
     // Use a Set for O(N) dedup instead of an O(N^2) nested .find().
@@ -629,7 +633,12 @@ router.post('/api/local/admin/commons/round', async (ctx) => {
             ctx.body = { error: 'projectIds and closesAt required' };
             return;
         }
-        const creatorKey = adminPubkey || getFirstNodeAdminPubkey();
+        const creatorKey = adminPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+        if (!creatorKey) {
+            ctx.status = 400;
+            ctx.body = { error: 'No genesis admin configured' };
+            return;
+        }
         const round = createVotingRound(creatorKey, projectIds, closesAt);
         if (!round) {
             ctx.status = 400;

@@ -162,12 +162,16 @@ export function blockCrossNodeSettlement(ctx: any, ...candidatePayers: Array<str
  * Used by the marketplace routes, where the refusal originates in the engine because only the engine
  * knows who is paying.
  */
-export function respondSettlementAware(ctx: any, err: SettlementRefusedError, fallback = 'Request failed'): void {
+export function respondSettlementAware(ctx: any, err: any, fallback = 'Request failed'): void {
     if (err?.code === SETTLEMENT_REFUSED_CODE) {
         ctx.status = 503;
         ctx.body = { error: err.message || SETTLEMENT_REFUSED_MESSAGE, code: SETTLEMENT_REFUSED_CODE };
         return;
     }
-    ctx.status = 400;
+    const rawCode = err?.status ?? err?.statusCode;
+    const statusCode = typeof rawCode === 'number' && Number.isInteger(rawCode) && rawCode >= 400 && rawCode <= 599
+        ? rawCode
+        : 400;
+    ctx.status = statusCode;
     ctx.body = { error: err?.message || fallback };
 }

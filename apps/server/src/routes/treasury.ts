@@ -12,7 +12,7 @@
 
 import Router from '@koa/router';
 import {
-    createTreasury, adminSetOperator, canOperateTreasury,
+    createTreasury, adminSetOperator, canOperateTreasury, canAdministerTreasury,
     treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     createPost, approvePostRequest, completePostTransaction,
     getBalance, moveToCommons, conservingTransaction,
@@ -84,9 +84,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'You are not a keeper of this enterprise' };
             return null;
         }
-        // Only an EXPLICIT suspension refuses. A missing row means "not a suspended member" — the admin
-        // override in canOperateTreasury does not require the admin to hold a member row, and reading a
-        // missing status as inactive would lock them out of their own node.
+        // Only an EXPLICIT suspension refuses. A missing row means "not a suspended member".
         const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
@@ -96,6 +94,28 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
             ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return null;
+        }
+        return actor;
+    };
+
+    const requireAdministrator = (ctx: any, treasury: string): string | null => {
+        const actor = ctx.state?.actor;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
+        if (!actor || !canAdministerTreasury(actor, treasury)) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not authorized to administer this enterprise' };
+            return null;
+        }
+        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed.' };
+            return null;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active.' };
             return null;
         }
         return actor;
@@ -281,34 +301,43 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Approve a bid on the treasury's Need — funds escrow from the treasury (its credit line).
     router.post('/api/treasury/:treasury/approve', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const { transactionId } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
         try {
-            const tx = approvePostRequest(String(transactionId), treasury);
+            const tx = approvePostRequest(String(transactionId), treasury, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not approve (not this treasury’s deal, or already actioned)' }; return; }
             ctx.body = { success: true, transaction: tx };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            ctx.status = e.status || e.statusCode || 400;
+            ctx.body = { error: e.message };
+        }
     });
 
     // Release escrow on a treasury Need it is the buyer of (e.g. pay the tender on completion).
     // Egg *sales* are released by the buyer through the normal marketplace route, not here.
     router.post('/api/treasury/:treasury/complete', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
-        const { transactionId } = (ctx as any).requestBody || {};
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
+        const { transactionId, hours } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
         try {
-            const tx = completePostTransaction(String(transactionId), treasury);
+            const tx = completePostTransaction(String(transactionId), treasury, typeof hours === 'number' ? hours : undefined, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
             ctx.body = { success: true, transaction: tx };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            ctx.status = e.status || e.statusCode || 400;
+            ctx.body = { error: e.message };
+        }
     });
 
     // Sweep surplus from the treasury into the shared Commons pool.
     router.post('/api/treasury/:treasury/sweep', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const amt = Number((ctx as any).requestBody?.amount);
         if (!amt || amt <= 0) { ctx.status = 400; ctx.body = { error: 'amount must be positive' }; return; }
         if (amt > getBalance(treasury).balance) { ctx.status = 400; ctx.body = { error: 'Cannot sweep more than the treasury holds' }; return; }
@@ -330,7 +359,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         let ok;
         try {
             ok = conservingTransaction(() =>
-                moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`));
+                moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`, { authSigner: actor }));
         } catch (e: any) {
             const invariant = /moveToCommons is for/.test(e?.message || '');
             console.error(`[Treasury] Sweep from ${treasury.slice(0, 8)} failed:`, e?.message || e);

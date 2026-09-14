@@ -34,6 +34,7 @@ import {
     canVouch,
     canOperate,
     canOperateTreasury,
+    canAdministerTreasury,
     keeperOf,
     unvouchMember,
     createTreasury,
@@ -238,22 +239,25 @@ async function main() {
     assert(hasLiveOffer('gen_alice') === true, 'Owner hasLiveOffer override');
     assert(canVouch('gen_alice') === true, 'Owner canVouch override');
     assert(canOperate('gen_alice') === true, 'Owner canOperate override');
-    assert(canOperateTreasury('gen_alice', tPub) === true, 'Owner canOperateTreasury override');
-    assert(keeperOf('gen_alice').includes(tPub), 'Owner keeperOf includes all treasuries');
+    assert(canAdministerTreasury('gen_alice', tPub) === true, 'Owner canAdministerTreasury override');
+    assert(canOperateTreasury('gen_alice', tPub) === false, 'Owner with no operator binding cannot spend (#774)');
+    assert(keeperOf('gen_alice').length === 0, 'Owner keeperOf is empty with no explicit binding (#774)');
 
     // Admin (Dave): also has overrides
     assert(hasListedOffer('dave') === true, 'Admin hasListedOffer override');
     assert(hasLiveOffer('dave') === true, 'Admin hasLiveOffer override');
     assert(canVouch('dave') === true, 'Admin canVouch override');
     assert(canOperate('dave') === true, 'Admin canOperate override');
-    assert(canOperateTreasury('dave', tPub) === true, 'Admin canOperateTreasury override');
-    assert(keeperOf('dave').includes(tPub), 'Admin keeperOf includes all treasuries');
+    assert(canAdministerTreasury('dave', tPub) === true, 'Admin canAdministerTreasury override');
+    assert(canOperateTreasury('dave', tPub) === false, 'Admin with no operator binding cannot spend (#774)');
+    assert(keeperOf('dave').length === 0, 'Admin keeperOf is empty with no explicit binding (#774)');
 
     // Plain user: no overrides
     assert(hasListedOffer('plain_user') === false, 'Plain member does NOT have hasListedOffer override');
     assert(hasLiveOffer('plain_user') === false, 'Plain member does NOT have hasLiveOffer override');
     assert(canVouch('plain_user') === false, 'Plain member does NOT have canVouch override');
     assert(canOperate('plain_user') === false, 'Plain member does NOT have canOperate override');
+    assert(canAdministerTreasury('plain_user', tPub) === false, 'Plain member does NOT have canAdministerTreasury override');
     assert(canOperateTreasury('plain_user', tPub) === false, 'Plain member does NOT have canOperateTreasury override');
     assert(keeperOf('plain_user').length === 0, 'Plain member keeperOf is empty');
 
@@ -262,6 +266,7 @@ async function main() {
     assert(hasLiveOffer('SYSTEM') === false, 'SYSTEM does NOT have hasLiveOffer override');
     assert(canVouch('SYSTEM') === false, 'SYSTEM does NOT have canVouch override');
     assert(canOperate('SYSTEM') === false, 'SYSTEM does NOT have canOperate override');
+    assert(canAdministerTreasury('SYSTEM', tPub) === false, 'SYSTEM does NOT have canAdministerTreasury override');
     assert(canOperateTreasury('SYSTEM', tPub) === false, 'SYSTEM does NOT have canOperateTreasury override');
 
     // unvouchMember override check:

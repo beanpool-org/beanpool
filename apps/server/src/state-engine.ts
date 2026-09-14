@@ -1269,7 +1269,7 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
-export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature: string; payload: string }): Transaction | null {
+export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string }): Transaction | null {
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
     if (amount < 0) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
@@ -1549,7 +1549,7 @@ export function moveToCommons(
     // becoming a back door around `transfer()`'s send gate and floor policy. A prune is different in kind —
     // an admin action on a member being removed, taking a positive balance to exactly zero — so the gate is
     // moot rather than bypassed. Anything else moving a member's value belongs in `transfer()`.
-    opts?: { allowMemberDebit?: boolean },
+    opts?: { allowMemberDebit?: boolean; authSigner?: string },
 ): Transaction | null {
     const synthetic = isSyntheticAccount(from);
     const treasury = !synthetic
@@ -1567,8 +1567,9 @@ export function moveToCommons(
         from, to: 'COMMONS_POOL', amount, taxFee: 0,
         memo: memo || '', timestamp: new Date().toISOString(),
     };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp);
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null
+    );
 
     const fromAcc = ledger.getAccount(from);
     db.prepare(`
@@ -1764,10 +1765,14 @@ export function canOperate(publicKey: string): boolean {
  * per-enterprise assignments. adminAssignTreasuryOperator sets the flag automatically, so a row can
  * never be silently inert.
  *
- * The system admin retains a node-wide override — they create the enterprises in the first place.
+ * Gated for SPENDING operations: post offer, post need, approve a bid, complete and pay, sweep the balance,
+ * and fund a federation commission.
+ * NO admin bypass: requires a real treasury_operators row, exactly as for anyone else.
+ *
+ * An admin can rescue an abandoned enterprise by explicitly appointing themselves via
+ * adminAssignTreasuryOperator, which creates a public, recorded, revocable binding.
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
-    if (isAdminPubkey(publicKey)) return true;
     if (!canOperate(publicKey)) return false;
     const row = db.prepare(
         "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
@@ -1776,16 +1781,25 @@ export function canOperateTreasury(publicKey: string, treasuryPubkey: string): b
 }
 
 /**
+ * May this actor perform REPAIR AND MODERATION actions on this enterprise?
+ * Covers non-spending administrative actions: pausing an enterprise, unbinding a keeper,
+ * archiving an abandoned enterprise, taking down a listing.
+ *
+ * The node admin IS allowed here (break-glass repair / moderation authority), as is any
+ * legitimate keeper of the enterprise.
+ */
+export function canAdministerTreasury(publicKey: string, treasuryPubkey: string): boolean {
+    if (isAdminPubkey(publicKey)) return true;
+    return canOperateTreasury(publicKey, treasuryPubkey);
+}
+
+/**
  * Which enterprises does this member keep? Drives the Commons tab's per-enterprise controls —
  * the client needs the list, not a boolean, to know which cards get an operate panel.
  *
- * The admin holds a node-wide override, so they get every treasury.
+ * No admin bypass: an admin sees only the enterprises they have explicitly been appointed to keep.
  */
 export function keeperOf(publicKey: string): string[] {
-    if (isAdminPubkey(publicKey)) {
-        return (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as any[])
-            .map(r => r.public_key);
-    }
     if (!canOperate(publicKey)) return [];
     return (db.prepare(
         "SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ?"
@@ -1928,7 +1942,9 @@ function getEscrowCb() {
         dispatchPushNotification,
         getBalance,
         floorLockedError,
-        SystemMessageType
+        SystemMessageType,
+        canOperateTreasury,
+        conservingTransaction,
     };
 }
 
@@ -1936,8 +1952,8 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
     return requestPostEngine(getEscrowCb(), postId, requesterPublicKey, hours);
 }
 
-export function approvePostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
-    return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey);
+export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string }): MarketplaceTransaction | null {
+    return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey, opts);
 }
 
 export function rejectPostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
@@ -1952,8 +1968,8 @@ export function acceptPost(postId: string, buyerPublicKey: string, hours?: numbe
     return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours);
 }
 
-export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
-    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours);
+export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, opts?: { authSigner?: string }): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
+    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
 }
 
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
@@ -3011,7 +3027,8 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
 }
 
 export function adminSendMessage(targetPubkey: string, body: string, senderPubkey?: string) {
-    const adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || 'SYSTEM';
+    const adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    if (!adminPubkey) throw new Error('No genesis admin configured');
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
     if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
 }
@@ -3241,7 +3258,7 @@ export function getGovernanceCredits(pubkey: string): { totalCredits: number; us
 }
 
 export function createVotingRound(adminPubkey: string, projectIds: string[], closesAt: string): VotingRound | null {
-    if (!isNodeAdmin(adminPubkey) || getActiveRound()) return null;
+    if (!adminPubkey || !isAdminPubkey(adminPubkey) || getActiveRound()) return null;
 
     const projects = getAllProjects();
     for (const pid of projectIds) {

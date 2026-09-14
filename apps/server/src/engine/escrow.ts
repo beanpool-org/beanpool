@@ -17,7 +17,7 @@ import {
 } from '@beanpool/engine';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
-type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean) => any;
+type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean, auth?: { signer: string; signature?: string; payload?: string }) => any;
 type EnsureConvFn = (postId: string, buyerPubkey: string, sellerPubkey: string) => string;
 type SystemMsgFn = (postId: string, type: any, payload: any, senderPubkey: string, recipientPubkey: string) => any;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow') => void;
@@ -31,6 +31,8 @@ export interface EscrowCallbacks {
     getBalance: (publicKey: string) => any;
     floorLockedError: (publicKey: string, postBalance: number) => Error;
     SystemMessageType: any;
+    canOperateTreasury?: (operator: string, treasury: string) => boolean;
+    conservingTransaction?: <T>(fn: () => T) => T;
 }
 
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
@@ -150,7 +152,8 @@ export function requestPost(
 export function approvePostRequest(
     cb: EscrowCallbacks,
     transactionId: string,
-    authorPublicKey: string
+    authorPublicKey: string,
+    opts?: { authSigner?: string }
 ): MarketplaceTransaction | null {
     const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='requested'").get(transactionId) as any;
     if (!row) return null;
@@ -161,6 +164,38 @@ export function approvePostRequest(
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
     if (expectedAuthorRole !== authorPublicKey) return null;
+
+    // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
+    // When an enterprise authors a Need, the acting operator approving the bid
+    // must NOT be the counterparty being paid, must provide an authenticated keeper signature,
+    // and must be an authorized keeper of the enterprise (failing closed).
+    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+    const isEnterpriseNeed = !isOffer && Boolean(buyerMember?.is_treasury);
+    if (isEnterpriseNeed) {
+        if (!opts?.authSigner) {
+            const err: any = new Error('Enterprise approval requires an authenticated keeper signature.');
+            err.status = 401;
+            err.statusCode = 401;
+            throw err;
+        }
+        const isKeeper = cb.canOperateTreasury
+            ? cb.canOperateTreasury(opts.authSigner, row.buyer_pubkey)
+            : Boolean(db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?").get(opts.authSigner, row.buyer_pubkey));
+        if (!isKeeper) {
+            const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+        }
+        if (opts.authSigner === row.seller_pubkey) {
+            const name = buyerMember?.callsign?.trim() || 'this enterprise';
+            const err: any = new Error(`Another keeper of ${name} needs to approve this — you cannot approve a job you are being paid for.`);
+            err.status = 403;
+            err.statusCode = 403;
+            err.code = 'TWO_PERSON_RULE';
+            throw err;
+        }
+    }
 
     assertMemberActive(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
@@ -182,10 +217,20 @@ export function approvePostRequest(
 
     cb.ensureTransactionConversation(row.post_id, row.buyer_pubkey, row.seller_pubkey);
 
-    db.transaction(() => {
+    const runTx = cb.conservingTransaction ? (fn: () => void) => cb.conservingTransaction!(fn) : (fn: () => void) => db.transaction(fn)();
+    runTx(() => {
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${row.id}`);
 
-        const escrowResult = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, row.credits, `Escrow hold for approved deal ${row.post_id}`, 'escrow', true);
+        const isEnterprisePayer = isEnterpriseNeed;
+        const escrowResult = cb.transfer(
+            row.buyer_pubkey,
+            `escrow_${row.id}`,
+            row.credits,
+            `Escrow hold for approved deal ${row.post_id}`,
+            'escrow',
+            true,
+            (isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined
+        );
         if (!escrowResult) throw new Error('Failed to lock funds in escrow');
 
         db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=?`).run(transactionId);
@@ -197,7 +242,7 @@ export function approvePostRequest(
             db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
               .run(post.id, row.id);
         }
-    })();
+    });
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'post_accepted', postId: post.id, transaction: tx });
@@ -387,7 +432,8 @@ export function completePostTransaction(
     cb: EscrowCallbacks,
     transactionId: string,
     confirmerPublicKey: string,
-    finalHours?: number
+    finalHours?: number,
+    opts?: { authSigner?: string }
 ): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
     const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='pending'").get(transactionId) as any;
     
@@ -402,6 +448,38 @@ export function completePostTransaction(
     
     if (row.buyer_pubkey !== confirmerPublicKey) return null;
 
+    // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
+    // When an enterprise authors a Need, the acting operator completing the deal
+    // and releasing payment must NOT be the counterparty being paid, must provide an
+    // authenticated keeper signature, and must be an authorized keeper of the enterprise.
+    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+    const isEnterpriseBuyer = Boolean(buyerMember?.is_treasury);
+    if (isEnterpriseBuyer) {
+        if (!opts?.authSigner) {
+            const err: any = new Error('Enterprise completion requires an authenticated keeper signature.');
+            err.status = 401;
+            err.statusCode = 401;
+            throw err;
+        }
+        const isKeeper = cb.canOperateTreasury
+            ? cb.canOperateTreasury(opts.authSigner, row.buyer_pubkey)
+            : Boolean(db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?").get(opts.authSigner, row.buyer_pubkey));
+        if (!isKeeper) {
+            const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+        }
+        if (opts.authSigner === row.seller_pubkey) {
+            const name = buyerMember?.callsign?.trim() || 'this enterprise';
+            const err: any = new Error(`Another keeper of ${name} needs to complete this — you cannot complete a job you are being paid for.`);
+            err.status = 403;
+            err.statusCode = 403;
+            err.code = 'TWO_PERSON_RULE';
+            throw err;
+        }
+    }
+
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     const isHourly = post && post.price_type !== 'fixed';
     
@@ -413,14 +491,15 @@ export function completePostTransaction(
     const completedAt = new Date().toISOString();
     let releaseResult: any = null;
 
-    db.transaction(() => {
+    const runTx = cb.conservingTransaction ? (fn: () => void) => cb.conservingTransaction!(fn) : (fn: () => void) => db.transaction(fn)();
+    runTx(() => {
         if (isHourly && releaseCredits !== row.credits) {
             const diff = releaseCredits - row.credits;
             if (diff > 0) {
                 const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
                 if (balance - diff < floor) throw new Error('Insufficient balance to cover extra hours');
                 if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
-                cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true);
+                cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
             } else if (diff < 0) {
                 cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true);
             }
@@ -441,7 +520,7 @@ export function completePostTransaction(
         } else if (post && post.repeatable) {
             db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
         }
-    })();
+    });
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_completed', transaction: tx });

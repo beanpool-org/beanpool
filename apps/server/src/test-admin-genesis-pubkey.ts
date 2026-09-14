@@ -29,6 +29,7 @@ import {
     getFirstNodeAdminPubkey,
     canOperate,
     canOperateTreasury,
+    canAdministerTreasury,
     canVouch,
     keeperOf,
     hasListedOffer,
@@ -113,9 +114,10 @@ async function main() {
     const farmPubkey = createTreasury('CommunityFarm', 'data:image/png;base64,iVBORw0KGgo=', 500).publicKey;
 
     assert(canOperate(alicePubkey) === true, 'real genesis admin has canOperate override');
-    assert(canOperateTreasury(alicePubkey, farmPubkey) === true, 'real genesis admin has canOperateTreasury override');
+    assert(canAdministerTreasury(alicePubkey, farmPubkey) === true, 'real genesis admin has canAdministerTreasury override');
+    assert(canOperateTreasury(alicePubkey, farmPubkey) === false, 'admin with no operator binding cannot spend (#774)');
     assert(canVouch(alicePubkey) === true, 'real genesis admin has canVouch override');
-    assert(keeperOf(alicePubkey).includes(farmPubkey), 'real genesis admin has keeperOf override');
+    assert(keeperOf(alicePubkey).length === 0, 'admin keeperOf is empty with no explicit binding (#774)');
     assert(hasListedOffer(alicePubkey) === true, 'real genesis admin has hasListedOffer override');
     assert(hasLiveOffer(alicePubkey) === true, 'real genesis admin has hasLiveOffer override');
     assert(liveOfferCount(alicePubkey) > 0, 'real genesis admin has liveOfferCount override');

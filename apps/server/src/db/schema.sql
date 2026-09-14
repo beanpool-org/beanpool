@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS members (
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
+CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
 
 -- 2. Invite Codes
 CREATE TABLE IF NOT EXISTS invite_codes (
@@ -99,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_from ON transactions(from_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_to ON transactions(to_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer);
 
 -- 4. Marketplace Posts & Photos
 CREATE TABLE IF NOT EXISTS posts (
@@ -684,6 +686,7 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
 -- Covers "which enterprises does this member steward?" — the stewardOf() lookup that
 -- drives the Commons tab's per-enterprise controls.
 CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(member_pubkey);
+CREATE INDEX IF NOT EXISTS idx_treasury_operators_member_treasury ON treasury_operators(member_pubkey, treasury_pubkey);
 
 -- 22. Node owner and admin roles (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2).
 -- Coordination and attribution record for authority over the node machine. Replaces the inferred

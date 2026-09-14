@@ -212,6 +212,8 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON mark
 -- case, a cache MISS is the expensive path and is worth making cheap.
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status ON marketplace_transactions(buyer_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status ON marketplace_transactions(seller_pubkey, status);
+CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status_created ON marketplace_transactions(buyer_pubkey, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON marketplace_transactions(seller_pubkey, status, created_at DESC);
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (

@@ -160,10 +160,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                    m.callsign as peer_callsign, m.avatar_url as peer_avatar
             FROM marketplace_transactions t
             JOIN posts p ON t.post_id = p.id
-            LEFT JOIN members m ON t.seller_pubkey = m.public_key
-            WHERE t.buyer_pubkey = ? AND t.status = 'requested'
+            LEFT JOIN members m ON m.public_key = CASE WHEN t.buyer_pubkey = ? THEN t.seller_pubkey ELSE t.buyer_pubkey END
+            WHERE (t.buyer_pubkey = ? OR t.seller_pubkey = ?) AND t.status = 'requested'
             ORDER BY t.created_at DESC
-        `).all(treasury) as any[]) : [];
+        `).all(treasury, treasury, treasury) as any[]) : [];
         const activeDeals = isOperator ? (db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
                    p.title as post_title, p.type as post_type, p.price_type,

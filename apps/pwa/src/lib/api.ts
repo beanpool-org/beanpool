@@ -1245,6 +1245,8 @@ export interface Treasury {
     balance: number;
     creditLine: number;
     liveOffers: number;
+    earnedSurplus?: number;
+    workingCapitalCeiling?: number | null;
     /**
      * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
      *

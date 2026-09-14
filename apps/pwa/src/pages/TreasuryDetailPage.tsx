@@ -303,6 +303,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 {balance} 🫘
                             </div>
 
+                            {balance < 0 && (
+                                <div
+                                    role="alert"
+                                    aria-live="polite"
+                                    className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-semibold leading-relaxed"
+                                >
+                                    ⚠️ In Deficit: This enterprise is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-2 gap-3 mt-5 pt-5 border-t border-nature-100 dark:border-nature-800">
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
@@ -318,6 +328,22 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
                                         {detail.liveOffers ?? 0}
+                                    </div>
+                                </div>
+                                <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                        Earned Surplus
+                                    </div>
+                                    <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
+                                        {detail.earnedSurplus ?? 0} 🫘
+                                    </div>
+                                </div>
+                                <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                        Capital Ceiling
+                                    </div>
+                                    <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
+                                        {detail.workingCapitalCeiling != null ? `${detail.workingCapitalCeiling} 🫘` : 'Uncapped'}
                                     </div>
                                 </div>
                             </div>

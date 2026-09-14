@@ -222,6 +222,9 @@ export default function TreasuryDetailScreen() {
     const flow: any[] = detail?.flow || [];
     const pendingBids: any[] = detail?.pendingBids || [];
     const activeDeals: any[] = detail?.activeDeals || [];
+    const deferredClaims: any[] = detail?.deferredClaims || [];
+    const pendingClaims = deferredClaims.filter((c: any) => c.status === 'pending');
+    const pendingClaimsTotal = pendingClaims.reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0);
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -269,10 +272,40 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.metaValue}>{detail.liveOffers ?? 0}</Text>
                                 </View>
                             </View>
+                            <View style={styles.balanceMetaRow}>
+                                <View style={styles.metaBox}>
+                                    <Text style={styles.metaLabel}>Earned surplus</Text>
+                                    <Text style={styles.metaValue}>{detail.earnedSurplus ?? 0} 🫘</Text>
+                                </View>
+                                <View style={styles.metaBox}>
+                                    <Text style={styles.metaLabel}>Capital ceiling</Text>
+                                    <Text style={styles.metaValue}>{detail.workingCapitalCeiling != null ? `${detail.workingCapitalCeiling} 🫘` : 'Uncapped'}</Text>
+                                </View>
+                            </View>
                             {balance < 0 && (
-                                <View style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}>
+                                <View
+                                    accessible={true}
+                                    accessibilityRole="alert"
+                                    accessibilityLabel={`Warning: Operator eats last. This enterprise is currently in deficit with ${balance} beans. Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.`}
+                                    style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}
+                                >
                                     <Text style={{ fontSize: 11, color: colors.feedback.warning.solid, fontWeight: '700', lineHeight: 16 }}>
                                         ⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.
+                                    </Text>
+                                </View>
+                            )}
+                            {pendingClaims.length > 0 && (
+                                <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Text style={{ fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                                            Pending Wage Claims ({pendingClaims.length})
+                                        </Text>
+                                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.feedback.warning.solid }}>
+                                            {pendingClaimsTotal} 🫘
+                                        </Text>
+                                    </View>
+                                    <Text style={{ fontSize: 11, color: colors.text.secondary, marginTop: 4, lineHeight: 15 }}>
+                                        Deferred until enterprise earns sufficient trading profit. Paid automatically from future sales.
                                     </Text>
                                 </View>
                             )}

@@ -337,8 +337,22 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                                         {t.balance} 🫘
                                     </div>
                                     {t.balance < 0 && !t.link && (
-                                        <div className="text-amber-400 text-xs mt-0.5" aria-label="In deficit: credit buys inputs, keepers eat last">
+                                        <div
+                                            role="status"
+                                            aria-live="polite"
+                                            className="text-amber-400 text-xs mt-0.5"
+                                            aria-label="In deficit: credit buys inputs, keepers eat last"
+                                        >
                                             in deficit (keepers eat last)
+                                        </div>
+                                    )}
+                                    {!t.link && (
+                                        <div className="text-nature-400 text-xs mt-0.5">
+                                            {t.workingCapitalCeiling !== null && t.workingCapitalCeiling !== undefined
+                                                ? `ceiling: ${t.workingCapitalCeiling} 🫘`
+                                                : 'no ceiling'}
+                                            {' · '}
+                                            surplus: {t.earnedSurplus ?? 0} 🫘
                                         </div>
                                     )}
                                     {/* The ceiling sits beside the balance because §7 makes it the safety on

@@ -100,28 +100,6 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         return actor;
     };
 
-    const requireAdministrator = (ctx: any, treasury: string): string | null => {
-        const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
-        if (!actor || !canAdministerTreasury(actor, treasury)) {
-            ctx.status = 403;
-            ctx.body = { error: 'You are not authorized to administer this enterprise' };
-            return null;
-        }
-        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
-        if (blocked(statusOf(treasury))) {
-            ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed.' };
-            return null;
-        }
-        if (blocked(statusOf(actor))) {
-            ctx.status = 403;
-            ctx.body = { error: 'Your account is not active.' };
-            return null;
-        }
-        return actor;
-    };
-
     // ---- Public transparency reads ------------------------------------------------------
     router.get('/api/treasuries', async (ctx) => {
         const rows = db.prepare(

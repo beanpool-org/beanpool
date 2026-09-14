@@ -135,9 +135,12 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
 
                 {isAuthor && !isClosed && (
                     <button
+                        type="button"
                         onClick={handleClosePoll}
                         disabled={isClosing}
-                        className="text-[11px] font-bold text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-900/40 rounded-lg px-2.5 py-1 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-50"
+                        aria-label={isClosing ? 'Closing poll...' : 'Close poll'}
+                        aria-busy={isClosing}
+                        className="text-xs font-bold text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-900/40 rounded-lg px-3 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-50"
                     >
                         {isClosing ? 'Closing...' : 'Close Poll'}
                     </button>

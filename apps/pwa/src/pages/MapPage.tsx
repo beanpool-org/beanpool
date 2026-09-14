@@ -522,7 +522,13 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
             }
             setShowNewPost(false);
             refreshPosts();
-            if (onNavigate) onNavigate('marketplace', 'deals_active');
+            if (onNavigate) {
+                if (newPostType === 'poll') {
+                    onNavigate('marketplace');
+                } else {
+                    onNavigate('marketplace', 'deals_active');
+                }
+            }
         } catch (e: any) {
             alert(e.message || 'Failed to create post. Are you offline?');
         }
@@ -960,6 +966,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                                         <input
                                             placeholder={`Option ${idx + 1}`}
                                             value={opt}
+                                            maxLength={80}
                                             onChange={e => {
                                                 const next = [...pollOptions];
                                                 next[idx] = e.target.value;
@@ -972,8 +979,9 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                                             <button
                                                 type="button"
                                                 onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
-                                                className="text-nature-400 hover:text-red-500 px-2 py-1 text-lg leading-none"
+                                                className="text-nature-400 hover:text-red-500 min-w-[44px] min-h-[44px] flex items-center justify-center text-lg leading-none rounded-lg"
                                                 title="Remove option"
+                                                aria-label={`Remove option ${idx + 1}`}
                                             >
                                                 ✕
                                             </button>
@@ -985,7 +993,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                                 <button
                                     type="button"
                                     onClick={() => setPollOptions([...pollOptions, ''])}
-                                    className="mt-2 text-sm text-purple-600 dark:text-purple-400 hover:underline font-semibold flex items-center gap-1"
+                                    className="mt-2 text-sm text-purple-600 dark:text-purple-400 hover:underline font-semibold flex items-center gap-1 min-h-[44px] py-2 px-1"
                                 >
                                     + Add option
                                 </button>
@@ -1010,8 +1018,9 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                                     <button
                                         key={days}
                                         type="button"
+                                        aria-pressed={pollDurationDays === days}
                                         onClick={() => setPollDurationDays(days)}
-                                        className={`flex-1 py-2 rounded-xl border text-sm font-semibold transition-all ${
+                                        className={`flex-1 min-h-[44px] py-2 rounded-xl border text-sm font-semibold transition-all ${
                                             pollDurationDays === days
                                                 ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
                                                 : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300'

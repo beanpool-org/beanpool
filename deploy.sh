@@ -2,17 +2,20 @@
 set -e
 
 # BeanPool Global Mesh Deploy Script
-# Pulls pre-built image from GHCR and deploys to remote nodes
+# Deploys to remote nodes via SSH (local build by default, or pre-built GHCR image)
 #
 # Usage:
-#   bash deploy.sh           # Deploy to all nodes
-#   bash deploy.sh 1 3 4     # Deploy to specific nodes by number
+#   bash deploy.sh                              # Deploy to all nodes (local build)
+#   bash deploy.sh 1 3 4                        # Deploy to specific nodes by number
+#   DEPLOY_PULL=1 bash deploy.sh                # Pull pre-built image (defaults to :latest)
+#   DEPLOY_PULL=1 DEPLOY_TAG=<sha> bash deploy.sh  # Pull and deploy specific commit tag
 #
-# The Docker image is auto-built by GitHub Actions on push to main:
-#   ghcr.io/beanpool-org/beanpool-node:latest
+# Image tags in GHCR:
+#   :latest only moves on a RELEASE (.github/workflows/docker-publish.yml).
+#   Pushes to main are tagged with their short-sha (e.g. DEPLOY_TAG=3fb6e72).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-IMAGE="ghcr.io/beanpool-org/beanpool-node:latest"
+IMAGE="ghcr.io/beanpool-org/beanpool-node:${DEPLOY_TAG:-latest}"
 
 # Load .env file for Cloudflare credentials (if it exists)
 if [ -f "$SCRIPT_DIR/.env" ]; then
@@ -64,6 +67,12 @@ fi
 
 echo ""
 echo "🌍 Deploying to ${#TARGETS[@]} node(s):"
+if [ -n "${DEPLOY_TAG:-}" ]; then
+  echo "🏷️  Deploy tag: $DEPLOY_TAG"
+fi
+if [ "${DEPLOY_PULL:-}" = "1" ] && [ -z "${DEPLOY_TAG:-}" ]; then
+  echo "⚠️  WARNING: :latest is the last RELEASE, not main — pass DEPLOY_TAG=<sha> to deploy a commit from main"
+fi
 for NODE in "${TARGETS[@]}"; do
   NAME=$(echo "$NODE" | cut -d: -f2)
   IP=$(echo "$NODE" | cut -d: -f3)
@@ -97,6 +106,11 @@ for NODE in "${TARGETS[@]}"; do
 
   echo "====================================="
   echo "🚀 Deploying $NAME ($IP) → $DNS"
+  if [ -n "${DEPLOY_TAG:-}" ]; then
+    echo "🏷️  Tag: $DEPLOY_TAG"
+  else
+    echo "🏷️  Tag: latest"
+  fi
   echo "====================================="
 
   # Upload
@@ -169,6 +183,7 @@ for NODE in "${TARGETS[@]}"; do
     export CF_API_TOKEN='${CF_API_TOKEN}'
     export CF_ZONE_ID='${CF_ZONE_ID}'
     export CF_RECORD_NAME='${DNS}'
+    ${DEPLOY_TAG:+export BEANPOOL_IMAGE_TAG='${DEPLOY_TAG}'}
     export ADMIN_PASSWORD='${ADMIN_PASSWORD}'
     export CF_TUNNEL_TOKEN='${CF_TUNNEL_TOKEN}'
     sudo mkdir -p $PROJECT_DIR/data
@@ -236,6 +251,9 @@ for NODE in "${TARGETS[@]}"; do
     fi
     echo "Public IP: $PUBLIC_IP"
     echo "DNS Record: $CF_RECORD_NAME"
+    if [ -n "${DEPLOY_TAG:-}" ]; then
+      echo "Image Tag: ${DEPLOY_TAG}"
+    fi
     sudo docker image prune -f 2>/dev/null || true
     sudo docker network create beanpool-shared 2>/dev/null || true
     COMPOSE_FLAGS=()
@@ -246,14 +264,18 @@ for NODE in "${TARGETS[@]}"; do
     # guaranteed to be the code in the tarball we just uploaded, uncommitted work included.
     #
     # DEPLOY_PULL=1 takes the published GHCR image instead. That drops the guarantee — you get whatever CI last
-    # pushed to :latest, NOT your working tree — so it is only correct when the commit you want is already built
-    # and pushed. What it buys is not building a monorepo on a small host: the VIC box is 1.3 GB and runs six
-    # nodes, so a build there leans on swap and competes with communities that have live members.
+    # pushed (by default :latest, which only updates on release; pass DEPLOY_TAG=<sha> for main builds), NOT your
+    # working tree — so it is only correct when the commit you want is already built and pushed. What it buys is
+    # not building a monorepo on a small host: the VIC box is 1.3 GB and runs six nodes, so a build there leans
+    # on swap and competes with communities that have live members.
     #
     # It is opt-in per run, not per node, because the choice depends on the state of your tree at that moment
     # rather than on which node you are deploying to.
     if [ "${DEPLOY_PULL:-}" = "1" ]; then
-      echo "📦 DEPLOY_PULL=1 — taking the published image for: $NAME (NOT your working tree)"
+      if [ -z "${DEPLOY_TAG:-}" ]; then
+        echo "⚠️  WARNING: :latest is the last RELEASE, not main — pass DEPLOY_TAG=<sha> to deploy a commit from main"
+      fi
+      echo "📦 DEPLOY_PULL=1 — taking the published image (${DEPLOY_TAG:-latest}) for: $NAME (NOT your working tree)"
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d
     elif [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ] || [ "$NAME" = "yarravalley" ]; then

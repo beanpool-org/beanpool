@@ -47,6 +47,8 @@ vi.mock('./api', async (importOriginal) => {
         getCommunityHealth: vi.fn(async () => ({ online: true })),
         resolveAvatarUrl: vi.fn(() => null),
         buildSignedWsParams: vi.fn(async () => ''),
+        getPulseFeed: vi.fn(async () => ({ items: [], nextCursor: null })),
+        getMemberChannels: vi.fn(async () => ({ channels: [] })),
     };
 });
 
@@ -55,6 +57,7 @@ import { ActivityWaterfall } from '../components/ActivityWaterfall';
 import { LedgerPage } from '../pages/LedgerPage';
 import { MarketplacePage } from '../pages/MarketplacePage';
 import { MapPage } from '../pages/MapPage';
+import { PulsePage } from '../pages/PulsePage';
 import { App } from '../App';
 import {
     connectToAnchor,
@@ -552,6 +555,102 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
             });
 
             expect(convSpy.mock.calls.length).toBe(initialCalls + 1);
+        });
+    });
+
+    describe('Map and Pulse tab rendering & poll resilience (regression #776)', () => {
+        const testIdentity: BeanPoolIdentity = {
+            publicKey: 'pub_test_123',
+            privateKey: '00'.repeat(32),
+            callsign: 'Alice',
+            createdAt: '2026-01-01T00:00:00.000Z',
+        };
+
+        it('switches to Map and renders MapPage without blanking', async () => {
+            render(<App />);
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(100);
+            });
+
+            const mapBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Map'));
+            expect(mapBtn).toBeDefined();
+
+            await act(async () => {
+                mapBtn!.click();
+                await vi.advanceTimersByTimeAsync(200);
+            });
+
+            expect(document.querySelector('.leaflet-container')).not.toBeNull();
+        });
+
+        it('switches to Pulse and renders PulsePage without blanking', async () => {
+            render(<App />);
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(100);
+            });
+
+            const pulseBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Pulse'));
+            expect(pulseBtn).toBeDefined();
+
+            await act(async () => {
+                pulseBtn!.click();
+                await vi.advanceTimersByTimeAsync(200);
+            });
+
+            expect(document.body.textContent).toContain('The Pulse');
+        });
+
+        it('MapPage does not throw and safely excludes polls from map pins', async () => {
+            vi.spyOn(api, 'getMarketplacePosts').mockResolvedValueOnce([
+                {
+                    id: 'poll-1',
+                    type: 'poll' as any,
+                    category: 'community',
+                    title: 'Should we add composting?',
+                    description: 'Community poll',
+                    credits: 0,
+                    priceType: 'fixed',
+                    authorPublicKey: 'pub_test_123',
+                    authorCallsign: 'Alice',
+                    createdAt: '2026-01-01T00:00:00.000Z',
+                    status: 'active',
+                    pollOptions: [
+                        { id: 'opt_1', text: 'Yes', votes: 5 },
+                        { id: 'opt_2', text: 'No', votes: 2 },
+                    ],
+                } as any,
+                {
+                    id: 'offer-1',
+                    type: 'offer',
+                    category: 'food',
+                    title: 'Fresh Apples',
+                    description: 'Crisp apples from orchard',
+                    credits: 5,
+                    priceType: 'fixed',
+                    authorPublicKey: 'pub_other_456',
+                    authorCallsign: 'Bob',
+                    createdAt: '2026-01-01T00:00:00.000Z',
+                    status: 'active',
+                    lat: -28.5,
+                    lng: 153.5,
+                } as any,
+            ]);
+
+            await act(async () => {
+                render(<MapPage identity={testIdentity} />);
+                await vi.advanceTimersByTimeAsync(100);
+            });
+
+            expect(document.querySelector('.leaflet-container')).not.toBeNull();
+        });
+
+        it('PulsePage renders correctly without throwing', async () => {
+            await act(async () => {
+                render(<PulsePage identity={testIdentity} onOpenProfile={vi.fn()} />);
+                await vi.advanceTimersByTimeAsync(100);
+            });
+
+            expect(document.body.textContent).toContain('The Pulse');
         });
     });
 });

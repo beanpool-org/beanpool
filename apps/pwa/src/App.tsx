@@ -632,6 +632,16 @@ export function App() {
                                     <RecoveryAlertBanner identity={identity} />
                                 </div>
                             )}
+                            {activeTab === 'map' && (
+                                <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}>
+                                    <MapPage
+                                        identity={identity}
+                                        openNewPost={openNewPost}
+                                        onOpenNewPostHandled={() => setOpenNewPost(false)}
+                                        onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    />
+                                </Suspense>
+                            )}
                             {activeTab === 'marketplace' && (
                                 <MarketplacePage
                                     identity={identity}
@@ -642,6 +652,12 @@ export function App() {
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     transactions={myTransactions}
                                     onRefreshTransactions={refreshTransactions}
+                                />
+                            )}
+                            {activeTab === 'pulse' && (
+                                <PulsePage
+                                    identity={identity}
+                                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                 />
                             )}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}

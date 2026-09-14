@@ -556,9 +556,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                             ) : (
                                 <div className="divide-y divide-nature-100 dark:divide-nature-800">
                                     {flow.map((tx: any, idx: number) => {
-                                        const isOut = tx.from_pubkey === pubkey;
+                                        const isOut = !tx.incoming;
                                         return (
-                                            <div key={tx.id || idx} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                                            <div key={tx.id || `${tx.timestamp}-${idx}`} className="py-2.5 flex items-center justify-between gap-3 text-xs">
                                                 <div className="min-w-0 flex-1">
                                                     <div className="font-semibold text-nature-800 dark:text-nature-200 truncate">
                                                         {tx.memo || 'Transfer'}

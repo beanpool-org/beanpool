@@ -274,6 +274,10 @@ async function main() {
     // ── 10. HTTP Admin Routes ──
     const app = new Koa();
     app.use(async (ctx, next) => {
+        // Test auth harness: simulate signature-verified actor in ctx.state.actor
+        if (ctx.header['x-verified-actor']) {
+            (ctx.state as any).actor = ctx.header['x-verified-actor'];
+        }
         if (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'DELETE') {
             const chunks: Buffer[] = [];
             for await (const chunk of ctx.req) chunks.push(chunk as Buffer);
@@ -311,45 +315,74 @@ async function main() {
         assert(getBody.roles.some((r: any) => r.member_pubkey === 'gen_alice' && r.role === 'owner'), 'Alice listed as owner');
         assert(getBody.roles.some((r: any) => r.member_pubkey === 'dave' && r.role === 'admin'), 'Dave listed as admin');
 
-        // POST /api/local/admin/node-roles: non-owner attempting to grant owner -> 403
-        const postNonOwner = await fetch(`${base}/api/local/admin/node-roles`, {
+        // Regression (Finding 2): Spoofing actorPubkey in request body is rejected
+        const postSpoofedBody = await fetch(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pubkey: 'plain_user', role: 'owner', actorPubkey: 'dave' }),
+            body: JSON.stringify({ pubkey: 'charlie', role: 'owner', actorPubkey: 'gen_alice', actor: 'gen_alice' }),
         });
-        assert(postNonOwner.status === 403, 'POST /api/local/admin/node-roles with non-owner actor returns 403');
+        assert(postSpoofedBody.status === 403, 'POST /api/local/admin/node-roles with spoofed actor in body without verified actor returns 403');
+
+        // Regression (Finding 2): Spoofing x-admin-caller-pubkey header is rejected
+        const postSpoofedHeader = await fetch(`${base}/api/local/admin/node-roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-admin-caller-pubkey': 'gen_alice' },
+            body: JSON.stringify({ pubkey: 'charlie', role: 'owner' }),
+        });
+        assert(postSpoofedHeader.status === 403, 'POST /api/local/admin/node-roles with spoofed x-admin-caller-pubkey header without verified actor returns 403');
+
+        // POST /api/local/admin/node-roles: verified non-owner actor attempting to grant owner -> 403
+        const postNonOwner = await fetch(`${base}/api/local/admin/node-roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'dave' },
+            body: JSON.stringify({ pubkey: 'plain_user', role: 'owner' }),
+        });
+        assert(postNonOwner.status === 403, 'POST /api/local/admin/node-roles with verified non-owner actor returns 403');
 
         // POST /api/local/admin/node-roles: attempting to grant to treasury -> 400
         const postTreasury = await fetch(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pubkey: tPub, role: 'admin', actorPubkey: 'gen_alice' }),
+            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'gen_alice' },
+            body: JSON.stringify({ pubkey: tPub, role: 'admin' }),
         });
         assert(postTreasury.status === 400, 'POST /api/local/admin/node-roles for treasury returns 400');
 
-        // POST /api/local/admin/node-roles: owner granting owner -> 200
+        // POST /api/local/admin/node-roles: verified owner actor granting owner -> 200
         const postOwner = await fetch(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pubkey: 'charlie', role: 'owner', actorPubkey: 'gen_alice' }),
+            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'gen_alice' },
+            body: JSON.stringify({ pubkey: 'charlie', role: 'owner' }),
         });
         const postOwnerBody: any = await postOwner.json();
         assert(postOwner.status === 200 && postOwnerBody.success === true, 'POST /api/local/admin/node-roles granting owner returns 200');
         assert(isNodeOwner('charlie') === true, 'Charlie is now owner via HTTP endpoint');
 
-        // DELETE /api/local/admin/node-roles/:pubkey/:role: non-owner actor -> 403
-        const delNonOwner = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actorPubkey: 'dave' }),
-        });
-        assert(delNonOwner.status === 403, 'DELETE /api/local/admin/node-roles with non-owner actor returns 403');
-
-        // DELETE /api/local/admin/node-roles/:pubkey/:role: owner actor -> 200
-        const delOwner = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
+        // Regression (Finding 2): DELETE with spoofed actorPubkey in body without verified actor is rejected
+        const delSpoofedBody = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ actorPubkey: 'gen_alice' }),
+        });
+        assert(delSpoofedBody.status === 403, 'DELETE /api/local/admin/node-roles with spoofed actorPubkey in body returns 403');
+
+        // Regression (Finding 2): DELETE with spoofed header without verified actor is rejected
+        const delSpoofedHeader = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'x-admin-caller-pubkey': 'gen_alice' },
+        });
+        assert(delSpoofedHeader.status === 403, 'DELETE /api/local/admin/node-roles with spoofed x-admin-caller-pubkey header returns 403');
+
+        // DELETE /api/local/admin/node-roles/:pubkey/:role: verified non-owner actor -> 403
+        const delNonOwner = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'dave' },
+        });
+        assert(delNonOwner.status === 403, 'DELETE /api/local/admin/node-roles with non-owner actor returns 403');
+
+        // DELETE /api/local/admin/node-roles/:pubkey/:role: verified owner actor -> 200
+        const delOwner = await fetch(`${base}/api/local/admin/node-roles/charlie/owner`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'gen_alice' },
         });
         const delOwnerBody: any = await delOwner.json();
         assert(delOwner.status === 200 && delOwnerBody.success === true, 'DELETE /api/local/admin/node-roles with owner actor returns 200');
@@ -358,8 +391,7 @@ async function main() {
         // DELETE last owner -> 400
         const delLastOwner = await fetch(`${base}/api/local/admin/node-roles/gen_alice/owner`, {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actorPubkey: 'gen_alice' }),
+            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'gen_alice' },
         });
         assert(delLastOwner.status === 400, 'DELETE last owner returns 400');
         assert(isNodeOwner('gen_alice') === true, 'Alice cannot be deleted as last owner');

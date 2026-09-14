@@ -878,8 +878,8 @@ router.get('/api/local/admin/node-roles', async (ctx) => {
 
 router.post('/api/local/admin/node-roles', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { pubkey, role, actorPubkey, actor, granted_by, callerPubkey } = (ctx as any).requestBody || {};
-    const effectiveActor = actorPubkey || actor || granted_by || callerPubkey || (ctx.request.header['x-admin-caller-pubkey'] as string);
+    const { pubkey, role } = (ctx as any).requestBody || {};
+    const effectiveActor = (ctx.state as any)?.actor;
 
     if (!pubkey || !role) {
         ctx.status = 400;
@@ -905,8 +905,7 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
 router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { pubkey, role } = ctx.params;
-    const body = (ctx as any).requestBody || {};
-    const effectiveActor = body.actorPubkey || body.actor || body.callerPubkey || (ctx.query.actorPubkey as string) || (ctx.query.actor as string) || (ctx.request.header['x-admin-caller-pubkey'] as string);
+    const effectiveActor = (ctx.state as any)?.actor;
 
     if (role !== 'owner' && role !== 'admin') {
         ctx.status = 400;

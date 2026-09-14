@@ -246,6 +246,17 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const body = (ctx as any).requestBody || {};
         const { fromPubkey, amount, memo } = body;
         const actor = (ctx.state?.actor as string) || fromPubkey;
+        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
+            return;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot pledge.' };
+            return;
+        }
         const parsedAmount = Number(amount);
         if (!actor || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
             ctx.status = 400;

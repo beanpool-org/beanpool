@@ -47,7 +47,12 @@ const floorOf = (pk: string) => getMemberTrustProfile(pk).floor;
 function main() {
     console.log('Running Elder-vouch + covenant test...\n');
     initStateEngine();
-    const admin = getAdminPubkey();
+    let admin = getAdminPubkey();
+    if (!admin) {
+        seedMember('genesis-admin');
+        db.prepare("UPDATE members SET invited_by = 'genesis' WHERE public_key = 'genesis-admin'").run();
+        admin = 'genesis-admin';
+    }
 
     // ── 1. canVouch capability (admin-granted, never tier-derived) ──
     seedMember('elderA'); seedMember('plain');

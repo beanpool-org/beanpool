@@ -148,8 +148,23 @@ CREATE TABLE IF NOT EXISTS posts (
     -- when a host moves, while the peer id is the thing the trust relationship and the bridge are keyed on.
     reach_peers TEXT,
     created_by TEXT REFERENCES members(public_key) ON DELETE SET NULL,
+    -- Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
+    poll_options TEXT,
+    poll_closes_at DATETIME,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+    post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    voter_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    option_id TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (post_id, voter_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
+
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
 -- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would
 -- otherwise dominate a full index for no benefit.

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, Pressable, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Pressable, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -18,6 +18,8 @@ import { ActivityWaterfall } from '../../components/ActivityWaterfall';
 import { categoryEmoji, categoryLabel } from '../../constants/categories';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
+import { PollCard } from '../../components/PollCard';
+import { NewPollModal } from '../../components/NewPollModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
 
@@ -126,7 +128,7 @@ export default function MarketScreen() {
         setShowFirstOfferQuest(false);
         AsyncStorage.setItem('beanpool_first_offer_quest_dismissed', 'true').catch(() => {});
     };
-    const [filter, setFilter] = useState<'all' | 'needs' | 'offers' | 'for-you'>('all');
+    const [filter, setFilter] = useState<'all' | 'needs' | 'offers' | 'for-you' | 'polls'>('all');
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
@@ -477,6 +479,64 @@ export default function MarketScreen() {
         segmentBtnFavActive: { backgroundColor: colors.accent.primary },
         segmentBtnOfferActive: { backgroundColor: colors.brand.primary },
         segmentBtnNeedActive: { backgroundColor: colors.action.fab },
+        segmentBtnPollActive: { backgroundColor: '#7c3aed' },
+
+        actionSheetBackdrop: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            justifyContent: 'flex-end',
+        },
+        actionSheetContainer: {
+            backgroundColor: colors.surface.card,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            padding: 20,
+            paddingBottom: 36,
+        },
+        actionSheetTitle: {
+            fontSize: 18,
+            fontWeight: '800',
+            color: colors.text.body,
+            marginBottom: 4,
+        },
+        actionSheetSubtitle: {
+            fontSize: 13,
+            color: colors.text.secondary,
+            marginBottom: 16,
+        },
+        actionSheetOption: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 14,
+            borderBottomWidth: 1,
+            borderBottomColor: theme === 'dark' ? '#374151' : '#f3f4f6',
+            gap: 14,
+        },
+        actionSheetEmoji: {
+            fontSize: 26,
+        },
+        actionSheetOptionTitle: {
+            fontSize: 16,
+            fontWeight: '700',
+            color: colors.text.body,
+        },
+        actionSheetOptionDesc: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            marginTop: 2,
+        },
+        actionSheetCancel: {
+            marginTop: 16,
+            backgroundColor: theme === 'dark' ? '#374151' : '#f3f4f6',
+            borderRadius: 12,
+            paddingVertical: 12,
+            alignItems: 'center',
+        },
+        actionSheetCancelText: {
+            fontSize: 15,
+            fontWeight: '700',
+            color: colors.text.body,
+        },
 
         dropdownsRow: {
             flexDirection: 'row',
@@ -588,6 +648,8 @@ export default function MarketScreen() {
     // Deals Sheet
     const [showDealsSheet, setShowDealsSheet] = useState(false);
     const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
+    const [showNewPollModal, setShowNewPollModal] = useState(false);
+    const [showNewPostTypePicker, setShowNewPostTypePicker] = useState(false);
     const [myTransactions, setMyTransactions] = useState<any[]>([]);
 
     const pendingCount = usePendingDealsCount(identity, posts, myTransactions);
@@ -682,7 +744,7 @@ export default function MarketScreen() {
                     setIsSearching(false);
                     return;
                 }
-                const type = filter === 'all' ? '' : filter === 'needs' ? '&type=need' : '&type=offer';
+                const type = filter === 'all' || filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : '&type=offer';
                 const cat = categoryFilter !== 'all' ? `&category=${categoryFilter}` : '';
                 
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
@@ -732,7 +794,7 @@ export default function MarketScreen() {
     }, [searchQuery, filter, categoryFilter]);
 
     const loadPosts = async (): Promise<boolean> => {
-        const queryFilter = filter === 'all' ? undefined : { type: filter === 'needs' ? 'need' : 'offer' };
+        const queryFilter = filter === 'all' || filter === 'for-you' ? undefined : { type: filter === 'needs' ? 'need' : filter === 'offers' ? 'offer' : 'poll' };
         const runLoad = async () => {
             const data = await getPosts(queryFilter);
             setPosts(data);
@@ -774,19 +836,24 @@ export default function MarketScreen() {
     const basePosts = searchResults !== null ? searchResults : posts;
 
     let filteredPosts = basePosts.filter(p => {
-        if (p.status !== 'active') return false;
+        if (p.type === 'poll') {
+            if (p.status !== 'active' && p.status !== 'completed') return false;
+        } else {
+            if (p.status !== 'active') return false;
+        }
         if (blockedUsers.includes(p.author_pubkey)) return false;
         if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
-        // #108: beans-only browse. Rows predating the column read as 0, i.e. beans-only.
-        if (beansOnly && p.cash_also_needed === 1) return false;
+        // #108: beans-only browse excludes polls
+        if (beansOnly && (p.type === 'poll' || p.cash_also_needed === 1)) return false;
         
         // Type / For You filters
         if (filter === 'offers' && p.type !== 'offer') return false;
         if (filter === 'needs' && p.type !== 'need') return false;
-        if (filter === 'for-you' && !favCategories.includes(p.category)) return false;
+        if (filter === 'polls' && p.type !== 'poll') return false;
+        if (filter === 'for-you' && (p.type === 'poll' || !favCategories.includes(p.category))) return false;
         
         // Trust Level filters
-        if (trustFilter === 'founding' && !p.authorFoundingNeeded) return false;
+        if (trustFilter === 'founding' && (p.type === 'poll' || !p.authorFoundingNeeded)) return false;
         if (trustFilter === 'new' && (p.author_energy_cycled ?? 0) >= 120) return false;
         if (trustFilter === 'resident' && (p.author_energy_cycled ?? 0) < 120) return false;
         if (trustFilter === 'steward' && (p.author_energy_cycled ?? 0) < 520) return false;
@@ -798,6 +865,9 @@ export default function MarketScreen() {
             const dist = getDistanceInKm(centerLat, centerLng, p.lat, p.lng);
             if (dist > radiusKm) return false;
         }
+
+        // Goods search isolation: searching marketplace keywords must not return polls unless explicitly filtered
+        if (searchQuery.trim() && p.type === 'poll' && filter !== 'polls') return false;
 
         // Synonym-aware local search: expand query using synonym map
         // Works on ALL servers, even those without FTS5 deployed
@@ -818,7 +888,7 @@ export default function MarketScreen() {
     // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
     const realMemberListingsCount = posts.filter(p => {
         const isPulse = (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
-        return !isPulse && p.status === 'active';
+        return !isPulse && p.type !== 'poll' && p.status === 'active';
     }).length;
     if (realMemberListingsCount >= 2) {
         filteredPosts = filteredPosts.filter(p => !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode));
@@ -952,6 +1022,14 @@ export default function MarketScreen() {
                         accessibilityState={{ selected: filter === 'needs' }}
                     >
                         <Text style={[styles.segmentText, filter === 'needs' && styles.segmentTextActive]}>🟠 Needs</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={() => setFilter(filter === 'polls' ? 'all' : 'polls')}
+                        style={[styles.segmentBtn, filter === 'polls' && styles.segmentBtnPollActive]}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: filter === 'polls' }}
+                    >
+                        <Text style={[styles.segmentText, filter === 'polls' && styles.segmentTextActive]}>🗳️ Polls</Text>
                     </Pressable>
                 </View>
 
@@ -1200,6 +1278,16 @@ export default function MarketScreen() {
                     <Text style={styles.sectionHeaderText}>{item.title.toUpperCase()}</Text>
                     <View style={styles.sectionHeaderLine} />
                 </View>
+            );
+        }
+
+        if (item.type === 'poll') {
+            return (
+                <PollCard
+                    post={item}
+                    currentPubkey={identity?.publicKey}
+                    onVoteSuccess={() => loadPosts()}
+                />
             );
         }
 
@@ -1534,7 +1622,7 @@ export default function MarketScreen() {
                     )
                 }
             />
-            <Pressable accessibilityRole="button" style={styles.fab} onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}>
+            <Pressable accessibilityRole="button" style={styles.fab} onPress={() => setShowNewPostTypePicker(true)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
                     <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>ADD POST</Text>
@@ -1578,6 +1666,90 @@ export default function MarketScreen() {
                 identity={identity}
                 onClose={() => setShowDealsSheet(false)}
                 initialTab={dealsInitialTab}
+            />
+
+            {/* New Post Type Action Sheet */}
+            <Modal
+                visible={showNewPostTypePicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowNewPostTypePicker(false)}
+            >
+                <Pressable
+                    style={styles.actionSheetBackdrop}
+                    onPress={() => setShowNewPostTypePicker(false)}
+                >
+                    <Pressable
+                        style={styles.actionSheetContainer}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <Text style={styles.actionSheetTitle}>Create New Post</Text>
+                        <Text style={styles.actionSheetSubtitle}>What would you like to share with the village?</Text>
+
+                        <Pressable
+                            style={styles.actionSheetOption}
+                            accessibilityRole="button"
+                            accessibilityLabel="Offer: List goods, skills, food, or tools on the map"
+                            onPress={() => {
+                                setShowNewPostTypePicker(false);
+                                router.push({ pathname: '/map', params: { newPost: 'true' } });
+                            }}
+                        >
+                            <Text style={styles.actionSheetEmoji}>📦</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.actionSheetOptionTitle}>Offer</Text>
+                                <Text style={styles.actionSheetOptionDesc}>List goods, skills, food, or tools on the map</Text>
+                            </View>
+                        </Pressable>
+
+                        <Pressable
+                            style={styles.actionSheetOption}
+                            accessibilityRole="button"
+                            accessibilityLabel="Need: Ask your neighbours for something you need"
+                            onPress={() => {
+                                setShowNewPostTypePicker(false);
+                                router.push({ pathname: '/map', params: { newPost: 'true' } });
+                            }}
+                        >
+                            <Text style={styles.actionSheetEmoji}>❤️</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.actionSheetOptionTitle}>Need</Text>
+                                <Text style={styles.actionSheetOptionDesc}>Ask your neighbours for something you need</Text>
+                            </View>
+                        </Pressable>
+
+                        <Pressable
+                            style={[styles.actionSheetOption, { borderBottomWidth: 0 }]}
+                            accessibilityRole="button"
+                            accessibilityLabel="Community Poll: Ask a question with 2–4 options in the feed"
+                            onPress={() => {
+                                setShowNewPostTypePicker(false);
+                                setShowNewPollModal(true);
+                            }}
+                        >
+                            <Text style={styles.actionSheetEmoji}>🗳️</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.actionSheetOptionTitle}>Community Poll</Text>
+                                <Text style={styles.actionSheetOptionDesc}>Ask a question with 2–4 options in the feed</Text>
+                            </View>
+                        </Pressable>
+
+                        <Pressable
+                            style={styles.actionSheetCancel}
+                            accessibilityRole="button"
+                            accessibilityLabel="Cancel"
+                            onPress={() => setShowNewPostTypePicker(false)}
+                        >
+                            <Text style={styles.actionSheetCancelText}>Cancel</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <NewPollModal
+                visible={showNewPollModal}
+                onClose={() => setShowNewPollModal(false)}
+                onSuccess={() => loadPosts()}
             />
         </View>
     );

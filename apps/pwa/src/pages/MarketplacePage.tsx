@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
+import { PollCard } from '../components/PollCard';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -655,6 +656,31 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // =================== DETAIL VIEW ===================
     if (selectedPost) {
+        if (selectedPost.type === 'poll') {
+            return (
+                <div className="p-4 max-w-lg mx-auto pb-24">
+                    <button
+                        onClick={() => {
+                            setSelectedPost(null);
+                            setSelectedTxId(null);
+                            setEditMode(false);
+                            setEditPhotos([]);
+                        }}
+                        className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors cursor-pointer"
+                    >
+                        <span className="text-xl leading-none">←</span> Back to Market
+                    </button>
+                    <PollCard
+                        post={selectedPost}
+                        identity={identity}
+                        onVoteSuccess={() => {
+                            refresh();
+                        }}
+                        onOpenProfile={onOpenProfile}
+                    />
+                </div>
+            );
+        }
         const cat = MARKETPLACE_CATEGORIES_BY_ID.get(selectedPost.category);
         const typeColor = POST_TYPE_COLORS[selectedPost.type];
         const postedDate = new Date(selectedPost.createdAt);
@@ -1619,7 +1645,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 )}
                                 <button
                                     onClick={() => {
-                                        setEditType(selectedPost.type);
+                                        setEditType(selectedPost.type as 'offer' | 'need');
                                         setEditCategory(selectedPost.category);
                                         setEditTitle(selectedPost.title);
                                         setEditDescription(selectedPost.description);
@@ -1936,11 +1962,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 {/* Row 2: Full-Width Type Segmented Control */}
                 <div className="w-full bg-nature-100 dark:bg-nature-900/60 rounded-2xl p-0.5 flex gap-0.5 mt-0.5 mb-1 shadow-inner border border-nature-200/50 dark:border-nature-800/40">
-                    {(['all', 'for-you', 'offer', 'need'] as const).map((t) => {
+                    {(['all', 'for-you', 'offer', 'need', 'poll'] as const).map((t) => {
                         const isSelected = typeFilter === t;
                         let activeStyles = 'bg-nature-800 dark:bg-white text-white dark:text-nature-900 border border-nature-900/10 shadow-sm scale-[1.01]';
                         if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-500 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
                         if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-500 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-500 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
                         if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-500 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
 
                         return (
@@ -1953,7 +1980,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-nature-200 hover:bg-white/40 dark:hover:bg-nature-800/30'
                                 }`}
                             >
-                                {t === 'all' ? 'All' : t === 'for-you' ? '★ For You' : t === 'offer' ? '🟢 Offers' : '🟠 Needs'}
+                                {t === 'all' ? 'All' : t === 'for-you' ? '★ For You' : t === 'offer' ? '🟢 Offers' : t === 'need' ? '🟠 Needs' : '🗳️ Polls'}
                             </button>
                         );
                     })}
@@ -2096,13 +2123,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {loading ? (
                 <p className="text-nature-500 text-center py-8">Loading...</p>
             ) : (() => {
-                let filtered = posts.filter(p => p.status === 'active');
+                let filtered = posts.filter(p => {
+                    if (p.type === 'poll') {
+                        return p.status === 'active' || p.status === 'completed';
+                    }
+                    return p.status === 'active';
+                });
 
-                // Text search (synonym-expanded)
+                // Text search (synonym-expanded): exclude polls from goods search unless polls filter active
                 if (searchQuery.trim()) {
-                    filtered = filtered.filter(p =>
-                        matchesExpandedSearch(searchQuery, p.title, p.description)
-                    );
+                    filtered = filtered.filter(p => {
+                        if (p.type === 'poll' && typeFilter !== 'poll') return false;
+                        return matchesExpandedSearch(searchQuery, p.title, p.description);
+                    });
                 }
 
                 // Blocked user filtering
@@ -2112,29 +2145,44 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
                 }
 
-                // Radius filter
+                // Radius filter: polls have null coordinates and never pin to map; allow when viewing polls tab
                 if (radiusSettings) {
                     filtered = filtered.filter(p => {
+                        if (p.type === 'poll') return typeFilter === 'poll';
                         if (p.lat == null || p.lng == null) return false;
                         const dist = haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng);
                         return dist <= radiusSettings.radiusKm;
                     });
                 }
 
-                // Local "★ For You" category filter
+                // Local "★ For You" category filter (exclude polls)
                 if (typeFilter === 'for-you') {
-                    filtered = filtered.filter(p => favCategories.includes(p.category));
+                    filtered = filtered.filter(p => p.type !== 'poll' && favCategories.includes(p.category));
                 }
 
-                // Founding-trade filter: surface newcomers whose first trade unlocks their account
+                // Beans-only filter (exclude polls)
+                if (beansOnly) {
+                    filtered = filtered.filter(p => p.type !== 'poll');
+                }
+
+                // Founding-trade filter (exclude polls)
                 if (foundingOnly) {
-                    filtered = filtered.filter(p => p.authorFoundingNeeded);
+                    filtered = filtered.filter(p => p.type !== 'poll' && p.authorFoundingNeeded);
+                }
+
+                // Specific type filter
+                if (typeFilter === 'offer') {
+                    filtered = filtered.filter(p => p.type === 'offer');
+                } else if (typeFilter === 'need') {
+                    filtered = filtered.filter(p => p.type === 'need');
+                } else if (typeFilter === 'poll') {
+                    filtered = filtered.filter(p => p.type === 'poll');
                 }
 
                 // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
                 const realMemberListingsCount = posts.filter(p => {
                     const isPulse = ((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode;
-                    return !isPulse && p.status === 'active';
+                    return !isPulse && p.type !== 'poll' && p.status === 'active';
                 }).length;
                 if (realMemberListingsCount >= 2) {
                     filtered = filtered.filter(p => !(((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode));
@@ -2262,6 +2310,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 return (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                                         {filtered.map((post) => {
+                                            if (post.type === 'poll') {
+                                                return (
+                                                    <div key={post.id} className="h-full">
+                                                        <PollCard
+                                                            post={post}
+                                                            identity={identity}
+                                                            onVoteSuccess={() => refresh()}
+                                                            onOpenProfile={onOpenProfile}
+                                                        />
+                                                    </div>
+                                                );
+                                            }
                                             const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
                                             return (
                                             <div
@@ -2334,6 +2394,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         </div>
                                         <div className="flex flex-col gap-1.5">
                                             {items.map(post => {
+                                                if (post.type === 'poll') {
+                                                    return (
+                                                        <div key={post.id} className="w-full my-1">
+                                                            <PollCard
+                                                                post={post}
+                                                                identity={identity}
+                                                                onVoteSuccess={() => refresh()}
+                                                                onOpenProfile={onOpenProfile}
+                                                            />
+                                                        </div>
+                                                    );
+                                                }
                                                 const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
                                                 return (
                                                 <div

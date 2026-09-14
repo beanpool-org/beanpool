@@ -6,6 +6,7 @@ import { isSyntheticAccount, parseReachPeers, type PostReach } from '@beanpool/c
 import { db } from '../db/db.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
+import { bumpPostsVersion } from './versions.js';
 import {
     getMember,
     getPosts,
@@ -87,7 +88,7 @@ function normaliseReach(rawReach: unknown, rawPeers: unknown): { reach: PostReac
 
 export function createPost(
     broadcast: BroadcastFn,
-    type: 'offer' | 'need',
+    type: 'offer' | 'need' | 'poll',
     category: string,
     title: string,
     description: string,
@@ -103,7 +104,7 @@ export function createPost(
     // #143 step 4. An OPTIONS OBJECT rather than positions 15 and 16: this list is already fourteen
     // positional parameters deep, and `createPost(…, undefined, undefined, 'peers', [id])` at a call site
     // is how the wrong argument ends up in the wrong slot.
-    options?: { reach?: unknown; reachPeers?: unknown; createdBy?: string },
+    options?: { reach?: unknown; reachPeers?: unknown; createdBy?: string; pollOptions?: Array<{ id: string; text: string }>; durationDays?: number },
 ): MarketplacePost | null {
     assertMemberActive(authorPublicKey);
     if (!getMember(db, authorPublicKey)) {
@@ -111,7 +112,61 @@ export function createPost(
     }
     assertProfileComplete(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
-    validatePostPhotos(photos);
+
+    let cleanPollOptions: Array<{ id: string; text: string }> | null = null;
+    let pollClosesAt: string | null = null;
+
+    if (type === 'poll') {
+        const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(authorPublicKey) as any;
+        if (!memberRow || memberRow.status !== 'active') {
+            throw new Error('Only active members can create polls');
+        }
+        if (memberRow.credit_frozen) {
+            throw new Error('Credit-frozen members cannot create polls');
+        }
+
+        // Sweep expired polls before rate limit check
+        const nowIso = new Date().toISOString();
+        db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE type = 'poll' AND status = 'active' AND poll_closes_at <= ?").run(nowIso, nowIso);
+
+        const rawOpts = options?.pollOptions;
+        if (!Array.isArray(rawOpts) || rawOpts.length < 2 || rawOpts.length > 4) {
+            throw new Error('Polls must have between 2 and 4 options');
+        }
+        const seenIds = new Set<string>();
+        cleanPollOptions = (rawOpts as any[]).map((opt: any, idx: number) => {
+            const text = typeof opt === 'string' ? opt.trim() : (typeof opt?.text === 'string' ? opt.text.trim() : '');
+            if (!text || text.length > 80) {
+                throw new Error('Poll options must be between 1 and 80 characters');
+            }
+            const rawId = (typeof opt === 'object' && opt?.id) ? String(opt.id).trim() : `opt_${idx + 1}`;
+            const optId = /^[a-zA-Z0-9_-]{1,32}$/.test(rawId) ? rawId : `opt_${idx + 1}`;
+            if (seenIds.has(optId)) {
+                throw new Error(`Duplicate option ID detected: ${optId}`);
+            }
+            seenIds.add(optId);
+            return { id: optId, text };
+        });
+
+        const durationDays = options?.durationDays ? Number(options.durationDays) : 7;
+        if (![3, 7, 14].includes(durationDays)) {
+            throw new Error('Poll duration must be 3, 7, or 14 days');
+        }
+        pollClosesAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+
+        // Enforce poll isolation defaults
+        category = 'community';
+        credits = 0;
+        priceType = 'fixed';
+        repeatable = false;
+        lat = undefined;
+        lng = undefined;
+        photos = [];
+        cashAlsoNeeded = false;
+        options = { ...options, reach: 'local', reachPeers: null };
+    } else {
+        validatePostPhotos(photos);
+    }
 
     if (type === 'need' && !hasListedOffer(db, authorPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
 
@@ -121,9 +176,27 @@ export function createPost(
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
 
     db.transaction(() => {
+        if (type === 'poll') {
+            const authorOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'").get(authorPublicKey) as any;
+            if (authorOpen && authorOpen.c >= 1) {
+                throw new Error('Rate limit: You can only have 1 active poll at a time');
+            }
+
+            const nodeOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE type = 'poll' AND status = 'active'").get() as any;
+            if (nodeOpen && nodeOpen.c >= 5) {
+                throw new Error('Rate limit: Node limit of 5 active polls reached');
+            }
+        }
+
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt, repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords, cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null);
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
+            repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
+            cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
+            cleanPollOptions ? JSON.stringify(cleanPollOptions) : null,
+            pollClosesAt
+        );
 
         if (photos && photos.length > 0) {
             const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
@@ -133,6 +206,7 @@ export function createPost(
 
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
+    bumpPostsVersion();
     const post = getPosts(db, { id: finalId })[0]!;
     broadcast({ type: 'new_post', post });
     try {
@@ -155,11 +229,37 @@ export function removePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
     })();
     if (!removed) return false;
+    bumpPostsVersion();
     broadcast({ type: 'post_removed', id });
     return true;
 }
 
-export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost>): MarketplacePost | null {
+export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }): MarketplacePost | null {
+    const existingPost = getPosts(db, { id })[0] ?? null;
+    if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
+
+    if (existingPost.type === 'poll') {
+        const voteCountRow = db.prepare("SELECT COUNT(*) as c FROM poll_votes WHERE post_id = ?").get(id) as any;
+        const hasVotes = (voteCountRow?.c || 0) > 0;
+        if (hasVotes) {
+            if (updates.title !== undefined && updates.title !== existingPost.title) {
+                throw new Error('Cannot edit poll question once votes have been cast');
+            }
+            if (updates.pollOptions !== undefined) {
+                throw new Error('Cannot edit poll options once votes have been cast');
+            }
+        }
+        // Enforce poll isolation during updates
+        delete updates.credits;
+        delete updates.lat;
+        delete updates.lng;
+        delete updates.photos;
+        delete updates.category;
+        delete updates.priceType;
+        delete updates.repeatable;
+        delete updates.cashAlsoNeeded;
+    }
+
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
         const existingByOrder = new Map<number, string>(
             (db.prepare(`SELECT order_num, photo_data FROM post_photos WHERE post_id=?`).all(id) as any[])
@@ -190,6 +290,22 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.cashAlsoNeeded !== undefined) { fields.push('cash_also_needed = ?'); values.push((updates.cashAlsoNeeded === true || (updates.cashAlsoNeeded as any) === 'true') ? 1 : 0); }
     if (updates.lat !== undefined) { fields.push('lat = ?'); values.push(updates.lat); }
     if (updates.lng !== undefined) { fields.push('lng = ?'); values.push(updates.lng); }
+
+    if (existingPost.type === 'poll' && updates.pollOptions !== undefined) {
+        const rawOpts = updates.pollOptions;
+        if (!Array.isArray(rawOpts) || rawOpts.length < 2 || rawOpts.length > 4) {
+            throw new Error('Polls must have between 2 and 4 options');
+        }
+        const cleanPollOptions = (rawOpts as any[]).map((opt: any, idx: number) => {
+            const text = typeof opt === 'string' ? opt.trim() : (typeof opt?.text === 'string' ? opt.text.trim() : '');
+            if (!text) throw new Error('Poll options cannot be empty');
+            const optId = (typeof opt === 'object' && opt?.id) ? String(opt.id) : `opt_${idx + 1}`;
+            return { id: optId, text };
+        });
+        fields.push('poll_options = ?');
+        values.push(JSON.stringify(cleanPollOptions));
+    }
+
     // #143 step 4. BOTH columns always move together, through the same normaliser the create path uses —
     // otherwise switching 'peers' → 'everywhere' would leave a stale peer list behind, and a client sending
     // only `reachPeers` could leave a listing claiming named peers that no longer match the reach.
@@ -204,11 +320,6 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     const now = new Date().toISOString();
     fields.push('updated_at = ?');
     values.push(now);
-
-    // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
-    // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
-    const existingPost = getPosts(db, { id })[0] ?? null;
-    if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
 
     const newTitle = updates.title ?? existingPost.title;
     const newDesc = updates.description ?? existingPost.description;
@@ -231,9 +342,113 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
-    const updated = getPosts(db, { id })[0] ?? null;
+    bumpPostsVersion();
+    const updated = getPosts(db, { id, viewerPubkey: authorPublicKey })[0] ?? null;
     if (updated) broadcast({ type: 'post_updated', post: updated });
     return updated;
+}
+
+export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKey: string): MarketplacePost | null {
+    const post = getPosts(db, { id: postId })[0];
+    if (!post || post.type !== 'poll') {
+        throw new Error('Poll not found');
+    }
+    if (post.authorPublicKey !== authorPublicKey) {
+        throw new Error('Only the author can close a poll');
+    }
+    if (post.status === 'completed') {
+        return post;
+    }
+    const now = new Date().toISOString();
+    db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE id = ?").run(now, postId);
+    bumpPostsVersion();
+    const updated = getPosts(db, { id: postId, viewerPubkey: authorPublicKey })[0] ?? null;
+    if (updated) broadcast({ type: 'post_updated', post: updated });
+    return updated;
+}
+
+export function votePoll(
+    broadcast: BroadcastFn,
+    postId: string,
+    voterPublicKey: string,
+    optionId: string,
+    signature?: string
+): { success: boolean; post: MarketplacePost } {
+    assertMemberActive(voterPublicKey);
+    const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(voterPublicKey) as any;
+    if (!memberRow || memberRow.status !== 'active') {
+        throw new Error('Only active members can vote in polls');
+    }
+    if (memberRow.credit_frozen) {
+        throw new Error('Credit-frozen members cannot vote in polls');
+    }
+
+    const post = getPosts(db, { id: postId })[0];
+    if (!post || post.type !== 'poll') {
+        throw new Error('Poll not found');
+    }
+    if (post.status !== 'active') {
+        throw new Error('This poll is closed');
+    }
+    const nowIso = new Date().toISOString();
+    if (post.pollClosesAt && post.pollClosesAt <= nowIso) {
+        db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE id = ?").run(nowIso, postId);
+        bumpPostsVersion();
+        throw new Error('This poll is closed');
+    }
+
+    const options = post.pollOptions || [];
+    const validOption = options.some(opt => opt.id === optionId);
+    if (!validOption) {
+        throw new Error('Invalid poll option');
+    }
+
+    if (signature) {
+        try {
+            const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
+            const spki = Buffer.concat([spkiHeader, Buffer.from(voterPublicKey, 'hex')]);
+            const publicKeyObject = crypto.createPublicKey({
+                key: spki,
+                format: 'der',
+                type: 'spki'
+            });
+            const sigBuf = Buffer.from(signature, 'base64');
+            const valid = crypto.verify(undefined, Buffer.from(`${postId}:${optionId}`), publicKeyObject, sigBuf)
+                || crypto.verify(undefined, Buffer.from(JSON.stringify({ postId, optionId })), publicKeyObject, sigBuf);
+            if (!valid) {
+                throw new Error('Invalid cryptographic signature for vote');
+            }
+        } catch (err: any) {
+            if (err.message === 'Invalid cryptographic signature for vote') {
+                throw err;
+            }
+            throw new Error('Invalid vote signature format');
+        }
+    }
+
+    db.transaction(() => {
+        // Atomically verify poll is active and bump updated_at for delta sync
+        const res = db.prepare(
+            "UPDATE posts SET updated_at = ? WHERE id = ? AND status = 'active' AND (poll_closes_at IS NULL OR poll_closes_at > ?)"
+        ).run(nowIso, postId, nowIso);
+        if (res.changes === 0) {
+            throw new Error('This poll is closed');
+        }
+
+        db.prepare(`
+            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
+                option_id = excluded.option_id,
+                signature = excluded.signature,
+                created_at = excluded.created_at
+        `).run(postId, voterPublicKey, optionId, signature || '', nowIso);
+    })();
+
+    bumpPostsVersion();
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey })[0]!;
+    broadcast({ type: 'post_updated', post: updatedPost });
+    return { success: true, post: updatedPost };
 }
 
 export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string): boolean {

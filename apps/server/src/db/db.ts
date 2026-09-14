@@ -339,6 +339,13 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status_created ON marketplace_transactions(buyer_pubkey, status, created_at DESC)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON marketplace_transactions(seller_pubkey, status, created_at DESC)`).run(); } catch { }
 
+    // Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_options TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME`).run(); } catch { }
+    try { db.exec(`DROP INDEX IF EXISTS idx_poll_votes_post_id;`); } catch { }
+    try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
+    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
+
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
 

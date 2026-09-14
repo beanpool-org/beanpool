@@ -28,12 +28,27 @@ export const MARKETPLACE_CATEGORIES_BY_ID = new Map(
     MARKETPLACE_CATEGORIES.map(c => [c.id as string, c])
 );
 
-export type PostType = 'offer' | 'need';
+export type PostType = 'offer' | 'need' | 'poll';
 
 export const POST_TYPE_COLORS = {
     offer: '#10b981',  // Sage Green (Emerald-500)
     need: '#d97757',  // Soft Terracotta
+    poll: '#8b5cf6',  // Purple / Violet
 } as const;
+
+export interface PollOption {
+    id: string;
+    text: string;
+    votes?: number;
+    percentage?: number;
+}
+
+export interface PollVoteRecord {
+    voterPubkey: string;
+    voterCallsign?: string;
+    optionId: string;
+    createdAt: string;
+}
 
 export interface MarketplacePost {
     id: string;
@@ -57,6 +72,11 @@ export interface MarketplacePost {
     authorFoundingNeeded?: boolean;
     lat?: number;
     lng?: number;
+    pollOptions?: PollOption[];
+    pollClosesAt?: string;
+    totalVotes?: number;
+    userVotedOptionId?: string;
+    pollVotes?: PollVoteRecord[];
 }
 
 /**

@@ -227,6 +227,7 @@ export function removePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         if (result.changes === 0) return;
         removed = true;
         db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
+        db.prepare(`UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'`).run(id);
     })();
     if (!removed) return false;
     bumpPostsVersion();
@@ -498,7 +499,10 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
         }
         db.prepare("UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'").run(postId);
         const result = db.prepare("UPDATE posts SET active=0, status='cancelled', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?").run(postId);
-        if (result.changes > 0) deleted = true;
+        if (result.changes > 0) {
+            deleted = true;
+            db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'").run(postId);
+        }
     });
     if (!deleted) return false;
     broadcast({ type: 'post_removed', id: postId });

@@ -1975,6 +1975,13 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                 continue;
             }
         }
+        if (claim.post_id) {
+            const post = db.prepare('SELECT status FROM posts WHERE id = ?').get(claim.post_id) as any;
+            if (!post || post.status === 'cancelled') {
+                db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE id = ?").run(claim.id);
+                continue;
+            }
+        }
 
         const { balance } = getBalance(enterprisePubkey);
         const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;

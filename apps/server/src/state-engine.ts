@@ -1936,7 +1936,7 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                     if (!txn) return false;
 
                     db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
-                        .run(Math.round(claim.amount), enterprisePubkey);
+                        .run(claim.amount, enterprisePubkey);
                     db.prepare("UPDATE deferred_wage_claims SET status = 'paid', paid_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
                         .run(claim.id);
 

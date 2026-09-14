@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS members (
     -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
     earned_credit REAL DEFAULT 0,
     -- Enterprise Credit Model (Rules 6 & 7)
-    earned_surplus INTEGER DEFAULT 0,
+    earned_surplus REAL DEFAULT 0,
     working_capital_ceiling REAL DEFAULT NULL,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,

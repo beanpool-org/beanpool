@@ -253,7 +253,7 @@ export function approvePostRequest(
 
         if (isPayeeKeeper) {
             db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
-                .run(Math.round(row.credits), row.buyer_pubkey);
+                .run(row.credits, row.buyer_pubkey);
         }
 
         db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=?`).run(transactionId);
@@ -450,7 +450,7 @@ export function acceptPost(
 
         if (isPayeeKeeper) {
             db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
-                .run(Math.round(finalCredits), buyerPublicKey);
+                .run(finalCredits, buyerPublicKey);
         }
 
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
@@ -668,7 +668,7 @@ export function cancelPostTransaction(
             );
             if (isPayeeKeeper) {
                 db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
-                    .run(Math.round(row.credits), row.buyer_pubkey);
+                    .run(row.credits, row.buyer_pubkey);
             }
         }
 

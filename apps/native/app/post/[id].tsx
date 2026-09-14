@@ -1010,7 +1010,7 @@ export default function PostDetailModal() {
                                                 setAccepting(true);
                                                 try {
                                                     if (isOperatorOfAuthor) {
-                                                        await treasuryComplete(post.author_pubkey, txToComplete);
+                                                        await treasuryComplete(post.author_pubkey, txToComplete, post.price_type !== 'fixed' ? Number(completeHours) : undefined);
                                                     } else {
                                                         await completeMarketplaceTransaction(txToComplete, identity.publicKey, post.price_type !== 'fixed' ? Number(completeHours) : undefined);
                                                     }

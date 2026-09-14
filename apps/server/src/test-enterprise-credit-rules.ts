@@ -15,6 +15,7 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, createPost, completePostTransaction,
     requestPost, approvePostRequest, transfer, getBalance,
+    recordDeferredWageClaim, acceptPost,
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -374,6 +375,52 @@ async function main() {
     const updatedGardenClaim = db.prepare('SELECT * FROM deferred_wage_claims WHERE id = ?').get(gardenClaim.id) as any;
     assert(updatedGardenClaim.status === 'paid', 'Deferred claim for extra hours paid automatically on sales income');
     assert(bal(gardenKeeper) === Math.round((19.70 + 9.85) * 100) / 100, 'Keeper received both payments minus fee (29.55 total)');
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // REGRESSION TEST 5: Deferred claim deduplication & replay prevention
+    // ─────────────────────────────────────────────────────────────────────────────
+    console.log('\n── Regression Test 5: Deferred claim deduplication & replay prevention ──');
+    const { publicKey: dedupTreasury } = createTreasury('DedupBakery', AVATAR, 100);
+    const dedupKeeper = 'dedup-keeper-000000000000000000000000000013';
+    seedMember(dedupKeeper, 'DedupKeeper');
+    assignKeeper(dedupTreasury, dedupKeeper);
+
+    // 1. Direct recordDeferredWageClaim deduplication on (enterprise, keeper, postId)
+    const claimId1 = recordDeferredWageClaim(dedupTreasury, dedupKeeper, 15, 'post-dedup-1');
+    const claimId2 = recordDeferredWageClaim(dedupTreasury, dedupKeeper, 15, 'post-dedup-1');
+    assert(claimId1 === claimId2, 'Repeated claim recording for same enterprise+keeper+postId returns same ID');
+    const countPending = (db.prepare('SELECT COUNT(*) as cnt FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND post_id = ?').get(dedupTreasury, 'post-dedup-1') as any).cnt;
+    assert(countPending === 1, 'Only one pending claim exists in database despite repeated recording');
+
+    // 2. Replay prevention when claim status is 'paid'
+    db.prepare("UPDATE deferred_wage_claims SET status = 'paid' WHERE id = ?").run(claimId1);
+    const claimId3 = recordDeferredWageClaim(dedupTreasury, dedupKeeper, 15, 'post-dedup-1');
+    assert(claimId3 === claimId1, 'Paid claim is not replayed into a new pending claim (replay prevention)');
+    const countTotal = (db.prepare('SELECT COUNT(*) as cnt FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND post_id = ?').get(dedupTreasury, 'post-dedup-1') as any).cnt;
+    assert(countTotal === 1, 'Still only one claim exists after attempted replay of paid claim');
+
+    // 3. Dedup on acceptPost when enterprise has insufficient surplus
+    createPost('offer', 'food', 'Keeper Bread', 'Daily baked loaf', 20, 'fixed', dedupKeeper, undefined, undefined, undefined, true);
+    const keeperBread = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'offer'").get(dedupKeeper) as any;
+    createPost('offer', 'goods', 'Bakery merch', 'Apron', 10, 'fixed', dedupTreasury, undefined, undefined, undefined, true);
+    let accept1Failed = false;
+    try {
+        acceptPost(keeperBread.id, dedupTreasury);
+    } catch {
+        accept1Failed = true;
+    }
+    assert(accept1Failed, 'First acceptPost failed due to insufficient surplus');
+
+    let accept2Failed = false;
+    try {
+        acceptPost(keeperBread.id, dedupTreasury);
+    } catch {
+        accept2Failed = true;
+    }
+    assert(accept2Failed, 'Second acceptPost retry failed due to insufficient surplus');
+
+    const acceptClaims = (db.prepare('SELECT COUNT(*) as cnt FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND post_id = ?').get(dedupTreasury, keeperBread.id) as any).cnt;
+    assert(acceptClaims === 1, 'Retrying acceptPost does NOT create duplicate deferred wage claims');
 
     // Conservation check
     const { runLedgerAudit } = await import('./state-engine.js');

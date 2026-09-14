@@ -43,9 +43,13 @@ export function recordDeferredWageClaim(
     postId?: string,
     transactionId?: string
 ): string {
-    const existing = transactionId
-        ? db.prepare("SELECT id FROM deferred_wage_claims WHERE transaction_id = ? AND status = 'pending'").get(transactionId) as any
-        : null;
+    let existing: any = null;
+    if (transactionId) {
+        existing = db.prepare("SELECT id FROM deferred_wage_claims WHERE transaction_id = ? AND status IN ('pending', 'paid')").get(transactionId) as any;
+    }
+    if (!existing && postId) {
+        existing = db.prepare("SELECT id FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND keeper_pubkey = ? AND post_id = ? AND status IN ('pending', 'paid')").get(enterprisePubkey, keeperPubkey, postId) as any;
+    }
     if (existing) return existing.id;
     const id = crypto.randomUUID();
     db.prepare(`

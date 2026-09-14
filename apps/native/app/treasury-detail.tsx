@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -23,6 +23,8 @@ export default function TreasuryDetailScreen() {
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
     const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
+    const [hourlyDealPrompt, setHourlyDealPrompt] = useState<any | null>(null);
+    const [hourlyDealHours, setHourlyDealHours] = useState('');
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.app },
@@ -148,35 +150,53 @@ export default function TreasuryDetailScreen() {
         }
     };
 
-    const handleRejectBid = async (txId: string) => {
-        const treasuryKey = params.publicKey;
-        if (!treasuryKey) return;
-        setActionState({ id: txId, type: 'reject' });
-        try {
-            await treasuryReject(treasuryKey, txId);
-            Alert.alert('Bid Declined', 'The request has been declined.');
-            load();
-        } catch (e: any) {
-            Alert.alert('Decline Failed', e.message || 'Could not decline bid.');
-        } finally {
-            setActionState(null);
-        }
-    };
-
-    const handleCompleteDeal = (txId: string) => {
+    const handleRejectBid = (txId: string) => {
         const treasuryKey = params.publicKey;
         if (!treasuryKey) return;
         Alert.alert(
+            'Decline Bid?',
+            'Are you sure you want to decline this request? The member will be notified.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Decline',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setActionState({ id: txId, type: 'reject' });
+                        try {
+                            await treasuryReject(treasuryKey, txId);
+                            Alert.alert('Bid Declined', 'The request has been declined.');
+                            load();
+                        } catch (e: any) {
+                            Alert.alert('Decline Failed', e.message || 'Could not decline bid.');
+                        } finally {
+                            setActionState(null);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleCompleteDeal = (d: any) => {
+        const treasuryKey = params.publicKey;
+        if (!treasuryKey) return;
+        if (d.price_type && d.price_type !== 'fixed') {
+            setHourlyDealHours(d.hours ? String(d.hours) : '1');
+            setHourlyDealPrompt(d);
+            return;
+        }
+        Alert.alert(
             'Release Payment?',
-            'Are you sure you want to release the escrow payment to the member? This cannot be undone.',
+            `Are you sure you want to release ${d.credits} 🫘 to ${d.peer_callsign || 'the member'}? This cannot be undone.`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
                     text: 'Release Payment',
                     onPress: async () => {
-                        setActionState({ id: txId, type: 'complete' });
+                        setActionState({ id: d.id, type: 'complete' });
                         try {
-                            await treasuryComplete(treasuryKey, txId);
+                            await treasuryComplete(treasuryKey, d.id);
                             Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
                             load();
                         } catch (e: any) {
@@ -319,7 +339,7 @@ export default function TreasuryDetailScreen() {
                                                 </Text>
                                                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                                                     <Pressable
-                                                        style={[styles.opBtn, { paddingVertical: 8 }]}
+                                                        style={[styles.opBtn, { minHeight: 44, paddingVertical: 8, justifyContent: 'center' }]}
                                                         disabled={actionState?.id === b.id}
                                                         onPress={() => handleApproveBid(b.id)}
                                                         accessibilityRole="button"
@@ -331,7 +351,7 @@ export default function TreasuryDetailScreen() {
                                                         )}
                                                     </Pressable>
                                                     <Pressable
-                                                        style={[styles.sweepBtn, { height: 38 }]}
+                                                        style={[styles.sweepBtn, { minHeight: 44, height: 44, paddingHorizontal: 16 }]}
                                                         disabled={actionState?.id === b.id}
                                                         onPress={() => handleRejectBid(b.id)}
                                                         accessibilityRole="button"
@@ -350,26 +370,38 @@ export default function TreasuryDetailScreen() {
 
                                 {activeDeals.length > 0 && (
                                     <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.brand.primary, paddingTop: 12 }}>
-                                        <Text style={[styles.opTitle, { marginBottom: 8 }]}>DEALS TO PAY / COMPLETE ({activeDeals.length})</Text>
+                                        <Text style={[styles.opTitle, { marginBottom: 8 }]}>ACTIVE DEALS ({activeDeals.length})</Text>
                                         {activeDeals.map((d) => (
                                             <View key={d.id} style={{ backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default }}>
                                                 <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{d.post_title}</Text>
                                                 <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
-                                                    Worker: <Text style={{ fontWeight: '700', color: colors.text.body }}>{d.peer_callsign || 'Member'}</Text> · {d.credits} 🫘 in escrow
+                                                    {d.action_required === 'fulfill' ? 'Customer' : 'Worker'}: <Text style={{ fontWeight: '700', color: colors.text.body }}>{d.peer_callsign || 'Member'}</Text> · {d.credits} 🫘 in escrow
                                                 </Text>
                                                 <View style={{ marginTop: 10 }}>
-                                                    <Pressable
-                                                        style={[styles.opBtn, { backgroundColor: colors.feedback.success.solid, paddingVertical: 8 }]}
-                                                        disabled={actionState?.id === d.id}
-                                                        onPress={() => handleCompleteDeal(d.id)}
-                                                        accessibilityRole="button"
-                                                    >
-                                                        {actionState?.id === d.id && actionState?.type === 'complete' ? (
-                                                            <ActivityIndicator size="small" color={colors.text.inverse} />
-                                                        ) : (
-                                                            <Text style={styles.opBtnText}>Release Payment ({d.credits} 🫘)</Text>
-                                                        )}
-                                                    </Pressable>
+                                                    {d.action_required === 'fulfill' ? (
+                                                        <Pressable
+                                                            style={[styles.sweepBtn, { minHeight: 44, height: 44 }]}
+                                                            onPress={() => router.push({ pathname: '/post/[id]', params: { id: d.post_id, txId: d.id } })}
+                                                            accessibilityRole="button"
+                                                        >
+                                                            <Text style={[styles.sweepBtnText, { color: colors.text.secondary }]}>
+                                                                Fulfill Deal · Awaiting Customer Release
+                                                            </Text>
+                                                        </Pressable>
+                                                    ) : (
+                                                        <Pressable
+                                                            style={[styles.opBtn, { backgroundColor: colors.feedback.success.solid, minHeight: 44, paddingVertical: 8 }]}
+                                                            disabled={actionState?.id === d.id}
+                                                            onPress={() => handleCompleteDeal(d)}
+                                                            accessibilityRole="button"
+                                                        >
+                                                            {actionState?.id === d.id && actionState?.type === 'complete' ? (
+                                                                <ActivityIndicator size="small" color={colors.text.inverse} />
+                                                            ) : (
+                                                                <Text style={styles.opBtnText}>Release Payment ({d.credits} 🫘)</Text>
+                                                            )}
+                                                        </Pressable>
+                                                    )}
                                                 </View>
                                             </View>
                                         ))}
@@ -425,6 +457,66 @@ export default function TreasuryDetailScreen() {
                         ))}
                     </ScrollView>
                 </KeyboardAvoidingView>
+            )}
+
+            {hourlyDealPrompt && (
+                <Modal visible transparent animationType="fade" onRequestClose={() => setHourlyDealPrompt(null)}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                        <View style={{ backgroundColor: colors.surface.card, borderRadius: 16, padding: 20, width: '100%', maxWidth: 400, borderWidth: 1, borderColor: colors.border.default }}>
+                            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading, marginBottom: 6 }}>
+                                Confirm Hours Worked
+                            </Text>
+                            <Text style={{ fontSize: 13, color: colors.text.secondary, marginBottom: 14 }}>
+                                Enter actual hours worked for "{hourlyDealPrompt.post_title}":
+                            </Text>
+                            <TextInput
+                                style={{ height: 44, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, color: colors.text.body, marginBottom: 16 }}
+                                value={hourlyDealHours}
+                                onChangeText={setHourlyDealHours}
+                                keyboardType="numeric"
+                                placeholder="e.g. 2.5"
+                                placeholderTextColor={colors.text.muted}
+                                autoFocus
+                            />
+                            <View style={{ flexDirection: 'row', gap: 10 }}>
+                                <Pressable
+                                    style={{ flex: 1, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border.default }}
+                                    onPress={() => setHourlyDealPrompt(null)}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={{ color: colors.text.body, fontWeight: '700' }}>Cancel</Text>
+                                </Pressable>
+                                <Pressable
+                                    style={{ flex: 1, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 10, backgroundColor: colors.feedback.success.solid }}
+                                    accessibilityRole="button"
+                                    onPress={async () => {
+                                        const parsed = Number(hourlyDealHours);
+                                        if (isNaN(parsed) || parsed <= 0) {
+                                            Alert.alert('Invalid Hours', 'Please enter a valid positive number of hours.');
+                                            return;
+                                        }
+                                        const deal = hourlyDealPrompt;
+                                        const treasuryKey = params.publicKey;
+                                        setHourlyDealPrompt(null);
+                                        if (!treasuryKey) return;
+                                        setActionState({ id: deal.id, type: 'complete' });
+                                        try {
+                                            await treasuryComplete(treasuryKey, deal.id, parsed);
+                                            Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
+                                            load();
+                                        } catch (e: any) {
+                                            Alert.alert('Release Failed', e.message || 'Could not release payment.');
+                                        } finally {
+                                            setActionState(null);
+                                        }
+                                    }}
+                                >
+                                    <Text style={{ color: colors.text.inverse, fontWeight: '800' }}>Release Payment</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
             )}
         </SafeAreaView>
     );

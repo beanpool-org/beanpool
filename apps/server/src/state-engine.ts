@@ -7,7 +7,7 @@ export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -1372,6 +1372,13 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     persistDecayEvents();
     persistCommonsBalance();
 
+    afterTransactionCommit(() => {
+        const toMember = getMember(to);
+        if (toMember?.isTreasury) {
+            sweepEnterpriseCeiling(to);
+        }
+    });
+
     const fromMember = getMember(from);
     const toMember = getMember(to);
     broadcast({
@@ -1635,6 +1642,14 @@ export function payFromCommons(
     // them and this must too (review finding).
     persistDecayEvents();
     persistCommonsBalance();
+
+    afterTransactionCommit(() => {
+        const toMember = getMember(to);
+        if (toMember?.isTreasury) {
+            sweepEnterpriseCeiling(to);
+        }
+    });
+
     return txn;
 }
 
@@ -1931,6 +1946,113 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
     return updatePostEngine(broadcast, id, authorPublicKey, updates);
 }
 
+/**
+ * Process pending deferred wage claims for an enterprise (docs/the-commons.md §2.4 Rule 6).
+ * Automatically pays claims the moment the enterprise can legitimately pay (positive balance AND sufficient earned surplus).
+ */
+export function processDeferredWageClaims(enterprisePubkey: string): number {
+    let paidCount = 0;
+    const claims = db.prepare(`
+        SELECT * FROM deferred_wage_claims
+        WHERE enterprise_pubkey = ? AND status = 'pending'
+        ORDER BY created_at ASC
+    `).all(enterprisePubkey) as any[];
+
+    for (const claim of claims) {
+        const { balance } = getBalance(enterprisePubkey);
+        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+        const earnedSurplus = Number(trow?.earned_surplus) || 0;
+
+        // Condition: positive balance AND sufficient earned surplus (Rule 5 & Rule 6)
+        if (balance >= claim.amount && earnedSurplus >= claim.amount && balance - claim.amount >= 0) {
+            let success = false;
+            try {
+                success = conservingTransaction(() => {
+                    const memo = `Deferred wage claim payout for ${claim.post_id || 'keeper work'}`;
+                    const txn = transfer(enterprisePubkey, claim.keeper_pubkey, claim.amount, memo, 'escrow', false);
+                    if (!txn) return false;
+
+                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
+                        .run(claim.amount, enterprisePubkey);
+                    db.prepare("UPDATE deferred_wage_claims SET status = 'paid', paid_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+                        .run(claim.id);
+
+                    if (claim.transaction_id) {
+                        db.prepare("UPDATE marketplace_transactions SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status != 'completed'")
+                            .run(claim.transaction_id);
+                    }
+                    if (claim.post_id) {
+                        db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND status != 'completed'")
+                            .run(claim.post_id);
+                    }
+                    return true;
+                });
+            } catch (err) {
+                console.error(`[DeferredClaims] Failed to pay claim ${claim.id}:`, err);
+                success = false;
+            }
+
+            if (success) {
+                paidCount++;
+                try {
+                    broadcast({
+                        type: 'deferred_wage_paid',
+                        claimId: claim.id,
+                        enterprise: enterprisePubkey,
+                        keeper: claim.keeper_pubkey,
+                        amount: claim.amount,
+                    });
+                } catch { }
+            }
+        }
+    }
+    return paidCount;
+}
+
+/**
+ * Automatically sweeps balance above working capital ceiling to COMMONS_POOL (docs/the-commons.md §2.4 Rule 7).
+ * Enterprises are decay-exempt; without a ceiling they accumulate indefinitely while members demur.
+ * When balance exceeds ceiling, the excess sweeps to COMMONS_POOL via moveToCommons inside a conservingTransaction.
+ */
+export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
+    const row = db.prepare('SELECT working_capital_ceiling, is_treasury FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+    if (row?.is_treasury === 1 && row.working_capital_ceiling !== null && row.working_capital_ceiling !== undefined) {
+        const ceiling = Number(row.working_capital_ceiling);
+        if (ceiling >= 0) {
+            const { balance } = getBalance(enterprisePubkey);
+            const excess = Math.round((balance - ceiling) * 100) / 100;
+            if (excess > 0) {
+                let sweptTxn: Transaction | null = null;
+                try {
+                    sweptTxn = conservingTransaction(() => {
+                        return moveToCommons(
+                            enterprisePubkey,
+                            excess,
+                            `Surplus swept to Commons above working capital ceiling (${ceiling} Beans)`
+                        );
+                    });
+                } catch (err) {
+                    console.error(`[EnterpriseCeiling] Failed to sweep ${excess} beans from ${enterprisePubkey}:`, err);
+                }
+                if (sweptTxn) {
+                    try {
+                        broadcast({
+                            type: 'enterprise_ceiling_swept',
+                            enterprise: enterprisePubkey,
+                            amount: excess,
+                            ceiling,
+                        });
+                    } catch { }
+                    return excess;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+export { recordDeferredWageClaim } from './engine/escrow.js';
+
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
 function getEscrowCb() {
@@ -1945,6 +2067,8 @@ function getEscrowCb() {
         SystemMessageType,
         canOperateTreasury,
         conservingTransaction,
+        processDeferredWageClaims,
+        sweepEnterpriseCeiling,
     };
 }
 
@@ -2783,7 +2907,8 @@ export function createTreasury(
     // no operator present to choose a picture. The Commons card already falls back to a glyph on a blank
     // avatar, so an avatarless enterprise renders fine. Opt-in rather than dropping the guard, which stays
     // as it was for every operator-created treasury.
-    opts: { systemCreated?: boolean } = {},
+    // opts.workingCapitalCeiling sets Rule 7 ceiling (docs/the-commons.md §2.4).
+    opts: { systemCreated?: boolean; workingCapitalCeiling?: number | null } = {},
 ): { publicKey: string } {
     const trimmed = (name || '').trim();
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
@@ -2796,6 +2921,9 @@ export function createTreasury(
         throw new Error('That name is already taken');
     }
     const line = Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.round(creditLine)));
+    const ceiling = opts.workingCapitalCeiling !== undefined && opts.workingCapitalCeiling !== null
+        ? Math.max(0, Number(opts.workingCapitalCeiling))
+        : null;
 
     const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
         publicKeyEncoding: { type: 'spki', format: 'pem' },
@@ -2807,9 +2935,10 @@ export function createTreasury(
     db.transaction(() => {
         // invited_by/invite_code left NULL: a treasury is system-created, it has no inviter
         // (and invited_by is an FK to members — 'genesis' is not itself a member row).
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit)
-                    VALUES (?, ?, ?, ?, 'active', 1, ?)`)
-            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line);
+        // Enterprise credit model: earned_surplus = 0, working_capital_ceiling = ceiling (docs/the-commons.md §2.4 Rules 6 & 7)
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling)
+                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?)`)
+            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line, ceiling);
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)`).run(`treasury_privkey_${pubKeyHex}`, privKeyHex);
     })();
@@ -3353,6 +3482,10 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
         if (funded) {
             winner.status = 'funded';
             winner.fundedAt = new Date().toISOString();
+            const toMember = getMember(winner.proposerPubkey);
+            if (toMember?.isTreasury) {
+                sweepEnterpriseCeiling(winner.proposerPubkey);
+            }
         } else {
             winner.status = 'proposed';
         }

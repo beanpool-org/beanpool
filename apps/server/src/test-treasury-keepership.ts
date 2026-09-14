@@ -275,6 +275,12 @@ async function main() {
     const bakeryNeed = await signedFetch('POST', `/api/treasury/${bakery}/need`, alice, { title: 'Bake morning bread', category: 'work', credits: 30 });
     assert(bakeryNeed.status === 200, 'Alice posts need on Bakery');
 
+    // Under Rules 5 & 6 (PR #775), enterprises cannot borrow into credit to pay keepers;
+    // keeper wages require positive balance and earned surplus. Seed Bakery with surplus
+    // so the two-person rule approval/completion workflow can be exercised.
+    transfer('genesis', bakery, 100, 'seed bakery balance', 'direct', true);
+    db.prepare('UPDATE members SET earned_surplus = 100 WHERE public_key = ?').run(bakery);
+
     // Keeper Alice bids on the need from her personal account
     const aliceBid = await signedFetch('POST', '/api/marketplace/posts/request', alice, { postId: bakeryNeed.body.post.id, buyerPublicKey: alice.pubKeyHex });
     assert(aliceBid.status === 200, 'Alice bids on Bakery need from personal account');

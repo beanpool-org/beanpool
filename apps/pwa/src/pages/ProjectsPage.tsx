@@ -336,6 +336,11 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                                     >
                                         {t.balance} 🫘
                                     </div>
+                                    {t.balance < 0 && !t.link && (
+                                        <div className="text-amber-400 text-xs mt-0.5" aria-label="In deficit: credit buys inputs, keepers eat last">
+                                            in deficit (keepers eat last)
+                                        </div>
+                                    )}
                                     {/* The ceiling sits beside the balance because §7 makes it the safety on
                                         commissioning: "the ceiling is the safety, and it must be visible alongside
                                         the balance". A link starts at 0, so say so plainly rather than showing "0".

@@ -249,6 +249,13 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.metaValue}>{detail.liveOffers ?? 0}</Text>
                                 </View>
                             </View>
+                            {balance < 0 && (
+                                <View style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}>
+                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.solid, fontWeight: '700', lineHeight: 16 }}>
+                                        ⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.
+                                    </Text>
+                                </View>
+                            )}
                         </View>
 
                         {/* Operator controls */}

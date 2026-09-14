@@ -19,6 +19,50 @@ const STATE_BACKUP_PATH = path.join(DATA_DIR, `state.backup-${Date.now()}.json`)
 // Initialize Database connection
 export const db: Database.Database = new Database(DB_PATH);
 
+const pendingPostCommitHooks: (() => void)[] = [];
+
+export function afterTransactionCommit(fn: () => void): void {
+    if (!(db as any).inTransaction) {
+        fn();
+    } else {
+        pendingPostCommitHooks.push(fn);
+    }
+}
+
+function wrapTxnFn(origFn: any) {
+    if (typeof origFn !== 'function') return origFn;
+    const wrapped = function (this: any, ...args: any[]) {
+        const isOuter = !(db as any).inTransaction;
+        try {
+            const res = origFn.apply(this, args);
+            if (isOuter && pendingPostCommitHooks.length > 0) {
+                const hooks = pendingPostCommitHooks.splice(0, pendingPostCommitHooks.length);
+                for (const hook of hooks) {
+                    try { hook(); } catch (e) { console.error('[DB] Post-commit hook failed:', e); }
+                }
+            }
+            return res;
+        } catch (err) {
+            if (isOuter) {
+                pendingPostCommitHooks.length = 0;
+            }
+            throw err;
+        }
+    };
+    return wrapped;
+}
+
+const origTransaction = db.transaction.bind(db);
+db.transaction = function (fn: any) {
+    const txn = origTransaction(fn);
+    const wrapped: any = wrapTxnFn(txn);
+    wrapped.default = wrapTxnFn(txn.default);
+    wrapped.deferred = wrapTxnFn(txn.deferred);
+    wrapped.immediate = wrapTxnFn(txn.immediate);
+    wrapped.exclusive = wrapTxnFn(txn.exclusive);
+    return wrapped;
+} as any;
+
 // A2-1: the in-memory LedgerManager (in state-engine) is the source of truth for
 // balance checks — getBalance/transfer read it, and transfer writes it back over
 // the accounts table. A few crowdfund operations below mutate accounts.balance
@@ -195,6 +239,25 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
     // Protocol v1: pre-seeded earned credit for the dynamic floor formula.
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
+    // Enterprise Credit Model (Rules 6 & 7)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus REAL DEFAULT 0`).run(); } catch { }
+    try {
+        // Backfill earned_surplus for existing live enterprises (e.g. Community Eggs) from historical sales
+        db.prepare(`
+            UPDATE members
+            SET earned_surplus = MAX(0, COALESCE((
+                SELECT SUM(credits) FROM marketplace_transactions
+                WHERE seller_pubkey = members.public_key AND status = 'completed'
+                  AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+            ), 0) - COALESCE((
+                SELECT SUM(credits) FROM marketplace_transactions
+                WHERE buyer_pubkey = members.public_key AND status = 'completed'
+                  AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+            ), 0))
+            WHERE is_treasury = 1 AND (earned_surplus IS NULL OR earned_surplus = 0)
+        `).run();
+    } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN working_capital_ceiling REAL DEFAULT NULL`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // Community Working Style / Archetype signature

@@ -163,8 +163,11 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                     <Pressable
                         onPress={handleClosePoll}
                         disabled={isClosing}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         style={styles.closeBtn}
                         accessibilityRole="button"
+                        accessibilityLabel={isClosing ? "Closing poll..." : "Close poll"}
+                        accessibilityState={{ busy: isClosing }}
                     >
                         {isClosing ? (
                             <ActivityIndicator size="small" color="#ef4444" />
@@ -210,6 +213,8 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                                 isClosed && styles.optionRowClosed,
                             ]}
                             accessibilityRole="button"
+                            accessibilityState={{ selected: isVoted, disabled: isClosed || Boolean(votingOptionId) }}
+                            accessibilityLabel={`${opt.text}, ${pct} percent, ${count} ${count === 1 ? 'vote' : 'votes'}${isVoted ? ', your vote' : ''}`}
                         >
                             {/* Background percentage fill bar */}
                             <View
@@ -532,7 +537,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         voterChoice: {
             fontSize: 12,
-            color: '#7c3aed',
+            color: theme === 'dark' ? '#c4b5fd' : '#7c3aed',
             fontWeight: '600',
             flex: 1,
         },

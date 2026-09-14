@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS posts (
     -- addresses: a callsign is a peer's own mutable label and an address is operator config that changes
     -- when a host moves, while the peer id is the thing the trust relationship and the bridge are keyed on.
     reach_peers TEXT,
-    created_by TEXT REFERENCES members(public_key),
+    created_by TEXT REFERENCES members(public_key) ON DELETE SET NULL,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
@@ -163,6 +163,7 @@ CREATE INDEX IF NOT EXISTS idx_posts_reach ON posts(created_at DESC)
     WHERE status = 'active' AND reach != 'local' AND origin_node IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_posts_created_by ON posts(created_by);
 CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
 CREATE INDEX IF NOT EXISTS idx_posts_updated_at ON posts(updated_at);
 

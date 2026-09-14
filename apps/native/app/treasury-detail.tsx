@@ -22,7 +22,7 @@ export default function TreasuryDetailScreen() {
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
-    const [actioningTxId, setActioningTxId] = useState<string | null>(null);
+    const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.app },
@@ -135,7 +135,7 @@ export default function TreasuryDetailScreen() {
 
     const handleApproveBid = async (txId: string) => {
         if (!params.publicKey) return;
-        setActioningTxId(txId);
+        setActionState({ id: txId, type: 'approve' });
         try {
             await treasuryApprove(params.publicKey, txId);
             Alert.alert('Bid Approved ✅', 'Funds locked in trust successfully.');
@@ -143,13 +143,13 @@ export default function TreasuryDetailScreen() {
         } catch (e: any) {
             Alert.alert('Approve Failed', e.message || 'Could not approve bid.');
         } finally {
-            setActioningTxId(null);
+            setActionState(null);
         }
     };
 
     const handleRejectBid = async (txId: string) => {
         if (!params.publicKey) return;
-        setActioningTxId(txId);
+        setActionState({ id: txId, type: 'reject' });
         try {
             await treasuryReject(params.publicKey, txId);
             Alert.alert('Bid Declined', 'The request has been declined.');
@@ -157,22 +157,34 @@ export default function TreasuryDetailScreen() {
         } catch (e: any) {
             Alert.alert('Decline Failed', e.message || 'Could not decline bid.');
         } finally {
-            setActioningTxId(null);
+            setActionState(null);
         }
     };
 
-    const handleCompleteDeal = async (txId: string) => {
+    const handleCompleteDeal = (txId: string) => {
         if (!params.publicKey) return;
-        setActioningTxId(txId);
-        try {
-            await treasuryComplete(params.publicKey, txId);
-            Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
-            load();
-        } catch (e: any) {
-            Alert.alert('Release Failed', e.message || 'Could not release payment.');
-        } finally {
-            setActioningTxId(null);
-        }
+        Alert.alert(
+            'Release Payment?',
+            'Are you sure you want to release the escrow payment to the member? This cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Release Payment',
+                    onPress: async () => {
+                        setActionState({ id: txId, type: 'complete' });
+                        try {
+                            await treasuryComplete(params.publicKey, txId);
+                            Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
+                            load();
+                        } catch (e: any) {
+                            Alert.alert('Release Failed', e.message || 'Could not release payment.');
+                        } finally {
+                            setActionState(null);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const formatTime = (t: any) => {
@@ -298,21 +310,27 @@ export default function TreasuryDetailScreen() {
                                                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                                                     <Pressable
                                                         style={[styles.opBtn, { paddingVertical: 8 }]}
-                                                        disabled={actioningTxId === b.id}
+                                                        disabled={actionState?.id === b.id}
                                                         onPress={() => handleApproveBid(b.id)}
                                                         accessibilityRole="button"
                                                     >
-                                                        {actioningTxId === b.id ? <ActivityIndicator size="small" color={colors.text.inverse} /> : (
+                                                        {actionState?.id === b.id && actionState.type === 'approve' ? (
+                                                            <ActivityIndicator size="small" color={colors.text.inverse} />
+                                                        ) : (
                                                             <Text style={styles.opBtnText}>Approve Bid ({b.credits} 🫘)</Text>
                                                         )}
                                                     </Pressable>
                                                     <Pressable
                                                         style={[styles.sweepBtn, { height: 38 }]}
-                                                        disabled={actioningTxId === b.id}
+                                                        disabled={actionState?.id === b.id}
                                                         onPress={() => handleRejectBid(b.id)}
                                                         accessibilityRole="button"
                                                     >
-                                                        <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.solid }]}>Decline</Text>
+                                                        {actionState?.id === b.id && actionState.type === 'reject' ? (
+                                                            <ActivityIndicator size="small" color={colors.feedback.warning.solid} />
+                                                        ) : (
+                                                            <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.solid }]}>Decline</Text>
+                                                        )}
                                                     </Pressable>
                                                 </View>
                                             </View>
@@ -332,11 +350,13 @@ export default function TreasuryDetailScreen() {
                                                 <View style={{ marginTop: 10 }}>
                                                     <Pressable
                                                         style={[styles.opBtn, { backgroundColor: colors.feedback.success.solid, paddingVertical: 8 }]}
-                                                        disabled={actioningTxId === d.id}
+                                                        disabled={actionState?.id === d.id}
                                                         onPress={() => handleCompleteDeal(d.id)}
                                                         accessibilityRole="button"
                                                     >
-                                                        {actioningTxId === d.id ? <ActivityIndicator size="small" color={colors.text.inverse} /> : (
+                                                        {actionState?.id === d.id && actionState.type === 'complete' ? (
+                                                            <ActivityIndicator size="small" color={colors.text.inverse} />
+                                                        ) : (
                                                             <Text style={styles.opBtnText}>Release Payment ({d.credits} 🫘)</Text>
                                                         )}
                                                     </Pressable>

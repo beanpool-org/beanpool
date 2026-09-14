@@ -334,6 +334,96 @@ async function main() {
     const peerComplete = await signedFetch('POST', '/api/marketplace/transactions/complete', charlie, { transactionId: daveBid.body.transaction.id, confirmerPublicKey: charlie.pubKeyHex });
     assert(peerComplete.status === 200, `peer-to-peer personal need completion succeeds (got ${peerComplete.status})`);
 
+    // ── 8. Active deals on enterprise Offers (sales) visible to operator ────────────
+    transfer('genesis', river.pubKeyHex, 50, 'seed river for offer purchase', 'direct', true);
+    createPost('offer', 'help', 'River gardening', 'Garden help', 10, 'fixed', river.pubKeyHex);
+    const freshOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Fresh dozen eggs', category: 'food', credits: 12 });
+    assert(freshOffer.status === 200, 'keeper posts fresh offer for sale test');
+    const riverOfferReq = await signedFetch('POST', '/api/marketplace/posts/request', river, { postId: freshOffer.body.post.id, buyerPublicKey: river.pubKeyHex });
+    assert(riverOfferReq.status === 200, `buyer requests enterprise offer (got ${riverOfferReq.status} ${riverOfferReq.error ?? ''})`);
+    const offerTxId = riverOfferReq.body.transaction.id;
+    const dooneOfferApprove = await signedFetch('POST', `/api/treasury/${eggs}/approve`, doone, { transactionId: offerTxId });
+    assert(dooneOfferApprove.status === 200, 'keeper approves request on enterprise offer');
+    const eggsDetail = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    const activeOfferDeal = eggsDetail.activeDeals?.find((d: any) => d.id === offerTxId);
+    assert(!!activeOfferDeal, 'operator view exposes active deal on enterprise offer');
+    assert(activeOfferDeal?.action_required === 'fulfill', 'active deal on offer has action_required = fulfill');
+    assert(activeOfferDeal?.peer_callsign === 'riverbend', 'peer callsign resolved to buyer');
+
+    // ── 9. CAS guard on rejectPostRequest ──────────────────────────────────────────
+    const rejNeed = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Paint the fence', category: 'work', credits: 18 });
+    assert(rejNeed.status === 200, 'keeper posts fresh need for reject test');
+    const rejNeedRes = await signedFetch('POST', '/api/marketplace/posts/request', river, { postId: rejNeed.body.post.id, buyerPublicKey: river.pubKeyHex });
+    assert(rejNeedRes.status === 200, 'worker requests enterprise need for reject test');
+    const rejTxId = rejNeedRes.body.transaction.id;
+    const firstReject = await signedFetch('POST', `/api/treasury/${eggs}/reject`, doone, { transactionId: rejTxId });
+    assert(firstReject.status === 200, 'first rejection succeeds');
+    const secondReject = await signedFetch('POST', `/api/treasury/${eggs}/reject`, doone, { transactionId: rejTxId });
+    assert(secondReject.status === 400, 'duplicate reject blocked by CAS guard');
+
+    // ── 10. posts.created_by carried through sync export/import/delta & restore ───
+    const { exportSyncState: exportEngine } = await import('@beanpool/engine');
+    const fullSync = exportEngine(db, 'primary-node');
+    assert(Array.isArray(fullSync.posts), 'exportSyncState includes posts');
+    const exportedOffer = fullSync.posts?.find(p => p.id === freshOffer.body.post.id);
+    assert(exportedOffer?.createdBy === doone.pubKeyHex, 'exportSyncState exports createdBy for offer');
+    const exportedNeed = fullSync.posts?.find(p => p.id === rejNeed.body.post.id);
+    assert(exportedNeed?.createdBy === doone.pubKeyHex, 'exportSyncState exports createdBy for need');
+
+    const pastSince = new Date(Date.now() - 3600000).toISOString();
+    const deltaSync = exportEngine(db, 'primary-node', pastSince);
+    const deltaOffer = deltaSync.posts?.find(p => p.id === freshOffer.body.post.id);
+    assert(deltaOffer?.createdBy === doone.pubKeyHex, 'delta sync exports createdBy for offer');
+
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const Database = (await import('better-sqlite3')).default;
+
+    // Secondary replica state import & restore
+    const replicaDb = new Database(':memory:');
+    const schemaSql = fs.readFileSync(path.join(thisDir, 'db', 'schema.sql'), 'utf-8');
+    replicaDb.exec(schemaSql);
+    const allMembers = db.prepare('SELECT * FROM members').all() as any[];
+    for (const m of allMembers) {
+        replicaDb.prepare(`
+            INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at)
+            VALUES (?, ?, ?, ?)
+        `).run(m.public_key, m.callsign, m.avatar_url, m.joined_at || new Date().toISOString());
+    }
+    for (const rp of fullSync.posts ?? []) {
+        replicaDb.prepare(`
+            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            rp.id, rp.type, rp.category, rp.title, rp.description, rp.credits,
+            rp.authorPublicKey, rp.createdAt, rp.active ? 1 : 0, rp.status,
+            rp.repeatable ? 1 : 0, rp.lat ?? null, rp.lng ?? null,
+            rp.originNode || 'node', rp.priceType || 'fixed',
+            rp.acceptedBy || null, rp.acceptedAt || null,
+            rp.pendingTransactionId || null, rp.completedAt || null,
+            rp.updatedAt || rp.createdAt, rp.createdBy ?? null
+        );
+    }
+    const replicaRestoredPost = replicaDb.prepare('SELECT created_by FROM posts WHERE id = ?').get(freshOffer.body.post.id) as any;
+    assert(replicaRestoredPost?.created_by === doone.pubKeyHex, 'replica restore preserves posts.created_by');
+    replicaDb.close();
+
+    // File backup & restore via writeDbSnapshot
+    const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
+    const tmpSnapFile = path.join(process.cwd(), `tmp-keepership-backup-${Date.now()}.db`);
+    try {
+        writeDbSnapshot(tmpSnapFile);
+        assert(fs.existsSync(tmpSnapFile), 'Snapshot file created via writeDbSnapshot');
+        const restoredSnapDb = new Database(tmpSnapFile, { readonly: true });
+        const snapPost = restoredSnapDb.prepare('SELECT created_by FROM posts WHERE id = ?').get(freshOffer.body.post.id) as any;
+        assert(snapPost?.created_by === doone.pubKeyHex, 'atomic snapshot restore preserves posts.created_by');
+        restoredSnapDb.close();
+    } finally {
+        if (fs.existsSync(tmpSnapFile)) fs.unlinkSync(tmpSnapFile);
+    }
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Per-enterprise keepership checks PASSED (#106).');

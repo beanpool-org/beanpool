@@ -356,6 +356,7 @@ export function exportSyncState(
         lat: row.lat,
         lng: row.lng,
         originNode: row.origin_node,
+        createdBy: row.created_by ?? undefined,
         pollOptions: row.poll_options
             ? (typeof row.poll_options === 'string' ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : row.poll_options)
             : undefined,

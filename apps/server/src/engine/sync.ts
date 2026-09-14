@@ -366,8 +366,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     : null;
                 const pollClosesAtVal = rp.pollClosesAt || null;
                 if (!existing) {
-                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, created_by)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -389,7 +389,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.completedAt || null,
                         rp.updatedAt || rp.createdAt,
                         pollOptionsJson,
-                        pollClosesAtVal
+                        pollClosesAtVal,
+                        rp.createdBy ?? null
                     );
                     newPosts++;
                 } else {
@@ -413,6 +414,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         lng = ?,
                         poll_options = COALESCE(?, poll_options),
                         poll_closes_at = COALESCE(?, poll_closes_at),
+                        created_by = COALESCE(?, created_by),
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.title,
@@ -430,6 +432,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.lng ?? null,
                         pollOptionsJson,
                         pollClosesAtVal,
+                        rp.createdBy ?? null,
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );

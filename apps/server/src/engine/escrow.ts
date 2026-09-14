@@ -32,7 +32,7 @@ export interface EscrowCallbacks {
     floorLockedError: (publicKey: string, postBalance: number) => Error;
     SystemMessageType: any;
     canOperateTreasury?: (operator: string, treasury: string) => boolean;
-    conservingTransaction?: <T>(fn: () => T) => T;
+    conservingTransaction: <T>(fn: () => T) => T;
     processDeferredWageClaims?: (enterprisePubkey: string) => number;
     sweepEnterpriseCeiling?: (enterprisePubkey: string) => number;
 }
@@ -609,8 +609,10 @@ export function completePostTransaction(
     const completedAt = new Date().toISOString();
     let releaseResult: any = null;
 
-    const runTx = cb.conservingTransaction ? (fn: () => void) => cb.conservingTransaction!(fn) : (fn: () => void) => db.transaction(fn)();
-    runTx(() => {
+    cb.conservingTransaction(() => {
+        const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
+        if (updateRes.changes === 0) throw new Error('Deal was already completed or cancelled');
+
         if (isHourly && releaseCredits !== row.credits) {
             const diff = releaseCredits - row.credits;
             if (diff > 0) {
@@ -662,9 +664,6 @@ export function completePostTransaction(
         // (federation-settlement-exchange.ts § commitOutboundSettlement → moveToCommons).
         releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts?.authSigner ? { signer: opts.authSigner } : undefined);
         if (!releaseResult) throw new Error('Failed to release escrow funds');
-
-        const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
-        if (updateRes.changes === 0) throw new Error('Deal was already completed or cancelled');
 
         if (post && !post.repeatable) {
             db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);

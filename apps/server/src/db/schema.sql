@@ -103,7 +103,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_from ON transactions(from_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_to ON transactions(to_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer);
+CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL;
 
 -- 4. Marketplace Posts & Photos
 CREATE TABLE IF NOT EXISTS posts (
@@ -708,7 +708,6 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
 -- Covers "which enterprises does this member steward?" — the stewardOf() lookup that
 -- drives the Commons tab's per-enterprise controls.
 CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(member_pubkey);
-CREATE INDEX IF NOT EXISTS idx_treasury_operators_member_treasury ON treasury_operators(member_pubkey, treasury_pubkey);
 
 -- 22. Node owner and admin roles (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2).
 -- Coordination and attribution record for authority over the node machine. Replaces the inferred

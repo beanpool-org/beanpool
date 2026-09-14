@@ -416,8 +416,7 @@ export function initSchema() {
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by)`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer)`).run(); } catch { }
-    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_treasury_operators_member_treasury ON treasury_operators(member_pubkey, treasury_pubkey)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL`).run(); } catch { }
 
     // Enterprise Credit Model (Rule 6): One-time backfill of earned_surplus for pre-existing enterprises
     // from historical completed external sales. Gated behind node_config so it runs strictly once

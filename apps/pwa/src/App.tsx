@@ -28,6 +28,7 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
+import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
 import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 
@@ -104,6 +105,7 @@ export function App() {
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     const [openNewPost, setOpenNewPost] = useState(false);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
+    const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
     const [theme, toggleTheme] = useTheme();
     const [sysAnnouncement, setSysAnnouncement] = useState<{ title: string, body: string, severity: string } | null>(null);
     const [totalUnread, setTotalUnread] = useState(0);
@@ -645,7 +647,12 @@ export function App() {
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
                             {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} />}
-                            {activeTab === 'projects' && <ProjectsPage identity={identity} />}
+                            {activeTab === 'projects' && (
+                                <ProjectsPage
+                                    identity={identity}
+                                    onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
+                                />
+                            )}
                         </>
                     )}
 
@@ -678,11 +685,24 @@ export function App() {
                             }}
                         />
                     )}
+
+                    {/* Treasury Detail Overlay */}
+                    {openTreasuryPubkey && (
+                        <TreasuryDetailPage
+                            identity={identity}
+                            pubkey={openTreasuryPubkey}
+                            onBack={() => setOpenTreasuryPubkey(null)}
+                            onNavigatePost={(postId) => {
+                                setOpenTreasuryPubkey(null);
+                                navigateToTab('marketplace', postId);
+                            }}
+                        />
+                    )}
                 </main>
 
                 {/* Bottom nav — mobile only */}
                 <nav className="relative md:hidden" style={{
-                    display: openProfilePubkey ? 'none' : 'flex',
+                    display: (openProfilePubkey || openTreasuryPubkey) ? 'none' : 'flex',
                     position: 'fixed',
                     bottom: 0,
                     left: 0,

@@ -88,6 +88,47 @@ async function main() {
     const offer = { title: 'Dozen eggs', category: 'food', credits: 12 };
     const own = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, offer);
     assert(own.status === 200, `keeper posts an Offer on their OWN enterprise (got ${own.status} ${own.error ?? ''})`);
+    const offerRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(own.body.post.id) as any;
+    assert(offerRow?.created_by === doone.pubKeyHex, 'offer post created_by records acting operator');
+
+    // Keeper posts a Need, worker bids, keeper approves and completes — verifying audit trail
+    const needRes = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Tend chickens', category: 'work', credits: 20 });
+    assert(needRes.status === 200, `keeper posts a Need on enterprise (got ${needRes.status})`);
+    const needRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(needRes.body.post.id) as any;
+    assert(needRow?.created_by === doone.pubKeyHex, 'need post created_by records acting operator');
+
+    const reqRes = await signedFetch('POST', `/api/marketplace/posts/request`, river, { postId: needRes.body.post.id, buyerPublicKey: river.pubKeyHex });
+    assert(reqRes.status === 200, `worker bids on enterprise Need (got ${reqRes.status} ${reqRes.error ?? ''})`);
+    const dealTxId = reqRes.body.transaction.id;
+
+    // Verify treasury detail exposes pendingBids and activeDeals to operator, but hides them on unauthenticated read
+    const unauthBeforeApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(Array.isArray(unauthBeforeApprove.pendingBids) && unauthBeforeApprove.pendingBids.length === 0, 'public read hides pending bids');
+    const detailBeforeApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    assert(detailBeforeApprove.pendingBids?.some((b: any) => b.id === dealTxId), 'detail exposes pending bid on need to keeper');
+
+    const approveRes = await signedFetch('POST', `/api/treasury/${eggs}/approve`, doone, { transactionId: dealTxId });
+    assert(approveRes.status === 200, `keeper approves bid on enterprise Need (got ${approveRes.status})`);
+    const escrowTxRow = db.prepare('SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey=?').get(eggs, `escrow_${dealTxId}`) as any;
+    assert(escrowTxRow?.auth_signer === doone.pubKeyHex, 'escrow hold transaction auth_signer records acting operator');
+
+    const unauthAfterApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(Array.isArray(unauthAfterApprove.activeDeals) && unauthAfterApprove.activeDeals.length === 0, 'public read hides active deals');
+    const detailAfterApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    assert(detailAfterApprove.activeDeals?.some((d: any) => d.id === dealTxId), 'detail exposes active deal on need to keeper');
+
+    const completeRes = await signedFetch('POST', `/api/treasury/${eggs}/complete`, doone, { transactionId: dealTxId });
+    assert(completeRes.status === 200, `keeper completes deal on enterprise Need (got ${completeRes.status})`);
+    const payoutTxRow = db.prepare('SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey=?').get(`escrow_${dealTxId}`, river.pubKeyHex) as any;
+    assert(payoutTxRow?.auth_signer === doone.pubKeyHex, 'escrow payout transaction auth_signer records acting operator');
+
+    // Sweep test with audit trail
+    // Give eggs a positive balance to sweep via genesis transfer
+    transfer('genesis', eggs, 50, 'seed test', 'direct', true);
+    const sweepRes = await signedFetch('POST', `/api/treasury/${eggs}/sweep`, doone, { amount: 15 });
+    assert(sweepRes.status === 200, `keeper sweeps surplus from enterprise (got ${sweepRes.status})`);
+    const sweepTxRow = db.prepare("SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey='COMMONS_POOL' ORDER BY timestamp DESC LIMIT 1").get(eggs) as any;
+    assert(sweepTxRow?.auth_signer === doone.pubKeyHex, 'sweep transaction auth_signer records acting operator');
 
     for (const [route, payload] of [
         ['offer', offer],
@@ -237,27 +278,27 @@ async function main() {
     // Keeper Alice bids on the need from her personal account
     const aliceBid = await signedFetch('POST', '/api/marketplace/posts/request', alice, { postId: bakeryNeed.body.post.id, buyerPublicKey: alice.pubKeyHex });
     assert(aliceBid.status === 200, 'Alice bids on Bakery need from personal account');
-    const dealTxId = aliceBid.body.transaction.id;
+    const selfDealTxId = aliceBid.body.transaction.id;
 
     // Keeper Alice tries to approve her own bid -> REFUSED (403, friendly copy)
-    const selfApprove = await signedFetch('POST', `/api/treasury/${bakery}/approve`, alice, { transactionId: dealTxId });
+    const selfApprove = await signedFetch('POST', `/api/treasury/${bakery}/approve`, alice, { transactionId: selfDealTxId });
     assert(selfApprove.status === 403, `Alice approving own bid is REFUSED 403 (got ${selfApprove.status})`);
     assert(selfApprove.error === 'Another keeper of CommunityBakery needs to approve this — you cannot approve a job you are being paid for.',
         `friendly refusal on self-approve: "${selfApprove.error}"`);
 
     // Appoint Bob as second keeper: Bob approves Alice's bid -> SUCCEEDS
     adminAssignTreasuryOperator(bakery, bob.pubKeyHex, 'admin');
-    const bobApprove = await signedFetch('POST', `/api/treasury/${bakery}/approve`, bob, { transactionId: dealTxId });
+    const bobApprove = await signedFetch('POST', `/api/treasury/${bakery}/approve`, bob, { transactionId: selfDealTxId });
     assert(bobApprove.status === 200, `second keeper Bob approves Alice's bid (got ${bobApprove.status})`);
 
     // Keeper Alice tries to complete and pay herself -> REFUSED (403, friendly copy)
-    const selfComplete = await signedFetch('POST', `/api/treasury/${bakery}/complete`, alice, { transactionId: dealTxId });
+    const selfComplete = await signedFetch('POST', `/api/treasury/${bakery}/complete`, alice, { transactionId: selfDealTxId });
     assert(selfComplete.status === 403, `Alice completing deal paying herself is REFUSED 403 (got ${selfComplete.status})`);
     assert(selfComplete.error === 'Another keeper of CommunityBakery needs to complete this — you cannot complete a job you are being paid for.',
         `friendly refusal on self-complete: "${selfComplete.error}"`);
 
     // Keeper Bob completes and pays Alice -> SUCCEEDS
-    const bobComplete = await signedFetch('POST', `/api/treasury/${bakery}/complete`, bob, { transactionId: dealTxId });
+    const bobComplete = await signedFetch('POST', `/api/treasury/${bakery}/complete`, bob, { transactionId: selfDealTxId });
     assert(bobComplete.status === 200, `second keeper Bob completes deal paying Alice (got ${bobComplete.status})`);
     // Alice receives payout (30 minus 1.5% fee = 29.55)
     assert(getBalance(alice.pubKeyHex).balance === 29.55, 'Alice received payment minus fee');

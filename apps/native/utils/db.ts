@@ -1814,11 +1814,8 @@ export async function getTreasuries(): Promise<TreasurySummary[]> {
 }
 
 export async function getTreasuryDetail(publicKey: string): Promise<any | null> {
-    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!rawUrl) return null;
-    const anchorUrl = rawUrl.replace(/\/$/, '');
     try {
-        const res = await fetch(`${anchorUrl}/api/treasury/${encodeURIComponent(publicKey)}`);
+        const res = await signedGet(`/api/treasury/${encodeURIComponent(publicKey)}`);
         if (!res.ok) return null;
         return await res.json();
     } catch { return null; }
@@ -1835,8 +1832,11 @@ export async function treasuryPostNeed(treasury: string, body: { category: strin
 export async function treasuryApprove(treasury: string, transactionId: string) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/approve`, { transactionId });
 }
-export async function treasuryComplete(treasury: string, transactionId: string) {
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId });
+export async function treasuryComplete(treasury: string, transactionId: string, hours?: number) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId, hours });
+}
+export async function treasuryReject(treasury: string, transactionId: string) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
 }
 export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });

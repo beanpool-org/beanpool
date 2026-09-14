@@ -271,6 +271,10 @@ export function initSchema() {
     // Step 7: recovery share replication audit column
     try { db.prepare(`ALTER TABLE sync_audit_log ADD COLUMN recovery_shares_imported INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN kdf_params TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN created_by TEXT REFERENCES members(public_key) ON DELETE SET NULL`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_posts_created_by ON posts(created_by)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status_created ON marketplace_transactions(buyer_pubkey, status, created_at DESC)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON marketplace_transactions(seller_pubkey, status, created_at DESC)`).run(); } catch { }
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);

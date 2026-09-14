@@ -103,7 +103,7 @@ export function createPost(
     // #143 step 4. An OPTIONS OBJECT rather than positions 15 and 16: this list is already fourteen
     // positional parameters deep, and `createPost(…, undefined, undefined, 'peers', [id])` at a call site
     // is how the wrong argument ends up in the wrong slot.
-    options?: { reach?: unknown; reachPeers?: unknown },
+    options?: { reach?: unknown; reachPeers?: unknown; createdBy?: string },
 ): MarketplacePost | null {
     assertMemberActive(authorPublicKey);
     if (!getMember(db, authorPublicKey)) {
@@ -122,8 +122,8 @@ export function createPost(
 
     db.transaction(() => {
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?)`).run(finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt, repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords, cashAlsoNeeded ? 1 : 0, reach, reachPeers);
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt, repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords, cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null);
 
         if (photos && photos.length > 0) {
             const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);

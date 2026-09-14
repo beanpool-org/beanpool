@@ -1914,7 +1914,7 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
 export function createPost(
     type: 'offer' | 'need', category: string, title: string, description: string, credits: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string, authorPublicKey: string, lat?: number, lng?: number, photos?: string[], repeatable?: boolean, id?: string, cashAlsoNeeded?: boolean,
-    options?: { reach?: unknown; reachPeers?: unknown }
+    options?: { reach?: unknown; reachPeers?: unknown; createdBy?: string }
 ): MarketplacePost | null {
     return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
 }

@@ -47,6 +47,7 @@ export interface MarketplacePost {
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
     authorAvatarUrl?: string | null;
+    createdBy?: string;
 }
 
 export interface PostFilter {
@@ -189,7 +190,8 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
             ? (row.author_avatar.startsWith('bundled://')
                 ? row.author_avatar
                 : `/api/avatar/${row.author_pubkey}?size=thumb`)
-            : null
+            : null,
+        createdBy: row.created_by || undefined
     };
 }
 

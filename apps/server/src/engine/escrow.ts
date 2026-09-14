@@ -221,6 +221,7 @@ export function approvePostRequest(
     runTx(() => {
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${row.id}`);
 
+        // Only attribute authSigner when the debited account is the enterprise itself (Need listings)
         const isEnterprisePayer = isEnterpriseNeed;
         const escrowResult = cb.transfer(
             row.buyer_pubkey,
@@ -233,7 +234,8 @@ export function approvePostRequest(
         );
         if (!escrowResult) throw new Error('Failed to lock funds in escrow');
 
-        db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=?`).run(transactionId);
+        const res = db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=? AND status='requested'`).run(transactionId);
+        if (res.changes === 0) throw new Error('Transaction is no longer in requested state');
 
         if (!post.repeatable) {
             const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(row.buyer_pubkey, new Date().toISOString(), row.id, post.id);
@@ -501,7 +503,7 @@ export function completePostTransaction(
                 if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
                 cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
             } else if (diff < 0) {
-                cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true);
+                cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
             }
             db.prepare(`UPDATE marketplace_transactions SET credits=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
         }
@@ -510,10 +512,11 @@ export function completePostTransaction(
         // the Commons. Holds, adjustments and refunds stay exempt; this is the one transfer where value
         // settles to a real member's account. Cross-node settlement handles its own fee separately
         // (federation-settlement-exchange.ts § commitOutboundSettlement → moveToCommons).
-        releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false);
+        releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts?.authSigner ? { signer: opts.authSigner } : undefined);
         if (!releaseResult) throw new Error('Failed to release escrow funds');
 
-        db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?`).run(completedAt, transactionId);
+        const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
+        if (updateRes.changes === 0) throw new Error('Deal was already completed or cancelled');
 
         if (post && !post.repeatable) {
             db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);

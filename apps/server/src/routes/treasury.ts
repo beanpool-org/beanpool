@@ -14,7 +14,7 @@ import Router from '@koa/router';
 import {
     createTreasury, adminSetOperator, canOperateTreasury, canAdministerTreasury,
     treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
-    createPost, approvePostRequest, completePostTransaction,
+    createPost, approvePostRequest, completePostTransaction, rejectPostRequest,
     getBalance, moveToCommons, conservingTransaction,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
@@ -170,6 +170,30 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ).all(treasury, treasury) as any[]).map(f => ({
             amount: f.amount, memo: f.memo, timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
         }));
+        // Gate pending bids and active deals so only verified operators of this treasury receive them
+        const actor = ctx.state?.actor;
+        const isOperator = !!(actor && canOperateTreasury(actor, treasury));
+
+        const pendingBids = isOperator ? (db.prepare(`
+            SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
+                   p.title as post_title, p.type as post_type, p.price_type,
+                   m.callsign as peer_callsign, m.avatar_url as peer_avatar
+            FROM marketplace_transactions t
+            JOIN posts p ON t.post_id = p.id
+            LEFT JOIN members m ON m.public_key = CASE WHEN t.buyer_pubkey = ? THEN t.seller_pubkey ELSE t.buyer_pubkey END
+            WHERE (t.buyer_pubkey = ? OR t.seller_pubkey = ?) AND t.status = 'requested'
+            ORDER BY t.created_at DESC
+        `).all(treasury, treasury, treasury) as any[]) : [];
+        const activeDeals = isOperator ? (db.prepare(`
+            SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
+                   p.title as post_title, p.type as post_type, p.price_type,
+                   m.callsign as peer_callsign, m.avatar_url as peer_avatar
+            FROM marketplace_transactions t
+            JOIN posts p ON t.post_id = p.id
+            LEFT JOIN members m ON t.seller_pubkey = m.public_key
+            WHERE t.buyer_pubkey = ? AND t.status = 'pending'
+            ORDER BY t.created_at DESC
+        `).all(treasury) as any[]) : [];
         ctx.body = {
             publicKey: treasury, name: m.callsign,
             avatar: m.avatar_url
@@ -178,7 +202,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     : `/api/avatar/${treasury}?size=thumb`)
                 : null,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
-            liveOffers: b.liveOffers, posts, flow,
+            liveOffers: b.liveOffers, posts, flow, pendingBids, activeDeals,
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
             keepers: treasuryKeepers(treasury),
@@ -274,11 +298,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Post the treasury's recurring Offer (e.g. "a dozen eggs"). Defaults repeatable=true.
     router.post('/api/treasury/:treasury/offer', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -288,11 +313,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // live Offer (the offer covenant) before it can run the need at a deficit.
     router.post('/api/treasury/:treasury/need', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -326,6 +352,23 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             const tx = completePostTransaction(String(transactionId), treasury, typeof hours === 'number' ? hours : undefined, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
+            ctx.body = { success: true, transaction: tx };
+        } catch (e: any) {
+            ctx.status = e.status || e.statusCode || 400;
+            ctx.body = { error: e.message };
+        }
+    });
+
+    // Reject a bid on the treasury's Need
+    router.post('/api/treasury/:treasury/reject', async (ctx) => {
+        const { treasury } = ctx.params;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
+        const { transactionId } = (ctx as any).requestBody || {};
+        if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
+        try {
+            const tx = rejectPostRequest(String(transactionId), treasury);
+            if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not reject (not this treasury’s deal, or already actioned)' }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;

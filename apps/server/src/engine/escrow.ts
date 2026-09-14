@@ -286,8 +286,18 @@ export function approvePostRequest(
 
     cb.ensureTransactionConversation(row.post_id, row.buyer_pubkey, row.seller_pubkey);
 
-    const runTx = cb.conservingTransaction ? (fn: () => void) => cb.conservingTransaction!(fn) : (fn: () => void) => db.transaction(fn)();
-    runTx(() => {
+    cb.conservingTransaction(() => {
+        const res = db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=? AND status='requested'`).run(transactionId);
+        if (res.changes === 0) throw new Error('Transaction is no longer in requested state');
+
+        if (!post.repeatable) {
+            const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(row.buyer_pubkey, new Date().toISOString(), row.id, post.id);
+            if (updated.changes === 0) throw new Error('Post is no longer available');
+
+            db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
+              .run(post.id, row.id);
+        }
+
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${row.id}`);
 
         // Only attribute authSigner when the debited account is the enterprise itself (Need listings)
@@ -302,20 +312,9 @@ export function approvePostRequest(
         );
         if (!escrowResult) throw new Error('Failed to lock funds in escrow');
 
-        const res = db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=? AND status='requested'`).run(transactionId);
-        if (res.changes === 0) throw new Error('Transaction is no longer in requested state');
-
         if (isPayeeKeeper) {
             db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
                 .run(row.credits, row.buyer_pubkey);
-        }
-
-        if (!post.repeatable) {
-            const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(row.buyer_pubkey, new Date().toISOString(), row.id, post.id);
-            if (updated.changes === 0) throw new Error('Post is no longer available');
-
-            db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
-              .run(post.id, row.id);
         }
     });
 
@@ -497,7 +496,15 @@ export function acceptPost(
 
     cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
 
-    db.transaction(() => {
+    cb.conservingTransaction(() => {
+        if (!post.repeatable) {
+            const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(buyerPublicKey, tx.createdAt, tx.id, post.id);
+            if (updated.changes === 0) throw new Error('Post is no longer available — it is already committed to another deal');
+
+            db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
+              .run(post.id, tx.id);
+        }
+
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${tx.id}`);
 
         const escrowResult = cb.transfer(buyerPublicKey, `escrow_${tx.id}`, finalCredits, `Escrow hold for offer ${post.id}`, 'escrow', true);
@@ -509,15 +516,7 @@ export function acceptPost(
         }
 
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
-        
-        if (!post.repeatable) {
-            const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(buyerPublicKey, tx.createdAt, tx.id, post.id);
-            if (updated.changes === 0) throw new Error('Post is no longer available — it is already committed to another deal');
-
-            db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
-              .run(post.id, tx.id);
-        }
-    })();
+    });
 
     cb.broadcast({ type: 'post_accepted', postId: post.id, transaction: tx });
 
@@ -747,7 +746,10 @@ export function cancelPostTransaction(
     if (post && post.type === 'poll') return null;
     const completedAt = new Date().toISOString();
 
-    db.transaction(() => {
+    cb.conservingTransaction(() => {
+        const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
+        if (updateRes.changes === 0) throw new Error('Deal was already completed or cancelled');
+
         const refundResult = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, row.credits, `Escrow refund for cancelled post ${row.post_id}`, 'escrow', true);
         if (!refundResult) throw new Error('Failed to refund escrow funds');
 
@@ -766,12 +768,10 @@ export function cancelPostTransaction(
             }
         }
 
-        db.prepare(`UPDATE marketplace_transactions SET status = 'cancelled', completed_at = ? WHERE id = ?`).run(completedAt, transactionId);
-
         if (post) {
             db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
         }
-    })();
+    });
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'transaction_cancelled', transaction: tx });

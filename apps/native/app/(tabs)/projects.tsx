@@ -2,12 +2,11 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { getProjects, getBalance, voteForProjectApi, getActiveVotingRound, getTreasuries } from '../../utils/db';
+import { getProjects, getBalance, getActiveVotingRound, getTreasuries } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
-import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
@@ -77,23 +76,6 @@ export default function ProjectsScreen() {
         proposedBy: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, marginRight: 8 },
         proposedByText: { fontSize: 12, color: colors.text.secondary, fontWeight: '500', flexShrink: 1 },
         proposedByCallsign: { color: colors.brand.primary, fontWeight: 'bold' },
-        voteTriggerBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0, backgroundColor: theme === 'dark' ? 'rgba(16, 185, 129, 0.15)' : palette.emerald50, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary },
-        voteTriggerBtnActive: { backgroundColor: colors.brand.primary },
-        voteTriggerText: { fontSize: 12, fontWeight: '700', color: colors.brand.primary },
-        votedMiniBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme === 'dark' ? 'rgba(16, 185, 129, 0.15)' : palette.emerald50, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-        votedMiniText: { fontSize: 11, color: colors.brand.dark, fontWeight: '600' },
-        votingArea: { backgroundColor: colors.surface.subtle, borderRadius: 14, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.border.default },
-        stepperContainer: { alignItems: 'center' },
-        stepperControls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-        stepperBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface.card, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border.strong, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-        stepperBtnText: { fontSize: 20, color: colors.text.secondary, marginTop: -2 },
-        stepperValue: { fontSize: 18, fontWeight: '700', color: colors.text.body, width: 28, textAlign: 'center', fontFamily: 'Courier' },
-        castBtn: { backgroundColor: colors.brand.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-        castBtnDisabled: { backgroundColor: colors.text.muted },
-        castBtnText: { color: colors.text.inverse, fontSize: 14, fontWeight: 'bold' },
-        stepperCostText: { fontSize: 11, color: colors.text.secondary, marginTop: 8, fontWeight: '500' },
-        stepperCostTextError: { color: colors.feedback.danger.solid },
-        stepperHintText: { fontSize: 11, color: colors.text.secondary, marginTop: 4, fontStyle: 'italic', textAlign: 'center' },
         progressSection: { marginTop: 4 },
         progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
         currentText: { fontSize: 13, fontWeight: 'bold', color: colors.text.body },
@@ -164,11 +146,8 @@ export default function ProjectsScreen() {
         }
     }));
 
-    // Sort & Vote state
+    // Sort state
     const [sortBy, setSortBy] = useState<'trending' | 'newest' | 'cost'>('trending');
-    const [expandedVote, setExpandedVote] = useState<string | null>(null);
-    const [voteSteppers, setVoteSteppers] = useState<Record<string, number>>({});
-    const [votingInProgress, setVotingInProgress] = useState<string | null>(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -278,35 +257,11 @@ export default function ProjectsScreen() {
         
         const heroUri = parsedPhotos.length > 0 ? parsedPhotos[0] : null;
 
-        // Calculate total votes
-        let parsedVotes = item.votes || [];
-        if (typeof item.votes === 'string') {
-            try { parsedVotes = JSON.parse(item.votes); } catch (e) { parsedVotes = []; }
-        }
-        
-        const myVote = parsedVotes.find((v: any) => v.pubkey === identity?.publicKey);
-        const hasVoted = !!myVote;
-        
-        const stepperVotes = voteSteppers[item.id] ?? 1;
-        const stepperCost = stepperVotes * stepperVotes;
-        const isOverBudget = stepperCost > balanceState.earnedCredit;
-        const isExpanded = expandedVote === item.id;
-        // Voting is only supported for Commons governance proposals (POST /api/commons/vote).
-        // Crowdfunding projects accept pledges (POST /api/crowdfund/projects/:id/pledge);
-        // the server has no POST /api/crowdfund/projects/vote endpoint.
-        // Suppress voting controls on crowdfund projects so members cannot trigger non-existent routes.
-        const isCommonsProject = item.type === 'commons';
-
         return (
             <Pressable
                 accessibilityRole="button"
                 style={styles.card}
                 onPress={() => {
-                    // Collapse expanded vote if tapping the card
-                    if (isExpanded) {
-                        setExpandedVote(null);
-                        return;
-                    }
                     router.push({
                         pathname: '/project-detail',
                         params: {
@@ -373,86 +328,9 @@ export default function ProjectsScreen() {
                                 Proposed by <Text style={styles.proposedByCallsign}>{item.creator_callsign || 'Unknown'}</Text>
                             </Text>
                         </Pressable>
-                        
-                        {/* Vote Button Trigger - only available for Commons governance projects */}
-                        {isCommonsProject && !isFunded && !hasVoted && (
-                            <Pressable
-                                accessibilityRole="button"
-                                accessibilityState={{ selected: isExpanded }}
-                                style={[styles.voteTriggerBtn, isExpanded && styles.voteTriggerBtnActive]}
-                                onPress={(e) => {
-                                    e.stopPropagation();
-                                    setExpandedVote(isExpanded ? null : item.id);
-                                }}
-                            >
-                                <MaterialCommunityIcons name="vote" size={14} color={isExpanded ? colors.text.inverse : colors.brand.primary} />
-                                <Text style={[styles.voteTriggerText, isExpanded && { color: colors.text.inverse }]}>Vote with Credits</Text>
-                            </Pressable>
-                        )}
-                        {isCommonsProject && hasVoted && (
-                            <View style={styles.votedMiniBadge}>
-                                <MaterialCommunityIcons name="check-circle" size={12} color={colors.brand.primary} />
-                                <Text style={styles.votedMiniText}>Voted</Text>
-                            </View>
-                        )}
                     </View>
 
-                    {/* Expandable Voting Area - only available for Commons governance projects */}
-                    {isCommonsProject && isExpanded && !isFunded && !hasVoted && (
-                        <View style={styles.votingArea}>
-                            <View style={styles.stepperContainer}>
-                                <View style={styles.stepperControls}>
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Decrease votes"
-                                        style={styles.stepperBtn}
-                                        onPress={(e) => { e.stopPropagation(); hapticTick(); setVoteSteppers(prev => ({ ...prev, [item.id]: Math.max(1, (prev[item.id] ?? 1) - 1) })); }}
-                                    >
-                                        <Text style={styles.stepperBtnText}>-</Text>
-                                    </Pressable>
-                                    <Text style={styles.stepperValue}>{stepperVotes}</Text>
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Increase votes"
-                                        style={styles.stepperBtn}
-                                        onPress={(e) => { e.stopPropagation(); hapticTick(); setVoteSteppers(prev => ({ ...prev, [item.id]: Math.min(10, (prev[item.id] ?? 1) + 1) })); }}
-                                    >
-                                        <Text style={styles.stepperBtnText}>+</Text>
-                                    </Pressable>
-                                    
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        style={[styles.castBtn, (votingInProgress === item.id || isOverBudget) && styles.castBtnDisabled]}
-                                        disabled={votingInProgress === item.id || isOverBudget}
-                                        onPress={async (e) => {
-                                            e.stopPropagation();
-                                            setVotingInProgress(item.id);
-                                            try {
-                                                await voteForProjectApi(item.id, stepperVotes);
-                                                hapticSuccess();
-                                                setExpandedVote(null);
-                                                loadData();
-                                            } catch (err: any) {
-                                                hapticWarning();
-                                                Alert.alert('Voting Failed', err.message);
-                                            }
-                                            setVotingInProgress(null);
-                                        }}
-                                    >
-                                        <Text style={styles.castBtnText}>{votingInProgress === item.id ? '...' : 'Cast'}</Text>
-                                    </Pressable>
-                                </View>
-                                <Text style={[styles.stepperCostText, isOverBudget && styles.stepperCostTextError]}>
-                                    {stepperVotes} vote{stepperVotes > 1 ? 's' : ''} = {stepperCost} credits
-                                </Text>
-                                {isOverBudget && balanceState.earnedCredit === 0 && (
-                                    <Text style={styles.stepperHintText}>
-                                        Earn credits by completing trades to unlock voting.
-                                    </Text>
-                                )}
-                            </View>
-                        </View>
-                    )}
+                    {/* Voting is being redesigned (see docs/the-commons.md) */}
 
                     <View style={styles.progressSection}>
                         <View style={styles.progressHeader}>

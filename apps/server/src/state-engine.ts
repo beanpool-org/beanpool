@@ -2965,7 +2965,18 @@ export function createTreasury(
     // avatar, so an avatarless enterprise renders fine. Opt-in rather than dropping the guard, which stays
     // as it was for every operator-created treasury.
     // opts.workingCapitalCeiling sets Rule 7 ceiling (docs/the-commons.md §2.4).
-    opts: { systemCreated?: boolean; workingCapitalCeiling?: number | null } = {},
+    // Unified enterprise fields (docs/the-commons.md §2.1, Slice 3): purpose, lifecycle, goalAmount, deadlineAt, paused.
+    opts: {
+        systemCreated?: boolean;
+        workingCapitalCeiling?: number | null;
+        purpose?: string;
+        lifecycle?: 'ongoing' | 'bounded';
+        goalAmount?: number | null;
+        deadlineAt?: string | null;
+        paused?: boolean;
+        publicKeyHex?: string;
+        leadKeeperPubkey?: string;
+    } = {},
 ): { publicKey: string } {
     const trimmed = (name || '').trim();
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
@@ -2987,22 +2998,39 @@ export function createTreasury(
         ceiling = num;
     }
 
-    const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    });
-    const pubKeyHex = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    const privKeyHex = crypto.createPrivateKey(privateKey).export({ type: 'pkcs8', format: 'der' }).subarray(-32).toString('hex');
+    const purpose = opts.purpose || '';
+    const lifecycle = opts.lifecycle || 'ongoing';
+    const goalAmount = opts.goalAmount != null ? Number(opts.goalAmount) : null;
+    const deadlineAt = opts.deadlineAt || null;
+    const paused = opts.paused ? 1 : 0;
+
+    let pubKeyHex = opts.publicKeyHex;
+    let privKeyHex = '';
+    if (!pubKeyHex) {
+        const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+        });
+        pubKeyHex = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+        privKeyHex = crypto.createPrivateKey(privateKey).export({ type: 'pkcs8', format: 'der' }).subarray(-32).toString('hex');
+    }
 
     db.transaction(() => {
         // invited_by/invite_code left NULL: a treasury is system-created, it has no inviter
         // (and invited_by is an FK to members — 'genesis' is not itself a member row).
         // Enterprise credit model: earned_surplus = 0, working_capital_ceiling = ceiling (docs/the-commons.md §2.4 Rules 6 & 7)
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling)
-                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?)`)
-            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line, ceiling);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
-        db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)`).run(`treasury_privkey_${pubKeyHex}`, privKeyHex);
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, paused)
+                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?)`)
+            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line, ceiling, purpose, goalAmount, deadlineAt, lifecycle, paused);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        if (privKeyHex) {
+            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)`).run(`treasury_privkey_${pubKeyHex}`, privKeyHex);
+        }
+        if (opts.leadKeeperPubkey) {
+            db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
+                        VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);
+            db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(opts.leadKeeperPubkey);
+        }
     })();
 
     ledger.initializeGenesisAccount(pubKeyHex);
@@ -3378,6 +3406,40 @@ export function createProject(proposerPubkey: string, title: string, description
     projects.push(project);
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
     
+    // Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3):
+    // A Commons project proposal IS an enterprise with lifecycle = 'bounded'.
+    const now = new Date().toISOString();
+    const baseCallsign = (project.title || 'Project').trim().slice(0, 40) || 'Project';
+    const existingCallsign = db.prepare(
+        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+    ).get(baseCallsign, project.id) as any;
+    const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${project.id.slice(0, 6)}` : baseCallsign;
+
+    db.transaction(() => {
+        const existingMember = db.prepare("SELECT public_key FROM members WHERE public_key = ?").get(project.id);
+        if (!existingMember) {
+            db.prepare(`
+                INSERT INTO members (
+                    public_key, callsign, joined_at, bio, status,
+                    is_treasury, earned_credit, earned_surplus,
+                    purpose, goal_amount, lifecycle, paused, updated_at
+                ) VALUES (?, ?, ?, ?, 'proposed', 1, 0, 0, ?, ?, 'bounded', 0, ?)
+            `).run(
+                project.id, callsign, now, project.description,
+                project.description || project.title, project.requestedAmount, now
+            );
+            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(project.id);
+            if (proposerPubkey) {
+                db.prepare(`
+                    INSERT OR IGNORE INTO treasury_operators (
+                        treasury_pubkey, member_pubkey, role, granted_at, granted_by
+                    ) VALUES (?, ?, 'lead', ?, 'creator')
+                `).run(project.id, proposerPubkey, now);
+                db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(proposerPubkey);
+            }
+        }
+    })();
+
     broadcast({ type: 'project_created', project });
     return project;
 }
@@ -3394,7 +3456,22 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
     projects[index].description = description.trim().slice(0, 500);
     projects[index].requestedAmount = Math.round(requestedAmount * 100) / 100;
     
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    const now = new Date().toISOString();
+    db.transaction(() => {
+        db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+        db.prepare(`
+            UPDATE members
+            SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
+            WHERE public_key = ?
+        `).run(
+            projects[index].title,
+            projects[index].description || projects[index].title,
+            projects[index].description,
+            projects[index].requestedAmount,
+            now,
+            projectId
+        );
+    })();
     broadcast({ type: 'project_updated', project: projects[index] });
     return true;
 }
@@ -3407,7 +3484,12 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
     if (projects[index].status !== 'proposed') return false;
 
     projects.splice(index, 1);
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    db.transaction(() => {
+        db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+        db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
+        db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
+    })();
     broadcast({ type: 'project_deleted', projectId });
     return true;
 }
@@ -3575,6 +3657,9 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
         if (funded) {
             winner.status = 'funded';
             winner.fundedAt = new Date().toISOString();
+            try {
+                db.prepare("UPDATE members SET status = 'funded', updated_at = ? WHERE public_key = ?").run(winner.fundedAt, winner.id);
+            } catch { }
             // Community-voted project grants are capital grants (raise balance, never earned_surplus).
             // Under Rule 7 (docs/the-commons.md §2.4), sweeps take only earned surplus, never grant money.
         } else {
@@ -3604,7 +3689,40 @@ export function getProjects(): CommunityProject[] {
 
 export function getAllProjects(): CommunityProject[] {
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    return row ? JSON.parse(row.value) : [];
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const knownIds = new Set(blobProjects.map(p => p.id));
+
+    // Unify with bounded enterprises from members table (docs/the-commons.md §2.1, Slice 3)
+    try {
+        const enterprises = db.prepare(`
+            SELECT m.public_key, m.callsign, m.bio, m.purpose, m.goal_amount, m.status, m.joined_at,
+                   (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
+                   (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
+            FROM members m
+            WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded'
+        `).all() as any[];
+
+        for (const e of enterprises) {
+            if (!knownIds.has(e.public_key)) {
+                const lead = e.lead_keeper || e.any_keeper || e.public_key;
+                const leadMember = getMember(lead);
+                blobProjects.push({
+                    id: e.public_key,
+                    title: e.callsign,
+                    description: e.purpose || e.bio || '',
+                    proposerPubkey: lead,
+                    proposerCallsign: leadMember?.callsign || e.callsign,
+                    requestedAmount: Number(e.goal_amount || 0),
+                    status: (e.status || 'proposed').toLowerCase() as any,
+                    votes: [],
+                    createdAt: e.joined_at || new Date().toISOString(),
+                });
+                knownIds.add(e.public_key);
+            }
+        }
+    } catch { }
+
+    return blobProjects;
 }
 
 export function getVotingRounds(): VotingRound[] {

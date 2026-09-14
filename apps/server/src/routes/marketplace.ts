@@ -571,11 +571,19 @@ router.get('/api/marketplace/transactions', async (ctx) => {
     }
     if (ENFORCE_READ_AUTH) {
         const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
         const isSelf = actor === publicKey;
-        const isAuthorizedKeeper = Boolean(actor && isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
+        const isAuthorizedKeeper = Boolean(isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
         if (!isSelf && !isAuthorizedKeeper) {
             ctx.status = 403;
-            ctx.body = { error: 'You may only view your own marketplace transactions' };
+            ctx.body = { error: isTreasury(publicKey)
+                ? 'You are not authorized to view transactions for this enterprise'
+                : 'You may only view your own marketplace transactions'
+            };
             return;
         }
     }

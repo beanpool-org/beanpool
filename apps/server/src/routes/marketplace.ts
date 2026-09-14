@@ -213,7 +213,12 @@ router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
             ctx.body = { error: 'id, optionId, and voter are required' };
             return;
         }
-        const sig = signature || (ctx.state as any)?.authSig?.signature;
+        if (ctx.state.actor && ((voterPublicKey && voterPublicKey !== ctx.state.actor) || (voterPubkey && voterPubkey !== ctx.state.actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Cannot vote on behalf of another member' };
+            return;
+        }
+        const sig = signature;
         const result = votePoll(id, voter, optionId, sig);
         ctx.body = result;
     } catch (e: any) {
@@ -232,7 +237,12 @@ router.post('/api/marketplace/polls/vote', async (ctx) => {
             ctx.body = { error: 'postId, optionId, and voter are required' };
             return;
         }
-        const sig = signature || (ctx.state as any)?.authSig?.signature;
+        if (ctx.state.actor && ((voterPublicKey && voterPublicKey !== ctx.state.actor) || (voterPubkey && voterPubkey !== ctx.state.actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Cannot vote on behalf of another member' };
+            return;
+        }
+        const sig = signature;
         const result = votePoll(targetId, voter, optionId, sig);
         ctx.body = result;
     } catch (e: any) {
@@ -249,6 +259,11 @@ router.post('/api/marketplace/posts/:id/close', async (ctx) => {
         if (!id || !author) {
             ctx.status = 400;
             ctx.body = { error: 'id and author are required' };
+            return;
+        }
+        if (ctx.state.actor && ((authorPublicKey && authorPublicKey !== ctx.state.actor) || (authorPubkey && authorPubkey !== ctx.state.actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Cannot close poll on behalf of another member' };
             return;
         }
         const post = closePoll(id, author);
@@ -272,6 +287,11 @@ router.post('/api/marketplace/polls/close', async (ctx) => {
         if (!targetId || !author) {
             ctx.status = 400;
             ctx.body = { error: 'postId and author are required' };
+            return;
+        }
+        if (ctx.state.actor && ((authorPublicKey && authorPublicKey !== ctx.state.actor) || (authorPubkey && authorPubkey !== ctx.state.actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Cannot close poll on behalf of another member' };
             return;
         }
         const post = closePoll(targetId, author);

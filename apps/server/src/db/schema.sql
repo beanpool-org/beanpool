@@ -156,7 +156,8 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (post_id, voter_pubkey)
 );
-CREATE INDEX IF NOT EXISTS idx_poll_votes_post_id ON poll_votes(post_id);
+CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
 
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
 -- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would

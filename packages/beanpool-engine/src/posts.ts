@@ -371,12 +371,9 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
 
         if (post.type === 'poll') {
-            // Check auto-close if expired
+            // Check auto-close if expired (projected in memory; DB writes handled in write paths/hygiene)
             if (post.pollClosesAt && post.pollClosesAt <= nowIso && post.status === 'active') {
                 post.status = 'completed';
-                try {
-                    db.prepare("UPDATE posts SET status = 'completed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status = 'active'").run(post.id);
-                } catch { }
             }
             const votes = pollVotesByPost.get(post.id) || [];
             const totalVotes = votes.length;

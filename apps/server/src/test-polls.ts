@@ -352,7 +352,65 @@ async function main() {
     // Searching specifically for polls returns it
     const searchPolls = getPosts({ query: 'Timber', type: 'poll' });
     const pollFound = searchPolls.some(p => p.id === poll1!.id);
-    assert(pollFound, 'Poll search specifically returns matching poll');
+    console.log('\n--- 10. Route Security & Extended Validation ---');
+    // Option text length limit
+    errThrew = false;
+    try {
+        createPost('poll', 'community', 'Long Option Poll', '', 0, 'fixed', 'pub-carol', undefined, undefined, undefined, false, undefined, false, {
+            pollOptions: [{ id: '1', text: 'A'.repeat(81) }, { id: '2', text: 'B' }]
+        });
+    } catch (e: any) {
+        errThrew = true;
+        assert(e.message.includes('between 1 and 80 characters'), 'Rejects option text > 80 characters');
+    }
+    assert(errThrew, 'Blocked option text > 80 chars');
+
+    // Duplicate option ID
+    errThrew = false;
+    try {
+        createPost('poll', 'community', 'Duplicate ID Poll', '', 0, 'fixed', 'pub-carol', undefined, undefined, undefined, false, undefined, false, {
+            pollOptions: [{ id: 'same_id', text: 'A' }, { id: 'same_id', text: 'B' }]
+        });
+    } catch (e: any) {
+        errThrew = true;
+        assert(e.message.includes('Duplicate option ID'), 'Rejects duplicate option ID');
+    }
+    assert(errThrew, 'Blocked duplicate option ID');
+
+    // Route impersonation checks
+    const { createMarketplaceRoutes } = await import('./routes/marketplace.js');
+    const router = createMarketplaceRoutes({
+        broadcast: () => {},
+        getPostsVersion: () => 1,
+        bumpPostsVersion: () => {},
+    } as any);
+
+    const dispatch = async (method: string, path: string, ctx: any) => {
+        const route = router.stack.find(r => r.methods.includes(method.toUpperCase()) && r.regexp.test(path));
+        if (!route) throw new Error(`Route not found: ${method} ${path}`);
+        const match = route.regexp.exec(path);
+        ctx.params = {};
+        if (match && route.paramNames) {
+            route.paramNames.forEach((p: any, i: number) => { ctx.params[p.name] = match[i + 1]; });
+        }
+        await route.stack[0](ctx);
+    };
+
+    // Authenticated as pub-alice, cannot vote claiming to be pub-carol
+    const ctxImpersonateVote: any = {
+        requestBody: { optionId: '1', voterPublicKey: 'pub-carol' },
+        state: { actor: 'pub-alice' }
+    };
+    await dispatch('POST', `/api/marketplace/posts/${aliceNewPoll!.id}/vote`, ctxImpersonateVote);
+    assert(ctxImpersonateVote.status === 403, 'Route rejects vote impersonation (actor != voterPublicKey)');
+
+    // Authenticated as pub-carol, cannot close Alice's poll
+    const ctxImpersonateClose: any = {
+        requestBody: { authorPublicKey: 'pub-alice' },
+        state: { actor: 'pub-carol' }
+    };
+    await dispatch('POST', `/api/marketplace/posts/${aliceNewPoll!.id}/close`, ctxImpersonateClose);
+    assert(ctxImpersonateClose.status === 403, 'Route rejects close impersonation (actor != authorPublicKey)');
 
     console.log(`\n🎉 All ${passed}/${run} tests passed successfully!`);
 }

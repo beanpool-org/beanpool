@@ -129,26 +129,22 @@ export function createPost(
         const nowIso = new Date().toISOString();
         db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE type = 'poll' AND status = 'active' AND poll_closes_at <= ?").run(nowIso, nowIso);
 
-        const authorOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'").get(authorPublicKey) as any;
-        if (authorOpen && authorOpen.c >= 1) {
-            throw new Error('Rate limit: You can only have 1 active poll at a time');
-        }
-
-        const nodeOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE type = 'poll' AND status = 'active'").get() as any;
-        if (nodeOpen && nodeOpen.c >= 5) {
-            throw new Error('Rate limit: Node limit of 5 active polls reached');
-        }
-
         const rawOpts = options?.pollOptions;
         if (!Array.isArray(rawOpts) || rawOpts.length < 2 || rawOpts.length > 4) {
             throw new Error('Polls must have between 2 and 4 options');
         }
+        const seenIds = new Set<string>();
         cleanPollOptions = (rawOpts as any[]).map((opt: any, idx: number) => {
             const text = typeof opt === 'string' ? opt.trim() : (typeof opt?.text === 'string' ? opt.text.trim() : '');
-            if (!text) {
-                throw new Error('Poll options cannot be empty');
+            if (!text || text.length > 80) {
+                throw new Error('Poll options must be between 1 and 80 characters');
             }
-            const optId = (typeof opt === 'object' && opt?.id) ? String(opt.id) : `opt_${idx + 1}`;
+            const rawId = (typeof opt === 'object' && opt?.id) ? String(opt.id).trim() : `opt_${idx + 1}`;
+            const optId = /^[a-zA-Z0-9_-]{1,32}$/.test(rawId) ? rawId : `opt_${idx + 1}`;
+            if (seenIds.has(optId)) {
+                throw new Error(`Duplicate option ID detected: ${optId}`);
+            }
+            seenIds.add(optId);
             return { id: optId, text };
         });
 
@@ -180,6 +176,18 @@ export function createPost(
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
 
     db.transaction(() => {
+        if (type === 'poll') {
+            const authorOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'").get(authorPublicKey) as any;
+            if (authorOpen && authorOpen.c >= 1) {
+                throw new Error('Rate limit: You can only have 1 active poll at a time');
+            }
+
+            const nodeOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE type = 'poll' AND status = 'active'").get() as any;
+            if (nodeOpen && nodeOpen.c >= 5) {
+                throw new Error('Rate limit: Node limit of 5 active polls reached');
+            }
+        }
+
         db.prepare(`INSERT INTO posts (
             id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, poll_options, poll_closes_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -241,6 +249,15 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
                 throw new Error('Cannot edit poll options once votes have been cast');
             }
         }
+        // Enforce poll isolation during updates
+        delete updates.credits;
+        delete updates.lat;
+        delete updates.lng;
+        delete updates.photos;
+        delete updates.category;
+        delete updates.priceType;
+        delete updates.repeatable;
+        delete updates.cashAlsoNeeded;
     }
 
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
@@ -273,8 +290,6 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.cashAlsoNeeded !== undefined) { fields.push('cash_also_needed = ?'); values.push((updates.cashAlsoNeeded === true || (updates.cashAlsoNeeded as any) === 'true') ? 1 : 0); }
     if (updates.lat !== undefined) { fields.push('lat = ?'); values.push(updates.lat); }
     if (updates.lng !== undefined) { fields.push('lng = ?'); values.push(updates.lng); }
-    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
-    if ((updates as any).active !== undefined) { fields.push('active = ?'); values.push((updates as any).active ? 1 : 0); }
 
     if (existingPost.type === 'poll' && updates.pollOptions !== undefined) {
         const rawOpts = updates.pollOptions;
@@ -411,14 +426,24 @@ export function votePoll(
         }
     }
 
-    db.prepare(`
-        INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
-            option_id = excluded.option_id,
-            signature = excluded.signature,
-            created_at = excluded.created_at
-    `).run(postId, voterPublicKey, optionId, signature || '', nowIso);
+    db.transaction(() => {
+        // Atomically verify poll is active and bump updated_at for delta sync
+        const res = db.prepare(
+            "UPDATE posts SET updated_at = ? WHERE id = ? AND status = 'active' AND (poll_closes_at IS NULL OR poll_closes_at > ?)"
+        ).run(nowIso, postId, nowIso);
+        if (res.changes === 0) {
+            throw new Error('This poll is closed');
+        }
+
+        db.prepare(`
+            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
+                option_id = excluded.option_id,
+                signature = excluded.signature,
+                created_at = excluded.created_at
+        `).run(postId, voterPublicKey, optionId, signature || '', nowIso);
+    })();
 
     bumpPostsVersion();
     const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey })[0]!;

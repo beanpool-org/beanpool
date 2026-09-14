@@ -169,7 +169,32 @@ async function main() {
     const claimRow = db.prepare('SELECT * FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND keeper_pubkey = ?').get(solventTreasury, bakerKeeper) as any;
     assert(!!claimRow && claimRow.status === 'pending' && claimRow.amount === 20, 'Deferred wage claim recorded with pending status for 20 beans');
 
-    // Customer Charlie buys bread from SolventBakery for 40 beans
+    // Regression Test 1: Wash trading prevention — sale to own keeper does NOT increment earned_surplus
+    const { publicKey: washCoop } = createTreasury('WashCoop', AVATAR, 100);
+    const washKeeper = 'wash-keeper-000000000000000000000000000007';
+    const washExternalCustomer = 'wash-cust-000000000000000000000000000008';
+    seedMember(washKeeper, 'WashKeeper');
+    seedMember(washExternalCustomer, 'WashCustomer');
+    assignKeeper(washCoop, washKeeper);
+    createPost('offer', 'goods', 'Wash pottery', 'Handmade mugs', 30, 'fixed', washCoop, undefined, undefined, undefined, true);
+    const washOffer = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'offer'").get(washCoop) as any;
+    // Wash keeper tries to buy from own enterprise
+    transfer('genesis', washKeeper, 50, 'Seed WashKeeper', 'direct', true);
+    createPost('offer', 'skills', 'Pottery lessons', 'Learn clay', 10, 'fixed', washKeeper, undefined, undefined, undefined, true);
+    const keeperWashBid = requestPost(washOffer.id, washKeeper);
+    approvePostRequest(keeperWashBid.id, washCoop);
+    completePostTransaction(keeperWashBid.id, washKeeper);
+    assert(surplusOf(washCoop) === 0, 'Wash trade with own keeper does NOT increment earned surplus (Rule 6 wash trading defense)');
+
+    // External customer buys from WashCoop -> earned surplus DOES increment
+    transfer('genesis', washExternalCustomer, 50, 'Seed WashCustomer', 'direct', true);
+    createPost('offer', 'skills', 'Glazing help', 'Assist with glaze', 10, 'fixed', washExternalCustomer, undefined, undefined, undefined, true);
+    const extBid = requestPost(washOffer.id, washExternalCustomer);
+    approvePostRequest(extBid.id, washCoop);
+    completePostTransaction(extBid.id, washExternalCustomer);
+    assert(surplusOf(washCoop) === 30, 'Genuine sale to external customer increments earned surplus by 30');
+
+    // Customer Charlie buys bread from SolventBakery for 40 beans (genuine external sale)
     transfer('genesis', customerCharlie, 100, 'Seed Charlie', 'direct', true);
     createPost('offer', 'skills', 'Gardening help', 'Weeding and pruning', 15, 'fixed', customerCharlie, undefined, undefined, undefined, true);
     const breadOffer = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'offer'").get(solventTreasury) as any;

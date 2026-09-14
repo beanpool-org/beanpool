@@ -592,9 +592,15 @@ export function completePostTransaction(
     // Rule 6 & 7: Earned surplus tracking, deferred wage claims, and working capital ceiling sweep (docs/the-commons.md §2.4).
     const sellerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(row.seller_pubkey) as any;
     if (sellerMember?.is_treasury === 1) {
-        // Increment on completed marketplace income
-        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
-            .run(Math.round(releaseCredits), row.seller_pubkey);
+        const isBuyerKeeper = Boolean(
+            db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                .get(row.seller_pubkey, row.buyer_pubkey)
+        );
+        // Rule 6: Only genuine external sales count toward earned surplus (exclude wash trades with own keepers)
+        if (!isBuyerKeeper) {
+            db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                .run(releaseCredits, row.seller_pubkey);
+        }
         // Process any deferred wage claims now that the enterprise has earned surplus and balance
         if (cb.processDeferredWageClaims) {
             cb.processDeferredWageClaims(row.seller_pubkey);

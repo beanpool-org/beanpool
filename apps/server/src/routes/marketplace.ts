@@ -241,17 +241,23 @@ router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
     try {
         const { id } = ctx.params;
         const { optionId, voterPublicKey, voterPubkey, signature } = (ctx as any).requestBody || {};
-        const voter = (ctx.state.actor as string) || voterPublicKey || voterPubkey;
-        if (!id || !optionId || !voter) {
-            ctx.status = 400;
-            ctx.body = { error: 'id, optionId, and voter are required' };
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
             return;
         }
-        if (ctx.state.actor && ((voterPublicKey && voterPublicKey !== ctx.state.actor) || (voterPubkey && voterPubkey !== ctx.state.actor))) {
+        if ((voterPublicKey && voterPublicKey !== actor) || (voterPubkey && voterPubkey !== actor)) {
             ctx.status = 403;
             ctx.body = { error: 'Cannot vote on behalf of another member' };
             return;
         }
+        if (!id || !optionId) {
+            ctx.status = 400;
+            ctx.body = { error: 'id and optionId are required' };
+            return;
+        }
+        const voter = actor;
         const sig = signature;
         const result = votePoll(id, voter, optionId, sig);
         ctx.body = result;
@@ -265,17 +271,23 @@ router.post('/api/marketplace/polls/vote', async (ctx) => {
     try {
         const { postId, id, optionId, voterPublicKey, voterPubkey, signature } = (ctx as any).requestBody || {};
         const targetId = postId || id;
-        const voter = (ctx.state.actor as string) || voterPublicKey || voterPubkey;
-        if (!targetId || !optionId || !voter) {
-            ctx.status = 400;
-            ctx.body = { error: 'postId, optionId, and voter are required' };
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
             return;
         }
-        if (ctx.state.actor && ((voterPublicKey && voterPublicKey !== ctx.state.actor) || (voterPubkey && voterPubkey !== ctx.state.actor))) {
+        if ((voterPublicKey && voterPublicKey !== actor) || (voterPubkey && voterPubkey !== actor)) {
             ctx.status = 403;
             ctx.body = { error: 'Cannot vote on behalf of another member' };
             return;
         }
+        if (!targetId || !optionId) {
+            ctx.status = 400;
+            ctx.body = { error: 'postId and optionId are required' };
+            return;
+        }
+        const voter = actor;
         const sig = signature;
         const result = votePoll(targetId, voter, optionId, sig);
         ctx.body = result;
@@ -289,18 +301,23 @@ router.post('/api/marketplace/posts/:id/close', async (ctx) => {
     try {
         const { id } = ctx.params;
         const { authorPublicKey, authorPubkey } = (ctx as any).requestBody || {};
-        const author = (ctx.state.actor as string) || authorPublicKey || authorPubkey;
-        if (!id || !author) {
-            ctx.status = 400;
-            ctx.body = { error: 'id and author are required' };
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
             return;
         }
-        if (ctx.state.actor && ((authorPublicKey && authorPublicKey !== ctx.state.actor) || (authorPubkey && authorPubkey !== ctx.state.actor))) {
+        if ((authorPublicKey && authorPublicKey !== actor) || (authorPubkey && authorPubkey !== actor)) {
             ctx.status = 403;
             ctx.body = { error: 'Cannot close poll on behalf of another member' };
             return;
         }
-        const post = closePoll(id, author);
+        if (!id) {
+            ctx.status = 400;
+            ctx.body = { error: 'id is required' };
+            return;
+        }
+        const post = closePoll(id, actor);
         if (!post) {
             ctx.status = 404;
             ctx.body = { error: 'Poll not found or unauthorized' };
@@ -317,18 +334,23 @@ router.post('/api/marketplace/polls/close', async (ctx) => {
     try {
         const { postId, id, authorPublicKey, authorPubkey } = (ctx as any).requestBody || {};
         const targetId = postId || id;
-        const author = (ctx.state.actor as string) || authorPublicKey || authorPubkey;
-        if (!targetId || !author) {
-            ctx.status = 400;
-            ctx.body = { error: 'postId and author are required' };
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
             return;
         }
-        if (ctx.state.actor && ((authorPublicKey && authorPublicKey !== ctx.state.actor) || (authorPubkey && authorPubkey !== ctx.state.actor))) {
+        if ((authorPublicKey && authorPublicKey !== actor) || (authorPubkey && authorPubkey !== actor)) {
             ctx.status = 403;
             ctx.body = { error: 'Cannot close poll on behalf of another member' };
             return;
         }
-        const post = closePoll(targetId, author);
+        if (!targetId) {
+            ctx.status = 400;
+            ctx.body = { error: 'postId is required' };
+            return;
+        }
+        const post = closePoll(targetId, actor);
         if (!post) {
             ctx.status = 404;
             ctx.body = { error: 'Poll not found or unauthorized' };

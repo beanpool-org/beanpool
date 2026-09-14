@@ -7,7 +7,7 @@ export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -1349,12 +1349,12 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     persistDecayEvents();
     persistCommonsBalance();
 
-    if (!(db as any).inTransaction) {
+    afterTransactionCommit(() => {
         const toMember = getMember(to);
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
         }
-    }
+    });
 
     const fromMember = getMember(from);
     const toMember = getMember(to);
@@ -1619,12 +1619,12 @@ export function payFromCommons(
     persistDecayEvents();
     persistCommonsBalance();
 
-    if (!(db as any).inTransaction) {
+    afterTransactionCommit(() => {
         const toMember = getMember(to);
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
         }
-    }
+    });
 
     return txn;
 }
@@ -1983,7 +1983,7 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
         const ceiling = Number(row.working_capital_ceiling);
         if (ceiling >= 0) {
             const { balance } = getBalance(enterprisePubkey);
-            const excess = balance - ceiling;
+            const excess = Math.round((balance - ceiling) * 100) / 100;
             if (excess > 0) {
                 let sweptTxn: Transaction | null = null;
                 try {

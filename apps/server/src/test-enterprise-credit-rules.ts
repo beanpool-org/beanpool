@@ -270,6 +270,14 @@ async function main() {
     assert(sweptAmount === 40, 'Admin lowering ceiling sweeps excess (100 - 60 = 40) to Commons');
     assert(bal(cider) === 60, 'CommunityCider balance reduced to new ceiling of 60');
 
+    // Batch/nested transaction sweeps via afterTransactionCommit (Rule 7 post-commit hook)
+    const { publicKey: batchCider } = createTreasury('BatchCider', AVATAR, 100, { workingCapitalCeiling: 50 });
+    db.transaction(() => {
+        transfer('genesis', batchCider, 30, 'Batch 1', 'direct', true);
+        transfer('genesis', batchCider, 40, 'Batch 2', 'direct', true); // Total 70 > ceiling 50
+    })();
+    assert(bal(batchCider) === 50, 'Enterprise swept to ceiling of 50 post-commit after batch transfers inside db.transaction');
+
     // Rule 7 constraint: The ceiling must NOT be editable by the enterprise's own keepers (admin-only for now)
     const keeperEndpoints = ['/api/treasury/:treasury/offer', '/api/treasury/:treasury/need', '/api/treasury/:treasury/approve', '/api/treasury/:treasury/complete', '/api/treasury/:treasury/sweep'];
     assert(!keeperEndpoints.some(e => e.includes('ceiling')), 'No keeper routes expose ceiling modification');

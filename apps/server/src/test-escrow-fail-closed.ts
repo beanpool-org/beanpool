@@ -63,6 +63,8 @@ async function runTests() {
     const bakery = createTreasury('CommunityBakery', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
     adminAssignTreasuryOperator(bakery, alice, 'admin');
     adminAssignTreasuryOperator(bakery, bob, 'admin');
+    transfer('genesis', bakery, 100, 'seed bakery balance', 'direct', true);
+    db.prepare('UPDATE members SET earned_surplus = 100 WHERE public_key = ?').run(bakery);
 
     // Enterprise lists an Offer first to satisfy CONTRIBUTION_REQUIRED
     createPost('offer', 'food', 'Bakery bread', 'Daily fresh bread', 5, 'fixed', bakery);
@@ -133,13 +135,13 @@ async function runTests() {
     const completedTx = completePostTransaction(tx.id, bakery, undefined, { authSigner: bob });
     check(Boolean(completedTx) && completedTx!.status === 'completed', 'Bob (second keeper) successfully completes deal');
 
-    // ── 9. Internal escrow transfers do not record auth_signer as operator ──
+    // ── 9. Escrow payout transfer records auth_signer from keeper Bob (PR #770 audit trail) ──
     const payoutTransfer = db.prepare(
         `SELECT * FROM transactions WHERE from_pubkey = ? AND to_pubkey = ? ORDER BY timestamp DESC LIMIT 1`
     ).get(`escrow_${tx.id}`, alice) as any;
     check(Boolean(payoutTransfer), 'Payout transfer exists in transactions table');
-    check(payoutTransfer.auth_signer === null || payoutTransfer.auth_signer === undefined,
-        'Internal escrow payout does not misattribute auth_signer to keeper Bob');
+    check(payoutTransfer.auth_signer === bob,
+        'escrow payout transaction auth_signer records acting operator Bob (#770)');
 
     // ── 10. Peer-to-peer deals work without authSigner ──
     const charlie = makeMember('charlie');

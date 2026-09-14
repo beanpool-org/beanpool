@@ -1679,12 +1679,17 @@ export default function MarketScreen() {
                     style={styles.actionSheetBackdrop}
                     onPress={() => setShowNewPostTypePicker(false)}
                 >
-                    <View style={styles.actionSheetContainer}>
+                    <Pressable
+                        style={styles.actionSheetContainer}
+                        onPress={(e) => e.stopPropagation()}
+                    >
                         <Text style={styles.actionSheetTitle}>Create New Post</Text>
                         <Text style={styles.actionSheetSubtitle}>What would you like to share with the village?</Text>
 
                         <Pressable
                             style={styles.actionSheetOption}
+                            accessibilityRole="button"
+                            accessibilityLabel="Offer: List goods, skills, food, or tools on the map"
                             onPress={() => {
                                 setShowNewPostTypePicker(false);
                                 router.push({ pathname: '/map', params: { newPost: 'true' } });
@@ -1699,6 +1704,8 @@ export default function MarketScreen() {
 
                         <Pressable
                             style={styles.actionSheetOption}
+                            accessibilityRole="button"
+                            accessibilityLabel="Need: Ask your neighbours for something you need"
                             onPress={() => {
                                 setShowNewPostTypePicker(false);
                                 router.push({ pathname: '/map', params: { newPost: 'true' } });
@@ -1713,6 +1720,8 @@ export default function MarketScreen() {
 
                         <Pressable
                             style={[styles.actionSheetOption, { borderBottomWidth: 0 }]}
+                            accessibilityRole="button"
+                            accessibilityLabel="Community Poll: Ask a question with 2–4 options in the feed"
                             onPress={() => {
                                 setShowNewPostTypePicker(false);
                                 setShowNewPollModal(true);
@@ -1727,11 +1736,13 @@ export default function MarketScreen() {
 
                         <Pressable
                             style={styles.actionSheetCancel}
+                            accessibilityRole="button"
+                            accessibilityLabel="Cancel"
                             onPress={() => setShowNewPostTypePicker(false)}
                         >
                             <Text style={styles.actionSheetCancelText}>Cancel</Text>
                         </Pressable>
-                    </View>
+                    </Pressable>
                 </Pressable>
             </Modal>
 

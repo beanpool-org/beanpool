@@ -1494,7 +1494,9 @@ export function settleDemurrage(publicKeys: string[]): void {
  */
 export function conservingTransaction<T>(fn: () => T): T {
     // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair.
-    persistDecayEvents();
+    if (!(db as any).inTransaction) {
+        persistDecayEvents();
+    }
     const commonsBefore = getCommonsBalanceExact();
     try {
         return db.transaction(fn)();
@@ -1567,32 +1569,35 @@ export function moveToCommons(
         throw new Error(`moveToCommons is for synthetic accounts and treasuries only, got ${from}`);
     }
     if (amount <= 0) return null;
-    // Synthetic senders are unbounded (escrow drains to zero by design; a bridge must be able to go
-    // negative). A treasury or a member is floored at 0 — neither may be driven into debt by this path.
-    if (!ledger.moveToCommons(from, amount, synthetic ? -Infinity : 0)) return null;
 
-    const txn: Transaction = {
-        id: crypto.randomUUID(),
-        from, to: 'COMMONS_POOL', amount, taxFee: 0,
-        memo: memo || '', timestamp: new Date().toISOString(),
-    };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null
-    );
+    return conservingTransaction(() => {
+        // Synthetic senders are unbounded (escrow drains to zero by design; a bridge must be able to go
+        // negative). A treasury or a member is floored at 0 — neither may be driven into debt by this path.
+        if (!ledger.moveToCommons(from, amount, synthetic ? -Infinity : 0)) return null;
 
-    const fromAcc = ledger.getAccount(from);
-    db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
-            last_demurrage_epoch = excluded.last_demurrage_epoch,
-            last_updated_at = excluded.last_updated_at
-    `).run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, txn.timestamp);
+        const txn: Transaction = {
+            id: crypto.randomUUID(),
+            from, to: 'COMMONS_POOL', amount, taxFee: 0,
+            memo: memo || '', timestamp: new Date().toISOString(),
+        };
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null
+        );
 
-    persistDecayEvents();
-    persistCommonsBalance();   // must come last — it is what makes the credit durable
-    return txn;
+        const fromAcc = ledger.getAccount(from);
+        db.prepare(`
+            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(public_key) DO UPDATE SET
+                balance = excluded.balance,
+                last_demurrage_epoch = excluded.last_demurrage_epoch,
+                last_updated_at = excluded.last_updated_at
+        `).run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, txn.timestamp);
+
+        persistDecayEvents();
+        persistCommonsBalance();   // must come last — it is what makes the credit durable
+        return txn;
+    });
 }
 
 /**

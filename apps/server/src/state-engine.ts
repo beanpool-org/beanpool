@@ -2971,7 +2971,7 @@ export function createTreasury(
 }
 
 export function adminDeletePost(postId: string) {
-    return adminDeletePostEngine(broadcast, postId, transfer);
+    return adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction);
 }
 
 export function adminPruneUser(publicKey: string) {

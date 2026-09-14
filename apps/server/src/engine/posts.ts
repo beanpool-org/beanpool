@@ -470,10 +470,12 @@ export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicK
 }
 
 type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean) => any;
+type ConservingTxnFn = <T>(fn: () => T) => T;
 
-export function adminDeletePost(broadcast: BroadcastFn, postId: string, transferFn?: TransferFn): boolean {
+export function adminDeletePost(broadcast: BroadcastFn, postId: string, transferFn?: TransferFn, conservingTxn?: ConservingTxnFn): boolean {
     let deleted = false;
-    db.transaction(() => {
+    const runTx = conservingTxn ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
+    runTx(() => {
         if (transferFn) {
             const pending = db.prepare("SELECT * FROM marketplace_transactions WHERE post_id=? AND status='pending'").all(postId) as any[];
             for (const tx of pending) {
@@ -484,16 +486,16 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
         db.prepare("UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'").run(postId);
         const result = db.prepare("UPDATE posts SET active=0, status='cancelled', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?").run(postId);
         if (result.changes > 0) deleted = true;
-    })();
+    });
     if (!deleted) return false;
     broadcast({ type: 'post_removed', id: postId });
     return true;
 }
 
-export function adminBulkDeletePosts(broadcast: BroadcastFn, postIds: string[], transferFn?: TransferFn): number {
+export function adminBulkDeletePosts(broadcast: BroadcastFn, postIds: string[], transferFn?: TransferFn, conservingTxn?: ConservingTxnFn): number {
     let deletedCount = 0;
     for (const postId of postIds) {
-        if (adminDeletePost(broadcast, postId, transferFn)) {
+        if (adminDeletePost(broadcast, postId, transferFn, conservingTxn)) {
             deletedCount++;
         }
     }

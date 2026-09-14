@@ -77,6 +77,11 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             Alert.alert('Options Required', 'A poll must have at least 2 non-empty options.');
             return;
         }
+        const uniqueOptions = new Set(validOptions.map(o => o.toLowerCase()));
+        if (uniqueOptions.size !== validOptions.length) {
+            Alert.alert('Duplicate Options', 'Each poll option must have distinct text.');
+            return;
+        }
         if (validOptions.length > 4) {
             Alert.alert('Too Many Options', 'A poll can have at most 4 options.');
             return;
@@ -205,7 +210,9 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                 <Pressable
                                     onPress={handleAddOption}
                                     style={styles.addOptionBtn}
+                                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                     accessibilityRole="button"
+                                    accessibilityLabel="Add another poll option"
                                 >
                                     <Text style={styles.addOptionText}>+ Add Option</Text>
                                 </Pressable>
@@ -249,6 +256,8 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                         durationDays === days && styles.durationBtnActive,
                                     ]}
                                     accessibilityRole="button"
+                                    accessibilityState={{ selected: durationDays === days }}
+                                    accessibilityLabel={`${days} Days duration${durationDays === days ? ', selected' : ''}`}
                                 >
                                     <Text
                                         style={[

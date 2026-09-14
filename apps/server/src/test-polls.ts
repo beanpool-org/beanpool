@@ -393,7 +393,7 @@ async function main() {
         if (match && route.paramNames) {
             route.paramNames.forEach((p: any, i: number) => { ctx.params[p.name] = match[i + 1]; });
         }
-        await route.stack[0](ctx);
+        await (route.stack[0] as any)(ctx, async () => {});
     };
 
     // Authenticated as pub-alice, cannot vote claiming to be pub-carol
